@@ -231,6 +231,7 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
         <option value="edge">Edge (bargain)</option><option value="adp">Fantrax ADP</option>
         <option value="cat" disabled>Category (click a column)</option></select></label>
       <label class="f zsel" for="zdrop">Zscore<select id="zdrop"><option value="0" title="All categories">0</option><option value="1" title="Drop worst category">−1</option><option value="2" title="Drop worst two categories">−2</option></select></label>
+      <label class="f zsel" for="edgeby">Edge vs<select id="edgeby"><option value="z">Zscore</option><option value="gain">Gain</option><option value="gainM">Gain M</option></select></label>
       <label class="f zsel" for="s-basis">Basis<select id="s-basis"><option value="total">Season</option><option value="pergame">Per game</option></select></label>
       <fieldset class="posf" id="posf"><legend>Position</legend>
         <label for="pf-PG"><input type="checkbox" id="pf-PG" value="PG"><span>PG</span></label>
@@ -273,7 +274,7 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
         <h3>There at / Lasts to</h3>
         <p>The chance a player is still available at your next pick and at the one after, given he is on the board now. They come from his ADP and how much draft position varies, which grows the later a player goes. Safe until is the last pick he has an 80% chance to reach; Gone by is the first pick where that falls to 20%. Rank range is ADP plus or minus one standard deviation.</p>
         <h3>Edge</h3>
-        <p>Fantrax ADP minus rank on the Zscore shown, in picks. Positive means he is going later than his value says he should.</p>
+        <p>Fantrax ADP minus the pick his value says he deserves, in picks. Positive means he is going later than he should. Edge vs picks the yardstick: Zscore uses his rank on the Zscore shown; Gain and Gain M use picks made so far plus his rank on that metric among players still available, so they change with every pick and are blank for taken players.</p>
         <h3>ADP</h3>
         <p>Fantrax ADP from the projections file. The two players without one are treated as late picks with a wide range.</p>
         <h3>Fantrax sync</h3>
@@ -636,7 +637,7 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
 const E = Engine, CATS = E.CATS;
 const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
-const DEF = { zdrop: 0, teams: 12, slot: 9, order: 'snake', adpSrc: 'ftx', scoring: 'roto', cats: 9, roster: 13, basis: 'total' };
+const DEF = { edgeBy: 'z', zdrop: 0, teams: 12, slot: 9, order: 'snake', adpSrc: 'ftx', scoring: 'roto', cats: 9, roster: 13, basis: 'total' };
 let cfg = Object.assign({}, DEF), picks = [], log = [];
 let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
@@ -671,7 +672,7 @@ function syncSetup() {
   fillSelect($('s-teams'), 4, 20, cfg.teams);
   fillSelect($('s-slot'), 1, cfg.teams, cfg.slot);
   fillSelect($('s-roster'), 8, 25, cfg.roster);
-  $('s-order').value = cfg.order; $('s-scoring').value = cfg.scoring; $('s-cats').value = String(cfg.cats); $('s-basis').value = cfg.basis; $('zdrop').value = String(cfg.zdrop);
+  $('s-order').value = cfg.order; $('s-scoring').value = cfg.scoring; $('s-cats').value = String(cfg.cats); $('s-basis').value = cfg.basis; $('zdrop').value = String(cfg.zdrop); $('edgeby').value = cfg.edgeBy;
 }
 function onSetup(e) {
   const id = e.target.id, v = e.target.value;
@@ -883,6 +884,7 @@ $('q').addEventListener('input', renderTable);
 $('hide').addEventListener('change', renderTable);
 $('posf').addEventListener('change', renderTable);
 $('zdrop').addEventListener('change', e => { cfg.zdrop = +e.target.value; save(); renderTable(); });
+$('edgeby').addEventListener('change', e => { cfg.edgeBy = e.target.value; save(); renderTable(); });
 $('sort').addEventListener('change', e => { sortKey = e.target.value; sortCat = null; renderTable(); });
 $('thead').addEventListener('click', e => {
   const th = e.target.closest('th[data-sort]'); if (!th) return;
@@ -974,7 +976,7 @@ function renderTable() {
     CATS.map((c, i) => th(c.l, 'c' + i, '', 'Gain in ' + c.l + '. Click to sort')).join('') +
     th(['Zscore', '−1 Zscore', '−2 Zscore'][cfg.zdrop] + '<br><span style="font-weight:400;text-transform:none">' + (cfg.basis === 'pergame' ? 'per game' : 'season') + '</span>', 'board', '', (cfg.basis === 'pergame' ? 'Per-game' : 'Season') + ' value vs an average drafted player' + (cfg.zdrop ? ', leaving out the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories') : '') + '. Small number is the rank') + th('Fantrax<br>ADP', 'adp', '', 'Fantrax ADP') +
     th(thereH.replace(' at ', ' at<br>'), null, '', 'Chance he is still there at your next pick') + th(lastH.replace(' to ', ' to<br>'), null, '', 'Chance he lasts to the pick after') +
-    th('Safe<br>until', null, '', 'Last pick with an 80% chance he is still there') + th('Gone<br>by', null, '', 'First pick where his chance falls to 20%') + th('Edge', 'edge', '', 'Fantrax ADP minus rank on the Zscore shown. Positive: going later than he should') + th('Rank<br>range', null, '', 'ADP ± one standard deviation') + '</tr>';
+    th('Safe<br>until', null, '', 'Last pick with an 80% chance he is still there') + th('Gone<br>by', null, '', 'First pick where his chance falls to 20%') + th('Edge<br><span style="font-weight:400;text-transform:none">vs ' + ({ z: 'Zscore', gain: 'Gain', gainM: 'Gain M' }[cfg.edgeBy]) + '</span>', 'edge', '', ({ z: 'Fantrax ADP minus rank on the Zscore shown.', gain: 'Fantrax ADP minus the pick he would go at if the room drafted by Gain from here.', gainM: 'Fantrax ADP minus the pick he would go at if the room drafted by Gain M from here.' }[cfg.edgeBy]) + ' Positive: going later than he should') + th('Rank<br>range', null, '', 'ADP ± one standard deviation') + '</tr>';
 
   const takenAt = new Map(); picks.forEach((id, k) => { if (id != null) takenAt.set(id, k); });
   const q = norm($('q').value), hide = $('hide').checked;
@@ -982,11 +984,19 @@ function renderTable() {
   const posOk = p => !posOn.length || p.p.split('/').some(x => posOn.includes(x));
   let rows = P.filter(p => (!hide || !takenAt.has(p.id)) && posOk(p) && (!q || p.key.includes(q) || p.t.toLowerCase() === q));
   const big = 1e9, zd = cfg.zdrop;
+  // Edge: Fantrax ADP minus the pick the chosen metric says he deserves.
+  // Gain and Gain M only exist for available players: implied pick = picks made + rank among available.
+  const made = takenAt.size, gRank = new Map();
+  if (cfg.edgeBy !== 'z') {
+    const k = cfg.edgeBy;
+    P.filter(p => !takenAt.has(p.id) && p[k] != null).sort((a, b) => b[k] - a[k]).forEach((p, i) => gRank.set(p.id, made + i + 1));
+  }
+  const edgeOf = p => cfg.edgeBy === 'z' ? p.adpUse - p.zRank[zd] : (gRank.has(p.id) ? p.adpUse - gRank.get(p.id) : null);
   const keyFn = {
     order: p => p.order != null ? p.order : big + p.boardRank,
     gain: p => p.gain != null ? -p.gain : big + p.boardRank,
     gainM: p => p.gainM != null ? -p.gainM : big + p.boardRank,
-    board: p => -p.z[zd], edge: p => -(p.adpUse - p.zRank[zd]), adp: p => p.adpUse,
+    board: p => -p.z[zd], edge: p => { const e = edgeOf(p); return e == null || p.ftx == null ? big + p.boardRank : -e; }, adp: p => p.adpUse,
     cat: p => p.gainC ? -p.gainC[sortCat] : big + p.boardRank
   }[sortKey] || (p => p.boardRank);
   rows.sort((a, b) => keyFn(a) - keyFn(b));
@@ -1015,10 +1025,10 @@ function renderTable() {
       h += '<td>' + Math.round(p.thereAt * 100) + '%</td><td>' + (p.lastsTo != null ? Math.round(p.lastsTo * 100) + '%' : '—') + '</td>';
       h += '<td>' + p.safeUntil + '</td><td>' + (p.goneBy != null ? p.goneBy : '—') + '</td>';
     }
-    const ed = Math.round(p.adpUse - p.zRank[zd]);
+    const e0 = edgeOf(p), ed = e0 == null ? null : Math.round(e0);
     if (p.ftx == null) h += '<td class="dash" title="No Fantrax ADP">—</td><td class="dash">—</td>';
     else {
-      h += '<td class="' + (ed > 0 ? 'pos' : ed < 0 ? 'neg' : '') + '">' + sgn(ed) + '</td>';
+      h += ed == null ? '<td class="dash">—</td>' : '<td class="' + (ed > 0 ? 'pos' : ed < 0 ? 'neg' : '') + '">' + sgn(ed) + '</td>';
       h += '<td>' + Math.max(1, Math.round(p.adpUse - p.sd)) + '–' + Math.round(p.adpUse + p.sd) + '</td>';
     }
     return '<tr class="' + cls + '">' + h + '</tr>';
