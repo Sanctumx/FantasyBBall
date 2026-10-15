@@ -856,7 +856,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
 const E = Engine, CATS = E.CATS;
 const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
-const DEF = { stats: 'gain', poBoost: 'off', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 1], asb: 'merged', poStart: 20, poFmt: '1-1-1', shown: 0, orderBy: 'gain', edgeBy: 'z', zdrop: 0, teams: 12, slot: 9, order: 'snake', adpSrc: 'ftx', scoring: 'roto', cats: 9, roster: 13, basis: 'total' };
+const DEF = { stats: 'gain', poBoost: 'medium', scarZ: 'vstrong', scarP: 'light', catW: [1, 1, 1, 1, 1, 1, 1, 1, 1], asb: 'merged', poStart: 18, poFmt: '1-2-2', shown: 0, orderBy: 'gainM', edgeBy: 'gainM', zdrop: 1, teams: 14, slot: 7, order: 'snake', adpSrc: 'ftx', scoring: 'most', cats: 9, roster: 12, basis: 'mix' };
 let cfg = Object.assign({}, DEF), picks = [], log = [];
 let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
