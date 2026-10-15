@@ -274,7 +274,7 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
         <h3>There at / Lasts to</h3>
         <p>The chance a player is still available at your next pick and at the one after, given he is on the board now. They come from his ADP and how much draft position varies, which grows the later a player goes. Safe until is the last pick he has an 80% chance to reach; Gone by is the first pick where that falls to 20%. Rank range is ADP plus or minus one standard deviation.</p>
         <h3>Edge</h3>
-        <p>Fantrax ADP minus the pick his value says he deserves, in picks. Positive means he is going later than he should. Edge vs picks the yardstick: Zscore uses his rank on the Zscore shown; Gain and Gain M use picks made so far plus his rank on that metric among players still available, so they change with every pick and are blank for taken players.</p>
+        <p>Fantrax ADP minus the pick his value says he deserves, in picks. Positive means he is going later than he should. Edge vs picks the yardstick: Zscore uses his rank on the Zscore shown; Gain and Gain M use picks made so far plus his rank on that metric among players still available, so they change with every pick and are blank for taken players. An ADP later than the last pick of your draft counts as the pick after it (marked *), so undrafted players don't look like bargains.</p>
         <h3>ADP</h3>
         <p>Fantrax ADP from the projections file. The two players without one are treated as late picks with a wide range.</p>
         <h3>Fantrax sync</h3>
@@ -991,7 +991,9 @@ function renderTable() {
     const k = cfg.edgeBy;
     P.filter(p => !takenAt.has(p.id) && p[k] != null).sort((a, b) => b[k] - a[k]).forEach((p, i) => gRank.set(p.id, made + i + 1));
   }
-  const edgeOf = p => cfg.edgeBy === 'z' ? p.adpUse - p.zRank[zd] : (gRank.has(p.id) ? p.adpUse - gRank.get(p.id) : null);
+  // ADP past the last pick of the draft means "goes undrafted", so it counts as the pick after the last one.
+  const lastPick = picks.length, adpCap = p => Math.min(p.adpUse, lastPick + 1);
+  const edgeOf = p => cfg.edgeBy === 'z' ? adpCap(p) - p.zRank[zd] : (gRank.has(p.id) ? adpCap(p) - gRank.get(p.id) : null);
   const keyFn = {
     order: p => p.order != null ? p.order : big + p.boardRank,
     gain: p => p.gain != null ? -p.gain : big + p.boardRank,
@@ -1028,7 +1030,8 @@ function renderTable() {
     const e0 = edgeOf(p), ed = e0 == null ? null : Math.round(e0);
     if (p.ftx == null) h += '<td class="dash" title="No Fantrax ADP">—</td><td class="dash">—</td>';
     else {
-      h += ed == null ? '<td class="dash">—</td>' : '<td class="' + (ed > 0 ? 'pos' : ed < 0 ? 'neg' : '') + '">' + sgn(ed) + '</td>';
+      const capped = p.adpUse > lastPick + 1;
+      h += ed == null ? '<td class="dash">—</td>' : '<td class="' + (ed > 0 ? 'pos' : ed < 0 ? 'neg' : '') + '"' + (capped ? ' title="Fantrax ADP ' + p.adpUse.toFixed(0) + ' is past the last pick (' + lastPick + '), so Edge counts him as undrafted"' : '') + '>' + sgn(ed) + (capped ? '<sup style="color:var(--muted)">*</sup>' : '') + '</td>';
       h += '<td>' + Math.max(1, Math.round(p.adpUse - p.sd)) + '–' + Math.round(p.adpUse + p.sd) + '</td>';
     }
     return '<tr class="' + cls + '">' + h + '</tr>';
