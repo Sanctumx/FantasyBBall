@@ -231,6 +231,7 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
         <option value="edge">Edge (bargain)</option><option value="adp">Fantrax ADP</option>
         <option value="cat" disabled>Category (click a column)</option></select></label>
       <label class="f zsel" for="zdrop">Zscore<select id="zdrop"><option value="0" title="All categories">0</option><option value="1" title="Drop worst category">−1</option><option value="2" title="Drop worst two categories">−2</option></select></label>
+      <label class="f zsel" for="orderby"># order by<select id="orderby"><option value="gain">Gain</option><option value="gainM">Gain M</option></select></label>
       <label class="f zsel" for="edgeby">Edge vs<select id="edgeby"><option value="z">Zscore</option><option value="gain">Gain</option><option value="gainM">Gain M</option></select></label>
       <label class="f zsel" for="s-basis">Basis<select id="s-basis"><option value="total">Season</option><option value="pergame">Per game</option></select></label>
       <fieldset class="posf" id="posf"><legend>Position</legend>
@@ -268,7 +269,7 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
         <div class="swing" id="swing"></div>
         <p>H2H most categories values the chance of winning the week. A category counts for more the more often it decides your matchup.</p>
         <h3>The # order</h3>
-        <p>The board's ranking for your next pick. It ranks by Gain, then checks the top ten against your following pick: if a slightly better player is likely to still be there, it moves up the one who won't be. Rows that probably won't reach your pick are dimmed.</p>
+        <p>The board's ranking for your next pick. It ranks by Gain, or by Gain M if you choose that in "# order by", then checks the top ten against your following pick: if a slightly better player is likely to still be there, it moves up the one who won't be. Rows that probably won't reach your pick are dimmed.</p>
       </div>
       <div>
         <h3>There at / Lasts to</h3>
@@ -598,25 +599,26 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
       p.safeUntil = safe; p.goneBy = gone;
     }
 
-    // model pick order: gain now plus what is likely left at the following pick
-    const byGain = avail.slice().sort((a, b) => b.gain - a.gain);
+    // model pick order: the chosen metric (Gain or Gain M) now plus what is likely left at the following pick
+    const mk = cfg.orderBy === 'gainM' ? 'gainM' : 'gain';
+    const byGain = avail.slice().sort((a, b) => b[mk] - a[mk]);
     const K = Math.min(10, byGain.length);
     const backToBack = p2 != null && unfilled.indexOf(p2) === unfilled.indexOf(p1) + 1;
-    byGain.forEach(p => { p.score = p.gain; });
+    byGain.forEach(p => { p.score = p[mk]; });
     if (p2 != null) {
       const look = byGain.slice(0, 30);
-      const tail = look.length ? look[look.length - 1].gain : 0;
+      const tail = look.length ? look[look.length - 1][mk] : 0;
       for (let i = 0; i < K; i++) {
         const cand = byGain[i];
         let mass = 1, E = 0;
         for (const o of look) {
           if (o === cand) continue;
           const q = backToBack ? 1 : (o.lastsFromP1 == null ? 0 : o.lastsFromP1);
-          E += mass * q * o.gain; mass *= (1 - q);
+          E += mass * q * o[mk]; mass *= (1 - q);
           if (mass < 1e-4) break;
         }
         E += mass * tail;
-        cand.score = cand.gain + E;
+        cand.score = cand[mk] + E;
       }
     }
     const top = byGain.slice(0, K).sort((a, b) => b.score - a.score);
@@ -637,7 +639,7 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
 const E = Engine, CATS = E.CATS;
 const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
-const DEF = { edgeBy: 'z', zdrop: 0, teams: 12, slot: 9, order: 'snake', adpSrc: 'ftx', scoring: 'roto', cats: 9, roster: 13, basis: 'total' };
+const DEF = { orderBy: 'gain', edgeBy: 'z', zdrop: 0, teams: 12, slot: 9, order: 'snake', adpSrc: 'ftx', scoring: 'roto', cats: 9, roster: 13, basis: 'total' };
 let cfg = Object.assign({}, DEF), picks = [], log = [];
 let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
@@ -672,7 +674,7 @@ function syncSetup() {
   fillSelect($('s-teams'), 4, 20, cfg.teams);
   fillSelect($('s-slot'), 1, cfg.teams, cfg.slot);
   fillSelect($('s-roster'), 8, 25, cfg.roster);
-  $('s-order').value = cfg.order; $('s-scoring').value = cfg.scoring; $('s-cats').value = String(cfg.cats); $('s-basis').value = cfg.basis; $('zdrop').value = String(cfg.zdrop); $('edgeby').value = cfg.edgeBy;
+  $('s-order').value = cfg.order; $('s-scoring').value = cfg.scoring; $('s-cats').value = String(cfg.cats); $('s-basis').value = cfg.basis; $('zdrop').value = String(cfg.zdrop); $('edgeby').value = cfg.edgeBy; $('orderby').value = cfg.orderBy;
 }
 function onSetup(e) {
   const id = e.target.id, v = e.target.value;
@@ -884,6 +886,7 @@ $('q').addEventListener('input', renderTable);
 $('hide').addEventListener('change', renderTable);
 $('posf').addEventListener('change', renderTable);
 $('zdrop').addEventListener('change', e => { cfg.zdrop = +e.target.value; save(); renderTable(); });
+$('orderby').addEventListener('change', e => { cfg.orderBy = e.target.value; recompute(); });
 $('edgeby').addEventListener('change', e => { cfg.edgeBy = e.target.value; save(); renderTable(); });
 $('sort').addEventListener('change', e => { sortKey = e.target.value; sortCat = null; renderTable(); });
 $('thead').addEventListener('click', e => {
@@ -972,7 +975,7 @@ function renderTable() {
   const thereH = p1 != null ? 'There at ' + ord(p1 + 1) : 'There at —';
   const lastH = p2 != null ? 'Lasts to ' + ord(p2 + 1) : 'Lasts to —';
   const th = (label, sort, cls, tip) => '<th' + (sort ? ' data-sort="' + sort + '"' : '') + ' class="' + (cls || '') + (sort ? ' sortable' : '') + ((sort && (sort === sortKey || (sortKey === 'cat' && sort === 'c' + sortCat))) ? ' on' : '') + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + label + '</th>';
-  $('thead').innerHTML = '<tr>' + th('Log', null, 'l') + th('#', 'order', '', 'Model pick order for your next pick') + th('Player', null, 'l player') + th('Gain', 'gain', '', 'Hundredths of a category win added, averaged over opponents') + th('Gain M', 'gainM', '', 'Gain Matchup: percentage points added to your chance of winning the matchup, averaged over every opponent') +
+  $('thead').innerHTML = '<tr>' + th('Log', null, 'l') + th('#', 'order', '', 'Model pick order for your next pick, built on ' + (cfg.orderBy === 'gainM' ? 'Gain M' : 'Gain')) + th('Player', null, 'l player') + th('Gain', 'gain', '', 'Hundredths of a category win added, averaged over opponents') + th('Gain M', 'gainM', '', 'Gain Matchup: percentage points added to your chance of winning the matchup, averaged over every opponent') +
     CATS.map((c, i) => th(c.l, 'c' + i, '', 'Gain in ' + c.l + '. Click to sort')).join('') +
     th(['Zscore', '−1 Zscore', '−2 Zscore'][cfg.zdrop] + '<br><span style="font-weight:400;text-transform:none">' + (cfg.basis === 'pergame' ? 'per game' : 'season') + '</span>', 'board', '', (cfg.basis === 'pergame' ? 'Per-game' : 'Season') + ' value vs an average drafted player' + (cfg.zdrop ? ', leaving out the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories') : '') + '. Small number is the rank') + th('Fantrax<br>ADP', 'adp', '', 'Fantrax ADP') +
     th(thereH.replace(' at ', ' at<br>'), null, '', 'Chance he is still there at your next pick') + th(lastH.replace(' to ', ' to<br>'), null, '', 'Chance he lasts to the pick after') +
