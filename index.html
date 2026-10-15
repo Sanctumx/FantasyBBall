@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.45 system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Courtside Draft Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: war-room console. Left rail = setup, clock, your team, standings; right = the live player board. */
+:root{
+  --bg:#EFF1EE; --surface:#FFFFFF; --sunk:#F6F7F5; --ink:#15191B; --muted:#5D666B; --line:#D8DCD7;
+  --accent:#C24E1B; --accent-soft:#F7E3D8; --mine:#1F5FA8; --mine-soft:#DFE9F6;
+  --good:#1D8A4B; --bad:#C2372F;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --accent-soft:#3A2419; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --accent-soft:#3A2419; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px;padding-block:18px 14px;border-bottom:2px solid var(--ink);margin-bottom:16px}
+header.top h1{font:700 2.1rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0;text-wrap:balance}
+header.top p{margin:0;color:var(--muted);max-width:62ch}
+.layout{display:grid;gap:16px;grid-template-columns:minmax(300px,360px) minmax(0,1fr);grid-template-areas:"setup list" "sync list" "clock list" "mine list" "teams list" ". list";grid-template-rows:auto auto auto auto auto 1fr;align-items:start}
+#setup{grid-area:setup}#sync{grid-area:sync}#clock{grid-area:clock}#mine{grid-area:mine}#teams{grid-area:teams}#list{grid-area:list}
+@media (max-width:980px){.layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"setup" "sync" "clock" "list" "mine" "teams";grid-template-rows:none}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0}
+.panel>h2,.panel>summary{font:600 1.15rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+details.panel>summary{cursor:pointer;list-style:none;margin:0}
+details.panel[open]>summary{margin-bottom:12px}
+details.panel>summary::after{content:"+";font-family:var(--f-data);color:var(--muted)}
+details.panel[open]>summary::after{content:"–"}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+select,input[type=text],textarea{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:0;width:100%;text-transform:none;letter-spacing:0;font-size:.92rem}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn.mine{background:var(--mine);color:var(--surface);border-color:var(--mine)}
+.btn.warn{border-color:var(--bad);color:var(--bad)}
+.btn.sm{padding:2px 7px;font-size:.78rem}
+.hint{color:var(--muted);font-size:.8rem;margin:8px 0 0}
+/* clock */
+.sync-row{display:flex;gap:6px}
+.sync-row input{flex:1}
+.sync-status{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--muted);margin-top:8px}
+.sync-status .dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+.sync-status.live .dot{background:var(--good)}
+.sync-status.err{color:var(--bad)}
+.sync-status.err .dot{background:var(--bad)}
+.board-face{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin-bottom:12px}
+.board-face .pk{font:700 3rem/0.9 var(--f-display);font-variant-numeric:tabular-nums;grid-row:span 2}
+.board-face .who{font:600 1.2rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.04em}
+.board-face .sub{color:var(--muted);font-size:.85rem}
+.board-face.me{background:var(--accent-soft);border-color:var(--accent)}
+.board-face.me .pk,.board-face.me .who{color:var(--accent)}
+.logrow{display:flex;gap:6px}
+.logrow input{flex:1}
+.msg{min-height:1.2em;font-size:.82rem;margin-top:6px;color:var(--muted)}
+.msg.err{color:var(--bad)}
+.recent{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+.recent button{all:unset;cursor:pointer;display:grid;grid-template-columns:3.2em 1fr auto;gap:8px;width:100%;padding:3px 6px;border-radius:4px;font-size:.86rem}
+.recent button:hover,.recent button.armed{background:var(--sunk)}
+.recent button.armed .tm{color:var(--bad)}
+.recent .tm{color:var(--muted);font-size:.78rem}
+.recent .me .nm{color:var(--mine);font-weight:600}
+/* your team */
+.roster{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:2px;font-size:.88rem}
+.roster li{display:grid;grid-template-columns:2.6em 1fr auto;gap:8px}
+.roster .empty{color:var(--muted)}
+.chances{display:grid;grid-template-columns:3.4em 1fr 3em;gap:4px 8px;align-items:center;font-size:.82rem}
+.bar{height:8px;background:var(--sunk);border:1px solid var(--line);border-radius:2px;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--mine)}
+.bar::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed var(--muted)}
+.bigstat{display:flex;align-items:baseline;gap:8px;margin:2px 0 12px}
+.bigstat b{font:700 2rem/1 var(--f-display)}
+.bigstat span{color:var(--muted);font-size:.85rem}
+.poscount{display:flex;gap:10px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-bottom:10px}
+.poscount b{color:var(--ink);font-family:var(--f-data)}
+/* teams */
+.stand{width:100%;border-collapse:collapse;font-size:.86rem}
+.stand td{padding:4px 4px;border-top:1px solid var(--line);vertical-align:top}
+.stand tr.me td{color:var(--mine);font-weight:600}
+.stand details summary{cursor:pointer}
+.stand details ol{margin:4px 0 2px;padding-left:1.3em;color:var(--muted);font-weight:400;font-size:.82rem}
+/* list */
+.listbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin-bottom:10px}
+.listbar label.f{flex:1 1 160px}
+.listbar label.zsel{flex:0 1 120px}
+.check{display:flex;align-items:center;gap:6px;font-size:.88rem;padding-bottom:6px}
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:4px;max-height:calc(100vh - 150px)}
+@media (max-width:980px){.tablewrap{max-height:75vh}}
+table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:.84rem}
+.pl th{position:sticky;top:0;z-index:2;background:var(--surface);font:600 .74rem/1.15 var(--f-body);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:right;padding:7px 6px;border-bottom:1px solid var(--ink);white-space:nowrap;vertical-align:bottom}
+.pl th.l,.pl td.l{text-align:left}
+.pl th.sortable{cursor:pointer}
+.pl th.sortable:hover,.pl th.on{color:var(--ink)}
+.pl th.on::after{content:" ▼";font-size:.7em}
+.pl td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;font-family:var(--f-data);font-variant-numeric:tabular-nums;background:var(--surface)}
+.pl td.player{font-family:var(--f-body);position:sticky;left:0;z-index:1;min-width:13.5em;max-width:16em;white-space:normal;line-height:1.2}
+.pl th.player{left:0;z-index:3}
+.pl .nm{font-weight:600}
+.pl .meta{display:block;color:var(--muted);font-size:.74rem}
+.tag{display:inline-block;font:500 .66rem/1.3 var(--f-body);padding:0 4px;border-radius:3px;border:1px solid var(--line);color:var(--muted);margin-left:3px;vertical-align:1px}
+.tag.inj{border-color:var(--bad);color:var(--bad)}
+.pl td.cat{min-width:3.1em;font-size:.78rem}
+.pl td.gain{font-weight:500;font-size:.9rem}
+.pl tr.top td{background:var(--accent-soft)}
+.pl tr.top td.ord{color:var(--accent);font-weight:700}
+.pl tr.taken td{color:var(--muted);background:var(--sunk)}
+.pl tr.taken.mine td{background:var(--mine-soft);color:var(--ink)}
+.pl tr.far td:not(.player):not(.logc){opacity:.55}
+.pl td.logc{font-family:var(--f-body)}
+.logc .btn{margin-left:2px}
+.pos{color:var(--good)}.neg{color:var(--bad)}
+.pl td.dash{color:var(--muted)}
+.empty-row td{text-align:center;color:var(--muted);padding:20px;font-family:var(--f-body)}
+/* explainer */
+.how{grid-column:1/-1;margin-top:8px}
+.how h2{font:700 1.5rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px}
+.how .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 28px}
+.how h3{font:600 1.05rem/1.2 var(--f-display);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 4px}
+.how p{margin:0 0 6px;max-width:64ch;color:var(--ink)}
+.how .swing{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.how .swing span{font:500 .78rem var(--f-data);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+@media (prefers-reduced-motion:no-preference){.recent button,.btn{transition:background .12s,border-color .12s}}
+</style>
+
+<header class="top">
+  <h1>Courtside Draft Board</h1>
+  <p>Live snake draft ranking for 9-cat and 8-cat leagues on BBM 2026-27 projections and Fantrax ADP. Log each pick and the board re-ranks everyone by how much they raise your chances.</p>
+</header>
+
+<div class="layout">
+  <details class="panel" id="setup" open>
+    <summary>Setup</summary>
+    <div class="grid2">
+      <label class="f" for="s-teams">Teams<select id="s-teams"></select></label>
+      <label class="f" for="s-slot">Your slot<select id="s-slot"></select></label>
+      <label class="f" for="s-order">Draft order<select id="s-order"><option value="snake">Snake</option><option value="3rr">3RR (third-round reversal)</option></select></label>
+      <label class="f" for="s-roster">Roster size<select id="s-roster"></select></label>
+      <label class="f" for="s-scoring">Scoring<select id="s-scoring"><option value="roto">Roto</option><option value="h2h">H2H: each category</option><option value="most">H2H: most categories</option></select></label>
+      <label class="f" for="s-cats">Categories<select id="s-cats"><option value="9">9-cat</option><option value="8">8-cat (no TO)</option></select></label>
+    </div>
+    <div class="seg">
+      <button class="btn" id="b-undo" type="button">Undo</button>
+      <button class="btn warn" id="b-new" type="button">New draft</button>
+      <button class="btn" id="b-copy" type="button">Copy log</button>
+    </div>
+  </details>
+
+  <section class="panel" id="sync">
+    <h2>Fantrax sync</h2>
+    <form class="sync-row" id="fx-form" autocomplete="off">
+      <input type="text" id="fx-league" placeholder="League ID from your league URL" aria-label="Fantrax league ID">
+      <button class="btn primary" type="submit" id="fx-connect">Connect</button>
+    </form>
+    <div id="fx-on" hidden>
+      <label class="f" for="fx-team" style="margin-top:10px">Your team<select id="fx-team"></select></label>
+      <div class="seg">
+        <label class="check" for="fx-auto" style="padding:0"><input type="checkbox" id="fx-auto" checked> Auto-sync every 10 s</label>
+        <button class="btn sm" type="button" id="fx-now">Sync now</button>
+        <button class="btn sm" type="button" id="fx-off">Disconnect</button>
+      </div>
+    </div>
+    <div class="sync-status" id="fx-status"><span class="dot"></span><span id="fx-text">Not connected. Picks made in your Fantrax draft room will appear here on their own.</span></div>
+  </section>
+
+  <section class="panel" id="clock">
+    <h2>On the clock</h2>
+    <div class="board-face" id="face"></div>
+    <form class="logrow" id="logform" autocomplete="off">
+      <input type="text" id="pickname" list="names" placeholder="Player picked" aria-label="Player picked">
+      <datalist id="names"></datalist>
+      <button class="btn primary" type="submit" title="Taken by another team (Enter)">Taken</button>
+      <button class="btn mine" type="button" id="b-mine" title="Your pick (Shift+Enter)">Mine</button>
+    </form>
+    <div class="msg" id="msg"></div>
+    <details style="margin-top:6px">
+      <summary class="hint" style="cursor:pointer;margin:0">Paste picks in draft order</summary>
+      <textarea id="paste" rows="4" placeholder="One name per line. Each fills the next open pick, yours included." style="margin-top:6px"></textarea>
+      <button class="btn sm" id="b-paste" type="button" style="margin-top:6px">Log pasted picks</button>
+    </details>
+    <ul class="recent" id="recent"></ul>
+  </section>
+
+  <section class="panel" id="mine">
+    <h2>Your team <span class="hint" id="mineSub" style="margin:0;text-transform:none;letter-spacing:0;font:400 .8rem var(--f-body)"></span></h2>
+    <div class="bigstat" id="mineStat"></div>
+    <div class="poscount" id="posCount"></div>
+    <ul class="roster" id="roster"></ul>
+    <div class="chances" id="chances"></div>
+    <p class="hint">Chance to beat an average opponent in each category, counting a typical player at each pick you still have. Dashed line is 50%.</p>
+  </section>
+
+  <section class="panel" id="teams">
+    <h2>Teams</h2>
+    <table class="stand"><tbody id="stand"></tbody></table>
+  </section>
+
+  <section class="panel" id="list">
+    <h2>Player list</h2>
+    <div class="listbar">
+      <label class="f" for="q">Find player<input type="text" id="q" placeholder="Name or team"></label>
+      <label class="f" for="sort">Order by<select id="sort">
+        <option value="order">Model pick order</option><option value="gain">Gain</option><option value="gainM">Gain M (matchup)</option><option value="board">Zscore</option>
+        <option value="edge">Edge (bargain)</option><option value="adp">Fantrax ADP</option>
+        <option value="cat" disabled>Category (click a column)</option></select></label>
+      <label class="f zsel" for="zdrop">Zscore<select id="zdrop"><option value="0" title="All categories">0</option><option value="1" title="Drop worst category">−1</option><option value="2" title="Drop worst two categories">−2</option></select></label>
+      <label class="f zsel" for="s-basis">Basis<select id="s-basis"><option value="total">Season</option><option value="pergame">Per game</option></select></label>
+      <label class="check" for="hide"><input type="checkbox" id="hide" checked> Hide taken</label>
+    </div>
+    <div class="tablewrap"><table class="pl"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  </section>
+
+  <section class="how">
+    <h2>How the board works</h2>
+    <div class="cols">
+      <div>
+        <h3>Logging picks</h3>
+        <p>Type each pick and press Enter (taken by another team) or tap Mine. The draft order puts every pick on the right team, so the Teams panel fills itself in. If you fall behind, log missed picks in any order: your own picks go to your slot and everyone else's fill the other picks in order. Tap a pick in the recent list twice to take it back; the next pick you log goes into that spot.</p>
+        <h3>Zscore</h3>
+        <p>A player's season value against an average drafted player. Each category is scaled by how far apart teams finish, measured by simulating drafts in which every team follows ADP. Categories where teams end up bunched together reward small edges more.</p>
+        <h3>−1 and −2 Zscore</h3>
+        <p>Zscore with the player's worst category, or worst two, left out, the way he looks on a team that punts them. The dropped categories show in the cell. Edge and the rank number follow whichever Zscore is shown.</p>
+        <h3>Season or per game</h3>
+        <p>Season counts each player's projected games, so a player who misses time is worth less. Per game gives everyone the same games (the drafted-pool average), so value comes only from production when he plays. This choice drives Zscore, Gain and Edge.</p>
+        <h3>Gain</h3>
+        <p>How much a player raises your chance of winning each category against the other teams in this draft, compared with leaving the pick to a waiver-level player. Your forecast is your picks plus a typical player at each pick you have left; every other team's is its picks plus a typical player at each of its remaining picks. Unpicked slots count as twice as uncertain as a single typical player. It changes with every pick, so a third big man adds less once you have two. Numbers are hundredths of a category win, averaged over your opponents.</p>
+        <h3>Gain M</h3>
+        <p>Gain Matchup. Instead of adding up category chances, it asks how much a player raises your chance of winning the whole matchup against each other team (more categories than he wins, ties counted half), averaged over every opponent. Numbers are percentage points. It rewards strength in categories that are close and gives little for piling onto categories you already win or have no chance in. It follows the Scoring setting: weekly swings in H2H, season totals in roto.</p>
+      </div>
+      <div>
+        <h3>Head-to-head</h3>
+        <p>In H2H each week is a fresh contest, so the board adds each category's week-to-week swing. Swing comes from game-to-game variance in each stat plus the number of games a player gets in a week. Here is each category's weekly swing relative to how far apart teams sit in a week; higher means a lead there is less reliable, so it counts for less:</p>
+        <div class="swing" id="swing"></div>
+        <p>H2H most categories values the chance of winning the week. A category counts for more the more often it decides your matchup.</p>
+        <h3>The # order</h3>
+        <p>The board's ranking for your next pick. It ranks by Gain, then checks the top ten against your following pick: if a slightly better player is likely to still be there, it moves up the one who won't be. Rows that probably won't reach your pick are dimmed.</p>
+      </div>
+      <div>
+        <h3>There at / Lasts to</h3>
+        <p>The chance a player is still available at your next pick and at the one after, given he is on the board now. They come from his ADP and how much draft position varies, which grows the later a player goes. Safe until is the last pick he has an 80% chance to reach; Gone by is the first pick where that falls to 20%. Rank range is ADP plus or minus one standard deviation.</p>
+        <h3>Edge</h3>
+        <p>Fantrax ADP minus rank on the Zscore shown, in picks. Positive means he is going later than his value says he should.</p>
+        <h3>ADP</h3>
+        <p>Fantrax ADP from the projections file. The two players without one are treated as late picks with a wide range.</p>
+        <h3>Fantrax sync</h3>
+        <p>Paste your league ID (or the whole league URL) and press Connect. The board reads your draft from Fantrax every 10 seconds, sets the team count, rounds and draft order from your league, and puts each pick on the team that made it, traded picks included. Choose your team so Gain and availability are worked out for you. You can still log picks by hand; anything Fantrax reports takes priority. A drafted player missing from the projections is added as a waiver-level player.</p>
+        <h3>Limits</h3>
+        <p>Lineup positions and games caps aren't modeled. Your draft is saved in this browser only.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>const PLAYERS=[{"n":"Victor Wembanyama","t":"SAS","p":"C","g":69.0,"m":31.0,"pts":27.521,"tpm":2.067,"reb":12.582,"ast":3.68,"stl":1.193,"blk":3.46,"fgp":0.523,"fga":18.417,"ftp":0.8323,"fta":7.436,"to":2.224,"adp":1.6,"ftx":1.7,"rk":1,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Nikola Jokic","t":"DEN","p":"C","g":75.0,"m":35.0,"pts":27.046,"tpm":1.472,"reb":13.465,"ast":10.583,"stl":1.405,"blk":0.889,"fgp":0.5575,"fga":17.76,"ftp":0.822,"fta":7.021,"to":3.668,"adp":1.5,"ftx":1.4,"rk":2,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Shai Gilgeous-Alexander","t":"OKC","p":"PG","g":75.0,"m":33.0,"pts":29.988,"tpm":1.771,"reb":4.012,"ast":5.663,"stl":1.453,"blk":0.762,"fgp":0.5404,"fga":18.934,"ftp":0.8715,"fta":8.894,"to":2.19,"adp":3.4,"ftx":3.5,"rk":3,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Luka Doncic","t":"LAL","p":"PG/SG","g":66.0,"m":36.0,"pts":34.465,"tpm":4.34,"reb":7.689,"ast":8.772,"stl":1.416,"blk":0.522,"fgp":0.4774,"fga":23.436,"ftp":0.7756,"fta":9.988,"to":4.029,"adp":3.6,"ftx":3.6,"rk":4,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Kawhi Leonard","t":"TOR","p":"SF/PF","g":57.5,"m":31.4,"pts":26.816,"tpm":2.674,"reb":6.219,"ast":3.521,"stl":1.572,"blk":0.328,"fgp":0.4975,"fga":19.087,"ftp":0.871,"fta":5.912,"to":1.917,"adp":28.8,"ftx":29.2,"rk":5,"inj":"","risk":"E","note":""},{"n":"Tyrese Maxey","t":"PHI","p":"PG/SG","g":71.5,"m":36.5,"pts":23.306,"tpm":2.546,"reb":3.995,"ast":5.179,"stl":1.611,"blk":0.576,"fgp":0.4661,"fga":17.893,"ftp":0.8958,"fta":4.555,"to":1.958,"adp":9.8,"ftx":9.7,"rk":6,"inj":"","risk":"M","note":""},{"n":"Jayson Tatum","t":"BOS","p":"SF/PF","g":68.5,"m":35.0,"pts":26.979,"tpm":3.321,"reb":8.705,"ast":5.692,"stl":1.135,"blk":0.424,"fgp":0.45,"fga":20.455,"ftp":0.834,"fta":6.293,"to":2.694,"adp":7.5,"ftx":7.8,"rk":7,"inj":"","risk":"M","note":""},{"n":"Tyrese Haliburton","t":"IND","p":"PG/SG","g":62.5,"m":32.0,"pts":18.079,"tpm":2.941,"reb":3.4,"ast":9.238,"stl":1.327,"blk":0.579,"fgp":0.4591,"fga":13.865,"ftp":0.8491,"fta":2.834,"to":1.902,"adp":14.0,"ftx":13.2,"rk":8,"inj":"Probable - ankle","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Cooper Flagg","t":"DAL","p":"PG/SG/SF","g":75.0,"m":34.0,"pts":24.45,"tpm":1.254,"reb":6.966,"ast":5.685,"stl":1.177,"blk":1.062,"fgp":0.484,"fga":18.532,"ftp":0.8375,"fta":6.278,"to":2.424,"adp":9.5,"ftx":10.6,"rk":9,"inj":"","risk":"M","note":""},{"n":"Amen Thompson","t":"HOU","p":"PG/SG/SF/PF","g":73.0,"m":36.5,"pts":18.504,"tpm":0.359,"reb":8.054,"ast":4.543,"stl":1.56,"blk":0.821,"fgp":0.5626,"fga":12.847,"ftp":0.777,"fta":4.75,"to":1.935,"adp":19.1,"ftx":20.5,"rk":10,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Cade Cunningham","t":"DET","p":"PG/SG","g":68.0,"m":34.0,"pts":23.668,"tpm":2.091,"reb":5.304,"ast":10.584,"stl":1.438,"blk":0.783,"fgp":0.4629,"fga":18.509,"ftp":0.8066,"fta":5.505,"to":3.61,"adp":5.9,"ftx":5.7,"rk":11,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Donovan Mitchell","t":"CLE","p":"PG/SG","g":71.0,"m":33.0,"pts":24.979,"tpm":2.572,"reb":4.332,"ast":5.127,"stl":1.457,"blk":0.278,"fgp":0.4801,"fga":18.087,"ftp":0.8721,"fta":5.78,"to":2.462,"adp":13.9,"ftx":14.7,"rk":12,"inj":"","risk":"M","note":""},{"n":"Anthony Edwards","t":"MIN","p":"SG/SF","g":73.0,"m":35.0,"pts":27.903,"tpm":3.325,"reb":5.083,"ast":3.801,"stl":1.35,"blk":0.82,"fgp":0.4833,"fga":19.397,"ftp":0.8069,"fta":7.221,"to":2.985,"adp":8.3,"ftx":8.6,"rk":13,"inj":"","risk":"M","note":""},{"n":"Stephen Curry","t":"GSW","p":"PG","g":61.5,"m":31.0,"pts":25.347,"tpm":4.475,"reb":3.557,"ast":4.952,"stl":1.068,"blk":0.322,"fgp":0.4619,"fga":18.083,"ftp":0.923,"fta":4.513,"to":2.771,"adp":23.7,"ftx":21.0,"rk":14,"inj":"","risk":"H","note":""},{"n":"Jamal Murray","t":"DEN","p":"PG/SG","g":69.0,"m":35.0,"pts":24.253,"tpm":3.209,"reb":4.365,"ast":6.832,"stl":0.888,"blk":0.445,"fgp":0.4624,"fga":17.687,"ftp":0.889,"fta":5.273,"to":2.224,"adp":18.5,"ftx":20.1,"rk":15,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Anthony Davis","t":"WAS","p":"PF/C","g":61.0,"m":32.0,"pts":19.405,"tpm":0.471,"reb":10.987,"ast":2.859,"stl":1.097,"blk":1.822,"fgp":0.5103,"fga":15.082,"ftp":0.754,"fta":4.695,"to":1.987,"adp":34.8,"ftx":28.6,"rk":16,"inj":"","risk":"E","note":"Matt's Manifesto Article Player"},{"n":"Chet Holmgren","t":"OKC","p":"PF/C","g":66.5,"m":29.5,"pts":17.025,"tpm":1.31,"reb":9.031,"ast":1.651,"stl":0.715,"blk":1.964,"fgp":0.546,"fga":11.082,"ftp":0.795,"fta":4.543,"to":1.399,"adp":23.9,"ftx":25.1,"rk":17,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Karl-Anthony Towns","t":"NYK","p":"PF/C","g":73.0,"m":31.0,"pts":19.915,"tpm":1.304,"reb":12.436,"ast":3.454,"stl":0.887,"blk":0.503,"fgp":0.5288,"fga":13.412,"ftp":0.853,"fta":5.19,"to":2.447,"adp":15.5,"ftx":16.6,"rk":18,"inj":"","risk":"M","note":""},{"n":"Trey Murphy","t":"NOR","p":"SG/SF/PF","g":70.5,"m":35.0,"pts":19.947,"tpm":3.334,"reb":5.429,"ast":3.611,"stl":1.341,"blk":0.446,"fgp":0.4524,"fga":15.024,"ftp":0.875,"fta":3.451,"to":1.606,"adp":33.0,"ftx":32.0,"rk":19,"inj":"","risk":"H","note":""},{"n":"Kyrie Irving","t":"DAL","p":"PG/SG","g":64.0,"m":33.0,"pts":22.613,"tpm":2.655,"reb":4.422,"ast":5.48,"stl":1.102,"blk":0.466,"fgp":0.4626,"fga":17.604,"ftp":0.91,"fta":4.032,"to":2.038,"adp":47.7,"ftx":49.5,"rk":20,"inj":"","risk":"H","note":""},{"n":"Scottie Barnes","t":"TOR","p":"SF/PF/C","g":73.0,"m":33.5,"pts":18.143,"tpm":0.801,"reb":6.453,"ast":6.698,"stl":1.36,"blk":1.221,"fgp":0.5077,"fga":14.065,"ftp":0.7974,"fta":3.839,"to":2.711,"adp":12.6,"ftx":12.2,"rk":21,"inj":"","risk":"M","note":""},{"n":"Kevin Durant","t":"HOU","p":"SG/SF/PF","g":70.5,"m":35.5,"pts":24.636,"tpm":2.358,"reb":5.684,"ast":4.195,"stl":0.725,"blk":0.912,"fgp":0.5212,"fga":16.907,"ftp":0.872,"fta":5.338,"to":2.935,"adp":16.1,"ftx":16.4,"rk":22,"inj":"","risk":"M","note":""},{"n":"LaMelo Ball","t":"MIN","p":"PG","g":66.5,"m":32.0,"pts":20.884,"tpm":4.049,"reb":5.539,"ast":8.297,"stl":1.346,"blk":0.269,"fgp":0.4145,"fga":17.551,"ftp":0.8965,"fta":2.549,"to":3.156,"adp":27.7,"ftx":25.2,"rk":23,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Dyson Daniels","t":"ATL","p":"PG/SG/SF","g":73.0,"m":32.5,"pts":12.184,"tpm":0.542,"reb":7.228,"ast":5.6,"stl":2.022,"blk":0.375,"fgp":0.5267,"fga":10.179,"ftp":0.6431,"fta":1.429,"to":1.603,"adp":52.0,"ftx":54.7,"rk":24,"inj":"","risk":"M","note":""},{"n":"Donovan Clingan","t":"POR","p":"C","g":73.0,"m":29.0,"pts":12.772,"tpm":1.147,"reb":12.64,"ast":1.955,"stl":0.678,"blk":2.018,"fgp":0.5171,"fga":9.406,"ftp":0.69,"fta":2.75,"to":1.407,"adp":36.7,"ftx":49.5,"rk":25,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Joel Embiid","t":"PHI","p":"C","g":51.0,"m":32.0,"pts":24.912,"tpm":1.419,"reb":8.109,"ast":3.582,"stl":0.607,"blk":1.143,"fgp":0.4865,"fga":16.745,"ftp":0.86,"fta":8.372,"to":2.631,"adp":59.6,"ftx":58.0,"rk":26,"inj":"","risk":"E","note":"Matt's Manifesto Article Player"},{"n":"Jalen Duren","t":"DET","p":"C","g":68.5,"m":29.0,"pts":20.786,"tpm":0.0,"reb":10.804,"ast":2.404,"stl":0.733,"blk":0.848,"fgp":0.6584,"fga":11.888,"ftp":0.7556,"fta":6.792,"to":1.846,"adp":37.0,"ftx":42.2,"rk":27,"inj":"","risk":"H","note":""},{"n":"Austin Reaves","t":"LAL","p":"PG/SG/SF","g":73.0,"m":35.5,"pts":24.531,"tpm":2.5,"reb":4.452,"ast":6.107,"stl":1.026,"blk":0.442,"fgp":0.4819,"fga":16.077,"ftp":0.8692,"fta":7.519,"to":3.163,"adp":19.4,"ftx":22.2,"rk":28,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Bam Adebayo","t":"MIA","p":"PF/C","g":73.0,"m":33.0,"pts":20.25,"tpm":1.985,"reb":9.206,"ast":3.723,"stl":1.266,"blk":0.71,"fgp":0.4454,"fga":15.369,"ftp":0.767,"fta":5.966,"to":1.493,"adp":29.8,"ftx":33.0,"rk":29,"inj":"","risk":"M","note":""},{"n":"Lauri Markkanen","t":"UTA","p":"SF/PF","g":70.5,"m":34.0,"pts":21.91,"tpm":2.285,"reb":6.753,"ast":2.152,"stl":0.943,"blk":0.509,"fgp":0.4698,"fga":16.249,"ftp":0.895,"fta":4.87,"to":1.526,"adp":36.1,"ftx":35.1,"rk":30,"inj":"","risk":"H","note":"Bust Candidate"},{"n":"Derrick White","t":"BOS","p":"PG/SG","g":75.0,"m":34.0,"pts":17.993,"tpm":3.308,"reb":4.352,"ast":5.16,"stl":0.962,"blk":1.168,"fgp":0.4173,"fga":14.655,"ftp":0.8809,"fta":2.785,"to":1.717,"adp":38.8,"ftx":36.7,"rk":31,"inj":"","risk":"M","note":""},{"n":"Jalen Williams","t":"OKC","p":"SG/SF/PF","g":69.0,"m":32.5,"pts":20.281,"tpm":1.226,"reb":5.035,"ast":5.15,"stl":1.462,"blk":0.402,"fgp":0.5047,"fga":15.164,"ftp":0.823,"fta":4.557,"to":2.079,"adp":39.8,"ftx":38.5,"rk":32,"inj":"","risk":"H","note":""},{"n":"Giannis Antetokounmpo","t":"MIA","p":"PF/C","g":69.0,"m":32.5,"pts":30.644,"tpm":0.391,"reb":10.977,"ast":6.866,"stl":1.066,"blk":1.011,"fgp":0.6071,"fga":18.751,"ftp":0.651,"fta":11.496,"to":3.435,"adp":7.6,"ftx":7.8,"rk":33,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Jalen Johnson","t":"ATL","p":"SF/PF","g":73.0,"m":35.0,"pts":21.286,"tpm":1.602,"reb":9.905,"ast":7.365,"stl":1.103,"blk":0.404,"fgp":0.4802,"fga":16.503,"ftp":0.7895,"fta":4.859,"to":3.206,"adp":10.6,"ftx":10.4,"rk":34,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Paul George","t":"BOS","p":"SF/PF","g":58.0,"m":31.4,"pts":18.679,"tpm":2.904,"reb":5.063,"ast":3.675,"stl":1.655,"blk":0.444,"fgp":0.4409,"fga":15.017,"ftp":0.8275,"fta":3.061,"to":2.011,"adp":77.5,"ftx":73.8,"rk":35,"inj":"","risk":"H","note":"Bust Candidate"},{"n":"Brandon Miller","t":"CHA","p":"SG/SF/PF","g":68.0,"m":32.5,"pts":22.678,"tpm":3.629,"reb":5.401,"ast":3.937,"stl":1.002,"blk":0.535,"fgp":0.4396,"fga":17.603,"ftp":0.9022,"fta":3.959,"to":2.54,"adp":45.4,"ftx":43.6,"rk":36,"inj":"","risk":"H","note":""},{"n":"Evan Mobley","t":"CLE","p":"PF/C","g":70.5,"m":32.0,"pts":18.63,"tpm":0.861,"reb":9.389,"ast":3.436,"stl":0.676,"blk":1.581,"fgp":0.5757,"fga":12.933,"ftp":0.6553,"fta":4.391,"to":1.721,"adp":28.9,"ftx":30.1,"rk":37,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Jaren Jackson Jr.","t":"UTA","p":"PF/C","g":70.5,"m":32.0,"pts":18.618,"tpm":1.714,"reb":5.973,"ast":2.239,"stl":1.232,"blk":1.569,"fgp":0.4817,"fga":14.375,"ftp":0.8,"fta":3.819,"to":2.25,"adp":43.5,"ftx":40.7,"rk":38,"inj":"","risk":"H","note":""},{"n":"O.G. Anunoby","t":"NYK","p":"SF/PF","g":66.5,"m":33.0,"pts":16.175,"tpm":2.478,"reb":5.163,"ast":2.057,"stl":1.403,"blk":0.739,"fgp":0.4793,"fga":11.666,"ftp":0.847,"fta":2.968,"to":1.68,"adp":63.2,"ftx":59.4,"rk":39,"inj":"","risk":"H","note":""},{"n":"Zach Edey","t":"MEM","p":"C","g":63.5,"m":27.0,"pts":13.859,"tpm":0.206,"reb":11.257,"ast":1.337,"stl":0.648,"blk":1.775,"fgp":0.6056,"fga":9.312,"ftp":0.7617,"fta":3.118,"to":1.861,"adp":69.7,"ftx":71.3,"rk":40,"inj":"","risk":"E","note":"Matt's Manifesto Article Player"},{"n":"Nickeil Alexander-Walker","t":"ATL","p":"PG/SG/SF","g":75.0,"m":33.0,"pts":19.523,"tpm":3.039,"reb":3.228,"ast":3.575,"stl":1.215,"blk":0.52,"fgp":0.4627,"fga":14.294,"ftp":0.881,"fta":3.697,"to":1.84,"adp":53.1,"ftx":53.8,"rk":41,"inj":"","risk":"M","note":""},{"n":"Ausar Thompson","t":"DET","p":"SG/SF/PF","g":68.0,"m":28.5,"pts":11.636,"tpm":0.064,"reb":6.173,"ast":4.418,"stl":2.147,"blk":1.038,"fgp":0.541,"fga":9.154,"ftp":0.597,"fta":2.793,"to":1.761,"adp":79.3,"ftx":77.4,"rk":42,"inj":"","risk":"H","note":""},{"n":"Michael Porter Jr.","t":"BKN","p":"SF/PF","g":66.0,"m":32.0,"pts":21.914,"tpm":3.139,"reb":6.357,"ast":2.794,"stl":1.056,"blk":0.264,"fgp":0.4721,"fga":16.636,"ftp":0.84,"fta":3.654,"to":2.004,"adp":62.3,"ftx":66.2,"rk":43,"inj":"","risk":"H","note":""},{"n":"Desmond Bane","t":"ORL","p":"SG/SF","g":73.0,"m":32.0,"pts":18.596,"tpm":2.048,"reb":3.656,"ast":3.584,"stl":1.156,"blk":0.411,"fgp":0.4977,"fga":12.848,"ftp":0.8935,"fta":4.206,"to":1.711,"adp":50.4,"ftx":49.4,"rk":44,"inj":"","risk":"M","note":""},{"n":"Kel'el Ware","t":"MIL","p":"PF/C","g":73.0,"m":26.0,"pts":12.193,"tpm":1.473,"reb":9.906,"ast":1.177,"stl":0.841,"blk":1.236,"fgp":0.5203,"fga":9.422,"ftp":0.675,"fta":1.356,"to":0.803,"adp":61.5,"ftx":60.1,"rk":45,"inj":"","risk":"M","note":"Position Battle Breakout Candidate"},{"n":"Walker Kessler","t":"LAL","p":"C","g":70.5,"m":31.5,"pts":11.627,"tpm":0.301,"reb":10.57,"ast":1.648,"stl":0.724,"blk":2.278,"fgp":0.65,"fga":7.434,"ftp":0.5852,"fta":2.839,"to":1.567,"adp":31.5,"ftx":37.0,"rk":46,"inj":"Probable - finger","risk":"H","note":"Breakout Candidate,Matt's Manifesto Article Player"},{"n":"Domantas Sabonis","t":"SAC","p":"PF/C","g":69.0,"m":32.5,"pts":18.02,"tpm":0.504,"reb":12.242,"ast":5.862,"stl":0.893,"blk":0.271,"fgp":0.5691,"fga":12.436,"ftp":0.741,"fta":4.535,"to":2.869,"adp":32.1,"ftx":35.9,"rk":47,"inj":"","risk":"M","note":""},{"n":"Alperen Sengun","t":"HOU","p":"PF/C","g":73.0,"m":33.0,"pts":19.913,"tpm":0.606,"reb":8.746,"ast":5.39,"stl":1.047,"blk":1.044,"fgp":0.5275,"fga":15.294,"ftp":0.7025,"fta":4.515,"to":2.56,"adp":20.9,"ftx":19.9,"rk":48,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Ty Jerome","t":"MEM","p":"SG/SF","g":66.5,"m":27.5,"pts":18.979,"tpm":2.606,"reb":3.137,"ast":5.407,"stl":1.272,"blk":0.117,"fgp":0.4675,"fga":14.432,"ftp":0.87,"fta":3.31,"to":1.876,"adp":98.5,"ftx":90.1,"rk":49,"inj":"","risk":"H","note":"Position Battle Sleeper"},{"n":"Matas Buzelis","t":"CHI","p":"SF/PF","g":75.0,"m":32.0,"pts":19.337,"tpm":2.734,"reb":6.31,"ast":2.684,"stl":0.769,"blk":1.536,"fgp":0.4671,"fga":14.557,"ftp":0.795,"fta":3.78,"to":2.339,"adp":55.4,"ftx":58.0,"rk":50,"inj":"","risk":"M","note":""},{"n":"Trae Young","t":"WAS","p":"PG","g":73.0,"m":34.0,"pts":22.884,"tpm":2.544,"reb":2.649,"ast":9.931,"stl":1.108,"blk":0.144,"fgp":0.4339,"fga":16.001,"ftp":0.87,"fta":7.418,"to":3.623,"adp":25.3,"ftx":24.8,"rk":51,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Darius Garland","t":"LAC","p":"PG","g":65.5,"m":32.0,"pts":21.704,"tpm":2.981,"reb":2.747,"ast":7.209,"stl":1.148,"blk":0.198,"fgp":0.4702,"fga":16.403,"ftp":0.861,"fta":3.832,"to":2.979,"adp":55.1,"ftx":52.3,"rk":52,"inj":"","risk":"E","note":"Matt's Manifesto Article Player"},{"n":"Onyeka Okongwu","t":"ATL","p":"PF/C","g":73.0,"m":31.0,"pts":14.284,"tpm":1.925,"reb":7.371,"ast":2.997,"stl":1.079,"blk":1.076,"fgp":0.4763,"fga":10.823,"ftp":0.7555,"fta":2.714,"to":1.596,"adp":49.1,"ftx":49.2,"rk":53,"inj":"","risk":"M","note":""},{"n":"VJ Edgecombe","t":"PHI","p":"SG","g":73.5,"m":34.0,"pts":14.377,"tpm":1.819,"reb":5.903,"ast":3.617,"stl":1.466,"blk":0.573,"fgp":0.4533,"fga":12.199,"ftp":0.8431,"fta":1.775,"to":1.611,"adp":78.5,"ftx":84.7,"rk":54,"inj":"","risk":"M","note":""},{"n":"Jaylen Brown","t":"PHI","p":"SG/SF","g":71.5,"m":35.0,"pts":24.98,"tpm":1.933,"reb":6.953,"ast":4.127,"stl":1.109,"blk":0.368,"fgp":0.4805,"fga":18.863,"ftp":0.7907,"fta":6.22,"to":2.61,"adp":39.3,"ftx":42.2,"rk":55,"inj":"","risk":"M","note":""},{"n":"Jalen Brunson","t":"NYK","p":"PG","g":71.5,"m":35.0,"pts":25.454,"tpm":2.407,"reb":3.341,"ast":7.187,"stl":0.85,"blk":0.143,"fgp":0.4718,"fga":19.554,"ftp":0.828,"fta":5.553,"to":2.421,"adp":25.3,"ftx":30.5,"rk":56,"inj":"","risk":"M","note":""},{"n":"James Harden","t":"CLE","p":"PG/SG","g":68.5,"m":33.5,"pts":19.322,"tpm":2.678,"reb":4.638,"ast":7.606,"stl":0.982,"blk":0.424,"fgp":0.4358,"fga":13.425,"ftp":0.872,"fta":5.669,"to":3.284,"adp":34.3,"ftx":29.6,"rk":57,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Damian Lillard","t":"POR","p":"PG","g":63.0,"m":31.0,"pts":20.947,"tpm":3.087,"reb":3.857,"ast":5.083,"stl":0.818,"blk":0.2,"fgp":0.4348,"fga":14.887,"ftp":0.912,"fta":5.388,"to":2.313,"adp":73.0,"ftx":79.2,"rk":58,"inj":"","risk":"H","note":""},{"n":"Jarrett Allen","t":"CLE","p":"C","g":73.0,"m":28.0,"pts":15.989,"tpm":0.006,"reb":8.866,"ast":1.532,"stl":1.004,"blk":0.823,"fgp":0.664,"fga":9.456,"ftp":0.6957,"fta":4.925,"to":1.237,"adp":73.4,"ftx":80.2,"rk":59,"inj":"","risk":"M","note":""},{"n":"Jaden McDaniels","t":"MIN","p":"SF/PF","g":75.0,"m":32.5,"pts":14.961,"tpm":1.352,"reb":4.369,"ast":2.684,"stl":1.187,"blk":1.143,"fgp":0.5189,"fga":11.166,"ftp":0.8194,"fta":2.466,"to":1.837,"adp":82.5,"ftx":78.9,"rk":60,"inj":"","risk":"M","note":""},{"n":"Dejounte Murray","t":"NOR","p":"PG/SG","g":66.0,"m":33.0,"pts":16.81,"tpm":1.615,"reb":6.084,"ast":7.363,"stl":1.707,"blk":0.28,"fgp":0.4467,"fga":14.237,"ftp":0.814,"fta":3.043,"to":3.406,"adp":56.9,"ftx":53.7,"rk":61,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Franz Wagner","t":"ORL","p":"SF/PF","g":67.5,"m":32.5,"pts":20.763,"tpm":1.445,"reb":5.414,"ast":3.922,"stl":1.086,"blk":0.344,"fgp":0.4792,"fga":15.443,"ftp":0.8389,"fta":5.383,"to":1.928,"adp":56.3,"ftx":60.8,"rk":62,"inj":"","risk":"H","note":""},{"n":"Naz Reid","t":"CHA","p":"PF/C","g":75.0,"m":30.5,"pts":16.488,"tpm":2.375,"reb":6.945,"ast":2.537,"stl":1.064,"blk":1.065,"fgp":0.4581,"fga":13.703,"ftp":0.7354,"fta":2.12,"to":1.861,"adp":63.2,"ftx":72.1,"rk":63,"inj":"","risk":"M","note":""},{"n":"Immanuel Quickley","t":"TOR","p":"PG/SG","g":68.0,"m":31.5,"pts":16.309,"tpm":2.71,"reb":3.737,"ast":5.793,"stl":1.115,"blk":0.066,"fgp":0.4451,"fga":12.888,"ftp":0.825,"fta":2.579,"to":1.246,"adp":90.5,"ftx":83.5,"rk":64,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Jalen Suggs","t":"ORL","p":"PG","g":61.0,"m":28.5,"pts":13.014,"tpm":2.215,"reb":3.776,"ast":5.361,"stl":1.763,"blk":0.735,"fgp":0.4234,"fga":11.076,"ftp":0.8423,"fta":1.686,"to":2.683,"adp":102.7,"ftx":94.6,"rk":65,"inj":"","risk":"H","note":""},{"n":"Keyonte George","t":"UTA","p":"PG","g":73.0,"m":32.5,"pts":20.364,"tpm":2.146,"reb":3.329,"ast":6.273,"stl":1.04,"blk":0.208,"fgp":0.459,"fga":14.329,"ftp":0.889,"fta":5.695,"to":2.774,"adp":55.4,"ftx":58.0,"rk":66,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"LeBron James","t":"PHI","p":"SF/PF","g":65.0,"m":32.0,"pts":17.944,"tpm":1.242,"reb":6.32,"ast":6.837,"stl":1.145,"blk":0.538,"fgp":0.5089,"fga":13.32,"ftp":0.742,"fta":4.24,"to":2.699,"adp":52.0,"ftx":55.0,"rk":67,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Jimmy Butler","t":"GSW","p":"SF/PF","g":19.5,"m":28.1,"pts":16.249,"tpm":0.661,"reb":4.718,"ast":4.907,"stl":1.138,"blk":0.236,"fgp":0.4843,"fga":10.597,"ftp":0.8593,"fta":6.196,"to":1.491,"adp":134.0,"ftx":198.1,"rk":68,"inj":"Injured - torn acl (54g) - 2/10/2027","risk":"E","note":""},{"n":"Devin Booker","t":"PHO","p":"PG/SG/SF","g":69.0,"m":34.0,"pts":26.322,"tpm":2.031,"reb":3.806,"ast":6.04,"stl":0.707,"blk":0.211,"fgp":0.4567,"fga":18.889,"ftp":0.882,"fta":7.977,"to":2.994,"adp":28.7,"ftx":27.1,"rk":69,"inj":"","risk":"H","note":""},{"n":"Neemias Queta","t":"BOS","p":"C","g":73.0,"m":24.5,"pts":10.876,"tpm":0.057,"reb":8.12,"ast":1.711,"stl":0.739,"blk":1.291,"fgp":0.6534,"fga":6.885,"ftp":0.741,"fta":2.458,"to":0.944,"adp":104.8,"ftx":104.6,"rk":70,"inj":"","risk":"M","note":"Position Battle Matt's Manifesto Article Player"},{"n":"Tyler Herro","t":"MIL","p":"PG/SG","g":61.5,"m":31.5,"pts":19.907,"tpm":2.484,"reb":4.553,"ast":4.37,"stl":0.791,"blk":0.33,"fgp":0.4683,"fga":15.217,"ftp":0.91,"fta":3.486,"to":2.113,"adp":66.0,"ftx":64.2,"rk":71,"inj":"","risk":"H","note":""},{"n":"Cason Wallace","t":"OKC","p":"PG/SG/SF","g":75.0,"m":29.5,"pts":9.938,"tpm":1.53,"reb":3.457,"ast":2.88,"stl":1.884,"blk":0.487,"fgp":0.4401,"fga":8.55,"ftp":0.8125,"fta":1.086,"to":0.973,"adp":114.3,"ftx":114.1,"rk":72,"inj":"","risk":"M","note":"Sleeper"},{"n":"Josh Giddey","t":"CHI","p":"PG/SG","g":70.5,"m":32.0,"pts":16.592,"tpm":2.055,"reb":7.342,"ast":9.433,"stl":1.048,"blk":0.556,"fgp":0.4388,"fga":13.184,"ftp":0.786,"fta":3.773,"to":3.616,"adp":24.7,"ftx":25.9,"rk":73,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Kon Knueppel","t":"CHA","p":"PG/SG/SF","g":73.0,"m":32.0,"pts":19.742,"tpm":3.45,"reb":5.815,"ast":3.868,"stl":0.726,"blk":0.262,"fgp":0.4562,"fga":14.703,"ftp":0.8513,"fta":3.38,"to":2.129,"adp":49.4,"ftx":50.3,"rk":74,"inj":"Injured - left hamstring (2g) - 10/24/2026","risk":"M","note":""},{"n":"Isaiah Hartenstein","t":"OKC","p":"C","g":66.5,"m":26.0,"pts":9.519,"tpm":0.015,"reb":10.035,"ast":3.233,"stl":1.049,"blk":0.917,"fgp":0.6349,"fga":6.451,"ftp":0.6403,"fta":2.048,"to":1.534,"adp":100.3,"ftx":97.4,"rk":75,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Jakob Poeltl","t":"TOR","p":"C","g":66.0,"m":27.0,"pts":12.409,"tpm":0.0,"reb":7.441,"ast":2.36,"stl":1.023,"blk":0.903,"fgp":0.6884,"fga":7.997,"ftp":0.6251,"fta":2.238,"to":1.345,"adp":123.2,"ftx":124.4,"rk":76,"inj":"","risk":"H","note":"Position Battle"},{"n":"Ryan Rollins","t":"MIL","p":"PG/SG","g":73.0,"m":31.0,"pts":17.075,"tpm":2.511,"reb":4.348,"ast":5.446,"stl":1.422,"blk":0.39,"fgp":0.464,"fga":13.666,"ftp":0.8098,"fta":2.325,"to":2.927,"adp":71.8,"ftx":70.3,"rk":77,"inj":"","risk":"M","note":"Position Battle Bust Candidate"},{"n":"Ivica Zubac","t":"IND","p":"C","g":71.0,"m":30.0,"pts":15.219,"tpm":0.0,"reb":11.167,"ast":2.184,"stl":0.384,"blk":1.017,"fgp":0.6258,"fga":10.243,"ftp":0.7169,"fta":3.346,"to":1.559,"adp":63.2,"ftx":65.4,"rk":78,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Dylan Harper","t":"SAS","p":"PG/SG/SF","g":73.0,"m":29.5,"pts":16.227,"tpm":1.294,"reb":4.366,"ast":5.36,"stl":0.967,"blk":0.549,"fgp":0.5163,"fga":12.727,"ftp":0.78,"fta":2.295,"to":1.715,"adp":87.5,"ftx":87.2,"rk":79,"inj":"","risk":"M","note":""},{"n":"Mikal Bridges","t":"NYK","p":"SG/SF/PF","g":79.0,"m":32.5,"pts":13.38,"tpm":1.748,"reb":3.497,"ast":3.389,"stl":1.134,"blk":0.721,"fgp":0.4779,"fga":11.085,"ftp":0.836,"fta":1.241,"to":0.984,"adp":76.7,"ftx":73.9,"rk":80,"inj":"","risk":"L","note":""},{"n":"Day'Ron Sharpe","t":"BKN","p":"C","g":71.0,"m":27.0,"pts":11.68,"tpm":0.185,"reb":9.603,"ast":3.12,"stl":1.252,"blk":0.833,"fgp":0.5945,"fga":8.069,"ftp":0.6801,"fta":2.796,"to":2.172,"adp":92.2,"ftx":99.4,"rk":81,"inj":"","risk":"M","note":"Position Battle"},{"n":"Alexandre Sarr","t":"WAS","p":"PF/C","g":68.0,"m":29.0,"pts":13.495,"tpm":1.051,"reb":7.092,"ast":2.353,"stl":0.879,"blk":1.903,"fgp":0.466,"fga":11.58,"ftp":0.687,"fta":2.404,"to":1.518,"adp":69.8,"ftx":68.9,"rk":82,"inj":"","risk":"H","note":""},{"n":"Collin Murray-Boyles","t":"TOR","p":"PF/C","g":75.0,"m":26.0,"pts":12.758,"tpm":0.278,"reb":6.067,"ast":2.283,"stl":1.102,"blk":1.209,"fgp":0.6008,"fga":8.764,"ftp":0.653,"fta":2.985,"to":1.107,"adp":106.4,"ftx":104.8,"rk":83,"inj":"","risk":"M","note":"Position Battle Sleeper"},{"n":"Keegan Murray","t":"SAC","p":"SF/PF","g":73.0,"m":34.5,"pts":15.116,"tpm":1.776,"reb":5.776,"ast":1.879,"stl":1.012,"blk":1.119,"fgp":0.454,"fga":13.003,"ftp":0.7857,"fta":1.953,"to":1.229,"adp":112.7,"ftx":106.6,"rk":84,"inj":"","risk":"M","note":""},{"n":"Kristaps Porzingis","t":"GSW","p":"PF/C","g":42.0,"m":25.0,"pts":16.632,"tpm":1.818,"reb":5.677,"ast":2.389,"stl":0.577,"blk":1.174,"fgp":0.4652,"fga":11.768,"ftp":0.833,"fta":4.641,"to":1.344,"adp":119.6,"ftx":115.4,"rk":85,"inj":"Injured - illness (7g) - 11/2/2026","risk":"E","note":""},{"n":"Rudy Gobert","t":"MIN","p":"C","g":70.5,"m":32.0,"pts":11.3,"tpm":0.004,"reb":12.221,"ast":1.719,"stl":0.822,"blk":1.637,"fgp":0.6708,"fga":6.755,"ftp":0.5607,"fta":3.983,"to":1.501,"adp":71.0,"ftx":69.4,"rk":86,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Andrew Wiggins","t":"MIA","p":"SG/SF","g":71.5,"m":31.0,"pts":14.605,"tpm":1.995,"reb":4.653,"ast":2.563,"stl":1.144,"blk":0.798,"fgp":0.4661,"fga":11.441,"ftp":0.7839,"fta":2.482,"to":1.424,"adp":103.5,"ftx":107.5,"rk":87,"inj":"","risk":"M","note":""},{"n":"Cam Johnson","t":"DEN","p":"SF/PF","g":66.5,"m":31.5,"pts":13.557,"tpm":2.311,"reb":4.197,"ast":2.829,"stl":0.87,"blk":0.465,"fgp":0.4684,"fga":9.928,"ftp":0.854,"fta":2.279,"to":0.93,"adp":141.7,"ftx":157.6,"rk":88,"inj":"","risk":"H","note":""},{"n":"Brandin Podziemski","t":"GSW","p":"SG/SF","g":75.0,"m":30.5,"pts":16.089,"tpm":2.074,"reb":5.276,"ast":3.907,"stl":1.016,"blk":0.191,"fgp":0.4651,"fga":11.753,"ftp":0.8215,"fta":3.752,"to":1.684,"adp":121.0,"ftx":117.0,"rk":89,"inj":"","risk":"M","note":"Position Battle"},{"n":"Ajay Mitchell","t":"OKC","p":"PG/SG/SF","g":71.5,"m":28.0,"pts":13.677,"tpm":1.285,"reb":3.408,"ast":3.56,"stl":1.25,"blk":0.348,"fgp":0.4885,"fga":10.377,"ftp":0.857,"fta":2.632,"to":1.335,"adp":132.3,"ftx":117.2,"rk":90,"inj":"","risk":"M","note":""},{"n":"Myles Turner","t":"MIL","p":"C","g":71.5,"m":28.0,"pts":12.594,"tpm":2.065,"reb":5.654,"ast":1.408,"stl":0.711,"blk":1.761,"fgp":0.4521,"fga":9.507,"ftp":0.742,"fta":2.606,"to":1.343,"adp":95.5,"ftx":88.9,"rk":91,"inj":"","risk":"M","note":"Position Battle"},{"n":"De'Aaron Fox","t":"SAS","p":"PG/SG","g":70.5,"m":30.5,"pts":17.367,"tpm":1.674,"reb":3.61,"ast":5.896,"stl":1.229,"blk":0.257,"fgp":0.4842,"fga":14.053,"ftp":0.735,"fta":2.834,"to":1.998,"adp":83.2,"ftx":73.9,"rk":92,"inj":"","risk":"H","note":""},{"n":"Deni Avdija","t":"POR","p":"SG/SF/PF","g":70.5,"m":33.5,"pts":22.224,"tpm":1.559,"reb":7.32,"ast":5.516,"stl":0.783,"blk":0.636,"fgp":0.4753,"fga":15.155,"ftp":0.7958,"fta":7.863,"to":3.362,"adp":45.2,"ftx":40.2,"rk":93,"inj":"","risk":"H","note":""},{"n":"John Collins","t":"DET","p":"SF/PF/C","g":70.5,"m":28.5,"pts":14.708,"tpm":1.316,"reb":6.082,"ast":1.272,"stl":0.904,"blk":0.741,"fgp":0.5467,"fga":10.349,"ftp":0.7778,"fta":2.67,"to":1.482,"adp":110.2,"ftx":108.9,"rk":94,"inj":"","risk":"M","note":""},{"n":"Norman Powell","t":"CHI","p":"SG/SF","g":66.0,"m":31.0,"pts":21.117,"tpm":2.706,"reb":3.114,"ast":2.323,"stl":1.113,"blk":0.202,"fgp":0.4652,"fga":15.228,"ftp":0.81,"fta":5.237,"to":1.818,"adp":92.1,"ftx":92.7,"rk":95,"inj":"","risk":"H","note":""},{"n":"Jabari Smith Jr.","t":"HOU","p":"SF/PF/C","g":75.0,"m":34.0,"pts":15.76,"tpm":2.336,"reb":6.663,"ast":1.798,"stl":0.624,"blk":0.904,"fgp":0.4613,"fga":12.292,"ftp":0.788,"fta":2.645,"to":1.39,"adp":92.5,"ftx":91.8,"rk":96,"inj":"","risk":"M","note":""},{"n":"Reed Sheppard","t":"HOU","p":"PG/SG","g":75.0,"m":23.5,"pts":12.381,"tpm":2.642,"reb":2.765,"ast":2.915,"stl":1.248,"blk":0.605,"fgp":0.433,"fga":10.173,"ftp":0.828,"fta":1.123,"to":1.303,"adp":119.9,"ftx":122.5,"rk":97,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Payton Pritchard","t":"BOS","p":"PG","g":77.0,"m":31.5,"pts":17.425,"tpm":2.817,"reb":3.592,"ast":4.873,"stl":0.696,"blk":0.128,"fgp":0.47,"fga":14.165,"ftp":0.8672,"fta":1.489,"to":1.597,"adp":78.1,"ftx":81.7,"rk":98,"inj":"","risk":"L","note":"Position Battle Matt's Manifesto Article Player"},{"n":"Paul Reed","t":"DET","p":"C","g":75.0,"m":19.0,"pts":9.598,"tpm":0.227,"reb":6.11,"ast":1.704,"stl":1.143,"blk":1.135,"fgp":0.5936,"fga":6.687,"ftp":0.679,"fta":2.11,"to":1.098,"adp":138.6,"ftx":156.6,"rk":99,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Cameron Boozer","t":"MEM","p":"PF","g":75.0,"m":29.0,"pts":16.041,"tpm":1.455,"reb":7.462,"ast":4.003,"stl":1.126,"blk":0.437,"fgp":0.4728,"fga":12.433,"ftp":0.7732,"fta":3.658,"to":2.473,"adp":60.9,"ftx":59.2,"rk":100,"inj":"","risk":"M","note":""},{"n":"Toumani Camara","t":"POR","p":"PF/C","g":75.0,"m":33.0,"pts":12.731,"tpm":2.605,"reb":5.095,"ast":2.124,"stl":1.324,"blk":0.419,"fgp":0.4376,"fga":10.367,"ftp":0.7272,"fta":1.447,"to":1.47,"adp":116.1,"ftx":114.9,"rk":101,"inj":"","risk":"M","note":"Position Battle"},{"n":"Josh Hart","t":"NYK","p":"SG/SF","g":70.5,"m":30.5,"pts":11.119,"tpm":1.348,"reb":7.459,"ast":4.621,"stl":1.117,"blk":0.186,"fgp":0.4893,"fga":8.622,"ftp":0.7316,"fta":1.822,"to":1.741,"adp":92.1,"ftx":96.0,"rk":102,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Zion Williamson","t":"NOR","p":"SF/PF","g":65.0,"m":30.5,"pts":19.92,"tpm":0.0,"reb":5.67,"ast":3.305,"stl":0.972,"blk":0.582,"fgp":0.6155,"fga":12.052,"ftp":0.7167,"fta":7.094,"to":1.912,"adp":79.8,"ftx":81.2,"rk":103,"inj":"","risk":"E","note":""},{"n":"Ayo Dosunmu","t":"MIN","p":"PG/SG/SF","g":73.0,"m":29.5,"pts":14.034,"tpm":1.427,"reb":3.906,"ast":4.066,"stl":1.014,"blk":0.312,"fgp":0.5076,"fga":10.881,"ftp":0.8464,"fta":1.844,"to":1.633,"adp":120.4,"ftx":111.2,"rk":104,"inj":"","risk":"M","note":""},{"n":"Zach LaVine","t":"SAC","p":"PG/SG/SF","g":66.5,"m":31.5,"pts":20.134,"tpm":2.666,"reb":2.766,"ast":3.111,"stl":0.727,"blk":0.198,"fgp":0.4858,"fga":14.516,"ftp":0.872,"fta":3.858,"to":2.043,"adp":109.8,"ftx":111.7,"rk":105,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Pascal Siakam","t":"IND","p":"SF/PF/C","g":70.5,"m":32.5,"pts":21.079,"tpm":1.428,"reb":6.488,"ast":3.345,"stl":1.036,"blk":0.414,"fgp":0.501,"fga":16.281,"ftp":0.7081,"fta":4.712,"to":2.178,"adp":52.5,"ftx":54.1,"rk":106,"inj":"","risk":"H","note":""},{"n":"Brandon Ingram","t":"LAC","p":"SG/SF/PF","g":43.5,"m":32.1,"pts":21.593,"tpm":1.629,"reb":5.605,"ast":4.99,"stl":0.665,"blk":0.672,"fgp":0.4734,"fga":16.677,"ftp":0.805,"fta":5.186,"to":2.79,"adp":87.5,"ftx":87.1,"rk":107,"inj":"Injured - partially torn achilles (23g) - 12/13/2026","risk":"E","note":""},{"n":"Fred VanVleet","t":"HOU","p":"PG","g":65.0,"m":32.5,"pts":13.363,"tpm":2.673,"reb":3.016,"ast":5.138,"stl":1.229,"blk":0.333,"fgp":0.3796,"fga":11.77,"ftp":0.83,"fta":2.115,"to":1.391,"adp":127.7,"ftx":109.7,"rk":108,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Tobias Harris","t":"SAS","p":"PF","g":71.5,"m":27.0,"pts":12.081,"tpm":1.117,"reb":5.195,"ast":2.35,"stl":0.972,"blk":0.513,"fgp":0.4713,"fga":9.736,"ftp":0.866,"fta":2.064,"to":0.97,"adp":145.2,"ftx":183.7,"rk":109,"inj":"Questionable - left calf strain","risk":"M","note":""},{"n":"Egor Demin","t":"BKN","p":"PG","g":68.5,"m":30.5,"pts":14.936,"tpm":3.012,"reb":3.704,"ast":3.863,"stl":0.99,"blk":0.436,"fgp":0.4147,"fga":12.083,"ftp":0.826,"fta":2.305,"to":1.821,"adp":136.2,"ftx":128.1,"rk":110,"inj":"","risk":"H","note":"Breakout Candidate,Matt's Manifesto Article Player"},{"n":"Yaxel Lendeborg","t":"GSW","p":"SF","g":75.0,"m":30.0,"pts":12.496,"tpm":1.249,"reb":6.554,"ast":2.817,"stl":0.938,"blk":1.0,"fgp":0.4655,"fga":9.872,"ftp":0.77,"fta":2.671,"to":1.862,"adp":125.0,"ftx":152.1,"rk":111,"inj":"","risk":"M","note":"Position Battle"},{"n":"Cedric Coward","t":"MEM","p":"SG/SF","g":71.5,"m":28.0,"pts":15.311,"tpm":1.625,"reb":5.232,"ast":3.157,"stl":0.793,"blk":0.478,"fgp":0.4793,"fga":11.394,"ftp":0.838,"fta":3.297,"to":1.768,"adp":93.3,"ftx":105.8,"rk":112,"inj":"","risk":"M","note":"Sleeper"},{"n":"Caleb Wilson","t":"CHI","p":"PF","g":73.0,"m":29.5,"pts":15.789,"tpm":1.354,"reb":6.988,"ast":1.927,"stl":1.156,"blk":1.06,"fgp":0.4594,"fga":12.466,"ftp":0.719,"fta":4.147,"to":2.084,"adp":79.1,"ftx":90.8,"rk":113,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Isaiah Jackson","t":"LAC","p":"C","g":68.0,"m":22.5,"pts":9.871,"tpm":0.008,"reb":6.877,"ast":1.375,"stl":0.86,"blk":1.438,"fgp":0.662,"fga":6.07,"ftp":0.648,"fta":2.819,"to":1.337,"adp":146.4,"ftx":219.9,"rk":114,"inj":"","risk":"H","note":"Position Battle"},{"n":"Mitchell Robinson","t":"BOS","p":"C","g":64.0,"m":22.0,"pts":8.479,"tpm":0.0,"reb":8.089,"ast":0.916,"stl":1.079,"blk":1.28,"fgp":0.7134,"fga":5.145,"ftp":0.4559,"fta":2.496,"to":0.751,"adp":133.3,"ftx":178.1,"rk":115,"inj":"","risk":"H","note":"Position Battle Matt's Manifesto Article Player"},{"n":"Aaron Nesmith","t":"IND","p":"SF/PF","g":73.0,"m":29.5,"pts":13.592,"tpm":2.137,"reb":4.2,"ast":1.765,"stl":0.816,"blk":0.562,"fgp":0.4666,"fga":10.338,"ftp":0.8665,"fta":2.086,"to":1.186,"adp":145.8,"ftx":196.2,"rk":116,"inj":"","risk":"M","note":""},{"n":"Derik Queen","t":"NOR","p":"PF/C","g":75.0,"m":25.5,"pts":12.013,"tpm":0.345,"reb":7.273,"ast":2.822,"stl":1.11,"blk":0.977,"fgp":0.4791,"fga":9.236,"ftp":0.806,"fta":3.495,"to":2.23,"adp":86.8,"ftx":90.3,"rk":117,"inj":"","risk":"M","note":"Position Battle Sleeper"},{"n":"C.J. McCollum","t":"ATL","p":"PG/SG","g":73.0,"m":29.5,"pts":18.377,"tpm":2.505,"reb":3.128,"ast":4.512,"stl":0.839,"blk":0.435,"fgp":0.4543,"fga":15.247,"ftp":0.7684,"fta":2.626,"to":1.8,"adp":109.3,"ftx":108.3,"rk":118,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Paolo Banchero","t":"ORL","p":"PF","g":73.0,"m":35.0,"pts":22.782,"tpm":1.17,"reb":7.911,"ast":5.491,"stl":0.785,"blk":0.449,"fgp":0.4739,"fga":15.918,"ftp":0.7737,"fta":8.431,"to":3.326,"adp":46.2,"ftx":45.9,"rk":119,"inj":"","risk":"M","note":""},{"n":"Jeremiah Fears","t":"NOR","p":"PG","g":75.0,"m":28.0,"pts":15.358,"tpm":1.511,"reb":3.814,"ast":3.97,"stl":1.329,"blk":0.471,"fgp":0.4467,"fga":12.556,"ftp":0.79,"fta":3.327,"to":2.119,"adp":140.8,"ftx":134.3,"rk":120,"inj":"","risk":"M","note":"Position Battle"},{"n":"Coby White","t":"CHA","p":"PG/SG","g":67.5,"m":30.5,"pts":20.996,"tpm":2.737,"reb":4.334,"ast":4.998,"stl":0.653,"blk":0.122,"fgp":0.4554,"fga":14.681,"ftp":0.8414,"fta":5.808,"to":2.935,"adp":85.7,"ftx":85.3,"rk":121,"inj":"Questionable - left calf strain","risk":"H","note":""},{"n":"Nicolas Claxton","t":"CHI","p":"C","g":70.5,"m":27.5,"pts":12.644,"tpm":0.018,"reb":7.362,"ast":2.809,"stl":0.722,"blk":1.409,"fgp":0.5887,"fga":9.235,"ftp":0.557,"fta":3.147,"to":1.226,"adp":92.5,"ftx":101.4,"rk":122,"inj":"Questionable - hamstring ","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Robert Williams","t":"POR","p":"C","g":52.0,"m":18.0,"pts":6.606,"tpm":0.113,"reb":7.272,"ast":0.913,"stl":0.61,"blk":1.445,"fgp":0.6848,"fga":4.289,"ftp":0.626,"fta":0.989,"to":0.837,"adp":null,"ftx":233.6,"rk":123,"inj":"","risk":"H","note":""},{"n":"Scotty Pippen Jr.","t":"MEM","p":"PG","g":63.5,"m":22.6,"pts":11.048,"tpm":1.191,"reb":2.473,"ast":4.672,"stl":1.569,"blk":0.387,"fgp":0.4775,"fga":8.42,"ftp":0.7445,"fta":2.44,"to":1.936,"adp":142.6,"ftx":191.2,"rk":124,"inj":"","risk":"H","note":"Position Battle"},{"n":"Gui Santos","t":"GSW","p":"SF/PF","g":73.0,"m":27.5,"pts":12.797,"tpm":1.567,"reb":5.161,"ast":3.124,"stl":1.119,"blk":0.4,"fgp":0.5018,"fga":9.448,"ftp":0.7334,"fta":2.384,"to":1.885,"adp":146.1,"ftx":182.7,"rk":125,"inj":"","risk":"M","note":"Position Battle"},{"n":"Tre Jones","t":"CHI","p":"PG","g":69.5,"m":24.5,"pts":12.163,"tpm":0.593,"reb":2.789,"ast":4.768,"stl":0.911,"blk":0.161,"fgp":0.5558,"fga":8.533,"ftp":0.838,"fta":2.488,"to":1.232,"adp":145.1,"ftx":163.9,"rk":126,"inj":"","risk":"M","note":""},{"n":"Stephon Castle","t":"SAS","p":"PG/SG","g":70.5,"m":31.0,"pts":17.063,"tpm":1.306,"reb":5.832,"ast":7.625,"stl":1.024,"blk":0.326,"fgp":0.4696,"fga":12.294,"ftp":0.736,"fta":5.722,"to":2.939,"adp":64.2,"ftx":63.5,"rk":127,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Anthony Black","t":"ORL","p":"PG/SG","g":72.5,"m":27.1,"pts":13.051,"tpm":1.443,"reb":3.272,"ast":3.321,"stl":1.373,"blk":0.698,"fgp":0.447,"fga":10.48,"ftp":0.7516,"fta":2.98,"to":1.755,"adp":137.2,"ftx":139.9,"rk":128,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Nikola Vucevic","t":"ORL","p":"C","g":71.5,"m":23.0,"pts":12.034,"tpm":1.348,"reb":6.947,"ast":2.755,"stl":0.477,"blk":0.6,"fgp":0.4842,"fga":10.041,"ftp":0.8405,"fta":1.145,"to":1.093,"adp":139.2,"ftx":188.1,"rk":129,"inj":"","risk":"M","note":""},{"n":"Ja Morant","t":"POR","p":"PG","g":60.5,"m":31.0,"pts":20.142,"tpm":1.223,"reb":3.553,"ast":6.487,"stl":1.119,"blk":0.196,"fgp":0.4537,"fga":15.737,"ftp":0.8358,"fta":5.551,"to":3.222,"adp":99.3,"ftx":84.3,"rk":130,"inj":"","risk":"H","note":"Position Battle"},{"n":"Derrick Jones","t":"LAC","p":"SF/PF","g":69.0,"m":27.5,"pts":10.982,"tpm":1.182,"reb":4.463,"ast":1.314,"stl":0.976,"blk":0.797,"fgp":0.505,"fga":8.252,"ftp":0.736,"fta":1.991,"to":0.857,"adp":null,"ftx":241.2,"rk":131,"inj":"","risk":"H","note":"Position Battle"},{"n":"Christian Braun","t":"DEN","p":"SG/SF","g":73.0,"m":31.0,"pts":12.133,"tpm":1.117,"reb":4.72,"ast":2.484,"stl":0.754,"blk":0.361,"fgp":0.5356,"fga":8.818,"ftp":0.79,"fta":1.988,"to":0.886,"adp":140.1,"ftx":175.8,"rk":132,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Jrue Holiday","t":"POR","p":"PG/SG","g":66.0,"m":30.5,"pts":13.532,"tpm":2.271,"reb":4.645,"ast":4.16,"stl":0.967,"blk":0.129,"fgp":0.4437,"fga":11.277,"ftp":0.854,"fta":1.467,"to":1.835,"adp":143.0,"ftx":165.1,"rk":133,"inj":"","risk":"H","note":"Position Battle"},{"n":"Kyshawn George","t":"WAS","p":"SG/SF/PF","g":70.5,"m":29.5,"pts":12.204,"tpm":1.714,"reb":4.549,"ast":3.378,"stl":1.02,"blk":0.88,"fgp":0.4314,"fga":10.134,"ftp":0.812,"fta":2.151,"to":1.958,"adp":130.0,"ftx":127.7,"rk":134,"inj":"","risk":"H","note":"Position Battle"},{"n":"Grayson Allen","t":"CHA","p":"PG/SG/SF","g":66.0,"m":26.9,"pts":13.307,"tpm":2.584,"reb":2.978,"ast":3.751,"stl":0.965,"blk":0.276,"fgp":0.4284,"fga":9.927,"ftp":0.857,"fta":2.588,"to":1.655,"adp":146.4,"ftx":158.8,"rk":135,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Moussa Diabate","t":"CHA","p":"C","g":73.0,"m":26.5,"pts":8.114,"tpm":0.0,"reb":8.92,"ast":2.232,"stl":0.758,"blk":0.896,"fgp":0.6267,"fga":5.3,"ftp":0.638,"fta":2.304,"to":1.09,"adp":139.8,"ftx":155.6,"rk":136,"inj":"","risk":"M","note":"Position Battle"},{"n":"Matisse Thybulle","t":"LAL","p":"SG/SF","g":64.0,"m":20.0,"pts":5.369,"tpm":1.105,"reb":2.398,"ast":1.167,"stl":1.805,"blk":0.669,"fgp":0.4307,"fga":4.416,"ftp":0.7096,"fta":0.647,"to":0.875,"adp":null,"ftx":241.1,"rk":137,"inj":"","risk":"H","note":""},{"n":"Sandro Mamukelashvili","t":"LAL","p":"PF/C","g":75.0,"m":23.5,"pts":10.966,"tpm":1.515,"reb":4.995,"ast":2.122,"stl":0.826,"blk":0.509,"fgp":0.5078,"fga":7.93,"ftp":0.735,"fta":1.902,"to":0.868,"adp":128.1,"ftx":135.1,"rk":138,"inj":"","risk":"M","note":"Position Battle"},{"n":"Peyton Watson","t":"CLE","p":"SG/SF/PF","g":70.5,"m":31.5,"pts":14.89,"tpm":1.427,"reb":4.983,"ast":2.55,"stl":0.931,"blk":1.227,"fgp":0.4784,"fga":11.383,"ftp":0.7065,"fta":3.64,"to":2.021,"adp":114.9,"ftx":117.8,"rk":139,"inj":"","risk":"H","note":""},{"n":"Miles Bridges","t":"PHO","p":"SF/PF","g":75.0,"m":30.5,"pts":14.914,"tpm":1.537,"reb":5.91,"ast":3.161,"stl":0.634,"blk":0.442,"fgp":0.4707,"fga":12.007,"ftp":0.8035,"fta":2.581,"to":1.454,"adp":101.9,"ftx":105.1,"rk":140,"inj":"Probable - ankle","risk":"L","note":""},{"n":"Rui Hachimura","t":"LAC","p":"PF","g":70.5,"m":30.0,"pts":13.982,"tpm":2.025,"reb":5.548,"ast":1.297,"stl":0.635,"blk":0.372,"fgp":0.4972,"fga":10.781,"ftp":0.7166,"fta":1.725,"to":0.818,"adp":137.4,"ftx":202.0,"rk":141,"inj":"","risk":"M","note":""},{"n":"Aaron Gordon","t":"DEN","p":"PF/C","g":61.0,"m":28.0,"pts":15.718,"tpm":1.698,"reb":5.773,"ast":2.861,"stl":0.534,"blk":0.296,"fgp":0.4906,"fga":10.9,"ftp":0.779,"fta":4.268,"to":1.183,"adp":133.2,"ftx":137.9,"rk":142,"inj":"","risk":"H","note":""},{"n":"Julian Champagnie","t":"SAS","p":"SF/PF","g":75.0,"m":26.0,"pts":10.353,"tpm":2.217,"reb":5.132,"ast":1.524,"stl":0.658,"blk":0.497,"fgp":0.4483,"fga":7.883,"ftp":0.865,"fta":1.234,"to":0.717,"adp":142.8,"ftx":219.4,"rk":143,"inj":"","risk":"M","note":""},{"n":"Keon Ellis","t":"BKN","p":"PG/SG","g":75.0,"m":24.5,"pts":7.823,"tpm":1.438,"reb":2.266,"ast":1.568,"stl":1.314,"blk":0.757,"fgp":0.4532,"fga":6.085,"ftp":0.7925,"fta":1.096,"to":0.783,"adp":null,"ftx":232.6,"rk":144,"inj":"","risk":"M","note":""},{"n":"Khaman Maluach","t":"PHO","p":"C","g":70.5,"m":23.5,"pts":8.987,"tpm":0.393,"reb":7.619,"ast":0.495,"stl":0.336,"blk":1.798,"fgp":0.5487,"fga":6.543,"ftp":0.7294,"fta":1.938,"to":1.065,"adp":108.0,"ftx":158.1,"rk":145,"inj":"","risk":"H","note":"Sleeper,Matt's Manifesto Article Player"},{"n":"Julius Randle","t":"BKN","p":"PF","g":71.0,"m":32.0,"pts":20.689,"tpm":1.525,"reb":6.226,"ast":4.577,"stl":0.826,"blk":0.198,"fgp":0.4677,"fga":15.35,"ftp":0.79,"fta":6.084,"to":2.804,"adp":71.8,"ftx":66.5,"rk":146,"inj":"","risk":"M","note":""},{"n":"Mark Williams","t":"PHO","p":"C","g":5.5,"m":20.0,"pts":9.761,"tpm":0.0,"reb":6.92,"ast":0.79,"stl":0.66,"blk":0.829,"fgp":0.6363,"fga":6.291,"ftp":0.7793,"fta":2.253,"to":1.036,"adp":121.1,"ftx":165.4,"rk":147,"inj":"Injured - torn labrum (74g) - 3/28/2027","risk":"E","note":""},{"n":"Herb Jones","t":"NOR","p":"SG/SF/PF","g":68.0,"m":28.0,"pts":7.591,"tpm":1.184,"reb":3.272,"ast":2.503,"stl":1.611,"blk":0.475,"fgp":0.4009,"fga":6.988,"ftp":0.8199,"fta":0.981,"to":1.19,"adp":147.6,"ftx":196.4,"rk":148,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Ja'Kobe Walter","t":"TOR","p":"PG/SG","g":73.0,"m":24.0,"pts":10.418,"tpm":2.185,"reb":3.1,"ast":1.526,"stl":1.107,"blk":0.249,"fgp":0.4379,"fga":7.751,"ftp":0.7929,"fta":1.821,"to":0.598,"adp":null,"ftx":238.9,"rk":149,"inj":"","risk":"M","note":""},{"n":"DeMar DeRozan","t":"DEN","p":"SF/PF","g":73.0,"m":27.5,"pts":15.733,"tpm":0.516,"reb":2.501,"ast":3.736,"stl":0.742,"blk":0.295,"fgp":0.4872,"fga":11.298,"ftp":0.869,"fta":4.844,"to":1.223,"adp":127.1,"ftx":132.1,"rk":150,"inj":"","risk":"M","note":""},{"n":"Dereck Lively II","t":"DAL","p":"C","g":42.5,"m":20.1,"pts":7.328,"tpm":0.0,"reb":6.589,"ast":1.796,"stl":0.54,"blk":1.374,"fgp":0.6935,"fga":4.466,"ftp":0.6391,"fta":1.773,"to":0.957,"adp":null,"ftx":217.4,"rk":151,"inj":"Injured - foot surgery (12g) - 11/14/2026","risk":"H","note":"Bust Candidate"},{"n":"Jordan Goodwin","t":"PHO","p":"PG/SG","g":69.0,"m":22.0,"pts":7.854,"tpm":1.557,"reb":4.735,"ast":2.057,"stl":1.404,"blk":0.229,"fgp":0.4112,"fga":6.999,"ftp":0.711,"fta":0.76,"to":0.871,"adp":null,"ftx":244.1,"rk":152,"inj":"","risk":"H","note":""},{"n":"Kelly Oubre","t":"IND","p":"SF/PF","g":73.0,"m":27.5,"pts":13.206,"tpm":1.499,"reb":4.35,"ast":1.418,"stl":1.188,"blk":0.355,"fgp":0.4672,"fga":10.351,"ftp":0.7575,"fta":2.685,"to":1.181,"adp":148.2,"ftx":221.7,"rk":153,"inj":"","risk":"M","note":""},{"n":"Tari Eason","t":"HOU","p":"SF/PF","g":66.5,"m":25.0,"pts":10.22,"tpm":1.422,"reb":6.031,"ast":1.407,"stl":1.167,"blk":0.486,"fgp":0.4252,"fga":9.291,"ftp":0.812,"fta":1.104,"to":1.229,"adp":144.7,"ftx":141.2,"rk":154,"inj":"","risk":"H","note":""},{"n":"Gary Payton II","t":"GSW","p":"PG/SG","g":66.0,"m":19.9,"pts":8.546,"tpm":0.577,"reb":4.056,"ast":2.033,"stl":1.163,"blk":0.374,"fgp":0.5775,"fga":6.492,"ftp":0.6616,"fta":0.714,"to":0.92,"adp":null,"ftx":243.3,"rk":155,"inj":"","risk":"H","note":""},{"n":"Collin Gillespie","t":"PHO","p":"PG","g":73.0,"m":25.5,"pts":10.339,"tpm":2.533,"reb":3.647,"ast":3.968,"stl":0.993,"blk":0.16,"fgp":0.398,"fga":9.04,"ftp":0.906,"fta":0.674,"to":1.267,"adp":136.1,"ftx":156.7,"rk":156,"inj":"","risk":"M","note":""},{"n":"Wendell Carter Jr.","t":"ORL","p":"C","g":69.0,"m":28.0,"pts":11.115,"tpm":0.698,"reb":7.018,"ast":1.661,"stl":0.714,"blk":0.539,"fgp":0.5163,"fga":7.465,"ftp":0.8029,"fta":3.374,"to":1.257,"adp":133.6,"ftx":175.6,"rk":157,"inj":"","risk":"M","note":""},{"n":"Miles McBride","t":"NYK","p":"PG/SG","g":70.5,"m":27.0,"pts":12.075,"tpm":2.608,"reb":2.681,"ast":2.834,"stl":0.937,"blk":0.219,"fgp":0.4201,"fga":10.085,"ftp":0.788,"fta":1.262,"to":0.817,"adp":151.0,"ftx":242.8,"rk":158,"inj":"","risk":"H","note":""},{"n":"Max Strus","t":"LAC","p":"SG/SF","g":61.0,"m":26.5,"pts":12.286,"tpm":2.85,"reb":4.839,"ast":3.064,"stl":0.5,"blk":0.165,"fgp":0.449,"fga":9.543,"ftp":0.814,"fta":1.064,"to":1.098,"adp":148.5,"ftx":234.9,"rk":159,"inj":"Injured - partial plantar fascia tear (8g) - 11/8/2026","risk":"E","note":"Position Battle"},{"n":"Devin Vassell","t":"SAS","p":"SG/SF","g":68.0,"m":28.5,"pts":12.546,"tpm":2.332,"reb":3.797,"ast":2.337,"stl":0.782,"blk":0.302,"fgp":0.4414,"fga":10.096,"ftp":0.78,"fta":1.668,"to":0.845,"adp":141.9,"ftx":136.2,"rk":160,"inj":"","risk":"H","note":""},{"n":"Ace Bailey","t":"UTA","p":"PG/SG/SF/PF","g":75.0,"m":28.5,"pts":13.998,"tpm":1.925,"reb":4.17,"ast":1.964,"stl":0.835,"blk":0.801,"fgp":0.4485,"fga":12.216,"ftp":0.76,"fta":1.466,"to":1.537,"adp":148.1,"ftx":141.4,"rk":161,"inj":"","risk":"M","note":"Position Battle"},{"n":"Kris Dunn","t":"LAC","p":"PG/SG","g":70.5,"m":24.5,"pts":7.019,"tpm":0.981,"reb":3.589,"ast":3.43,"stl":1.462,"blk":0.154,"fgp":0.4633,"fga":5.836,"ftp":0.7459,"fta":0.844,"to":1.232,"adp":149.0,"ftx":241.1,"rk":162,"inj":"","risk":"H","note":"Position Battle"},{"n":"Jay Huff","t":"IND","p":"C","g":75.0,"m":19.0,"pts":8.856,"tpm":1.344,"reb":3.437,"ast":1.127,"stl":0.478,"blk":1.404,"fgp":0.4942,"fga":6.729,"ftp":0.8213,"fta":1.048,"to":0.74,"adp":153.0,"ftx":229.8,"rk":163,"inj":"","risk":"M","note":""},{"n":"Dru Smith","t":"MIA","p":"PG/SG","g":73.0,"m":18.0,"pts":5.849,"tpm":0.58,"reb":2.668,"ast":2.703,"stl":1.532,"blk":0.345,"fgp":0.4403,"fga":4.67,"ftp":0.829,"fta":1.396,"to":0.806,"adp":null,"ftx":243.6,"rk":164,"inj":"Questionable - strained right calf","risk":"M","note":""},{"n":"Charles Bassey","t":"GSW","p":"C","g":66.0,"m":17.4,"pts":7.666,"tpm":0.0,"reb":6.548,"ast":1.11,"stl":0.578,"blk":1.267,"fgp":0.652,"fga":5.064,"ftp":0.658,"fta":1.613,"to":0.946,"adp":null,"ftx":242.0,"rk":165,"inj":"","risk":"H","note":""},{"n":"Luke Kornet","t":"SAS","p":"C","g":70.5,"m":20.5,"pts":6.281,"tpm":0.0,"reb":5.937,"ast":1.767,"stl":0.519,"blk":0.824,"fgp":0.6566,"fga":3.855,"ftp":0.81,"fta":1.504,"to":0.39,"adp":null,"ftx":242.6,"rk":166,"inj":"","risk":"H","note":""},{"n":"Sam Merrill","t":"CLE","p":"SG/SF","g":73.0,"m":27.5,"pts":11.296,"tpm":2.666,"reb":2.808,"ast":2.4,"stl":0.756,"blk":0.173,"fgp":0.4442,"fga":8.625,"ftp":0.8564,"fta":1.13,"to":0.808,"adp":null,"ftx":238.9,"rk":167,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Andrew Nembhard","t":"IND","p":"PG/SG","g":70.5,"m":30.5,"pts":13.98,"tpm":1.6,"reb":3.202,"ast":5.283,"stl":0.972,"blk":0.13,"fgp":0.4466,"fga":11.056,"ftp":0.8152,"fta":3.073,"to":1.911,"adp":131.0,"ftx":134.6,"rk":168,"inj":"","risk":"H","note":""},{"n":"Isaiah Joe","t":"DET","p":"PG/SG","g":75.0,"m":22.5,"pts":11.26,"tpm":2.661,"reb":2.729,"ast":1.542,"stl":0.762,"blk":0.141,"fgp":0.4495,"fga":8.027,"ftp":0.882,"fta":1.567,"to":0.675,"adp":null,"ftx":237.9,"rk":169,"inj":"","risk":"M","note":"Position Battle"},{"n":"Saddiq Bey","t":"NOR","p":"SF/PF","g":73.0,"m":28.5,"pts":13.01,"tpm":1.585,"reb":4.669,"ast":2.182,"stl":0.827,"blk":0.123,"fgp":0.4536,"fga":10.138,"ftp":0.847,"fta":2.63,"to":1.044,"adp":137.2,"ftx":133.8,"rk":170,"inj":"","risk":"M","note":"Position Battle"},{"n":"Jusuf Nurkic","t":"UTA","p":"C","g":56.0,"m":25.5,"pts":9.415,"tpm":0.512,"reb":9.857,"ast":4.39,"stl":0.982,"blk":0.652,"fgp":0.5003,"fga":7.517,"ftp":0.582,"fta":2.375,"to":2.335,"adp":111.6,"ftx":121.2,"rk":171,"inj":"Injured - toe (11g) - 11/11/2026","risk":"H","note":"Position Battle"},{"n":"Kevin Porter Jr.","t":"MIL","p":"PG/SG","g":50.5,"m":22.4,"pts":11.134,"tpm":0.67,"reb":3.651,"ast":4.014,"stl":1.161,"blk":0.341,"fgp":0.4667,"fga":9.011,"ftp":0.862,"fta":2.381,"to":1.853,"adp":134.6,"ftx":118.3,"rk":172,"inj":"","risk":"H","note":"Position Battle Bust Candidate"},{"n":"Jaime Jaquez Jr.","t":"MIL","p":"SG/SF/PF","g":75.0,"m":28.0,"pts":14.659,"tpm":0.995,"reb":4.547,"ast":4.009,"stl":0.761,"blk":0.293,"fgp":0.4963,"fga":11.812,"ftp":0.781,"fta":2.481,"to":1.702,"adp":116.9,"ftx":124.6,"rk":173,"inj":"","risk":"M","note":"Position Battle"},{"n":"Quentin Grimes","t":"LAL","p":"SG/SF","g":73.0,"m":30.5,"pts":13.318,"tpm":1.564,"reb":3.544,"ast":2.838,"stl":0.89,"blk":0.316,"fgp":0.475,"fga":9.992,"ftp":0.8221,"fta":2.75,"to":1.554,"adp":137.5,"ftx":157.4,"rk":174,"inj":"","risk":"M","note":"Position Battle"},{"n":"De'Anthony Melton","t":"GSW","p":"PG/SG","g":66.0,"m":23.0,"pts":12.264,"tpm":1.755,"reb":3.254,"ast":2.749,"stl":1.316,"blk":0.382,"fgp":0.4189,"fga":10.292,"ftp":0.8275,"fta":2.28,"to":1.863,"adp":null,"ftx":224.4,"rk":175,"inj":"","risk":"H","note":"Position Battle"},{"n":"Jalen Green","t":"PHO","p":"PG/SG","g":71.5,"m":32.0,"pts":19.82,"tpm":2.501,"reb":4.577,"ast":3.657,"stl":1.032,"blk":0.328,"fgp":0.4254,"fga":17.383,"ftp":0.7613,"fta":3.323,"to":2.545,"adp":108.3,"ftx":114.8,"rk":176,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Daniel Gafford","t":"DAL","p":"C","g":66.0,"m":20.5,"pts":8.941,"tpm":0.033,"reb":6.405,"ast":1.064,"stl":0.614,"blk":1.192,"fgp":0.6555,"fga":5.389,"ftp":0.671,"fta":2.747,"to":1.016,"adp":140.6,"ftx":204.6,"rk":177,"inj":"","risk":"H","note":""},{"n":"Al Horford","t":"GSW","p":"PF/C","g":55.5,"m":22.5,"pts":7.616,"tpm":1.487,"reb":4.911,"ast":2.437,"stl":0.606,"blk":0.922,"fgp":0.4246,"fga":6.694,"ftp":0.8405,"fta":0.529,"to":0.848,"adp":147.0,"ftx":242.6,"rk":178,"inj":"","risk":"M","note":""},{"n":"PJ Washington","t":"DAL","p":"SF/PF/C","g":70.5,"m":27.4,"pts":12.793,"tpm":1.36,"reb":5.735,"ast":1.689,"stl":0.823,"blk":0.857,"fgp":0.4544,"fga":10.39,"ftp":0.696,"fta":2.86,"to":1.271,"adp":141.4,"ftx":136.3,"rk":179,"inj":"","risk":"H","note":""},{"n":"Josh Minott","t":"BKN","p":"SF/PF/C","g":68.5,"m":19.5,"pts":7.764,"tpm":1.228,"reb":3.235,"ast":1.053,"stl":1.105,"blk":0.663,"fgp":0.4711,"fga":5.634,"ftp":0.827,"fta":1.485,"to":0.954,"adp":null,"ftx":243.9,"rk":180,"inj":"","risk":"H","note":""},{"n":"Morez Johnson","t":"DAL","p":"PF","g":75.0,"m":25.5,"pts":11.133,"tpm":0.323,"reb":7.131,"ast":1.072,"stl":0.604,"blk":0.906,"fgp":0.5424,"fga":8.074,"ftp":0.7376,"fta":2.781,"to":1.291,"adp":143.4,"ftx":207.9,"rk":181,"inj":"","risk":"M","note":"Matt's Manifesto Article Player"},{"n":"Jalen Smith","t":"CHI","p":"PF/C","g":68.5,"m":20.5,"pts":9.665,"tpm":1.447,"reb":6.411,"ast":1.154,"stl":0.448,"blk":0.782,"fgp":0.4873,"fga":7.146,"ftp":0.7574,"fta":1.656,"to":0.935,"adp":152.7,"ftx":234.3,"rk":182,"inj":"","risk":"H","note":""},{"n":"Jake LaRavia","t":"LAL","p":"PF","g":75.0,"m":26.0,"pts":8.289,"tpm":0.984,"reb":4.015,"ast":1.816,"stl":1.188,"blk":0.483,"fgp":0.4636,"fga":6.3,"ftp":0.7731,"fta":1.893,"to":1.129,"adp":153.7,"ftx":238.1,"rk":183,"inj":"","risk":"M","note":"Position Battle"},{"n":"Yves Missi","t":"NOR","p":"PF/C","g":73.0,"m":24.5,"pts":6.466,"tpm":0.0,"reb":7.497,"ast":1.635,"stl":0.368,"blk":1.95,"fgp":0.543,"fga":4.998,"ftp":0.564,"fta":1.84,"to":0.984,"adp":144.0,"ftx":215.4,"rk":184,"inj":"","risk":"M","note":"Position Battle"},{"n":"Pelle Larsson","t":"MIA","p":"SG/SF","g":73.0,"m":29.0,"pts":12.289,"tpm":0.963,"reb":3.488,"ast":3.363,"stl":0.838,"blk":0.281,"fgp":0.5183,"fga":8.336,"ftp":0.806,"fta":3.331,"to":1.62,"adp":150.0,"ftx":180.6,"rk":185,"inj":"","risk":"M","note":"Position Battle"},{"n":"De'Andre Hunter","t":"SAC","p":"SF/PF","g":66.5,"m":28.5,"pts":15.344,"tpm":1.965,"reb":3.762,"ast":1.916,"stl":0.794,"blk":0.176,"fgp":0.4326,"fga":11.818,"ftp":0.862,"fta":3.658,"to":1.51,"adp":null,"ftx":234.9,"rk":186,"inj":"","risk":"H","note":""},{"n":"R.J. Barrett","t":"TOR","p":"SG/SF/PF","g":70.5,"m":30.5,"pts":18.229,"tpm":1.63,"reb":5.242,"ast":3.229,"stl":0.703,"blk":0.379,"fgp":0.4782,"fga":13.847,"ftp":0.71,"fta":4.728,"to":1.778,"adp":125.5,"ftx":120.9,"rk":187,"inj":"","risk":"H","note":""},{"n":"Andre Drummond","t":"NYK","p":"C","g":71.5,"m":22.0,"pts":7.163,"tpm":0.499,"reb":9.114,"ast":1.579,"stl":0.728,"blk":0.75,"fgp":0.4735,"fga":5.992,"ftp":0.636,"fta":1.556,"to":1.089,"adp":127.0,"ftx":238.5,"rk":188,"inj":"","risk":"M","note":""},{"n":"Jonathan Kuminga","t":"MIN","p":"PF/C","g":68.0,"m":30.5,"pts":15.96,"tpm":1.198,"reb":6.37,"ast":3.17,"stl":0.949,"blk":0.444,"fgp":0.4661,"fga":12.42,"ftp":0.711,"fta":4.479,"to":2.097,"adp":147.5,"ftx":189.7,"rk":189,"inj":"","risk":"H","note":""},{"n":"Darryn Peterson","t":"UTA","p":"SG","g":70.5,"m":30.0,"pts":14.998,"tpm":1.814,"reb":3.67,"ast":4.254,"stl":1.153,"blk":0.513,"fgp":0.4174,"fga":12.774,"ftp":0.792,"fta":3.183,"to":2.704,"adp":108.3,"ftx":111.3,"rk":190,"inj":"","risk":"H","note":""},{"n":"Bobby Portis","t":"MIA","p":"PF/C","g":73.0,"m":22.5,"pts":11.136,"tpm":1.502,"reb":6.102,"ast":1.603,"stl":0.622,"blk":0.314,"fgp":0.4643,"fga":9.606,"ftp":0.7555,"fta":0.946,"to":0.922,"adp":144.6,"ftx":210.8,"rk":191,"inj":"","risk":"M","note":""},{"n":"Sam Hauser","t":"BOS","p":"SF/PF","g":75.0,"m":25.0,"pts":10.715,"tpm":2.896,"reb":3.8,"ast":1.342,"stl":0.449,"blk":0.255,"fgp":0.4361,"fga":8.63,"ftp":0.843,"fta":0.346,"to":0.452,"adp":null,"ftx":242.7,"rk":192,"inj":"","risk":"M","note":"Position Battle"},{"n":"Brook Lopez","t":"LAC","p":"C","g":58.5,"m":21.4,"pts":9.321,"tpm":1.468,"reb":4.085,"ast":1.357,"stl":0.445,"blk":1.14,"fgp":0.4659,"fga":7.542,"ftp":0.7449,"fta":1.109,"to":0.76,"adp":142.6,"ftx":217.5,"rk":193,"inj":"","risk":"H","note":"Position Battle"},{"n":"Draymond Green","t":"GSW","p":"PF/C","g":64.0,"m":28.0,"pts":8.308,"tpm":1.45,"reb":5.279,"ast":5.882,"stl":0.935,"blk":0.583,"fgp":0.4234,"fga":6.999,"ftp":0.72,"fta":1.294,"to":2.564,"adp":137.2,"ftx":170.9,"rk":194,"inj":"","risk":"H","note":"Matt's Manifesto Article Player"},{"n":"Will Richard","t":"GSW","p":"SG","g":75.0,"m":23.5,"pts":8.024,"tpm":1.332,"reb":2.844,"ast":1.458,"stl":1.181,"blk":0.147,"fgp":0.461,"fga":6.375,"ftp":0.8888,"fta":0.916,"to":0.794,"adp":null,"ftx":null,"rk":195,"inj":"","risk":"M","note":""},{"n":"Davion Mitchell","t":"MIA","p":"PG","g":73.0,"m":29.5,"pts":8.977,"tpm":1.347,"reb":2.603,"ast":5.211,"stl":0.894,"blk":0.188,"fgp":0.4902,"fga":7.242,"ftp":0.659,"fta":0.804,"to":1.391,"adp":127.5,"ftx":154.3,"rk":196,"inj":"","risk":"M","note":""},{"n":"Jerami Grant","t":"MEM","p":"SF/PF","g":66.5,"m":27.0,"pts":16.088,"tpm":2.178,"reb":2.996,"ast":1.947,"stl":0.631,"blk":0.645,"fgp":0.4476,"fga":11.402,"ftp":0.809,"fta":4.576,"to":1.817,"adp":148.0,"ftx":203.4,"rk":197,"inj":"","risk":"H","note":"Position Battle"},{"n":"Joan Beringer","t":"MIN","p":"PF/C","g":75.0,"m":18.5,"pts":8.338,"tpm":0.0,"reb":5.106,"ast":0.635,"stl":0.441,"blk":1.264,"fgp":0.6403,"fga":5.371,"ftp":0.6893,"fta":2.117,"to":0.632,"adp":142.5,"ftx":183.8,"rk":198,"inj":"","risk":"M","note":"Sleeper"},{"n":"Oso Ighodaro","t":"PHO","p":"PF/C","g":73.0,"m":24.5,"pts":7.474,"tpm":0.0,"reb":5.507,"ast":2.701,"stl":0.906,"blk":0.836,"fgp":0.6651,"fga":5.027,"ftp":0.463,"fta":1.699,"to":1.188,"adp":142.2,"ftx":227.8,"rk":199,"inj":"","risk":"M","note":""},{"n":"Jaylon Tyson","t":"CLE","p":"SG/SF","g":75.0,"m":27.0,"pts":12.099,"tpm":1.894,"reb":4.799,"ast":2.413,"stl":0.741,"blk":0.339,"fgp":0.4683,"fga":9.796,"ftp":0.731,"fta":1.412,"to":1.641,"adp":null,"ftx":232.8,"rk":200,"inj":"","risk":"M","note":""},{"n":"Isaiah Stewart","t":"MEM","p":"PF/C","g":63.5,"m":22.5,"pts":9.623,"tpm":0.643,"reb":4.946,"ast":1.327,"stl":0.341,"blk":1.285,"fgp":0.542,"fga":6.663,"ftp":0.752,"fta":2.334,"to":1.112,"adp":143.0,"ftx":220.8,"rk":201,"inj":"Injured - ankle (8g) - 11/6/2026","risk":"H","note":""},{"n":"Dillon Brooks","t":"PHO","p":"SG/SF/PF","g":69.0,"m":29.5,"pts":17.014,"tpm":1.837,"reb":3.609,"ast":1.76,"stl":0.854,"blk":0.184,"fgp":0.4306,"fga":15.024,"ftp":0.846,"fta":2.646,"to":1.471,"adp":139.5,"ftx":178.0,"rk":202,"inj":"","risk":"H","note":""},{"n":"Jaylin Williams","t":"OKC","p":"PF/C","g":73.5,"m":20.0,"pts":7.317,"tpm":1.596,"reb":5.949,"ast":2.249,"stl":0.465,"blk":0.667,"fgp":0.4323,"fga":5.383,"ftp":0.79,"fta":1.349,"to":0.994,"adp":null,"ftx":242.4,"rk":203,"inj":"","risk":"M","note":""},{"n":"Moses Moody","t":"GSW","p":"SG/SF","g":17.5,"m":22.8,"pts":9.84,"tpm":2.019,"reb":2.85,"ast":1.497,"stl":0.866,"blk":0.421,"fgp":0.4344,"fga":7.708,"ftp":0.7593,"fta":1.481,"to":0.767,"adp":null,"ftx":244.1,"rk":204,"inj":"Injured - patella tendon (58g) - 2/20/2027","risk":"H","note":""},{"n":"Maxime Raynaud","t":"SAC","p":"PF/C","g":64.5,"m":22.1,"pts":11.088,"tpm":0.378,"reb":6.03,"ast":1.059,"stl":0.447,"blk":0.426,"fgp":0.5869,"fga":7.694,"ftp":0.805,"fta":2.086,"to":1.132,"adp":139.4,"ftx":137.7,"rk":205,"inj":"Injured - right kneecap (7g) - 11/4/2026","risk":"H","note":""},{"n":"Leonard Miller","t":"CHI","p":"SF","g":59.0,"m":20.3,"pts":10.4,"tpm":0.91,"reb":5.226,"ast":1.264,"stl":0.528,"blk":0.442,"fgp":0.552,"fga":7.513,"ftp":0.762,"fta":1.569,"to":0.973,"adp":null,"ftx":243.2,"rk":206,"inj":"","risk":"H","note":""},{"n":"Ron Holland","t":"DET","p":"SF/PF","g":75.0,"m":21.5,"pts":9.515,"tpm":0.768,"reb":4.516,"ast":1.371,"stl":1.148,"blk":0.402,"fgp":0.4532,"fga":7.671,"ftp":0.796,"fta":2.255,"to":1.252,"adp":null,"ftx":240.8,"rk":207,"inj":"","risk":"M","note":""},{"n":"Tristan da Silva","t":"ORL","p":"SF/PF","g":75.0,"m":23.5,"pts":9.2,"tpm":1.24,"reb":3.409,"ast":1.643,"stl":0.797,"blk":0.353,"fgp":0.4672,"fga":7.222,"ftp":0.8768,"fta":1.38,"to":0.805,"adp":null,"ftx":243.5,"rk":208,"inj":"","risk":"M","note":""},{"n":"Alex Caruso","t":"OKC","p":"PG/SG/SF","g":61.5,"m":18.9,"pts":6.294,"tpm":1.094,"reb":2.665,"ast":1.976,"stl":1.224,"blk":0.355,"fgp":0.4279,"fga":5.272,"ftp":0.8091,"fta":0.851,"to":0.821,"adp":128.0,"ftx":238.9,"rk":209,"inj":"","risk":"H","note":""},{"n":"Kobe Sanders","t":"LAC","p":"SG/SF","g":75.0,"m":22.4,"pts":9.74,"tpm":1.563,"reb":2.665,"ast":2.016,"stl":0.917,"blk":0.186,"fgp":0.4747,"fga":7.192,"ftp":0.8354,"fta":1.614,"to":1.067,"adp":null,"ftx":243.5,"rk":210,"inj":"","risk":"M","note":""},{"n":"Ryan Kalkbrenner","t":"CHA","p":"C","g":68.0,"m":18.8,"pts":6.483,"tpm":0.003,"reb":4.722,"ast":0.801,"stl":0.347,"blk":1.317,"fgp":0.7498,"fga":3.605,"ftp":0.709,"fta":1.514,"to":0.741,"adp":143.0,"ftx":236.8,"rk":211,"inj":"","risk":"M","note":""},{"n":"Zaccharie Risacher","t":"DAL","p":"SF","g":75.0,"m":21.5,"pts":9.44,"tpm":1.511,"reb":3.953,"ast":1.058,"stl":0.857,"blk":0.532,"fgp":0.4588,"fga":7.534,"ftp":0.6927,"fta":1.468,"to":0.769,"adp":null,"ftx":234.3,"rk":212,"inj":"","risk":"M","note":""},{"n":"T.J. McConnell","t":"IND","p":"PG","g":71.0,"m":16.5,"pts":8.289,"tpm":0.225,"reb":2.137,"ast":4.773,"stl":0.91,"blk":0.211,"fgp":0.5294,"fga":7.077,"ftp":0.8063,"fta":0.707,"to":1.121,"adp":null,"ftx":241.2,"rk":213,"inj":"","risk":"M","note":""},{"n":"Bilal Coulibaly","t":"WAS","p":"SG/SF/PF","g":68.0,"m":23.5,"pts":8.244,"tpm":0.828,"reb":3.59,"ast":2.007,"stl":1.135,"blk":0.658,"fgp":0.4347,"fga":6.902,"ftp":0.739,"fta":1.915,"to":1.154,"adp":null,"ftx":208.3,"rk":214,"inj":"","risk":"H","note":"Position Battle"},{"n":"Naji Marshall","t":"DAL","p":"SG/SF/PF","g":73.0,"m":26.0,"pts":12.896,"tpm":0.648,"reb":3.814,"ast":3.344,"stl":0.991,"blk":0.112,"fgp":0.4976,"fga":9.754,"ftp":0.7677,"fta":3.311,"to":1.654,"adp":null,"ftx":225.0,"rk":215,"inj":"","risk":"M","note":""},{"n":"Marcus Smart","t":"HOU","p":"PG/SG","g":68.0,"m":25.5,"pts":8.552,"tpm":1.48,"reb":2.657,"ast":2.834,"stl":1.235,"blk":0.315,"fgp":0.3949,"fga":7.077,"ftp":0.7898,"fta":1.876,"to":1.334,"adp":null,"ftx":239.9,"rk":216,"inj":"","risk":"H","note":""},{"n":"Duncan Robinson","t":"DET","p":"SG/SF","g":75.0,"m":26.0,"pts":11.105,"tpm":2.542,"reb":2.504,"ast":2.116,"stl":0.488,"blk":0.273,"fgp":0.4479,"fga":8.448,"ftp":0.7917,"fta":1.257,"to":0.71,"adp":null,"ftx":235.9,"rk":217,"inj":"","risk":"M","note":"Position Battle"},{"n":"Max Christie","t":"DAL","p":"SG/SF","g":75.0,"m":28.0,"pts":11.4,"tpm":2.251,"reb":2.821,"ast":1.876,"stl":0.664,"blk":0.363,"fgp":0.4215,"fga":9.011,"ftp":0.9061,"fta":1.714,"to":1.271,"adp":156.0,"ftx":234.1,"rk":218,"inj":"","risk":"M","note":""},{"n":"Santi Aldama","t":"DAL","p":"PF/C","g":70.5,"m":21.5,"pts":10.7,"tpm":1.452,"reb":4.685,"ast":2.122,"stl":0.59,"blk":0.518,"fgp":0.4708,"fga":8.311,"ftp":0.688,"fta":2.066,"to":0.89,"adp":null,"ftx":229.0,"rk":219,"inj":"Questionable - knee surgery","risk":"H","note":""},{"n":"Obi Toppin","t":"IND","p":"PF/C","g":73.0,"m":19.0,"pts":10.171,"tpm":1.35,"reb":4.01,"ast":1.674,"stl":0.526,"blk":0.262,"fgp":0.5253,"fga":7.31,"ftp":0.8275,"fta":1.379,"to":0.968,"adp":null,"ftx":241.6,"rk":220,"inj":"","risk":"M","note":""},{"n":"Collin Sexton","t":"LAL","p":"PG/SG","g":73.0,"m":23.5,"pts":13.924,"tpm":1.553,"reb":2.144,"ast":2.595,"stl":0.832,"blk":0.099,"fgp":0.4849,"fga":10.2,"ftp":0.8431,"fta":2.94,"to":1.764,"adp":142.3,"ftx":216.1,"rk":221,"inj":"Questionable - lower leg","risk":"M","note":""},{"n":"Kyle Filipowski","t":"UTA","p":"PF/C","g":72.5,"m":19.0,"pts":7.87,"tpm":0.708,"reb":6.007,"ast":2.19,"stl":0.755,"blk":0.418,"fgp":0.5046,"fga":5.917,"ftp":0.762,"fta":1.562,"to":1.383,"adp":138.5,"ftx":216.1,"rk":222,"inj":"Questionable - back surgery","risk":"H","note":""},{"n":"Precious Achiuwa","t":"SAC","p":"PF/C","g":71.5,"m":22.0,"pts":8.887,"tpm":0.253,"reb":6.319,"ast":1.235,"stl":0.741,"blk":0.716,"fgp":0.5381,"fga":7.188,"ftp":0.573,"fta":1.568,"to":0.95,"adp":153.0,"ftx":239.5,"rk":223,"inj":"","risk":"M","note":""},{"n":"Dean Wade","t":"PHI","p":"PF","g":66.5,"m":23.5,"pts":4.928,"tpm":1.085,"reb":4.837,"ast":1.312,"stl":0.744,"blk":0.394,"fgp":0.4471,"fga":4.028,"ftp":0.698,"fta":0.347,"to":0.296,"adp":null,"ftx":243.8,"rk":224,"inj":"","risk":"H","note":""},{"n":"Bennedict Mathurin","t":"NOR","p":"SG/SF","g":72.5,"m":24.5,"pts":14.412,"tpm":1.027,"reb":4.34,"ast":2.033,"stl":0.665,"blk":0.211,"fgp":0.4492,"fga":10.076,"ftp":0.8539,"fta":5.074,"to":1.739,"adp":148.4,"ftx":186.7,"rk":225,"inj":"","risk":"H","note":""},{"n":"Jaxson Hayes","t":"UTA","p":"C","g":73.0,"m":19.5,"pts":6.919,"tpm":0.01,"reb":4.538,"ast":0.943,"stl":0.497,"blk":0.962,"fgp":0.744,"fga":3.773,"ftp":0.651,"fta":1.986,"to":0.585,"adp":null,"ftx":243.8,"rk":226,"inj":"","risk":"M","note":""},{"n":"Ziaire Williams","t":"LAL","p":"SG/SF","g":70.5,"m":23.5,"pts":9.439,"tpm":1.408,"reb":2.583,"ast":1.153,"stl":1.023,"blk":0.342,"fgp":0.4369,"fga":7.302,"ftp":0.8367,"fta":1.973,"to":1.074,"adp":null,"ftx":243.6,"rk":227,"inj":"","risk":"H","note":"Position Battle"},{"n":"Lu Dort","t":"ATL","p":"SG/SF/PF","g":73.0,"m":26.5,"pts":9.189,"tpm":1.949,"reb":3.567,"ast":1.505,"stl":0.948,"blk":0.39,"fgp":0.3975,"fga":7.86,"ftp":0.7317,"fta":1.355,"to":0.975,"adp":null,"ftx":241.9,"rk":228,"inj":"","risk":"M","note":""},{"n":"Tim Hardaway Jr.","t":"MIA","p":"SG/SF","g":73.0,"m":27.0,"pts":11.794,"tpm":2.659,"reb":2.781,"ast":1.464,"stl":0.582,"blk":0.116,"fgp":0.4237,"fga":9.092,"ftp":0.787,"fta":1.818,"to":0.636,"adp":null,"ftx":238.7,"rk":229,"inj":"","risk":"M","note":"Position Battle"},{"n":"Yanic Konan Niederhauser","t":"LAC","p":"SF/PF/C","g":44.5,"m":18.6,"pts":7.839,"tpm":0.088,"reb":5.364,"ast":0.571,"stl":0.304,"blk":1.331,"fgp":0.6191,"fga":4.622,"ftp":0.7473,"fta":2.713,"to":0.976,"adp":null,"ftx":241.3,"rk":230,"inj":"Injured - foot surgery (14g) - 11/20/2026","risk":"E","note":""},{"n":"Allen Graves","t":"TOR","p":"PF","g":75.0,"m":17.0,"pts":6.965,"tpm":0.852,"reb":4.179,"ast":1.346,"stl":0.956,"blk":0.409,"fgp":0.4485,"fga":5.74,"ftp":0.743,"fta":1.297,"to":0.704,"adp":null,"ftx":242.2,"rk":231,"inj":"","risk":"M","note":""},{"n":"AJ Dybantsa","t":"WAS","p":"SF","g":75.0,"m":31.5,"pts":16.381,"tpm":1.386,"reb":5.341,"ast":2.631,"stl":0.875,"blk":0.269,"fgp":0.4509,"fga":13.071,"ftp":0.758,"fta":4.235,"to":2.308,"adp":90.5,"ftx":97.3,"rk":232,"inj":"","risk":"M","note":""},{"n":"Dominick Barlow","t":"PHI","p":"SF/PF/C","g":73.0,"m":22.5,"pts":6.111,"tpm":0.185,"reb":4.688,"ast":1.075,"stl":0.793,"blk":0.717,"fgp":0.553,"fga":4.455,"ftp":0.698,"fta":1.431,"to":0.668,"adp":null,"ftx":null,"rk":233,"inj":"","risk":"M","note":""},{"n":"Scoot Henderson","t":"POR","p":"PG","g":68.0,"m":28.0,"pts":14.3,"tpm":2.039,"reb":2.956,"ast":3.844,"stl":0.951,"blk":0.236,"fgp":0.4133,"fga":11.763,"ftp":0.8144,"fta":3.117,"to":2.409,"adp":154.0,"ftx":222.8,"rk":234,"inj":"","risk":"H","note":"Position Battle"}];</script>
+<script>/* DraftDesk-style snake draft engine. Pure functions over state; no DOM. */
+(function (root) {
+  'use strict';
+  const CATS = [
+    { k: 'fg', l: 'FG%' }, { k: 'ft', l: 'FT%' }, { k: 'tpm', l: '3PM' },
+    { k: 'pts', l: 'PTS' }, { k: 'reb', l: 'REB' }, { k: 'ast', l: 'AST' },
+    { k: 'stl', l: 'ST' }, { k: 'blk', l: 'BLK' }, { k: 'to', l: 'TO' }
+  ];
+  const NC = 9, TO = 8;
+  const WEEKS = 24;           // season split into weekly matchups
+  const GPW = 3.45;           // average games per NBA team per week
+  const VAR_GAMES = 0.55;     // variance of a player's games in a week
+  const UNKNOWN_ADP = 175;
+
+  // ---------- math ----------
+  function erf(x) {
+    const s = x < 0 ? -1 : 1; x = Math.abs(x);
+    const t = 1 / (1 + 0.3275911 * x);
+    const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+    return s * y;
+  }
+  const Phi = z => 0.5 * (1 + erf(z / Math.SQRT2));
+  function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function gauss(r) { let u = 0, v = 0; while (u === 0) u = r(); v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+
+  // ---------- players ----------
+  function prepPlayers(raw) {
+    return raw.map((p, i) => {
+      const g = p.g;
+      return Object.assign({}, p, {
+        id: i,
+        fgm: p.fgp * p.fga * g, fgaT: p.fga * g,
+        ftm: p.ftp * p.fta * g, ftaT: p.fta * g,
+        tot: { tpm: p.tpm * g, pts: p.pts * g, reb: p.reb * g, ast: p.ast * g, stl: p.stl * g, blk: p.blk * g, to: p.to * g }
+      });
+    });
+  }
+
+  function adpOf(p, src) {
+    const a = p.adp, f = p.ftx;
+    if (src === 'ftx') return f != null ? f : UNKNOWN_ADP;
+    if (src === 'blend') {
+      if (a != null && f != null) return (a + f) / 2;
+      return a != null ? a : (f != null ? f : UNKNOWN_ADP);
+    }
+    return a != null ? a : (f != null ? f : UNKNOWN_ADP);
+  }
+  function adpSd(p, src) {
+    const adp = adpOf(p, src);
+    let sd = 0.9 + 0.13 * adp;
+    if (src === 'blend' && p.adp != null && p.ftx != null) { const d = (p.adp - p.ftx) / 2; sd = Math.sqrt(sd * sd + d * d); }
+    if (adp === UNKNOWN_ADP) sd = Math.max(sd, 25);
+    return sd;
+  }
+
+  // Category vector (bigger is always better). Percentages are "excess makes" over the pool average.
+  function vec(p, ctx, g) {
+    const v = new Float64Array(NC);
+    v[0] = (p.fgp - ctx.pFG) * p.fga * g;
+    v[1] = (p.ftp - ctx.pFT) * p.fta * g;
+    v[2] = p.tpm * g; v[3] = p.pts * g; v[4] = p.reb * g; v[5] = p.ast * g;
+    v[6] = p.stl * g; v[7] = p.blk * g; v[8] = -p.to * g;
+    return v;
+  }
+  // Projection error variance per player, season units.
+  function projVar(p, g) {
+    const v = new Float64Array(NC);
+    v[0] = Math.pow(0.015 * p.fga * g, 2); v[1] = Math.pow(0.02 * p.fta * g, 2);
+    const ks = ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+    ks.forEach((k, j) => { v[j + 2] = Math.pow(0.12 * p[k] * g, 2); });
+    return v;
+  }
+  // Weekly noise variance per player (one week, per-week units).
+  function weekVar(p, ctx, g) {
+    const G = GPW * g / 82;
+    const v = new Float64Array(NC);
+    const fgEx = p.fgp * p.fga - ctx.pFG * p.fga, ftEx = p.ftp * p.fta - ctx.pFT * p.fta;
+    v[0] = G * p.fga * p.fgp * (1 - p.fgp) * 1.25 + fgEx * fgEx * VAR_GAMES;
+    v[1] = G * p.fta * p.ftp * (1 - p.ftp) * 1.25 + ftEx * ftEx * VAR_GAMES;
+    const pg = { tpm: [p.tpm, 1.2 * p.tpm], pts: [p.pts, Math.pow(0.33 * p.pts, 2)], reb: [p.reb, 1.3 * p.reb], ast: [p.ast, 1.4 * p.ast], stl: [p.stl, 1.05 * p.stl], blk: [p.blk, 1.4 * p.blk], to: [p.to, 1.1 * p.to] };
+    ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'].forEach((k, j) => { const [m, vv] = pg[k]; v[j + 2] = G * vv + m * m * VAR_GAMES; });
+    return v;
+  }
+
+  // ---------- draft order ----------
+  function teamAt(pick, N, order) {
+    const r = Math.floor(pick / N), i = pick % N;
+    let rev;
+    if (order === '3rr') rev = r === 0 ? false : (r === 1 ? true : r % 2 === 0);
+    else rev = r % 2 === 1;
+    return rev ? N - 1 - i : i;
+  }
+
+  // ---------- league context (pool averages, Board scaling, weekly noise) ----------
+  // One pass of simulated ADP drafts for a given games function: pool averages and team spread.
+  function scaleFor(players, cfg, ctx, gOf) {
+    const N = cfg.teams, R = cfg.roster, src = cfg.adpSrc;
+    const X = players.map(p => vec(p, ctx, gOf(p)));
+    const WV = players.map(p => weekVar(p, ctx, gOf(p)));
+    const r = rng(1234 + N * 31 + R);
+    const SIMS = 80;
+    const sum = new Float64Array(NC), sq = new Float64Array(NC), wsum = new Float64Array(NC), dsum = new Float64Array(NC);
+    let teamsN = 0, dN = 0;
+    for (let s = 0; s < SIMS; s++) {
+      const draws = players.map((p, i) => ({ i, t: adpOf(p, src) + gauss(r) * adpSd(p, src) })).sort((a, b) => a.t - b.t);
+      const tot = Array.from({ length: N }, () => new Float64Array(NC));
+      const wk = Array.from({ length: N }, () => new Float64Array(NC));
+      const picks = Math.min(N * R, draws.length);
+      for (let k = 0; k < picks; k++) {
+        const t = teamAt(k, N, cfg.order), i = draws[k].i;
+        for (let c = 0; c < NC; c++) { tot[t][c] += X[i][c]; wk[t][c] += WV[i][c]; dsum[c] += X[i][c]; }
+        dN++;
+      }
+      for (let t = 0; t < N; t++) { for (let c = 0; c < NC; c++) { sum[c] += tot[t][c]; sq[c] += tot[t][c] * tot[t][c]; wsum[c] += wk[t][c]; } teamsN++; }
+    }
+    const avgX = Array.from(dsum, v => v / dN);
+    const teamSd = Array.from(sum, (v, c) => { const m = v / teamsN; return Math.sqrt(Math.max(1e-9, sq[c] / teamsN - m * m)); });
+    const teamWeekVar = Array.from(wsum, v => v / teamsN);
+    const counted = c => c !== TO || cfg.cats === 9;
+    const boards = X.map(x => {
+      const bc = new Float64Array(NC); let b = 0;
+      for (let c = 0; c < NC; c++) { bc[c] = (x[c] - avgX[c]) / teamSd[c]; if (counted(c)) b += bc[c]; }
+      const worst = []; for (let c = 0; c < NC; c++) if (counted(c)) worst.push(c);
+      worst.sort((a, b2) => bc[a] - bc[b2]);
+      return { b, bc, z: [b, b - bc[worst[0]], b - bc[worst[0]] - bc[worst[1]]], drop: worst.slice(0, 2) };
+    });
+    return { X, WV, avgX, teamSd, teamWeekVar, boards };
+  }
+
+  // ---------- league context (pool averages, Board scaling, weekly noise) ----------
+  // cfg.basis: 'total' values season totals (projected games count); 'pergame' gives every player
+  // the same games, so value comes from per-game production only.
+  function buildContext(players, cfg) {
+    const N = cfg.teams, R = cfg.roster, src = cfg.adpSrc;
+    const byAdp = players.slice().sort((a, b) => adpOf(a, src) - adpOf(b, src));
+    const pool = byAdp.slice(0, Math.min(players.length, N * R));
+    let fgm = 0, fga = 0, ftm = 0, fta = 0, gs = 0;
+    pool.forEach(p => { fgm += p.fgm; fga += p.fgaT; ftm += p.ftm; fta += p.ftaT; gs += p.g; });
+    const ctx = { pFG: fgm / fga, pFT: ftm / fta, G0: gs / pool.length, basis: cfg.basis === 'pergame' ? 'pergame' : 'total' };
+    const G0 = ctx.G0;
+    const tot = scaleFor(players, cfg, ctx, p => p.g);
+    const pg = scaleFor(players, cfg, ctx, () => G0);
+    const act = ctx.basis === 'pergame' ? pg : tot;
+    const gOf = ctx.basis === 'pergame' ? (() => G0) : (p => p.g);
+    players.forEach((p, i) => {
+      p.x = act.X[i]; p.wv = act.WV[i]; p.pv = projVar(p, gOf(p));
+      p.board = act.boards[i].b; p.boardC = act.boards[i].bc; p.z = act.boards[i].z; p.zDrop = act.boards[i].drop;
+    });
+    ctx.avgX = act.avgX; ctx.teamSd = act.teamSd; ctx.teamWeekVar = act.teamWeekVar;
+    ctx.h2hNoise = ctx.teamWeekVar.map(v => 2 * v * WEEKS * WEEKS);
+    const rankBy = (key, out) => players.slice().sort((a, b) => b[key] - a[key]).forEach((p, i) => { p[out] = i + 1; });
+    rankBy('board', 'boardRank');
+    players.forEach(p => { p.zRank = [0, 0, 0]; });
+    [0, 1, 2].forEach(d => players.slice().sort((a, b) => b.z[d] - a.z[d]).forEach((p, i) => { p.zRank[d] = i + 1; }));
+    players.forEach(p => { p.adpUse = adpOf(p, src); p.sd = adpSd(p, src); p.edge = p.adpUse - p.boardRank; });
+    ctx.swing = ctx.teamWeekVar.map((v, c) => Math.sqrt(2 * v) / (ctx.teamSd[c] / WEEKS));
+    return ctx;
+  }
+
+  // ---------- availability ----------
+  function survive(p, pick) { return 1 - Phi((pick - 0.5 - p.adpUse) / p.sd); }
+  function availProb(p, from, to) {
+    if (to <= from) return 1;
+    const s0 = survive(p, from); if (s0 < 1e-9) return 0;
+    return Math.min(1, survive(p, to) / s0);
+  }
+
+  // ---------- live evaluation ----------
+  // state: { picks: Array(N*R) of player id | null }
+  function evaluate(players, ctx, cfg, state) {
+    const N = cfg.teams, R = cfg.roster, me = cfg.slot - 1, total = N * R;
+    const nc = cfg.cats === 9 ? NC : NC - 1;
+    const taken = new Set(state.picks.filter(v => v != null));
+    const avail = players.filter(p => !taken.has(p.id)).sort((a, b) => a.adpUse - b.adpUse);
+
+    const unfilled = [];
+    for (let k = 0; k < total; k++) if (state.picks[k] == null) unfilled.push(k);
+    const current = unfilled.length ? unfilled[0] : total; // 0-based pick on the clock
+    // state.owner (optional): team index per pick from the host site, so traded picks land on the right team
+    const tAt = k => (state.owner && state.owner[k] != null) ? state.owner[k] : teamAt(k, N, cfg.order);
+    const myUnfilled = unfilled.filter(k => tAt(k) === me);
+    const p1 = myUnfilled.length ? myUnfilled[0] : null;
+    const p2 = myUnfilled.length > 1 ? myUnfilled[1] : null;
+
+    // typical player at the j-th upcoming pick
+    const M = unfilled.length;
+    const typMean = [], typVar = [], typPv = [];
+    const A = avail.length;
+    for (let j = 0; j < M; j++) {
+      const mean = new Float64Array(NC), vr = new Float64Array(NC), pv = new Float64Array(NC);
+      if (A === 0) { typMean.push(mean); typVar.push(vr); typPv.push(pv); continue; }
+      const c0 = Math.min(j, A - 1), w = 1.5 + 0.12 * j;
+      const lo = Math.max(0, Math.floor(c0 - 3 * w)), hi = Math.min(A - 1, Math.ceil(c0 + 3 * w));
+      let ws = 0;
+      for (let i = lo; i <= hi; i++) {
+        const wt = Math.exp(-0.5 * Math.pow((i - c0) / w, 2)); ws += wt;
+        const x = avail[i].x, q = avail[i].pv;
+        for (let c = 0; c < NC; c++) { mean[c] += wt * x[c]; pv[c] += wt * q[c]; }
+      }
+      for (let c = 0; c < NC; c++) { mean[c] /= ws; pv[c] /= ws; }
+      for (let i = lo; i <= hi; i++) {
+        const wt = Math.exp(-0.5 * Math.pow((i - c0) / w, 2)), x = avail[i].x;
+        for (let c = 0; c < NC; c++) vr[c] += wt * Math.pow(x[c] - mean[c], 2);
+      }
+      for (let c = 0; c < NC; c++) vr[c] /= ws;
+      typMean.push(mean); typVar.push(vr); typPv.push(pv);
+    }
+    const jOf = new Map(); unfilled.forEach((k, j) => jOf.set(k, j));
+
+    // team forecasts
+    const teams = Array.from({ length: N }, (_, t) => ({ t, mu: new Float64Array(NC), v: new Float64Array(NC), roster: [], left: 0 }));
+    for (let k = 0; k < total; k++) {
+      const t = tAt(k), T = teams[t];
+      const pid = state.picks[k];
+      if (pid != null) {
+        const p = players[pid]; T.roster.push({ pick: k, p });
+        for (let c = 0; c < NC; c++) { T.mu[c] += p.x[c]; T.v[c] += p.pv[c]; }
+      } else {
+        const j = jOf.get(k); T.left++;
+        for (let c = 0; c < NC; c++) { T.mu[c] += typMean[j][c]; T.v[c] += 2 * typVar[j][c] + typPv[j][c]; }
+      }
+    }
+    const noise = cfg.scoring === 'roto' ? new Float64Array(NC) : ctx.h2hNoise;
+    const winP = (a, av, b, bv, c) => Phi((a[c] - b[c]) / Math.sqrt(av[c] + bv[c] + noise[c] + 1e-9));
+
+    // standings & my category chances
+    function matchProb(ps) { // ps over nc categories -> P(win matchup) with ties counted half
+      let dist = [1];
+      for (const q of ps) { const nd = new Array(dist.length + 1).fill(0); dist.forEach((v, i) => { nd[i] += v * (1 - q); nd[i + 1] += v * q; }); dist = nd; }
+      let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
+      return w;
+    }
+    const standings = teams.map(A_ => {
+      let roto = 0, cats = 0, match = 0;
+      for (let c = 0; c < nc; c++) roto += 1;
+      teams.forEach(B => {
+        if (B === A_) return;
+        const ps = [];
+        for (let c = 0; c < nc; c++) { const q = winP(A_.mu, A_.v, B.mu, B.v, c); ps.push(q); roto += q; cats += q; }
+        match += matchProb(ps);
+      });
+      return { t: A_.t, roto, cats: cats / (N - 1), match };
+    });
+    const meT = teams[me];
+    const myChance = new Float64Array(NC);
+    teams.forEach(B => { if (B === meT) return; for (let c = 0; c < NC; c++) myChance[c] += winP(meT.mu, meT.v, B.mu, B.v, c) / (N - 1); });
+
+    // gains
+    const out = { current, p1, p2, unfilled, avail, teams, standings, myChance, rows: [] };
+    if (p1 == null) { players.forEach(p => { p.gain = 0; p.gainM = 0; p.gainC = new Float64Array(NC); }); return out; }
+    const j1 = jOf.get(p1);
+    // Baseline: the slot filled by a replacement-level player (best of what is left once the draft ends),
+    // so Gain reads as how much a player raises your chances over leaving the pick to waivers.
+    const rep = new Float64Array(NC), repPv = new Float64Array(NC);
+    { const c0 = Math.min(M, A - 1), lo = Math.max(0, c0 - 4), hi = Math.min(A - 1, c0 + 4); let n = 0;
+      for (let i = lo; i <= hi; i++) { n++; for (let c = 0; c < NC; c++) { rep[c] += avail[i].x[c]; repPv[c] += avail[i].pv[c]; } }
+      for (let c = 0; c < NC; c++) { rep[c] /= n; repPv[c] /= n; } }
+    const baseMu = meT.mu.slice(), baseV = meT.v.slice();
+    for (let c = 0; c < NC; c++) { baseMu[c] += rep[c] - typMean[j1][c]; baseV[c] += repPv[c] - typPv[j1][c] - 2 * typVar[j1][c]; }
+    const opps = teams.filter(T => T !== meT);
+    // baseline probabilities and (for most-cats) how often each category decides the week
+    const baseP = opps.map(B => { const a = new Float64Array(NC); for (let c = 0; c < NC; c++) a[c] = winP(baseMu, baseV, B.mu, B.v, c); return a; });
+    // Gain M baseline: chance of winning the whole matchup (more categories than the opponent, ties count half)
+    const baseMatch = baseP.map(ps => matchProb(Array.from(ps).slice(0, nc)));
+    let piv = null, pivScale = 1;
+    if (cfg.scoring === 'most') {
+      piv = baseP.map(ps => {
+        const arr = new Float64Array(NC);
+        for (let c = 0; c < nc; c++) {
+          const others = []; for (let d = 0; d < nc; d++) if (d !== c) others.push(ps[d]);
+          // P(win | c won) - P(win | c lost)
+          let dist = [1];
+          for (const q of others) { const nd = new Array(dist.length + 1).fill(0); dist.forEach((v, i) => { nd[i] += v * (1 - q); nd[i + 1] += v * q; }); dist = nd; }
+          const win = add => { let w = 0; for (let i = 0; i < dist.length; i++) { const k = i + add; if (2 * k > nc) w += dist[i]; else if (2 * k === nc) w += 0.5 * dist[i]; } return w; };
+          arr[c] = win(1) - win(0);
+        }
+        return arr;
+      });
+      let s = 0, n = 0; piv.forEach(a => { for (let c = 0; c < nc; c++) { s += a[c]; n++; } }); pivScale = s / n || 1;
+    }
+    const mu = new Float64Array(NC), v = new Float64Array(NC);
+    for (const p of avail) {
+      for (let c = 0; c < NC; c++) { mu[c] = baseMu[c] - rep[c] + p.x[c]; v[c] = baseV[c] - repPv[c] + p.pv[c]; }
+      const gc = new Float64Array(NC);
+      let gm = 0;
+      const q = new Array(nc);
+      opps.forEach((B, oi) => {
+        for (let c = 0; c < nc; c++) {
+          q[c] = winP(mu, v, B.mu, B.v, c);
+          let d = q[c] - baseP[oi][c];
+          if (piv) d *= piv[oi][c] / pivScale;
+          gc[c] += d / opps.length;
+        }
+        gm += (matchProb(q) - baseMatch[oi]) / opps.length;
+      });
+      let g = 0; for (let c = 0; c < nc; c++) g += gc[c];
+      p.gainC = gc; p.gain = g; p.gainM = gm;
+    }
+    taken.forEach(id => { players[id].gain = null; players[id].gainC = null; players[id].gainM = null; });
+
+    // availability for my next two picks (1-based pick numbers)
+    const cur1 = current + 1, p1n = p1 + 1, p2n = p2 != null ? p2 + 1 : null;
+    for (const p of avail) {
+      p.thereAt = availProb(p, cur1, p1n);
+      p.lastsTo = p2n != null ? availProb(p, cur1, p2n) : null;
+      p.lastsFromP1 = p2n != null ? availProb(p, p1n, p2n) : null;
+      let safe = cur1, gone = null;
+      for (let q = cur1; q <= total; q++) { const a = availProb(p, cur1, q); if (a >= 0.8) safe = q; if (gone == null && a <= 0.2) { gone = q; break; } }
+      p.safeUntil = safe; p.goneBy = gone;
+    }
+
+    // model pick order: gain now plus what is likely left at the following pick
+    const byGain = avail.slice().sort((a, b) => b.gain - a.gain);
+    const K = Math.min(10, byGain.length);
+    const backToBack = p2 != null && unfilled.indexOf(p2) === unfilled.indexOf(p1) + 1;
+    byGain.forEach(p => { p.score = p.gain; });
+    if (p2 != null) {
+      const look = byGain.slice(0, 30);
+      const tail = look.length ? look[look.length - 1].gain : 0;
+      for (let i = 0; i < K; i++) {
+        const cand = byGain[i];
+        let mass = 1, E = 0;
+        for (const o of look) {
+          if (o === cand) continue;
+          const q = backToBack ? 1 : (o.lastsFromP1 == null ? 0 : o.lastsFromP1);
+          E += mass * q * o.gain; mass *= (1 - q);
+          if (mass < 1e-4) break;
+        }
+        E += mass * tail;
+        cand.score = cand.gain + E;
+      }
+    }
+    const top = byGain.slice(0, K).sort((a, b) => b.score - a.score);
+    const order = top.concat(byGain.slice(K));
+    order.forEach((p, i) => { p.order = i + 1; });
+    taken.forEach(id => { players[id].order = null; });
+    out.order = order;
+    return out;
+  }
+
+  const api = { CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
+})(this);
+</script>
+<script>
+(function(){
+'use strict';
+const E = Engine, CATS = E.CATS;
+const P = E.prepPlayers(PLAYERS);
+const KEY = 'courtside-board-v1';
+const DEF = { zdrop: 0, teams: 12, slot: 9, order: 'snake', adpSrc: 'ftx', scoring: 'roto', cats: 9, roster: 13, basis: 'total' };
+let cfg = Object.assign({}, DEF), picks = [], log = [];
+let ctx = null, res = null;
+let sortKey = 'order', sortCat = null;
+const $ = id => document.getElementById(id);
+const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+P.forEach(p => { p.key = norm(p.n); });
+const ord = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+const fmt1 = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
+const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(0);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let owner = [], fx = null, extra = [];   // owner: team per pick from Fantrax; fx: connected league; extra: drafted players missing from the projections
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { cfg = Object.assign({}, DEF, s.cfg); picks = s.picks || []; log = s.log || []; owner = s.owner || []; fx = s.fx || null; extra = s.extra || []; } } catch (e) {}
+extra.forEach(addExtra);
+function addExtra(raw) { const p = E.prepPlayers([raw])[0]; p.id = P.length; p.key = norm(p.n); p.unlisted = true; P.push(p); return p; }
+function fit() {
+  cfg.adpSrc = 'ftx';
+  if (cfg.slot > cfg.teams) cfg.slot = cfg.teams;
+  const T = cfg.teams * cfg.roster;
+  if (picks.length < T) picks = picks.concat(new Array(T - picks.length).fill(null));
+  else if (picks.length > T) { picks = picks.slice(0, T); }
+  log = log.filter(k => k < T && picks[k] != null);
+  if (owner.length > T) owner = owner.slice(0, T);
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify({ cfg, picks, log, owner, fx, extra })); } catch (e) {} }
+const teamOf = k => owner[k] != null ? owner[k] : E.teamAt(k, cfg.teams, cfg.order);
+const teamName = t => t === cfg.slot - 1 ? 'You' : (fx && fx.names && fx.order && fx.names[fx.order[t]]) || 'Team ' + (t + 1);
+
+// ---------- setup ----------
+function fillSelect(el, from, to, val) { el.innerHTML = ''; for (let i = from; i <= to; i++) el.add(new Option(String(i), String(i))); el.value = String(val); }
+function syncSetup() {
+  fillSelect($('s-teams'), 4, 20, cfg.teams);
+  fillSelect($('s-slot'), 1, cfg.teams, cfg.slot);
+  fillSelect($('s-roster'), 8, 25, cfg.roster);
+  $('s-order').value = cfg.order; $('s-scoring').value = cfg.scoring; $('s-cats').value = String(cfg.cats); $('s-basis').value = cfg.basis; $('zdrop').value = String(cfg.zdrop);
+}
+function onSetup(e) {
+  const id = e.target.id, v = e.target.value;
+  if (id === 's-teams') cfg.teams = +v; else if (id === 's-slot') cfg.slot = +v; else if (id === 's-roster') cfg.roster = +v;
+  else if (id === 's-order') cfg.order = v; else if (id === 's-scoring') cfg.scoring = v; else if (id === 's-cats') cfg.cats = +v; else if (id === 's-basis') cfg.basis = v;
+  fit(); syncSetup();
+  if (id === 's-scoring' || id === 's-slot') recompute(); else rebuild();
+}
+['s-teams','s-slot','s-roster','s-order','s-scoring','s-cats','s-basis'].forEach(id => $(id).addEventListener('change', onSetup));
+
+// ---------- engine ----------
+function rebuild() { ctx = E.buildContext(P, cfg); recompute(); }
+function recompute() { res = E.evaluate(P, ctx, cfg, { picks, owner }); render(); save(); }
+
+// ---------- logging ----------
+function findPlayer(q) {
+  const k = norm(q); if (!k) return null;
+  const takenSet = new Set(picks.filter(v => v != null));
+  const avail = P.filter(p => !takenSet.has(p.id));
+  const byAdp = (a, b) => a.adpUse - b.adpUse;
+  let m = avail.filter(p => p.key === k); if (m.length) return m[0];
+  m = avail.filter(p => p.key.startsWith(k) || p.key.split(' ').some(w => w.startsWith(k))).sort(byAdp); if (m.length) return m[0];
+  m = avail.filter(p => p.key.includes(k)).sort(byAdp); if (m.length) return m[0];
+  if (P.some(p => p.key === k && takenSet.has(p.id))) return 'taken';
+  return null;
+}
+function say(t, err) { const m = $('msg'); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }
+function logPick(p, mine) {
+  const me = cfg.slot - 1;
+  let k = -1;
+  for (let i = 0; i < picks.length; i++) if (picks[i] == null && ((teamOf(i) === me) === !!mine)) { k = i; break; }
+  if (k < 0) { say(mine ? 'All of your picks are filled.' : 'Every other team\'s picks are filled.', true); return false; }
+  picks[k] = p.id; log.push(k);
+  say('Pick ' + (k + 1) + ': ' + p.n + ' → ' + teamName(teamOf(k)));
+  recompute(); return true;
+}
+function submitName(mine) {
+  const q = $('pickname').value; const p = findPlayer(q);
+  if (p === 'taken') { say(q + ' is already taken.', true); return; }
+  if (!p) { say(q ? 'No available player matches "' + q + '".' : 'Type a player name first.', true); return; }
+  if (logPick(p, mine)) { $('pickname').value = ''; $('pickname').focus(); }
+}
+$('logform').addEventListener('submit', e => { e.preventDefault(); submitName(false); });
+$('b-mine').addEventListener('click', () => submitName(true));
+$('pickname').addEventListener('keydown', e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); submitName(true); } });
+$('b-paste').addEventListener('click', () => {
+  const lines = $('paste').value.split(/\n/).map(s => s.replace(/^\s*\d+[.)]?\s*/, '').trim()).filter(Boolean);
+  let n = 0; const miss = [];
+  for (const ln of lines) {
+    const p = findPlayer(ln); const k = picks.indexOf(null);
+    if (k < 0) break;
+    if (!p || p === 'taken') { miss.push(ln); continue; }
+    picks[k] = p.id; log.push(k); n++;
+  }
+  $('paste').value = miss.join('\n');
+  say('Logged ' + n + ' picks.' + (miss.length ? ' Not matched (left in the box): ' + miss.length + '.' : ''), miss.length > 0);
+  recompute();
+});
+$('b-undo').addEventListener('click', () => { const k = log.pop(); if (k == null) { say('Nothing to undo.'); return; } const p = P[picks[k]]; picks[k] = null; say('Undid pick ' + (k + 1) + ': ' + p.n); recompute(); });
+let newArmed = null;
+$('b-new').addEventListener('click', e => {
+  const b = e.currentTarget;
+  if (!newArmed) { b.textContent = 'Click again to clear'; newArmed = setTimeout(() => { b.textContent = 'New draft'; newArmed = null; }, 3000); return; }
+  clearTimeout(newArmed); newArmed = null; b.textContent = 'New draft';
+  picks = picks.map(() => null); log = []; say('New draft started.'); recompute();
+});
+$('b-copy').addEventListener('click', () => {
+  const lines = []; picks.forEach((id, k) => { if (id != null) lines.push((k + 1) + '. ' + P[id].n + ' (' + teamName(teamOf(k)) + ')'); });
+  const txt = lines.join('\n') || 'No picks yet.';
+  const done = () => say('Copied ' + lines.length + ' picks.');
+  try { navigator.clipboard.writeText(txt).then(done, () => { $('paste').value = txt; say('Copy was blocked; the log is in the paste box to copy by hand.'); }); }
+  catch (e) { $('paste').value = txt; say('Copy was blocked; the log is in the paste box to copy by hand.'); }
+});
+$('recent').addEventListener('click', e => {
+  const b = e.target.closest('button[data-k]'); if (!b) return;
+  if (!b.classList.contains('armed')) { document.querySelectorAll('.recent .armed').forEach(x => { x.classList.remove('armed'); x.querySelector('.tm').textContent = x.dataset.tm; }); b.classList.add('armed'); b.querySelector('.tm').textContent = 'Tap again to remove'; return; }
+  const k = +b.dataset.k; const p = P[picks[k]]; picks[k] = null; log = log.filter(x => x !== k); say('Removed pick ' + (k + 1) + ': ' + p.n + '. The next pick logged for that team goes back in there.'); recompute();
+});
+$('tbody').addEventListener('click', e => {
+  const b = e.target.closest('button[data-id]'); if (!b) return;
+  logPick(P[+b.dataset.id], b.dataset.act === 'mine');
+});
+
+// ---------- Fantrax sync ----------
+const API = 'api/fantrax';
+let fxPlayers = null, fxTimer = null, fxBusy = false;
+const stripSfx = k => k.replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '').replace(/\s+/g, ' ').trim();
+function fxStatus(text, mode) { $('fx-text').textContent = text; $('fx-status').className = 'sync-status' + (mode ? ' ' + mode : ''); }
+async function fxGet(what) {
+  let r;
+  try { r = await fetch(API + '?what=' + what + (fx ? '&leagueId=' + encodeURIComponent(fx.leagueId) : ''), { cache: 'no-store' }); }
+  catch (e) { throw new Error('offline'); }
+  const type = r.headers.get('content-type') || '';
+  if (!type.includes('json')) throw new Error('nohost');
+  let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+  if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+  if (!r.ok || body.error) throw new Error(body.error || ('Fantrax answered ' + r.status));
+  return body;
+}
+function fxErr(e) {
+  if (e.message === 'nohost') return 'Sync runs on the hosted copy of the board (Netlify). Here, log picks by hand.';
+  if (e.message === 'offline') return 'Couldn\'t reach the sync service. Check your connection; it will retry.';
+  return e.message;
+}
+function swapName(n) { const i = n.indexOf(','); return i < 0 ? n : (n.slice(i + 1) + ' ' + n.slice(0, i)).trim(); }
+function matchFantrax(fid) {
+  const info = fxPlayers && fxPlayers[fid];
+  if (!info || !info.name) return null;
+  const name = swapName(info.name), k = norm(name), k2 = stripSfx(k);
+  let p = P.find(q => q.key === k) || P.find(q => stripSfx(q.key) === k2);
+  if (p) return p;
+  p = P.find(q => q.unlisted && q.fid === fid);
+  if (p) return p;
+  // Not in the projections: add him as a waiver-level player so the pick still counts for his team
+  const tail = P.filter(q => !q.unlisted).sort((a, b) => b.rk - a.rk).slice(0, 15);
+  const avg = f => tail.reduce((s, q) => s + q[f], 0) / tail.length;
+  const raw = { n: name, t: info.team || '', p: (info.position || '').replace(/,/g, '/'), g: Math.round(avg('g')), m: Math.round(avg('m')),
+    pts: avg('pts'), tpm: avg('tpm'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), fga: avg('fga'), ftp: avg('ftp'), fta: avg('fta'), to: avg('to'),
+    adp: null, ftx: null, rk: 999, inj: '', risk: '', note: 'Not in the BBM projections. Counted as a waiver-level player.', fid };
+  extra.push(raw);
+  const added = addExtra(raw); added.fid = fid;
+  return added;
+}
+async function fxConnect(id) {
+  const prevMine = fx && fx.leagueId === id ? fx.myTeam : null;
+  fx = { leagueId: id };
+  fxStatus('Connecting to league ' + id + '…');
+  try {
+    const [league, draft] = [await fxGet('league'), await fxGet('draft')];
+    const order = (draft.draftOrder && draft.draftOrder.length ? draft.draftOrder : Object.keys(league.teamInfo || {}));
+    if (!order.length) throw new Error('This league has no teams or draft order yet.');
+    const names = {}; Object.values(league.teamInfo || {}).forEach(t => { names[t.id] = t.name; });
+    fx = { leagueId: id, order, names, myTeam: prevMine };
+    if (!fxPlayers) { fxStatus('Loading Fantrax player list…'); fxPlayers = await fxGet('players'); }
+    renderFx();
+    await fxApply(draft, true);
+    fxSchedule();
+  } catch (e) { fxStatus(fxErr(e), 'err'); if (e.message !== 'offline') { fx = null; renderFx(); } save(); }
+}
+async function fxApply(draft, first) {
+  const order = fx.order, N = order.length;
+  const list = (draft.draftPicks || []).filter(d => d && d.round);
+  // When Fantrax lists every pick (future ones without a player), its last round is the roster size.
+  const maxRound = list.reduce((m, d) => Math.max(m, d.round), 0);
+  const listsAll = list.some(d => !d.playerId);
+  const rounds = listsAll ? maxRound : Math.max(cfg.roster, maxRound);
+  const reshape = N !== cfg.teams || rounds !== cfg.roster;
+  if (reshape) {
+    cfg.teams = Math.min(20, Math.max(4, N)); cfg.roster = Math.min(25, Math.max(8, rounds));
+    picks = []; log = []; owner = []; fit(); syncSetup();
+  }
+  if (fx.myTeam) { const i = order.indexOf(fx.myTeam); if (i >= 0 && cfg.slot !== i + 1) { cfg.slot = i + 1; syncSetup(); } }
+  let added = 0, before = P.length;
+  for (const d of list) {
+    const k = d.pickInRound ? (d.round - 1) * N + (d.pickInRound - 1) : d.pick - 1;
+    if (k < 0 || k >= picks.length) continue;
+    const t = order.indexOf(d.teamId);
+    if (t >= 0) owner[k] = t;
+    if (!d.playerId) continue;
+    const p = matchFantrax(d.playerId);
+    if (!p) continue;
+    if (picks[k] !== p.id) {
+      const prev = picks.indexOf(p.id); if (prev >= 0 && prev !== k) { picks[prev] = null; log = log.filter(x => x !== prev); }
+      picks[k] = p.id; if (!log.includes(k)) log.push(k); added++;
+    }
+  }
+  const made = picks.filter(v => v != null).length;
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const state = draft.draftState ? ' · ' + String(draft.draftState).toLowerCase().replace(/_/g, ' ') : '';
+  fxStatus('Synced ' + time + ' · ' + made + ' of ' + picks.length + ' picks' + state + (added && !first ? ' · ' + added + ' new' : ''), 'live');
+  if (reshape || P.length !== before) rebuild(); else if (added || first) recompute(); else save();
+  if (made >= picks.length) fxStop('Draft complete. Synced all ' + made + ' picks.');
+}
+async function fxTick() {
+  if (!fx || fxBusy) return; fxBusy = true;
+  try { await fxApply(await fxGet('draft'), false); } catch (e) { fxStatus(fxErr(e), 'err'); }
+  fxBusy = false;
+}
+function fxSchedule() { clearInterval(fxTimer); fxTimer = null; if (fx && $('fx-auto').checked) fxTimer = setInterval(fxTick, 10000); }
+function fxStop(msg) { clearInterval(fxTimer); fxTimer = null; $('fx-auto').checked = false; if (msg) fxStatus(msg, 'live'); }
+function renderFx() {
+  $('fx-on').hidden = !fx || !fx.order;
+  $('fx-connect').textContent = fx && fx.order ? 'Reconnect' : 'Connect';
+  if (fx) $('fx-league').value = fx.leagueId;
+  if (!fx || !fx.order) return;
+  const sel = $('fx-team'); sel.innerHTML = '';
+  sel.add(new Option('Choose your team…', ''));
+  fx.order.forEach((id, i) => sel.add(new Option((i + 1) + '. ' + (fx.names[id] || 'Team ' + (i + 1)), id)));
+  sel.value = fx.myTeam || '';
+}
+$('fx-form').addEventListener('submit', e => {
+  e.preventDefault();
+  let id = $('fx-league').value.trim();
+  const m = id.match(/league\/([A-Za-z0-9]+)/); if (m) id = m[1];
+  if (!/^[A-Za-z0-9]{4,40}$/.test(id)) { fxStatus('Paste the league ID, the letters and numbers after /league/ in your Fantrax URL.', 'err'); return; }
+  fxConnect(id);
+});
+$('fx-team').addEventListener('change', e => {
+  fx.myTeam = e.target.value || null;
+  const i = fx.order.indexOf(fx.myTeam); if (i >= 0) { cfg.slot = i + 1; syncSetup(); }
+  recompute();
+});
+$('fx-auto').addEventListener('change', () => { fxSchedule(); if ($('fx-auto').checked) fxTick(); });
+$('fx-now').addEventListener('click', fxTick);
+$('fx-off').addEventListener('click', () => { fxStop(); fx = null; owner = []; renderFx(); fxStatus('Disconnected. Picks already synced stay on the board.'); recompute(); });
+
+// ---------- list controls ----------
+$('q').addEventListener('input', renderTable);
+$('hide').addEventListener('change', renderTable);
+$('zdrop').addEventListener('change', e => { cfg.zdrop = +e.target.value; save(); renderTable(); });
+$('sort').addEventListener('change', e => { sortKey = e.target.value; sortCat = null; renderTable(); });
+$('thead').addEventListener('click', e => {
+  const th = e.target.closest('th[data-sort]'); if (!th) return;
+  const s = th.dataset.sort;
+  if (s.startsWith('c')) { sortKey = 'cat'; sortCat = +s.slice(1); } else { sortKey = s; sortCat = null; }
+  $('sort').value = sortKey; renderTable();
+});
+
+// ---------- render ----------
+function render() { renderClock(); renderMine(); renderTeams(); renderTable(); renderNames(); renderSwing(); }
+
+function renderNames() {
+  const takenSet = new Set(picks.filter(v => v != null));
+  $('names').innerHTML = P.filter(p => !takenSet.has(p.id)).sort((a, b) => a.adpUse - b.adpUse).map(p => '<option value="' + esc(p.n) + '"></option>').join('');
+}
+function renderClock() {
+  const N = cfg.teams, total = picks.length, cur = res.current, face = $('face');
+  if (cur >= total) { face.className = 'board-face'; face.innerHTML = '<div class="pk">✓</div><div class="who">Draft complete</div><div class="sub">' + total + ' picks logged. Standings are in the Teams panel.</div>'; }
+  else {
+    const t = teamOf(cur), mineNow = t === cfg.slot - 1;
+    const rd = Math.floor(cur / N) + 1, inRd = cur % N + 1;
+    let sub;
+    if (mineNow) sub = 'Round ' + rd + ', pick ' + inRd + '. Your next after this: ' + (res.p2 != null ? ord(res.p2 + 1) : 'none');
+    else { const until = res.p1 != null ? res.unfilled.indexOf(res.p1) : -1; sub = 'Round ' + rd + ', pick ' + inRd + '. ' + (res.p1 != null ? 'You pick ' + ord(res.p1 + 1) + ', ' + until + ' pick' + (until === 1 ? '' : 's') + ' away' : 'Your picks are done'); }
+    face.className = 'board-face' + (mineNow ? ' me' : '');
+    face.innerHTML = '<div class="pk num">' + (cur + 1) + '</div><div class="who">' + (mineNow ? 'You\'re on the clock' : teamName(t) + ' picking') + '</div><div class="sub">' + sub + '</div>';
+  }
+  const rec = log.slice(-10).reverse();
+  $('recent').innerHTML = rec.map(k => {
+    const t = teamOf(k), tm = teamName(t);
+    return '<li><button type="button" data-k="' + k + '" data-tm="' + tm + '" class="' + (t === cfg.slot - 1 ? 'me' : '') + '"><span class="num tm" style="font-size:.8rem">' + (k + 1) + '</span><span class="nm">' + esc(P[picks[k]].n) + '</span><span class="tm">' + tm + '</span></button></li>';
+  }).join('');
+}
+function positions(roster) {
+  const c = { PG: 0, SG: 0, SF: 0, PF: 0, C: 0 };
+  roster.forEach(r => r.p.p.split('/').forEach(x => { if (c[x] != null) c[x]++; }));
+  return c;
+}
+function renderMine() {
+  const me = cfg.slot - 1, T = res.teams[me], st = res.standings[me], N = cfg.teams;
+  const nc = cfg.cats === 9 ? 9 : 8;
+  const key = cfg.scoring === 'roto' ? 'roto' : cfg.scoring === 'h2h' ? 'cats' : 'match';
+  const sorted = res.standings.slice().sort((a, b) => b[key] - a[key]); const rank = sorted.findIndex(s => s.t === me) + 1;
+  let big, lab;
+  if (key === 'roto') { big = st.roto.toFixed(1); lab = 'projected roto points of ' + (nc * N) + ' · ' + ord(rank) + ' of ' + N; }
+  else if (key === 'cats') { big = st.cats.toFixed(2); lab = 'expected category wins per week of ' + nc + ' · ' + ord(rank) + ' of ' + N; }
+  else { big = st.match.toFixed(1); lab = 'expected matchup wins vs every other team once, of ' + (N - 1) + ' · ' + ord(rank); }
+  $('mineStat').innerHTML = '<b class="num">' + big + '</b><span>' + lab + '</span>';
+  $('mineSub').textContent = 'Slot ' + cfg.slot + ' · ' + T.roster.length + ' of ' + cfg.roster + ' picked';
+  const pc = positions(T.roster);
+  $('posCount').innerHTML = Object.keys(pc).map(k => k + ' <b>' + pc[k] + '</b>').join('');
+  const myPicks = []; for (let k = 0; k < picks.length; k++) if (teamOf(k) === me) myPicks.push(k);
+  $('roster').innerHTML = myPicks.map(k => {
+    const id = picks[k];
+    return id != null ? '<li><span class="num" style="color:var(--muted)">' + (k + 1) + '</span><span>' + esc(P[id].n) + '</span><span style="color:var(--muted);font-size:.78rem">' + esc(P[id].p) + '</span></li>'
+      : '<li class="empty"><span class="num">' + (k + 1) + '</span><span>Open</span><span></span></li>';
+  }).join('');
+  $('chances').innerHTML = CATS.map((c, i) => {
+    if (i === E.TO && cfg.cats === 8) return '<span>TO</span><span class="hint" style="margin:0">Not counted</span><span class="num">—</span>';
+    const v = res.myChance[i];
+    return '<span>' + c.l + '</span><div class="bar"><i style="width:' + (v * 100).toFixed(1) + '%"></i></div><span class="num">' + Math.round(v * 100) + '%</span>';
+  }).join('');
+}
+function renderTeams() {
+  const key = cfg.scoring === 'roto' ? 'roto' : cfg.scoring === 'h2h' ? 'cats' : 'match';
+  const unit = key === 'roto' ? 'pts' : key === 'cats' ? 'cat W/wk' : 'match W';
+  const rows = res.standings.slice().sort((a, b) => b[key] - a[key]);
+  $('stand').innerHTML = rows.map((s, i) => {
+    const T = res.teams[s.t];
+    const list = T.roster.map(r => '<li>' + esc(r.p.n) + '</li>').join('');
+    return '<tr class="' + (s.t === cfg.slot - 1 ? 'me' : '') + '"><td class="num" style="width:2em;color:var(--muted)">' + (i + 1) + '</td><td><details><summary>' + teamName(s.t) + (s.t === cfg.slot - 1 ? '' : ' <span style="color:var(--muted);font-size:.78rem">slot ' + (s.t + 1) + '</span>') + '</summary>' + (list ? '<ol>' + list + '</ol>' : '<ol><li>No picks yet</li></ol>') + '</details></td><td class="num" style="text-align:right;white-space:nowrap">' + (key === 'cats' ? s[key].toFixed(2) : s[key].toFixed(1)) + ' <span style="color:var(--muted);font-size:.72rem">' + unit + '</span></td><td class="num" style="text-align:right;color:var(--muted);width:3.5em">' + T.roster.length + '/' + cfg.roster + '</td></tr>';
+  }).join('');
+}
+function renderSwing() {
+  $('swing').innerHTML = CATS.map((c, i) => '<span>' + c.l + ' ' + ctx.swing[i].toFixed(2) + '</span>').join('');
+}
+function heat(v, scale) {
+  if (v == null) return '';
+  const a = Math.min(1, Math.abs(v) / scale) * 38;
+  return 'background:color-mix(in oklab, var(' + (v >= 0 ? '--good' : '--bad') + ') ' + a.toFixed(0) + '%, var(--surface))';
+}
+function renderTable() {
+  const N = cfg.teams, me = cfg.slot - 1;
+  const p1 = res.p1, p2 = res.p2;
+  const thereH = p1 != null ? 'There at ' + ord(p1 + 1) : 'There at —';
+  const lastH = p2 != null ? 'Lasts to ' + ord(p2 + 1) : 'Lasts to —';
+  const th = (label, sort, cls, tip) => '<th' + (sort ? ' data-sort="' + sort + '"' : '') + ' class="' + (cls || '') + (sort ? ' sortable' : '') + ((sort && (sort === sortKey || (sortKey === 'cat' && sort === 'c' + sortCat))) ? ' on' : '') + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + label + '</th>';
+  $('thead').innerHTML = '<tr>' + th('Log', null, 'l') + th('#', 'order', '', 'Model pick order for your next pick') + th('Player', null, 'l player') + th('Gain', 'gain', '', 'Hundredths of a category win added, averaged over opponents') + th('Gain M', 'gainM', '', 'Gain Matchup: percentage points added to your chance of winning the matchup, averaged over every opponent') +
+    CATS.map((c, i) => th(c.l, 'c' + i, '', 'Gain in ' + c.l + '. Click to sort')).join('') +
+    th(['Zscore', '−1 Zscore', '−2 Zscore'][cfg.zdrop] + '<br><span style="font-weight:400;text-transform:none">' + (cfg.basis === 'pergame' ? 'per game' : 'season') + '</span>', 'board', '', (cfg.basis === 'pergame' ? 'Per-game' : 'Season') + ' value vs an average drafted player' + (cfg.zdrop ? ', leaving out the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories') : '') + '. Small number is the rank') + th('Fantrax<br>ADP', 'adp', '', 'Fantrax ADP') +
+    th(thereH.replace(' at ', ' at<br>'), null, '', 'Chance he is still there at your next pick') + th(lastH.replace(' to ', ' to<br>'), null, '', 'Chance he lasts to the pick after') +
+    th('Safe<br>until', null, '', 'Last pick with an 80% chance he is still there') + th('Gone<br>by', null, '', 'First pick where his chance falls to 20%') + th('Edge', 'edge', '', 'Fantrax ADP minus rank on the Zscore shown. Positive: going later than he should') + th('Rank<br>range', null, '', 'ADP ± one standard deviation') + '</tr>';
+
+  const takenAt = new Map(); picks.forEach((id, k) => { if (id != null) takenAt.set(id, k); });
+  const q = norm($('q').value), hide = $('hide').checked;
+  let rows = P.filter(p => (!hide || !takenAt.has(p.id)) && (!q || p.key.includes(q) || p.t.toLowerCase() === q));
+  const big = 1e9, zd = cfg.zdrop;
+  const keyFn = {
+    order: p => p.order != null ? p.order : big + p.boardRank,
+    gain: p => p.gain != null ? -p.gain : big + p.boardRank,
+    gainM: p => p.gainM != null ? -p.gainM : big + p.boardRank,
+    board: p => -p.z[zd], edge: p => -(p.adpUse - p.zRank[zd]), adp: p => p.adpUse,
+    cat: p => p.gainC ? -p.gainC[sortCat] : big + p.boardRank
+  }[sortKey] || (p => p.boardRank);
+  rows.sort((a, b) => keyFn(a) - keyFn(b));
+  const topId = res.order && res.order.length ? res.order[0].id : null;
+  const done = p1 == null;
+  const cells = rows.map(p => {
+    const k = takenAt.get(p.id), isT = k != null, mineT = isT && teamOf(k) === me;
+    const cls = [isT ? 'taken' : '', mineT ? 'mine' : '', !isT && p.id === topId && !done ? 'top' : '', !isT && !done && p.thereAt < 0.15 ? 'far' : ''].join(' ');
+    const logc = isT ? '<span style="font-size:.78rem">' + (k + 1) + ' · ' + teamName(teamOf(k)) + '</span>'
+      : '<button class="btn sm" type="button" data-id="' + p.id + '" data-act="taken" title="Taken by another team">Taken</button><button class="btn sm mine" type="button" data-id="' + p.id + '" data-act="mine">Mine</button>';
+    const tags = (p.inj ? '<span class="tag inj" title="' + esc(p.inj) + '">inj</span>' : '') + ((p.risk === 'H' || p.risk === 'E') ? '<span class="tag" title="BBM injury risk: ' + (p.risk === 'E' ? 'extreme' : 'high') + '">risk ' + esc(p.risk) + '</span>' : '');
+    const tip = esc([p.inj, p.note].filter(Boolean).join(' — ') || (p.n + ', ' + p.t));
+    let h = '<td class="l logc">' + logc + '</td><td class="ord">' + (!isT && p.order != null && !done ? p.order : '') + '</td>' +
+      '<td class="l player" title="' + tip + '"><span class="nm">' + esc(p.n) + '</span>' + tags + '<span class="meta">' + esc(p.t) + ' · ' + esc(p.p) + ' · ' + p.g + ' g · ' + p.m + ' mpg</span></td>';
+    if (isT || done || p.gain == null) h += '<td class="dash">—</td><td class="dash">—</td>' + CATS.map(() => '<td class="cat dash"></td>').join('');
+    else {
+      h += '<td class="gain" style="' + heat(p.gain, 0.6) + '">' + fmt1(p.gain * 100) + '</td>';
+      h += '<td class="gain" style="' + heat(p.gainM, 0.25) + '">' + fmt1(p.gainM * 100) + '</td>';
+      h += CATS.map((c, i) => (i === E.TO && cfg.cats === 8) ? '<td class="cat dash">—</td>' : '<td class="cat" style="' + heat(p.gainC[i], 0.15) + '">' + fmt1(p.gainC[i] * 100) + '</td>').join('');
+    }
+    const zv = p.z[zd], dropped = p.zDrop.slice(0, zd).map(c => CATS[c].l);
+    h += '<td class="' + (zv >= 0 ? '' : 'neg') + '"' + (zd ? ' title="Leaves out ' + p.zDrop.slice(0, zd).map(c => CATS[c].l + ' (' + fmt1(p.boardC[c]) + ')').join(' and ') + '"' : '') + '>' + (dropped.length ? '<span class="meta" style="display:inline;font-size:.66rem">−' + dropped.join(' −') + '</span> ' : '') + zv.toFixed(2) + ' <span class="meta" style="display:inline;font-size:.68rem">#' + p.zRank[zd] + '</span></td>';
+    h += '<td>' + (p.ftx != null ? p.ftx.toFixed(1) : '<span class="dash" title="No Fantrax ADP">—</span>') + '</td>';
+    if (isT || done) h += '<td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td>';
+    else {
+      h += '<td>' + Math.round(p.thereAt * 100) + '%</td><td>' + (p.lastsTo != null ? Math.round(p.lastsTo * 100) + '%' : '—') + '</td>';
+      h += '<td>' + p.safeUntil + '</td><td>' + (p.goneBy != null ? p.goneBy : '—') + '</td>';
+    }
+    const ed = Math.round(p.adpUse - p.zRank[zd]);
+    if (p.ftx == null) h += '<td class="dash" title="No Fantrax ADP">—</td><td class="dash">—</td>';
+    else {
+      h += '<td class="' + (ed > 0 ? 'pos' : ed < 0 ? 'neg' : '') + '">' + sgn(ed) + '</td>';
+      h += '<td>' + Math.max(1, Math.round(p.adpUse - p.sd)) + '–' + Math.round(p.adpUse + p.sd) + '</td>';
+    }
+    return '<tr class="' + cls + '">' + h + '</tr>';
+  });
+  $('tbody').innerHTML = cells.length ? cells.join('') : '<tr class="empty-row"><td colspan="22">No players match. Clear the search or untick Hide taken.</td></tr>';
+}
+
+fit(); syncSetup(); renderFx();
+if (fx && fx.order) { fxStatus('Reconnecting to league ' + fx.leagueId + '…'); setTimeout(() => fxConnect(fx.leagueId), 0); }
+if (picks.some(v => v != null)) $('setup').open = false;
+rebuild();
+})();
+</script>
+
+</body>
+</html>
