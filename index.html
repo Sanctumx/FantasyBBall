@@ -105,6 +105,13 @@ select,input[type=text],textarea{background:var(--sunk);border:1px solid var(--l
 .listbar label.f{flex:1 1 160px}
 .listbar label.zsel{flex:0 1 120px}
 .check{display:flex;align-items:center;gap:6px;font-size:.88rem;padding-bottom:6px}
+.posf{display:flex;flex-wrap:wrap;gap:4px;align-items:center;border:0;margin:0;padding:0 0 4px}
+.posf legend{float:left;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;padding:0}
+.posf label{position:relative;cursor:pointer}
+.posf input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.posf span{display:inline-block;font:500 .8rem/1 var(--f-data);padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:var(--sunk);color:var(--muted)}
+.posf input:checked+span{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.posf input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
 .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:4px;max-height:calc(100vh - 150px)}
 @media (max-width:980px){.tablewrap{max-height:75vh}}
 table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:.84rem}
@@ -225,6 +232,13 @@ table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:1
         <option value="cat" disabled>Category (click a column)</option></select></label>
       <label class="f zsel" for="zdrop">Zscore<select id="zdrop"><option value="0" title="All categories">0</option><option value="1" title="Drop worst category">−1</option><option value="2" title="Drop worst two categories">−2</option></select></label>
       <label class="f zsel" for="s-basis">Basis<select id="s-basis"><option value="total">Season</option><option value="pergame">Per game</option></select></label>
+      <fieldset class="posf" id="posf"><legend>Position</legend>
+        <label for="pf-PG"><input type="checkbox" id="pf-PG" value="PG"><span>PG</span></label>
+        <label for="pf-SG"><input type="checkbox" id="pf-SG" value="SG"><span>SG</span></label>
+        <label for="pf-SF"><input type="checkbox" id="pf-SF" value="SF"><span>SF</span></label>
+        <label for="pf-PF"><input type="checkbox" id="pf-PF" value="PF"><span>PF</span></label>
+        <label for="pf-C"><input type="checkbox" id="pf-C" value="C"><span>C</span></label>
+      </fieldset>
       <label class="check" for="hide"><input type="checkbox" id="hide" checked> Hide taken</label>
     </div>
     <div class="tablewrap"><table class="pl"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
@@ -867,6 +881,7 @@ $('fx-off').addEventListener('click', () => { fxStop(); fx = null; owner = []; r
 // ---------- list controls ----------
 $('q').addEventListener('input', renderTable);
 $('hide').addEventListener('change', renderTable);
+$('posf').addEventListener('change', renderTable);
 $('zdrop').addEventListener('change', e => { cfg.zdrop = +e.target.value; save(); renderTable(); });
 $('sort').addEventListener('change', e => { sortKey = e.target.value; sortCat = null; renderTable(); });
 $('thead').addEventListener('click', e => {
@@ -963,7 +978,9 @@ function renderTable() {
 
   const takenAt = new Map(); picks.forEach((id, k) => { if (id != null) takenAt.set(id, k); });
   const q = norm($('q').value), hide = $('hide').checked;
-  let rows = P.filter(p => (!hide || !takenAt.has(p.id)) && (!q || p.key.includes(q) || p.t.toLowerCase() === q));
+  const posOn = [...document.querySelectorAll('#posf input:checked')].map(i => i.value);
+  const posOk = p => !posOn.length || p.p.split('/').some(x => posOn.includes(x));
+  let rows = P.filter(p => (!hide || !takenAt.has(p.id)) && posOk(p) && (!q || p.key.includes(q) || p.t.toLowerCase() === q));
   const big = 1e9, zd = cfg.zdrop;
   const keyFn = {
     order: p => p.order != null ? p.order : big + p.boardRank,
@@ -1006,7 +1023,7 @@ function renderTable() {
     }
     return '<tr class="' + cls + '">' + h + '</tr>';
   });
-  $('tbody').innerHTML = cells.length ? cells.join('') : '<tr class="empty-row"><td colspan="22">No players match. Clear the search or untick Hide taken.</td></tr>';
+  $('tbody').innerHTML = cells.length ? cells.join('') : '<tr class="empty-row"><td colspan="22">No players match. Clear the search, untick a position or untick Hide taken.</td></tr>';
 }
 
 fit(); syncSetup(); renderFx();
