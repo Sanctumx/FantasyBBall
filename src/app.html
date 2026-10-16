@@ -1,0 +1,1177 @@
+<title>Courtside Draft Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: war-room console. Left rail = setup, clock, your team, standings; right = the live player board. */
+:root{
+  --bg:#EFF1EE; --surface:#FFFFFF; --sunk:#F6F7F5; --ink:#15191B; --muted:#5D666B; --line:#D8DCD7;
+  --accent:#C24E1B; --accent-soft:#F7E3D8; --mine:#1F5FA8; --mine-soft:#DFE9F6;
+  --good:#1D8A4B; --bad:#C2372F;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --warn:#C26A12; --r:6px; --heat-s:60%; --heat-l:83%;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --accent-soft:#3A2419; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; --heat-s:34%; --heat-l:25%; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --accent-soft:#3A2419; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; --heat-s:34%; --heat-l:25%; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
+header.top #how-open{order:3;padding:10px 18px;font-size:.95rem;font-weight:600;border-radius:6px}
+header.top h1{font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0;text-wrap:balance}
+header.top p{margin:0;color:var(--muted);max-width:62ch}
+.layout{display:grid;gap:16px;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"setup setup setup" "clock sync drafts" "top top top" "list list list";align-items:stretch}
+#setup{grid-area:setup}#drafts{grid-area:drafts}#sync{grid-area:sync}#clock{grid-area:clock}#list{grid-area:list}
+@media (max-width:1100px){.layout{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"setup setup" "clock sync" "drafts drafts" "top top" "list list"}}
+@media (max-width:700px){.layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"setup" "clock" "sync" "drafts" "top" "list"}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0}
+.panel>h2,.panel>summary{font:600 1.15rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+details.panel>summary{cursor:pointer;list-style:none;margin:0}
+details.panel[open]>summary{margin-bottom:12px}
+details.panel>summary::after{content:"+";font-family:var(--f-data);color:var(--muted)}
+details.panel[open]>summary::after{content:"–"}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:10px 12px}
+#setup .grid2 label.f{grid-column:auto!important}
+#setup .grid2 #s-asb{min-width:0}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+select,input[type=text],textarea{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:0;width:100%;text-transform:none;letter-spacing:0;font-size:.92rem}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn.mine{background:var(--mine);color:var(--surface);border-color:var(--mine)}
+.btn.warn{border-color:var(--bad);color:var(--bad)}
+.btn.sm{padding:2px 7px;font-size:.78rem}
+.hint{color:var(--muted);font-size:.8rem;margin:8px 0 0}
+/* clock */
+.sync-row{display:flex;gap:6px}
+.saved{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:12rem;overflow:auto}
+.saved li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line);font-size:.88rem}
+.saved li.cur .sv-n{color:var(--mine);font-weight:600}
+.saved .sv-n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.saved .sv-m{display:block;color:var(--muted);font-size:.74rem}
+.saved .empty{display:block;color:var(--muted);border:0}
+.sync-row input,.sync-row select{flex:1}
+.sync-status{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--muted);margin-top:8px}
+.sync-status .dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+.sync-status.live .dot{background:var(--good)}
+.sync-status.err{color:var(--bad)}
+.sync-status.err .dot{background:var(--bad)}
+.board-face{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin-bottom:12px}
+.board-face .pk{font:700 3rem/0.9 var(--f-display);font-variant-numeric:tabular-nums;grid-row:span 2}
+.board-face .who{font:600 1.2rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.04em}
+.board-face .sub{color:var(--muted);font-size:.85rem}
+.board-face.me{background:var(--accent-soft);border-color:var(--accent)}
+.board-face.me .pk,.board-face.me .who{color:var(--accent)}
+.logrow{display:flex;gap:6px}
+.logrow input{flex:1}
+.msg{min-height:1.2em;font-size:.82rem;margin-top:6px;color:var(--muted)}
+.msg.err{color:var(--bad)}
+.recent{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:11.5rem;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;-ms-overflow-style:none}
+.recent::-webkit-scrollbar{display:none}
+.recent button{all:unset;cursor:pointer;display:grid;grid-template-columns:3.2em 1fr auto;gap:8px;width:100%;padding:3px 6px;border-radius:4px;font-size:.86rem}
+.recent button:hover,.recent button.armed{background:var(--sunk)}
+.recent button.armed .tm{color:var(--bad)}
+.recent .tm{color:var(--muted);font-size:.78rem}
+.recent .me .nm{color:var(--mine);font-weight:600}
+/* your team */
+/* Your team: content-width columns that wrap, so the panel only takes the width it needs */
+.topband{grid-area:top;display:flex;flex-wrap:wrap;gap:16px;align-items:stretch;min-width:0}
+#mine{flex:1 1 52rem;min-width:0;max-width:100%}
+#teams{flex:0 0 17.5rem;max-width:100%}
+@media (max-width:1100px){#teams{flex:1 1 100%}}
+.mine-body{display:grid;grid-template-columns:minmax(17rem,1fr) minmax(19rem,1.2fr) minmax(17rem,1fr);gap:10px 32px;align-items:stretch}
+/* every section runs to the same bottom line: lists stretch their rows, notes sit at the foot */
+.mine-body>*{min-width:0;display:flex;flex-direction:column}
+.mine-body .hint{font-size:.76rem;max-width:42ch;margin-top:auto;padding-top:8px}
+.mine-body .roster,.mine-body .vs-list{flex:1 1 auto;grid-auto-rows:1fr;align-content:stretch}
+.mine-body .roster li,.mine-body .vs-list li{align-items:center}
+@media (max-width:1100px){.mine-body{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.mine-body>.vs{grid-column:1/-1}}
+@media (max-width:700px){.mine-body{grid-template-columns:minmax(0,1fr)}}
+.vs h3,.sub-h{font:600 .78rem/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px}
+.vs-avg{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.vs-avg b{font:700 1.9rem/1 var(--f-display)}
+.vs-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 22px;font-size:.92rem}
+.vs-list li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding:2px 0}
+.vs-list .num{font-weight:600}
+.vs .lo{color:var(--bad)}.vs .mid{color:var(--warn)}.vs .hi{color:var(--good)}
+.roster{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 22px;font-size:.92rem}
+.roster li{display:grid;grid-template-columns:2.4em minmax(0,1fr) auto;gap:8px;border-bottom:1px solid var(--line);padding:2px 0}
+.roster .empty{color:var(--muted)}
+.roster .rn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chances{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 14px;font-size:.95rem}
+.chances>div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding:3px 0}
+.chances .num{font-weight:600;text-align:right;font-size:1.05rem}
+.bar{height:16px;background:var(--sunk);border:1px solid var(--line);border-radius:3px;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--mine)}
+.chances .lo{color:var(--bad)}.chances .mid{color:var(--warn)}.chances .hi{color:var(--good)}
+.bar.lo i{background:var(--bad)}.bar.mid i{background:var(--warn)}.bar.hi i{background:var(--good)}
+.bar::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed var(--muted)}
+.bigstat{display:flex;flex-direction:column;gap:4px;margin:2px 0 12px}
+.bigstat .rank{display:flex;align-items:baseline;gap:8px}
+.bigstat .rank b{font:700 2.8rem/1 var(--f-display)}
+.bigstat .rank span{font:600 1.1rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.bigstat .rank.lo b{color:var(--bad)}.bigstat .rank.mid b{color:var(--warn)}.bigstat .rank.hi b{color:var(--good)}
+.bigstat .score{color:var(--muted);font-size:.88rem}
+.bigstat .score b{color:var(--ink);font-family:var(--f-data);font-weight:600}
+.poscount{display:flex;gap:10px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-bottom:10px}
+.poscount b{color:var(--ink);font-family:var(--f-data)}
+/* teams */
+.stand{width:100%;border-collapse:collapse;font-size:.86rem;table-layout:fixed}
+.stand summary{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stand td{overflow:hidden}
+.stand td{padding:4px 4px;border-top:1px solid var(--line);vertical-align:top}
+.stand tr.me td{color:var(--mine);font-weight:600}
+.stand details summary{cursor:pointer}
+.stand details ol{margin:4px 0 2px;padding-left:1.3em;color:var(--muted);font-weight:400;font-size:.82rem}
+/* list */
+.listbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin-bottom:10px}
+.listbar label.f{flex:0 1 11rem}
+.listbar label.zsel{flex:1 1 7.5rem;max-width:11rem}
+/* second row (positions, weights, hide taken) spreads across the width */
+/* Position, Weights and Hide taken always share their own row, Position first */
+.wts .rh{display:inline-flex;align-items:center;gap:10px;white-space:nowrap}
+.wts .rh .check{padding:0;font:400 .88rem var(--f-body)}
+.listrow2{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.listbar .posf,.listbar .wts{flex:0 1 auto}
+.listbar .wts{flex:1 1 auto;justify-content:flex-start}
+
+.check{display:flex;align-items:center;gap:6px;font-size:.88rem;padding-bottom:6px}
+.wts{display:flex;flex-wrap:wrap;gap:6px 6px;align-items:center;border:0;margin:0;padding:0 0 4px}
+.wts legend{float:left;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;padding:0}
+.wts label{display:flex;align-items:center;gap:3px;font:500 .76rem var(--f-data)}
+.wts select{width:4rem;padding:3px 2px;font-size:.76rem}
+.wts select.off{color:var(--bad);border-color:var(--bad)}
+.wts select.chg{color:var(--mine);border-color:var(--mine)}
+.posf{display:flex;flex-wrap:wrap;gap:4px;align-items:center;border:0;margin:0;padding:0 0 4px}
+.posf legend{float:left;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;padding:0}
+.posf label{position:relative;cursor:pointer}
+.posf input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.posf span{display:inline-block;font:500 .8rem/1 var(--f-data);padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:var(--sunk);color:var(--muted)}
+.posf input:checked+span{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.posf input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:4px;max-height:calc(100vh - 24px)}
+@media (max-width:980px){.tablewrap{max-height:85vh}}
+table.pl{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:.84rem}
+.pl th{position:sticky;top:0;z-index:2;background:var(--surface);font:600 .74rem/1.15 var(--f-body);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center;padding:7px 6px;border-bottom:1px solid var(--ink);white-space:nowrap;vertical-align:bottom}
+.pl th.l,.pl td.l{text-align:left}
+.pl th.sortable{cursor:pointer}
+.pl th.sortable:hover,.pl th.on{color:var(--ink)}
+.pl th.on::after{content:" ▼";font-size:.7em}
+.pl td{padding:3px 6px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap;font-family:var(--f-data);font-variant-numeric:tabular-nums;background:var(--surface)}
+.pl td.player{font-family:var(--f-body);position:sticky;left:0;z-index:1;min-width:13.5em;max-width:16em;white-space:normal;line-height:1.12}
+.pl th.player{left:0;z-index:3}
+.pl .nm{font-weight:600}
+.pl .meta{display:block;color:var(--muted);font-size:.7rem}
+.tag{display:inline-block;font:500 .66rem/1.3 var(--f-body);padding:0 4px;border-radius:3px;border:1px solid var(--line);color:var(--muted);margin-left:3px;vertical-align:1px}
+.tag.inj{border-color:var(--bad);color:var(--bad)}
+.pl td.cat{min-width:3.1em;font-size:.78rem;text-align:center;padding-inline:3px}
+.pl th.punted{text-decoration:line-through;opacity:.6}
+.pl td.punted{opacity:.35}
+.zcell{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px}.zcell .zd{display:block;justify-self:end;font-size:.66rem}.zcell .zr{display:block;justify-self:start;font-size:.68rem}.zcell .chip{min-width:3.4em}
+.chip{display:inline-block;min-width:2.5em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
+.chip.zero{color:var(--muted)}
+.scar-strip{display:flex;flex-wrap:wrap;align-items:center;gap:5px 3px;margin:0 0 10px;font-size:.82rem}
+.scar-strip .sc-lab{font:600 .7rem/1 var(--f-body);text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin:0 1px 0 6px}
+.scar-strip .sc-head{font:600 1rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;color:var(--ink);margin-right:4px;padding-right:8px;border-right:1px solid var(--line)}
+.scar-strip .sc-head+.sc-lab{margin-left:0}
+.scar-strip .sc-note{color:var(--muted);font-size:.78rem;margin-left:8px}
+.scar-strip .pill{min-width:0;font-family:var(--f-data);padding:2px 6px;font-size:.72rem}
+.scar-strip button.pill{border:1px solid transparent;cursor:pointer}.scar-strip button.pill:hover{border-color:var(--muted)}.b2bmark{font-size:.55rem;color:var(--bad);margin-left:2px;font-family:var(--f-body);font-weight:600}td[data-b2b]{cursor:pointer}.scar-strip .pill.lockonly{border-style:dashed;border-color:currentColor}.scar-strip .pill.locked{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.pill{display:inline-block;min-width:3.4em;padding:2px 8px;border-radius:999px;font-weight:600;font-size:.78rem;text-align:center}
+.pill.hi{color:var(--good);background:color-mix(in oklab, var(--good) 16%, transparent)}
+.pill.mid{color:var(--warn);background:color-mix(in oklab, var(--warn) 18%, transparent)}
+.pill.lo{color:var(--bad);background:color-mix(in oklab, var(--bad) 16%, transparent)}
+.pl td.gain.pos,.pl td.pos{color:var(--good)}.pl td.gain.neg,.pl td.neg{color:var(--bad)}
+.pl td.gain.zero{color:var(--muted)}
+.pl td.gain{font-weight:500;font-size:.9rem}
+.pl tr.top td{background:color-mix(in oklab, var(--good) 9%, var(--surface))}
+.pl .mp{margin-left:6px;font:600 .64rem/1 var(--f-body);color:var(--good);border:1px solid var(--good);border-radius:999px;padding:2px 6px;vertical-align:2px;display:inline-block;white-space:nowrap}
+.pl tr.top td.ord{font-weight:700}
+.pl tr.taken td{color:var(--muted);background:var(--sunk)}
+.pl tr.taken.mine td{background:var(--mine-soft);color:var(--ink)}
+.pl tr.far td.player .nm{color:var(--muted)}
+.pl td.logc{font-family:var(--f-body)}
+.logc .btn{margin-left:2px}
+.pos{color:var(--good)}.neg{color:var(--bad)}
+.pl td.dash{color:var(--muted)}
+.empty-row td{text-align:center;color:var(--muted);padding:20px;font-family:var(--f-body)}
+/* explainer */
+.how{border:1px solid var(--line);border-radius:var(--r);background:var(--bg);color:var(--ink);padding:0;width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+.how::backdrop{background:rgba(0,0,0,.45)}
+.how-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);padding:14px 20px 10px;border-bottom:1px solid var(--line)}
+.how .cols{padding:0 20px 20px}
+.how h2{font:700 1.5rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin:0}
+.how .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 28px;padding:0 20px 20px}
+.how h3{font:600 1.05rem/1.2 var(--f-display);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 4px}
+.how p{margin:0 0 6px;max-width:64ch;color:var(--ink)}
+.how .swing{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.how .swing span{font:500 .78rem var(--f-data);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+@media (prefers-reduced-motion:no-preference){.recent button,.btn{transition:background .12s,border-color .12s}}
+
+/* bold headers everywhere: table headings, control labels, section sub-heads */
+.pl th{font-weight:700;color:var(--ink)}
+.pl th span{font-weight:400}
+label.f,.posf legend,.wts legend,.sub-h,.vs h3,.scar-strip .sc-lab{font-weight:700}
+label.f select,label.f input{font-weight:400}
+@media (max-width:700px){
+  .tablewrap{max-height:78vh}
+  .pl td.player{min-width:0;width:8.6em;max-width:8.6em;box-shadow:1px 0 0 var(--line)}
+  .pl td.player .nm{display:block;white-space:normal}
+  .pl th.player{box-shadow:1px 0 0 var(--line)}
+  .pl td.player .nm{font-size:.86rem}
+  .pl td.player .meta{font-size:.66rem}
+  .pl td.player .mp,.pl td.player .tag{font-size:.6rem}
+  .pl td,.pl th{padding-inline:4px}
+  .pl td.logc .btn{padding:4px 7px;font-size:.74rem}
+  header.top h1{font-size:2.3rem}
+  header.top #how-open{padding:8px 14px}
+}
+</style>
+
+<header class="top">
+  <h1>Courtside Draft Kit</h1>
+  <button class="btn" type="button" id="how-open">How the board works</button>
+</header>
+<dialog class="how" id="how" aria-labelledby="how-title">
+  <div class="how-head"><h2 id="how-title">How the board works</h2><button class="btn" type="button" id="how-close">Close</button></div>
+    <div class="cols">
+      <div>
+        <h3>Logging picks</h3>
+        <p>Type each pick and press Enter or Taken, or press Taken on his row in the player list. The pick always goes to the pick on the clock, so when it's your turn it's yours automatically and otherwise it goes to the team picking. The draft order puts every pick on the right team, so the Teams panel fills itself in. Undo pick takes back the last one; tap a pick in the recent list twice to take back an earlier one, and the next pick you log goes into that spot.</p>
+        <h3>Zscore</h3>
+        <p>A player's season value against an average drafted player. Each category is scaled by how far apart teams finish, measured by simulating drafts in which every team follows ADP. Categories where teams end up bunched together reward small edges more.</p>
+        <h3>−1 and −2 Zscore</h3>
+        <p>Zscore with the player's worst category, or worst two, left out, the way he looks on a team that punts them. The dropped categories show in the cell. Edge and the rank number follow whichever Zscore is shown.</p>
+        <h3>Season, per game or mix</h3>
+        <p>Season counts each player's projected games, so a player who misses time is worth less. Per game gives everyone the same games (the drafted-pool average), so value comes only from production when he plays. Mix sits halfway: each player counts as playing the average of his projected games and the pool average, which gives exactly the average of his season and per-game stat lines, so missed games count half. This choice drives Zscore, Gain C and Edge.</p>
+        <h3>Gain C (Gain Categories)</h3>
+        <p>How much a player raises your chance of winning each category against the other teams in this draft, compared with leaving the pick to a waiver-level player. Your forecast is your picks plus a typical player at each pick you have left; every other team's is its picks plus a typical player at each of its remaining picks. Unpicked slots count as twice as uncertain as a single typical player. It changes with every pick, so a third big man adds less once you have two. Numbers are hundredths of a category win, averaged over your opponents: 72 means he adds about three-quarters of a category win.</p>
+        <h3>Gain M</h3>
+        <p>Gain Matchup. Instead of adding up category chances, it asks how much a player raises your chance of winning the whole matchup against each other team (more categories than he wins, ties counted half), averaged over every opponent. Numbers are percentage points: 10 means a 10-point better chance to win the matchup. It rewards strength in categories that are close and gives little for piling onto categories you already win or have no chance in. It follows the Scoring setting: weekly swings in H2H, season totals in roto.</p>
+      </div>
+      <div>
+        <h3>Head-to-head</h3>
+        <p>In H2H each week is a fresh contest, so the board adds each category's week-to-week swing. Swing comes from game-to-game variance in each stat plus the number of games a player gets in a week. Here is each category's weekly swing relative to how far apart teams sit in a week; higher means a lead there is less reliable, so it counts for less:</p>
+        <div class="swing" id="swing"></div>
+        <p>H2H most categories values the chance of winning the week. A category counts for more the more often it decides your matchup.</p>
+        <h3>The # order and Model pick</h3>
+        <p>The # column ranks available players by whatever "# order by" is set to: Gain C, Gain M or the Zscore shown. The Model pick badge works underneath and always uses Gain M, whatever # order by is set to: it marks the best pick that is most likely to get to you. It weighs each player's Gain M by his chance of still being there at your next pick, then checks your following pick, so if a slightly better player is likely to last, it picks the one who won't. When you're on the clock every player is 100% to be there, so with # order by Gain M it usually matches #1. Players who probably won't reach your pick have a grey name. With Hide taken off, taken players appear where their value would place them, without a #, so the numbers still rank only players left.</p>
+      </div>
+      <div>
+        <h3>There at / Lasts to</h3>
+        <p>The chance a player is still available at your next pick and at the one after, given he is on the board now. They come from his ADP and how much draft position varies, which grows the later a player goes. Safe until is the last pick he has an 80% chance to reach; Gone by is the first pick where that falls to 20%. Rank range is ADP plus or minus one standard deviation.</p>
+        <h3>Edge</h3>
+        <p>Fantrax ADP minus the pick his value says he deserves, in picks. Positive means he is going later than he should. Edge vs picks the yardstick: Zscore uses his rank on the Zscore shown; Gain C and Gain M use picks made so far plus his rank on that metric among players still available, so they change with every pick and are blank for taken players. An ADP later than the last pick of your draft counts as the pick after it (marked *), so undrafted players don't look like bargains.</p>
+        <h3>ADP</h3>
+        <p>Fantrax ADP from the projections file. The two players without one are treated as late picks with a wide range.</p>
+        <h3>Fantrax sync</h3>
+        <p>Every league you connect to is saved, with your team, in a list under the league ID box: pick one and press Connect to switch, or Remove to forget it. Paste your league ID (or the whole league URL) and press Connect. The board reads your draft from Fantrax every 10 seconds, sets the team count, rounds and draft order from your league, and puts each pick on the team that made it, traded picks included. Choose your team so Gain C and availability are worked out for you. You can still log picks by hand; anything Fantrax reports takes priority. A drafted player missing from the projections is added as a waiver-level player.</p>
+        <h3>Playoff games</h3>
+        <p>How many NBA games each player's team plays during your fantasy playoffs, from the 2026-27 schedule. Set when your playoffs start and how many weeks each round lasts in League Settings; the small numbers are games per round. Green means at least one game above the league average, red at least one below. Week 1 is opening week (Oct 20–25) and later weeks run Monday to Sunday. With the All-Star break merged, Feb 15–28 counts as one week and later week numbers drop by one. Playoff boost, above the player list, turns this into value: each player's multiplier is 1 + strength × (his playoff games ÷ the league average − 1), kept between ×0.50 and ×1.50, with strength 25% on Light, 50% on Medium, 75% on Strong and 100% on Very strong. At 100%, 12 games against an average of 10.6 is ×1.13. It scales Gain C, Gain M and Zscore (on top of any scarcity adjustment), so the # order, Model pick and Edge follow. Off leaves values unchanged. Hover a Playoff games cell to see a player's edge and multiplier.</p>
+        <h3>Stats</h3>
+        <p>The Stats dropdown picks what the nine category columns show. Gain is how much a player raises your chance of winning each category right now. Zscore is each category's z-score times its category weight, so the nine add up to the Zscore column. Raw is his projected per-game line (FG% and FT% as decimals). In Raw and Zscore the chips are colored by his z-score in that category, so turnovers are red when he commits many. Sorting by a category column follows the choice.</p>
+        <h3>Category weights</h3>
+        <p>Each category has a weight for Zscore, like Basketball Monster's punt settings but adjustable: ×0 punts it, ×0.5 counts it half, ×1 is normal and ×2 counts it double. The weights apply only to Zscore and the −1 and −2 versions (and so to anything you set to follow Zscore, such as Edge vs Zscore or # order by Zscore). Gain C, Gain M and scarcity always count every category, since they measure your real chances of winning. Gain C already adjusts to your roster: if you've drafted poor free-throw shooters, the FT% gain from new players shrinks on its own. Reset sets everything back to ×1.</p>
+        <h3>Scarcity</h3>
+        <p>Category scarcity measures, for each category, how much value is lost between the best players left now and the ones likely left at your following pick. A category drying up fast scores above 1×. Position scarcity compares the lineup slots teams still need at each position (about 1.5 per team at PG, SG, SF and PF and 2 at C) with good players left who can play there. The list shows the two separately: Scarcity Cat is his strongest categories weighted by their scarcity, and Scarcity Position is the scarcest position he can fill. Both update after every pick, and the line above the list shows every category's and position's current index as a pill: red from 1.15× (drying up), amber in between, green at 0.85× or less (plentiful). Two dropdowns adjust values, one for each: the Scarcity Cat dropdown uses the Scarcity Cat column and Scarcity Pos uses the Scarcity Position column. Each multiplies Gain C, Gain M and Zscore by 1 + strength × his score, where strength is 25% on Light, 50% on Medium, 75% on Strong and 100% on Very strong, kept between ×0.50 and ×1.50. At 100%, a +20 score means ×1.20. With both on, the two multipliers are applied one after the other, not averaged. The # order, Model pick and Edge follow. Off leaves values unchanged; hover a scarcity cell to see its multiplier.</p>
+        <h3>IL spots</h3>
+        <p>With IL spots you can move an injured player off your roster and add a replacement, so the games he misses aren't zeros. The board counts a share of each player's missed games (35% per IL spot, up to 90%) at the production of the best players left after the draft. That helps injury-prone stars: with 2 IL spots Embiid moves from about 100th to 65th by Zscore. In backtests scored with daily lineups (10 active), 2 IL spots and 4 adds a week, Mix plus IL fill won 2.3 points more matchups than Mix alone; Season totals did far worse (17 points), because streaming and IL fill-ins make games played matter less than per-game production.</p>
+        <h3>Correlated categories</h3>
+        <p>Matchup win chances account for the fact that a team playing more games that week tends to win the counting stats together (and lose TO). Each team's weekly totals share a games factor (rostered players' weekly games vary by about 1.4, measured on 2024-26 logs), and the board averages the matchup over the games gap. This made the predicted win chances better calibrated; it did not change picks much.</p>
+        <h3>Back-to-back rest</h3>
+        <p>Some players sit the second night of back-to-backs. With B2B rest On (in the player list controls), a player's playoff games drop by his rest rate times his team's back-to-backs in your playoff weeks (from the 2026-27 schedule), and Playoff boost uses the lower number. Rest rates come from the last two seasons of game logs: how often he played the second night compared with his other games. Players who sit at least a quarter of them show a small B2B mark. Click a player's Playoff games cell to mark him as always sitting back-to-backs, always playing them, or back to the data.</p>
+        <h3>Board users</h3>
+        <p>Set how many of your opponents draft with this board. By default the board expects every opponent to pick near Fantrax ADP. Opponents on the board take players by value instead, so good-value players go earlier than ADP says. The board blends the two when working out who will still be there, the Model pick and the punt forecasts. In backtests where every opponent used the board, telling it so turned Auto from 2.8 points worse than Punt Off into 9.8 points better.</p>
+        <h3>Punt strategies</h3>
+        <p>Plain Gain treats your future picks as typical players at their ADP, so it charges a punt in full and never credits the payoff: later picks chosen to stack the other categories. For each strategy (no punt, and every single, double and triple punt: 130 in 9-cat) the board instead forecasts your open picks as players near their ADP who fit it best, and works out your average matchup win chance if you follow it from here. The Strategy line shows the best six. Punt Off keeps plain Gain. Auto blends the Gain of no punt, the single punts and the 8 most synergistic double punts (pairs where players weak in one category tend to be weak in the other, measured on the current projections) by how far ahead each is. In backtests, letting Auto pick among all doubles and triples chased punts that only looked good by chance, so the rest are for locking; their pills have dashed borders. With Auto, Gain stays neutral early and leans into a punt as your roster commits to it. Picking a strategy in the Punt dropdown, or clicking its pill, locks Gain to it; a punted category then counts zero in Gain C. Category weights still only affect Zscore.</p>
+        <h3>Colors</h3>
+        <p>Category cells are chips: green when a player helps you in that category, red when he hurts, deeper the bigger the effect compared with the best of the 50 top available players; under half a point shows as a plain 0. Zscore uses the same chips, scaled to the largest Zscore among the top 50 available players. Gain C, Gain M and Edge are green when positive and red when negative. Playoff games is green at least one game above the league average and red at least one below. There at and Lasts to are green from 75%, amber from 40% and red below that.</p>
+        <h3>Saved drafts</h3>
+        <p>Name the draft and press Save to keep a copy: picks, settings, Fantrax league and team. Load brings a saved draft back onto the board, Delete removes one and New draft clears the picks while keeping your settings; each asks for a second tap when it would lose something. Saved drafts live in this browser only, so they won't appear on another device or browser.</p>
+        <h3>Limits</h3>
+        <p>Lineup positions and games caps aren't modeled. Your draft is saved in this browser only.</p>
+      </div>
+    </div>
+</dialog>
+
+<div class="layout">
+  <details class="panel" id="setup" open>
+    <summary>League Settings</summary>
+    <div class="grid2">
+      <label class="f" for="s-teams">Teams<select id="s-teams"></select></label>
+      <label class="f" for="s-slot">Your slot<select id="s-slot"></select></label>
+      <label class="f" for="s-order">Draft order<select id="s-order"><option value="snake">Snake</option><option value="3rr">3RR (third-round reversal)</option></select></label>
+      <label class="f" for="s-roster">Roster size<select id="s-roster"></select></label>
+      <label class="f" for="s-scoring">Scoring<select id="s-scoring"><option value="roto">Roto</option><option value="h2h">H2H: each category</option><option value="most">H2H: most categories</option></select></label>
+      <label class="f" for="s-cats">Categories<select id="s-cats"><option value="9">9-cat</option><option value="8">8-cat (no TO)</option></select></label>
+      <label class="f" for="s-asb" style="grid-column:1/-1" title="Merged counts Feb 15–28 as one week">All-Star break<select id="s-asb"><option value="merged" title="Feb 15–28 counts as one week">Merged</option><option value="separate">Separate</option></select></label>
+      <label class="f" for="s-po">Playoffs start<select id="s-po"></select></label>
+      <label class="f" for="s-pofmt" title="Weeks per playoff round, for three rounds">Round format<select id="s-pofmt"><option value="1-1-1">1-1-1</option><option value="1-1-2">1-1-2</option><option value="1-2-2">1-2-2</option><option value="2-2-2">2-2-2</option></select></label>
+      <label class="f" for="s-oppb" title="How many opponents draft with this board. The board then expects them to pick by value instead of Fantrax ADP">Board users<select id="s-oppb"></select></label>
+      <label class="f" for="s-il" title="IL spots let you fill an injured player's spot with a replacement, so his missed games count at replacement level instead of zero">IL spots<select id="s-il"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+    </div>
+    <p class="hint" id="poHint"></p>
+  </details>
+
+  <section class="panel" id="drafts">
+    <h2>Saved drafts <span class="hint" id="curDraft" style="margin:0;text-transform:none;letter-spacing:0;font:400 .8rem var(--f-body)"></span></h2>
+    <form class="sync-row" id="sv-form" autocomplete="off">
+      <input type="text" id="sv-name" maxlength="60" placeholder="Name this draft, e.g. Home league mock 1" aria-label="Draft name">
+      <button class="btn primary" type="submit" id="sv-save">Save</button>
+      <button class="btn warn" type="button" id="sv-new">New draft</button>
+    </form>
+    <div class="msg" id="sv-msg"></div>
+    <ul class="saved" id="sv-list"></ul>
+  </section>
+
+  <section class="panel" id="sync">
+    <h2>Fantrax sync</h2>
+    <form class="sync-row" id="fx-form" autocomplete="off">
+      <input type="text" id="fx-league" placeholder="League ID from your league URL" aria-label="Fantrax league ID">
+      <button class="btn primary" type="submit" id="fx-connect">Connect</button>
+    </form>
+    <div class="sync-row" id="lg-row" style="margin-top:8px" hidden>
+      <select id="lg-sel" aria-label="Saved leagues"></select>
+      <button class="btn" type="button" id="lg-go" title="Connect to this league">Connect</button>
+      <button class="btn warn" type="button" id="lg-del" title="Forget this league">Remove</button>
+    </div>
+    <div id="fx-on" hidden>
+      <label class="f" for="fx-team" style="margin-top:10px">Your team<select id="fx-team"></select></label>
+      <div class="seg">
+        <label class="check" for="fx-auto" style="padding:0"><input type="checkbox" id="fx-auto" checked> Auto-sync every 10 s</label>
+        <button class="btn sm" type="button" id="fx-now">Sync now</button>
+        <button class="btn sm" type="button" id="fx-off">Disconnect</button>
+      </div>
+    </div>
+    <div class="sync-status" id="fx-status"><span class="dot"></span><span id="fx-text">Not connected. Picks made in your Fantrax draft room will appear here on their own.</span></div>
+  </section>
+
+  <section class="panel" id="clock">
+    <h2>On the clock</h2>
+    <div class="board-face" id="face"></div>
+    <form class="logrow" id="logform" autocomplete="off">
+      <input type="text" id="pickname" list="names" placeholder="Player picked" aria-label="Player picked">
+      <datalist id="names"></datalist>
+      <button class="btn primary" type="submit" title="Log at the pick on the clock">Taken</button>
+      <button class="btn" type="button" id="b-undo2" title="Take back the last pick logged">Undo pick</button>
+    </form>
+    <div class="msg" id="msg"></div>
+    <details style="margin-top:6px">
+      <summary class="hint" style="cursor:pointer;margin:0">Paste picks in draft order</summary>
+      <textarea id="paste" rows="4" placeholder="One name per line. Each fills the next open pick, yours included." style="margin-top:6px"></textarea>
+      <button class="btn sm" id="b-paste" type="button" style="margin-top:6px">Log pasted picks</button>
+    </details>
+    <ul class="recent" id="recent"></ul>
+  </section>
+
+  <div class="topband">
+  <section class="panel" id="mine">
+    <h2>Your team <span class="hint" id="mineSub" style="margin:0;text-transform:none;letter-spacing:0;font:400 .8rem var(--f-body)"></span></h2>
+    <div class="mine-body">
+      <div><div class="bigstat" id="mineStat"></div><div class="poscount" id="posCount"></div>
+        <h3 class="sub-h">Category win chance</h3><div class="chances" id="chances"></div>
+        <p class="hint">Chance to beat an average opponent in each category, counting a typical player at each pick you still have.</p></div>
+      <div><h3 class="sub-h">Your picks</h3><ul class="roster" id="roster"></ul></div>
+      <div class="vs"><h3>Matchup win chance</h3><div class="vs-avg" id="vsAvg"></div><ul class="vs-list" id="vsList"></ul>
+      <p class="hint">Chance to win a matchup against each team (more categories won than lost, ties count half), from both rosters as drafted so far plus a typical player at every open pick.</p></div>
+    </div>
+  </section>
+  <section class="panel" id="teams">
+    <h2>Teams <span class="hint" id="standUnit" style="margin:0;text-transform:none;letter-spacing:0;font:400 .76rem var(--f-body)"></span></h2>
+    <table class="stand"><tbody id="stand"></tbody></table>
+  </section>
+  </div>
+
+
+
+  <section class="panel" id="list">
+    <h2>Player list <span class="hint" style="margin:0;text-transform:none;letter-spacing:0;font:400 .8rem var(--f-body)"><span id="shownCount"></span> · Click a column heading to sort</span></h2>
+    <div class="listbar">
+      <label class="f" for="q">Find player<input type="text" id="q" placeholder="Name or team"></label>
+      <label class="f zsel" for="zdrop">Zscore<select id="zdrop"><option value="0" title="All categories">Normal</option><option value="1" title="Drop worst category">−1</option><option value="2" title="Drop worst two categories">−2</option></select></label>
+      <label class="f zsel" for="statsel" title="What the category columns show">Stats<select id="statsel"><option value="gain">Gain</option><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
+      <label class="f zsel" for="s-poboost" title="Boost players with more playoff games">Playoff boost<select id="s-poboost"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
+      <label class="f zsel" for="s-b2b" title="Lower playoff games for players who sit back-to-backs, from the last two seasons or your marks">B2B rest<select id="s-b2b"><option value="on">On</option><option value="off">Off</option></select></label>
+      <label class="f zsel" for="scarz" title="Boost players strong in scarce categories">Scarcity Cat<select id="scarz"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
+      <label class="f zsel" for="scarp" title="Boost players at scarce positions">Scarcity Pos<select id="scarp"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
+      <label class="f zsel" for="puntsel" title="Off: plain Gain. Auto: Gain leans toward the punts your roster is heading for. Pick one to lock it">Punt<select id="puntsel"></select></label>
+      <label class="f zsel" for="shown" title="Show the top players by # order">Show<select id="shown"><option value="25">Top 25</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="0">All</option></select></label>
+      <label class="f zsel" for="orderby"># order by<select id="orderby"><option value="gain">Gain C</option><option value="gainM">Gain M</option><option value="z">Zscore</option></select></label>
+      <label class="f zsel" for="edgeby">Edge vs<select id="edgeby"><option value="z">Zscore</option><option value="gain">Gain C</option><option value="gainM">Gain M</option></select></label>
+      <label class="f zsel" for="s-basis" id="basis-lab">Basis<select id="s-basis"><option value="total" title="Count projected games in full">Season</option><option value="pergame" title="Ignore games missed">Per game</option><option value="mix" title="Games missed count half">Mix</option></select></label>
+      <div class="listrow2">
+      <fieldset class="posf" id="posf"><legend>Position</legend>
+        <label for="pf-PG"><input type="checkbox" id="pf-PG" value="PG"><span>PG</span></label>
+        <label for="pf-SG"><input type="checkbox" id="pf-SG" value="SG"><span>SG</span></label>
+        <label for="pf-SF"><input type="checkbox" id="pf-SF" value="SF"><span>SF</span></label>
+        <label for="pf-PF"><input type="checkbox" id="pf-PF" value="PF"><span>PF</span></label>
+        <label for="pf-C"><input type="checkbox" id="pf-C" value="C"><span>C</span></label>
+      </fieldset>
+      <fieldset class="wts" id="catw" title="Weight categories in Zscore (×0 punts)"><legend>Weights</legend>
+        <label for="cw-0"><span>FG%</span><select id="cw-0" data-c="0"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <label for="cw-1"><span>FT%</span><select id="cw-1" data-c="1"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <label for="cw-2"><span>3PM</span><select id="cw-2" data-c="2"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <label for="cw-3"><span>PTS</span><select id="cw-3" data-c="3"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <label for="cw-4"><span>REB</span><select id="cw-4" data-c="4"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <label for="cw-5"><span>AST</span><select id="cw-5" data-c="5"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <label for="cw-6"><span>ST</span><select id="cw-6" data-c="6"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <label for="cw-7"><span>BLK</span><select id="cw-7" data-c="7"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <label for="cw-8"><span>TO</span><select id="cw-8" data-c="8"><option value="0" title="Punt">×0</option><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="0.75">×0.75</option><option value="1">×1</option><option value="1.25">×1.25</option><option value="1.5">×1.5</option><option value="2">×2</option></select></label>
+        <span class="rh"><button class="btn sm" type="button" id="cw-reset">Reset</button><label class="check" for="hide"><input type="checkbox" id="hide" checked> Hide taken</label></span>
+      </fieldset>
+      </div>
+    </div>
+    <div id="scarStrip" class="scar-strip"></div><div id="stratStrip" class="scar-strip"></div>
+    <div class="tablewrap"><table class="pl"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  </section>
+
+
+</div>
+
+<script>/*__DATA__*/
+/*__SCHED__*/</script>
+<script>/*__ENGINE__*/</script>
+<script>
+(function(){
+'use strict';
+const E = Engine, CATS = E.CATS;
+const P = E.prepPlayers(PLAYERS);
+const KEY = 'courtside-board-v1';
+const DEF = { ilSpots: 2, b2b: 'on', b2bOv: {}, oppBoard: 0, puntMode: 'auto', puntLock: '', stats: 'gain', poBoost: 'medium', scarZ: 'vstrong', scarP: 'light', catW: [1, 1, 1, 1, 1, 1, 1, 1, 1], asb: 'merged', poStart: 18, poFmt: '1-2-2', shown: 0, orderBy: 'gainM', edgeBy: 'gainM', zdrop: 1, teams: 14, slot: 7, order: 'snake', adpSrc: 'ftx', scoring: 'most', cats: 9, roster: 12, basis: 'mix' };
+let cfg = Object.assign({}, DEF), picks = [], log = [];
+let ctx = null, res = null;
+let sortKey = 'order', sortCat = null;
+const $ = id => document.getElementById(id);
+const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+P.forEach(p => { p.key = norm(p.n); });
+const ord = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+const fmt1 = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
+const fmt2 = v => (v < -0.005 ? '−' : '') + Math.abs(v).toFixed(2);
+const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(0);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let owner = [], fx = null, extra = [];   // owner: team per pick from Fantrax; fx: connected league; extra: drafted players missing from the projections
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { cfg = Object.assign({}, DEF, s.cfg); picks = s.picks || []; log = s.log || []; owner = s.owner || []; fx = s.fx || null; extra = s.extra || []; } } catch (e) {}
+extra.forEach(addExtra);
+function addExtra(raw) { const p = E.prepPlayers([raw])[0]; p.id = P.length; p.key = norm(p.n); p.unlisted = true; P.push(p); return p; }
+function fit() {
+  if (!Array.isArray(cfg.catW) || cfg.catW.length !== 9) { cfg.catW = [1, 1, 1, 1, 1, 1, 1, 1, 1]; (cfg.punt || []).forEach(c => { cfg.catW[c] = 0; }); }
+  delete cfg.punt;
+  cfg.adpSrc = 'ftx';
+  if (cfg.slot > cfg.teams) cfg.slot = cfg.teams;
+  const T = cfg.teams * cfg.roster;
+  if (picks.length < T) picks = picks.concat(new Array(T - picks.length).fill(null));
+  else if (picks.length > T) { picks = picks.slice(0, T); }
+  log = log.filter(k => k < T && picks[k] != null);
+  if (owner.length > T) owner = owner.slice(0, T);
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify({ cfg, picks, log, owner, fx, extra })); } catch (e) {} }
+const teamOf = k => owner[k] != null ? owner[k] : E.teamAt(k, cfg.teams, cfg.order);
+const teamName = t => t === cfg.slot - 1 ? 'You' : (fx && fx.names && fx.order && fx.names[fx.order[t]]) || 'Team ' + (t + 1);
+
+// ---------- playoff schedule ----------
+// SCHED.games[team] = games per week for the 25 standard weeks (week 1 = Oct 20–25, then Mon–Sun).
+// Merged All-Star break: standard weeks 18 and 19 (Feb 15–28) become one week, later weeks shift down by one.
+const ASB_WEEK = 18;
+function weekPlan() {
+  const n = SCHED.weeks.length, starts = SCHED.weeks.slice(), idx = [];
+  for (let w = 0; w < n; w++) idx.push([w]);
+  if (cfg.asb === 'merged') { idx.splice(ASB_WEEK - 1, 2, [ASB_WEEK - 1, ASB_WEEK]); starts.splice(ASB_WEEK, 1); }
+  return { idx, starts, count: idx.length };
+}
+const fmtDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
+function playoffRounds() {
+  const plan = weekPlan(), lens = cfg.poFmt.split('-').map(Number), rounds = [];
+  let w = cfg.poStart;
+  for (const L of lens) { const ws = []; for (let i = 0; i < L; i++, w++) if (w <= plan.count) ws.push(w); rounds.push(ws); }
+  return { plan, rounds, fits: w - 1 <= plan.count };
+}
+function playoffGames(team) {
+  const g = SCHED.games[team]; if (!g) return null;
+  const { plan, rounds } = playoffRounds();
+  const per = rounds.filter(ws => ws.length).map(ws => ws.reduce((s, w) => s + plan.idx[w - 1].reduce((t, i) => t + g[i], 0), 0));
+  return { per, total: per.reduce((a, b) => a + b, 0) };
+}
+// Back-to-back rest: share of the second night of back-to-backs a player sits (last two seasons, or your mark)
+function b2bRate(p) {
+  if (cfg.b2b === 'off') return 0;
+  const ov = (cfg.b2bOv || {})[p.n];
+  if (ov != null) return ov;
+  return p.b2b || 0;
+}
+const f1g = x => Math.abs(x - Math.round(x)) < 0.05 ? String(Math.round(x)) : x.toFixed(1);
+function playoffGamesP(p) {
+  const g = playoffGames(p.t); if (!g) return null;
+  const r = b2bRate(p); if (!r || !SCHED.b2b || !SCHED.b2b[p.t]) return Object.assign({ b2b: 0, rate: r, sat: 0 }, g);
+  const { plan, rounds } = playoffRounds(), bb = SCHED.b2b[p.t];
+  const nb = rounds.filter(ws => ws.length).map(ws => ws.reduce((s, w) => s + plan.idx[w - 1].reduce((t, i) => t + bb[i], 0), 0));
+  const per = g.per.map((x, i) => x - r * nb[i]);
+  const tot = per.reduce((s, x) => s + x, 0);
+  return { per, total: tot, b2b: nb.reduce((s, x) => s + x, 0), rate: r, sat: g.total - tot, teamTotal: g.total };
+}
+let poAvg = 0;
+function syncPlayoffs() {
+  const plan = weekPlan();
+  if (cfg.poStart > plan.count) cfg.poStart = plan.count;
+  if (cfg.poStart < 10) cfg.poStart = 10;
+  const sel = $('s-po'); sel.innerHTML = '';
+  for (let w = 10; w <= plan.count; w++) sel.add(new Option('Wk ' + w + ' · ' + fmtDay(plan.starts[w - 1]), String(w)));
+  sel.value = String(cfg.poStart); $('s-asb').value = cfg.asb; $('s-pofmt').value = cfg.poFmt; $('s-poboost').value = cfg.poBoost;
+  const { rounds, fits } = playoffRounds();
+  const all = rounds.flat(), first = all[0], last = all[all.length - 1];
+  const end = new Date(plan.starts[last - 1] + 'T12:00:00'); const endIso = last < plan.count ? plan.starts[last] : '2027-04-12';
+  const endDay = new Date(new Date(endIso + 'T12:00:00') - 864e5).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  $('poHint').textContent = 'Playoffs: weeks ' + rounds.filter(r => r.length).map(r => r.length > 1 ? r[0] + '–' + r[r.length - 1] : r[0]).join(', ') + ' (' + fmtDay(plan.starts[first - 1]) + ' – ' + endDay + ')' + (fits ? '' : '. The regular season ends at week ' + plan.count + ', so ' + (rounds.some(r => !r.length) ? 'the later rounds don\'t fit. Pick an earlier start.' : 'the last round is cut short.'));
+  const totals = Object.keys(SCHED.games).map(t => playoffGames(t).total);
+  poAvg = totals.reduce((a, b) => a + b, 0) / totals.length;
+}
+
+// ---------- setup ----------
+const BASIS_TIPS = {
+  total: 'Season: projected games count in full',
+  pergame: 'Per game: games missed are ignored',
+  mix: 'Mix: games missed count half'
+};
+function basisTip() { const t = BASIS_TIPS[cfg.basis] || BASIS_TIPS.total; $('s-basis').title = t; $('basis-lab').title = t; }
+function fillSelect(el, from, to, val) { el.innerHTML = ''; for (let i = from; i <= to; i++) el.add(new Option(String(i), String(i))); el.value = String(val); }
+function syncSetup() {
+  fillSelect($('s-teams'), 4, 20, cfg.teams);
+  fillSelect($('s-slot'), 1, cfg.teams, cfg.slot);
+  fillSelect($('s-roster'), 8, 25, cfg.roster);
+  $('s-b2b').value = cfg.b2b === 'off' ? 'off' : 'on';
+  $('s-il').value = String(cfg.ilSpots != null ? cfg.ilSpots : 2);
+  { const el = $('s-oppb'), n = cfg.teams - 1; cfg.oppBoard = Math.max(0, Math.min(n, +cfg.oppBoard || 0)); el.innerHTML = ''; for (let i = 0; i <= n; i++) el.add(new Option(i === 0 ? 'None' : i === n ? 'All (' + n + ')' : String(i), String(i))); el.value = String(cfg.oppBoard); }
+  $('s-order').value = cfg.order; $('s-scoring').value = cfg.scoring; $('s-cats').value = String(cfg.cats); $('s-basis').value = cfg.basis; basisTip(); syncPlayoffs(); $('zdrop').value = String(cfg.zdrop); $('edgeby').value = cfg.edgeBy; $('orderby').value = cfg.orderBy; $('statsel').value = cfg.stats; $('scarz').value = cfg.scarZ; $('scarp').value = cfg.scarP; syncPunt(); syncWeights(); $('shown').value = String(cfg.shown);
+}
+function onSetup(e) {
+  const id = e.target.id, v = e.target.value;
+  if (id === 's-teams') cfg.teams = +v; else if (id === 's-slot') cfg.slot = +v; else if (id === 's-roster') cfg.roster = +v;
+  else if (id === 's-order') cfg.order = v; else if (id === 's-scoring') cfg.scoring = v; else if (id === 's-cats') cfg.cats = +v; else if (id === 's-basis') cfg.basis = v; else if (id === 's-il') cfg.ilSpots = +v;
+  fit(); syncSetup();
+  if (id === 's-scoring' || id === 's-slot') recompute(); else rebuild();
+}
+['s-teams','s-slot','s-roster','s-order','s-scoring','s-cats','s-basis','s-il'].forEach(id => $(id).addEventListener('change', onSetup));
+$('s-b2b').addEventListener('change', e => { cfg.b2b = e.target.value; recompute(); });
+$('s-oppb').addEventListener('change', e => { cfg.oppBoard = +e.target.value; recompute(); });
+['s-asb','s-po','s-pofmt'].forEach(id => $(id).addEventListener('change', e => {
+  if (id === 's-asb') { const was = cfg.asb; cfg.asb = e.target.value; if (was !== cfg.asb) cfg.poStart += cfg.asb === 'merged' ? -1 : 1; }
+  else if (id === 's-po') cfg.poStart = +e.target.value; else cfg.poFmt = e.target.value;
+  syncPlayoffs(); recompute();
+}));
+$('s-poboost').addEventListener('change', e => { cfg.poBoost = e.target.value; recompute(); });
+
+// ---------- engine ----------
+function rebuild() { ctx = E.buildContext(P, cfg); recompute(); }
+// Playoff boost: multiplier = 1 + strength × (his playoff games ÷ league average − 1), kept within ×0.5–×1.5
+function setPlayoffMult() {
+  const lam = { light: 0.25, medium: 0.5, strong: 0.75, vstrong: 1 }[cfg.poBoost] || 0;
+  P.forEach(p => {
+    const g = playoffGamesP(p);
+    p.poEdge = g && poAvg ? g.total / poAvg - 1 : 0;
+    p.poMult = lam ? Math.max(0.5, Math.min(1.5, 1 + lam * p.poEdge)) : 1;
+  });
+}
+function recompute() { setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner }); render(); save(); }
+
+// ---------- logging ----------
+function findPlayer(q) {
+  const k = norm(q); if (!k) return null;
+  const takenSet = new Set(picks.filter(v => v != null));
+  const avail = P.filter(p => !takenSet.has(p.id));
+  const byAdp = (a, b) => a.adpUse - b.adpUse;
+  let m = avail.filter(p => p.key === k); if (m.length) return m[0];
+  m = avail.filter(p => p.key.startsWith(k) || p.key.split(' ').some(w => w.startsWith(k))).sort(byAdp); if (m.length) return m[0];
+  m = avail.filter(p => p.key.includes(k)).sort(byAdp); if (m.length) return m[0];
+  if (P.some(p => p.key === k && takenSet.has(p.id))) return 'taken';
+  return null;
+}
+function say(t, err) { const m = $('msg'); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }
+function logPick(p, mine) {
+  // Taken fills the pick on the clock, so it goes to you automatically when it's your turn
+  const k = picks.indexOf(null);
+  if (k < 0) { say('Every pick in the draft is filled.', true); return false; }
+  picks[k] = p.id; log.push(k);
+  say('Pick ' + (k + 1) + ': ' + p.n + ' → ' + teamName(teamOf(k)));
+  recompute(); return true;
+}
+function submitName(mine) {
+  const q = $('pickname').value; const p = findPlayer(q);
+  if (p === 'taken') { say(q + ' is already taken.', true); return; }
+  if (!p) { say(q ? 'No available player matches "' + q + '".' : 'Type a player name first.', true); return; }
+  if (logPick(p, mine)) { $('pickname').value = ''; $('pickname').focus(); }
+}
+$('logform').addEventListener('submit', e => { e.preventDefault(); submitName(false); });
+$('b-paste').addEventListener('click', () => {
+  const lines = $('paste').value.split(/\n/).map(s => s.replace(/^\s*\d+[.)]?\s*/, '').trim()).filter(Boolean);
+  let n = 0; const miss = [];
+  for (const ln of lines) {
+    const p = findPlayer(ln); const k = picks.indexOf(null);
+    if (k < 0) break;
+    if (!p || p === 'taken') { miss.push(ln); continue; }
+    picks[k] = p.id; log.push(k); n++;
+  }
+  $('paste').value = miss.join('\n');
+  say('Logged ' + n + ' picks.' + (miss.length ? ' Not matched (left in the box): ' + miss.length + '.' : ''), miss.length > 0);
+  recompute();
+});
+$('b-undo2').addEventListener('click', () => { const k = log.pop(); if (k == null) { say('Nothing to undo.'); return; } const p = P[picks[k]]; picks[k] = null; say('Undid pick ' + (k + 1) + ': ' + p.n); recompute(); });
+$('recent').addEventListener('click', e => {
+  const b = e.target.closest('button[data-k]'); if (!b) return;
+  if (!b.classList.contains('armed')) { document.querySelectorAll('.recent .armed').forEach(x => { x.classList.remove('armed'); x.querySelector('.tm').textContent = x.dataset.tm; }); b.classList.add('armed'); b.querySelector('.tm').textContent = 'Tap again to remove'; return; }
+  const k = +b.dataset.k; const p = P[picks[k]]; picks[k] = null; log = log.filter(x => x !== k); say('Removed pick ' + (k + 1) + ': ' + p.n + '. The next pick logged for that team goes back in there.'); recompute();
+});
+$('tbody').addEventListener('click', e => {
+  const b = e.target.closest('button[data-id]'); if (!b) return;
+  logPick(P[+b.dataset.id], b.dataset.act === 'mine');
+});
+
+// ---------- Fantrax sync ----------
+const API = 'api/fantrax';
+let fxPlayers = null, fxTimer = null, fxBusy = false;
+const stripSfx = k => k.replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '').replace(/\s+/g, ' ').trim();
+function fxStatus(text, mode) { $('fx-text').textContent = text; $('fx-status').className = 'sync-status' + (mode ? ' ' + mode : ''); }
+async function fxGet(what) {
+  let r;
+  try { r = await fetch(API + '?what=' + what + (fx ? '&leagueId=' + encodeURIComponent(fx.leagueId) : ''), { cache: 'no-store' }); }
+  catch (e) { throw new Error('offline'); }
+  const type = r.headers.get('content-type') || '';
+  if (!type.includes('json')) throw new Error('nohost');
+  let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+  if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+  if (!r.ok || body.error) throw new Error(body.error || ('Fantrax answered ' + r.status));
+  return body;
+}
+function fxErr(e) {
+  if (e.message === 'nohost') return 'Sync runs on the hosted copy of the board (Netlify). Here, log picks by hand.';
+  if (e.message === 'offline') return 'Couldn\'t reach the sync service. Check your connection; it will retry.';
+  return e.message;
+}
+function swapName(n) { const i = n.indexOf(','); return i < 0 ? n : (n.slice(i + 1) + ' ' + n.slice(0, i)).trim(); }
+function matchFantrax(fid) {
+  const info = fxPlayers && fxPlayers[fid];
+  if (!info || !info.name) return null;
+  const name = swapName(info.name), k = norm(name), k2 = stripSfx(k);
+  let p = P.find(q => q.key === k) || P.find(q => stripSfx(q.key) === k2);
+  if (p) return p;
+  p = P.find(q => q.unlisted && q.fid === fid);
+  if (p) return p;
+  // Not in the projections: add him as a waiver-level player so the pick still counts for his team
+  const tail = P.filter(q => !q.unlisted).sort((a, b) => b.rk - a.rk).slice(0, 15);
+  const avg = f => tail.reduce((s, q) => s + q[f], 0) / tail.length;
+  const raw = { n: name, t: info.team || '', p: (info.position || '').replace(/,/g, '/'), g: Math.round(avg('g')), m: Math.round(avg('m')),
+    pts: avg('pts'), tpm: avg('tpm'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), fga: avg('fga'), ftp: avg('ftp'), fta: avg('fta'), to: avg('to'),
+    adp: null, ftx: null, rk: 999, inj: '', risk: '', note: 'Not in the BBM projections. Counted as a waiver-level player.', fid };
+  extra.push(raw);
+  const added = addExtra(raw); added.fid = fid;
+  return added;
+}
+// ---------- saved leagues ----------
+const LEAGUES = 'courtside-leagues-v1';
+function readLeagues() { try { return JSON.parse(localStorage.getItem(LEAGUES) || '[]'); } catch (e) { return []; } }
+function writeLeagues(l) { try { localStorage.setItem(LEAGUES, JSON.stringify(l)); } catch (e) {} }
+function rememberLeague(id, name, myTeam) {
+  const l = readLeagues(); const i = l.findIndex(x => x.id === id);
+  const entry = { id, name: name || (i >= 0 ? l[i].name : 'League ' + id), myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
+  if (i >= 0) l[i] = entry; else l.push(entry);
+  writeLeagues(l); renderLeagues();
+}
+function renderLeagues() {
+  const l = readLeagues().sort((a, b) => b.used - a.used);
+  $('lg-row').hidden = !l.length;
+  const sel = $('lg-sel'); sel.innerHTML = '';
+  l.forEach(x => sel.add(new Option(x.name + (x.name.includes(x.id) ? '' : ' · ' + x.id), x.id)));
+  if (fx && fx.leagueId && l.some(x => x.id === fx.leagueId)) sel.value = fx.leagueId;
+}
+$('lg-go').addEventListener('click', () => { const id = $('lg-sel').value; if (!id) return; const saved = readLeagues().find(x => x.id === id); $('fx-league').value = id; if (saved && saved.myTeam) fx = { leagueId: id, myTeam: saved.myTeam }; fxConnect(id); });
+let lgArmed = null;
+$('lg-del').addEventListener('click', e => {
+  const id = $('lg-sel').value; if (!id) return;
+  if (lgArmed !== id) { lgArmed = id; e.currentTarget.textContent = 'Sure?'; setTimeout(() => { lgArmed = null; $('lg-del').textContent = 'Remove'; }, 3000); return; }
+  lgArmed = null; $('lg-del').textContent = 'Remove';
+  writeLeagues(readLeagues().filter(x => x.id !== id)); renderLeagues(); fxStatus('Removed league ' + id + ' from the saved list.');
+});
+
+async function fxConnect(id) {
+  const prevMine = fx && fx.leagueId === id ? fx.myTeam : null;
+  fx = { leagueId: id };
+  fxStatus('Connecting to league ' + id + '…');
+  try {
+    const [league, draft] = [await fxGet('league'), await fxGet('draft')];
+    const order = (draft.draftOrder && draft.draftOrder.length ? draft.draftOrder : Object.keys(league.teamInfo || {}));
+    if (!order.length) throw new Error('This league has no teams or draft order yet.');
+    const names = {}; Object.values(league.teamInfo || {}).forEach(t => { names[t.id] = t.name; });
+    fx = { leagueId: id, order, names, myTeam: prevMine };
+    rememberLeague(id, league.leagueName || league.name || (league.leagueInfo && league.leagueInfo.name) || null, prevMine);
+    if (!fxPlayers) { fxStatus('Loading Fantrax player list…'); fxPlayers = await fxGet('players'); }
+    renderFx();
+    await fxApply(draft, true);
+    fxSchedule();
+  } catch (e) { fxStatus(fxErr(e), 'err'); if (e.message !== 'offline') { fx = null; renderFx(); } save(); }
+}
+async function fxApply(draft, first) {
+  const order = fx.order, N = order.length;
+  const list = (draft.draftPicks || []).filter(d => d && d.round);
+  // When Fantrax lists every pick (future ones without a player), its last round is the roster size.
+  const maxRound = list.reduce((m, d) => Math.max(m, d.round), 0);
+  const listsAll = list.some(d => !d.playerId);
+  const rounds = listsAll ? maxRound : Math.max(cfg.roster, maxRound);
+  const reshape = N !== cfg.teams || rounds !== cfg.roster;
+  if (reshape) {
+    cfg.teams = Math.min(20, Math.max(4, N)); cfg.roster = Math.min(25, Math.max(8, rounds));
+    picks = []; log = []; owner = []; fit(); syncSetup();
+  }
+  if (fx.myTeam) { const i = order.indexOf(fx.myTeam); if (i >= 0 && cfg.slot !== i + 1) { cfg.slot = i + 1; syncSetup(); } }
+  let added = 0, before = P.length;
+  for (const d of list) {
+    const k = d.pickInRound ? (d.round - 1) * N + (d.pickInRound - 1) : d.pick - 1;
+    if (k < 0 || k >= picks.length) continue;
+    const t = order.indexOf(d.teamId);
+    if (t >= 0) owner[k] = t;
+    if (!d.playerId) continue;
+    const p = matchFantrax(d.playerId);
+    if (!p) continue;
+    if (picks[k] !== p.id) {
+      const prev = picks.indexOf(p.id); if (prev >= 0 && prev !== k) { picks[prev] = null; log = log.filter(x => x !== prev); }
+      picks[k] = p.id; if (!log.includes(k)) log.push(k); added++;
+    }
+  }
+  const made = picks.filter(v => v != null).length;
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const state = draft.draftState ? ' · ' + String(draft.draftState).toLowerCase().replace(/_/g, ' ') : '';
+  fxStatus('Synced ' + time + ' · ' + made + ' of ' + picks.length + ' picks' + state + (added && !first ? ' · ' + added + ' new' : ''), 'live');
+  if (reshape || P.length !== before) rebuild(); else if (added || first) recompute(); else save();
+  if (made >= picks.length) fxStop('Draft complete. Synced all ' + made + ' picks.');
+}
+async function fxTick() {
+  if (!fx || fxBusy) return; fxBusy = true;
+  try { await fxApply(await fxGet('draft'), false); } catch (e) { fxStatus(fxErr(e), 'err'); }
+  fxBusy = false;
+}
+function fxSchedule() { clearInterval(fxTimer); fxTimer = null; if (fx && $('fx-auto').checked) fxTimer = setInterval(fxTick, 10000); }
+function fxStop(msg) { clearInterval(fxTimer); fxTimer = null; $('fx-auto').checked = false; if (msg) fxStatus(msg, 'live'); }
+function renderFx() {
+  $('fx-on').hidden = !fx || !fx.order;
+  $('fx-connect').textContent = fx && fx.order ? 'Reconnect' : 'Connect';
+  if (fx) $('fx-league').value = fx.leagueId;
+  if (!fx || !fx.order) return;
+  const sel = $('fx-team'); sel.innerHTML = '';
+  sel.add(new Option('Choose your team…', ''));
+  fx.order.forEach((id, i) => sel.add(new Option((i + 1) + '. ' + (fx.names[id] || 'Team ' + (i + 1)), id)));
+  sel.value = fx.myTeam || '';
+}
+$('fx-form').addEventListener('submit', e => {
+  e.preventDefault();
+  let id = $('fx-league').value.trim();
+  const m = id.match(/league\/([A-Za-z0-9]+)/); if (m) id = m[1];
+  if (!/^[A-Za-z0-9]{4,40}$/.test(id)) { fxStatus('Paste the league ID, the letters and numbers after /league/ in your Fantrax URL.', 'err'); return; }
+  fxConnect(id);
+});
+$('fx-team').addEventListener('change', e => {
+  fx.myTeam = e.target.value || null;
+  rememberLeague(fx.leagueId, null, fx.myTeam);
+  const i = fx.order.indexOf(fx.myTeam); if (i >= 0) { cfg.slot = i + 1; syncSetup(); }
+  recompute();
+});
+$('fx-auto').addEventListener('change', () => { fxSchedule(); if ($('fx-auto').checked) fxTick(); });
+$('fx-now').addEventListener('click', fxTick);
+$('fx-off').addEventListener('click', () => { fxStop(); fx = null; owner = []; renderFx(); fxStatus('Disconnected. Picks already synced stay on the board.'); recompute(); });
+
+// ---------- help dialog ----------
+$('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
+$('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
+$('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
+
+// ---------- saved drafts ----------
+const SAVES = 'courtside-saved-drafts-v1';
+let curName = null;
+try { curName = localStorage.getItem(SAVES + '-cur'); } catch (e) {}
+function readSaves() { try { return JSON.parse(localStorage.getItem(SAVES) || '[]'); } catch (e) { return null; } }
+function writeSaves(list) { try { localStorage.setItem(SAVES, JSON.stringify(list)); return true; } catch (e) { return false; } }
+function setCur(n) { curName = n; try { if (n) localStorage.setItem(SAVES + '-cur', n); else localStorage.removeItem(SAVES + '-cur'); } catch (e) {} }
+function svSay(t, err) { const m = $('sv-msg'); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }
+function renderSaves() {
+  const list = readSaves();
+  $('curDraft').textContent = curName ? 'Working on: ' + curName : '';
+  if (curName && !$('sv-name').value) $('sv-name').value = curName;
+  if (list === null) { $('sv-list').innerHTML = '<li class="empty">Saving isn\'t available in this browser (storage is blocked).</li>'; return; }
+  if (!list.length) { $('sv-list').innerHTML = '<li class="empty">No saved drafts yet. Name this one and press Save.</li>'; return; }
+  $('sv-list').innerHTML = list.slice().sort((a, b) => b.savedAt - a.savedAt).map(d => {
+    const n = (d.picks || []).filter(v => v != null).length;
+    const when = new Date(d.savedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return '<li class="' + (d.name === curName ? 'cur' : '') + '"><span class="sv-n" title="' + esc(d.name) + '">' + esc(d.name) + '<span class="sv-m">' + n + ' picks · ' + (d.cfg ? d.cfg.teams + ' teams, slot ' + d.cfg.slot : '') + ' · ' + when + '</span></span>' +
+      '<button class="btn sm" type="button" data-load="' + esc(d.name) + '">Load</button><button class="btn sm warn" type="button" data-del="' + esc(d.name) + '">Delete</button></li>';
+  }).join('');
+}
+let svArmed = null, svTimer = null;
+function arm(key, btn, label) {
+  if (svArmed === key) { clearTimeout(svTimer); svArmed = null; return true; }
+  svArmed = key; if (btn) { btn.dataset.lab = btn.textContent; btn.textContent = label; }
+  clearTimeout(svTimer); svTimer = setTimeout(() => { svArmed = null; renderSaves(); $('sv-new').textContent = 'New draft'; $('sv-save').textContent = 'Save'; }, 3000);
+  return false;
+}
+$('sv-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('sv-name').value.trim();
+  if (!name) { svSay('Type a name for this draft first.', true); return; }
+  const list = readSaves(); if (list === null) { svSay('Saving isn\'t available in this browser.', true); return; }
+  const i = list.findIndex(d => d.name === name);
+  if (i >= 0 && name !== curName && !arm('save:' + name, $('sv-save'), 'Overwrite?')) { svSay('"' + name + '" already exists. Press Overwrite? to replace it.'); return; }
+  $('sv-save').textContent = 'Save';
+  const entry = { name, savedAt: Date.now(), cfg: JSON.parse(JSON.stringify(cfg)), picks: picks.slice(), log: log.slice(), owner: owner.slice(), fx, extra };
+  if (i >= 0) list[i] = entry; else list.push(entry);
+  if (!writeSaves(list)) { svSay('Couldn\'t save: browser storage is full or blocked.', true); return; }
+  setCur(name); svSay('Saved "' + name + '".'); renderSaves();
+});
+$('sv-list').addEventListener('click', e => {
+  const lb = e.target.closest('button[data-load]'), db = e.target.closest('button[data-del]');
+  const list = readSaves() || [];
+  if (lb) {
+    const d = list.find(x => x.name === lb.dataset.load); if (!d) return;
+    if (picks.some(v => v != null) && curName !== d.name && !arm('load:' + d.name, lb, 'Replace?')) { svSay('Loading replaces the draft on the board. Press Replace? to continue, or save this one first.'); return; }
+    cfg = Object.assign({}, DEF, d.cfg); picks = (d.picks || []).slice(); log = (d.log || []).slice(); owner = (d.owner || []).slice(); fx = d.fx || null;
+    (d.extra || []).forEach(raw => { if (!P.some(p => p.unlisted && p.n === raw.n)) { extra.push(raw); addExtra(raw); } });
+    fit(); syncSetup(); renderFx(); setCur(d.name); $('sv-name').value = d.name;
+    svSay('Loaded "' + d.name + '".'); rebuild(); renderSaves();
+  } else if (db) {
+    const name = db.dataset.del;
+    if (!arm('del:' + name, db, 'Sure?')) return;
+    writeSaves(list.filter(x => x.name !== name));
+    if (curName === name) setCur(null);
+    svSay('Deleted "' + name + '".'); renderSaves();
+  }
+});
+$('sv-new').addEventListener('click', e => {
+  if (picks.some(v => v != null) && !arm('new', e.currentTarget, 'Clear picks?')) { svSay('This clears the board (settings stay). Save first if you want to keep it.'); return; }
+  $('sv-new').textContent = 'New draft';
+  picks = picks.map(() => null); log = []; setCur(null); $('sv-name').value = '';
+  svSay('New draft started.'); recompute(); renderSaves();
+});
+
+// ---------- list controls ----------
+$('q').addEventListener('input', renderTable);
+$('hide').addEventListener('change', renderTable);
+$('posf').addEventListener('change', renderTable);
+$('statsel').addEventListener('change', e => { cfg.stats = e.target.value; save(); renderTable(); });
+$('scarz').addEventListener('change', e => { cfg.scarZ = e.target.value; recompute(); });
+$('scarp').addEventListener('change', e => { cfg.scarP = e.target.value; recompute(); });
+function syncPunt() {
+  const S = E.strategiesFor(cfg), opt = (v, l) => '<option value="' + v + '">' + esc(l) + '</option>';
+  const grp = (lab, n) => { const xs = S.filter(s => s.size === n); return xs.length ? '<optgroup label="' + lab + '">' + xs.map(s => opt('lock:' + s.id, s.label.replace('Punt ', ''))).join('') + '</optgroup>' : ''; };
+  const sel = $('puntsel');
+  sel.innerHTML = opt('off', 'Off') + opt('auto', 'Auto') + '<optgroup label="Lock">' + opt('lock:none', 'No punt') + '</optgroup>' + grp('Lock single punt', 1) + grp('Lock double punt', 2) + grp('Lock triple punt', 3);
+  sel.value = cfg.puntLock ? 'lock:' + cfg.puntLock : (cfg.puntMode === 'auto' ? 'auto' : 'off');
+  if (!sel.value) { cfg.puntLock = ''; sel.value = cfg.puntMode === 'auto' ? 'auto' : 'off'; }
+}
+$('puntsel').addEventListener('change', e => { const v = e.target.value; if (v.startsWith('lock:')) cfg.puntLock = v.slice(5); else { cfg.puntLock = ''; cfg.puntMode = v; } recompute(); syncPunt(); });
+$('tbody').addEventListener('click', e => { const td = e.target.closest('td[data-b2b]'); if (!td || cfg.b2b === 'off') return; const n = td.dataset.b2b; const ov = Object.assign({}, cfg.b2bOv || {}); if (ov[n] == null) ov[n] = 1; else if (ov[n] === 1) ov[n] = 0; else delete ov[n]; cfg.b2bOv = ov; recompute(); });
+$('stratStrip').addEventListener('click', e => { const b = e.target.closest('[data-strat]'); if (!b) return; cfg.puntLock = cfg.puntLock === b.dataset.strat ? '' : b.dataset.strat; recompute(); syncPunt(); });
+function syncWeights() {
+  document.querySelectorAll('#catw select').forEach(el => { const c = +el.dataset.c, v = cfg.catW[c]; el.value = String(v); el.className = v === 0 ? 'off' : v !== 1 ? 'chg' : ''; el.disabled = (c === E.TO && cfg.cats === 8); });
+}
+$('catw').addEventListener('change', e => { const el = e.target.closest('select'); if (!el) return; cfg.catW[+el.dataset.c] = +el.value; syncWeights(); rebuild(); });
+$('cw-reset').addEventListener('click', () => { cfg.catW = [1, 1, 1, 1, 1, 1, 1, 1, 1]; syncWeights(); rebuild(); });
+$('zdrop').addEventListener('change', e => { cfg.zdrop = +e.target.value; if (cfg.orderBy === 'z') recompute(); else { save(); renderTable(); } });
+$('shown').addEventListener('change', e => { cfg.shown = +e.target.value; save(); renderTable(); });
+$('orderby').addEventListener('change', e => { cfg.orderBy = e.target.value; recompute(); });
+$('edgeby').addEventListener('change', e => { cfg.edgeBy = e.target.value; save(); renderTable(); });
+$('thead').addEventListener('click', e => {
+  const th = e.target.closest('th[data-sort]'); if (!th) return;
+  const s = th.dataset.sort;
+  if (s.startsWith('c')) { sortKey = 'cat'; sortCat = +s.slice(1); } else { sortKey = s; sortCat = null; }
+  renderTable();
+});
+
+// ---------- render ----------
+function render() { renderClock(); renderMine(); renderTeams(); renderTable(); renderNames(); renderSwing(); }
+
+function renderNames() {
+  const takenSet = new Set(picks.filter(v => v != null));
+  $('names').innerHTML = P.filter(p => !takenSet.has(p.id)).sort((a, b) => a.adpUse - b.adpUse).map(p => '<option value="' + esc(p.n) + '"></option>').join('');
+}
+function renderClock() {
+  const N = cfg.teams, total = picks.length, cur = res.current, face = $('face');
+  if (cur >= total) { face.className = 'board-face'; face.innerHTML = '<div class="pk">✓</div><div class="who">Draft complete</div><div class="sub">' + total + ' picks logged. Standings are in the Teams panel.</div>'; }
+  else {
+    const t = teamOf(cur), mineNow = t === cfg.slot - 1;
+    const rd = Math.floor(cur / N) + 1, inRd = cur % N + 1;
+    let sub;
+    if (mineNow) sub = 'Round ' + rd + ', pick ' + inRd + '. Your next after this: ' + (res.p2 != null ? ord(res.p2 + 1) : 'none');
+    else { const until = res.p1 != null ? res.unfilled.indexOf(res.p1) : -1; sub = 'Round ' + rd + ', pick ' + inRd + '. ' + (res.p1 != null ? 'You pick ' + ord(res.p1 + 1) + ', ' + until + ' pick' + (until === 1 ? '' : 's') + ' away' : 'Your picks are done'); }
+    face.className = 'board-face' + (mineNow ? ' me' : '');
+    face.innerHTML = '<div class="pk num">' + (cur + 1) + '</div><div class="who">' + (mineNow ? 'You\'re on the clock' : teamName(t) + ' picking') + '</div><div class="sub">' + sub + '</div>';
+  }
+  // every pick made, newest pick number first; the list scrolls
+  const rec = []; for (let k = picks.length - 1; k >= 0; k--) if (picks[k] != null) rec.push(k);
+  $('recent').innerHTML = rec.map(k => {
+    const t = teamOf(k), tm = teamName(t);
+    return '<li><button type="button" data-k="' + k + '" data-tm="' + tm + '" class="' + (t === cfg.slot - 1 ? 'me' : '') + '"><span class="num tm" style="font-size:.8rem">' + (k + 1) + '</span><span class="nm">' + esc(P[picks[k]].n) + '</span><span class="tm">' + tm + '</span></button></li>';
+  }).join('');
+}
+function positions(roster) {
+  const c = { PG: 0, SG: 0, SF: 0, PF: 0, C: 0 };
+  roster.forEach(r => r.p.p.split('/').forEach(x => { if (c[x] != null) c[x]++; }));
+  return c;
+}
+function renderMine() {
+  const me = cfg.slot - 1, T = res.teams[me], st = res.standings[me], N = cfg.teams;
+  const nc = cfg.cats === 9 ? 9 : 8;
+  const key = cfg.scoring === 'roto' ? 'roto' : cfg.scoring === 'h2h' ? 'cats' : 'match';
+  const sorted = res.standings.slice().sort((a, b) => b[key] - a[key]); const rank = sorted.findIndex(s => s.t === me) + 1;
+  let big, lab;
+  if (key === 'roto') { big = st.roto.toFixed(1); lab = 'projected roto points'; }
+  else if (key === 'cats') { big = st.cats.toFixed(2); lab = 'expected category wins per week'; }
+  else { big = st.match.toFixed(1); lab = 'expected matchup wins, playing every team once'; }
+  const third = rank <= Math.ceil(N / 3) ? 'hi' : rank > N - Math.ceil(N / 3) ? 'lo' : 'mid';
+  $('mineStat').innerHTML = '<div class="rank ' + third + '"><b>' + ord(rank) + '</b><span>of ' + N + ' teams</span></div>' +
+    '<div class="score"><b>' + big + '</b> ' + lab + '</div>';
+  $('mineSub').textContent = 'Slot ' + cfg.slot + ' · ' + T.roster.length + ' of ' + cfg.roster + ' picked';
+  const pc = positions(T.roster);
+  $('posCount').innerHTML = Object.keys(pc).map(k => k + ' <b>' + pc[k] + '</b>').join('');
+  const myPicks = []; for (let k = 0; k < picks.length; k++) if (teamOf(k) === me) myPicks.push(k);
+  $('roster').innerHTML = myPicks.map(k => {
+    const id = picks[k];
+    return id != null ? '<li title="' + esc(P[id].n + ' · ' + P[id].t + ' · ' + P[id].p) + '"><span class="num" style="color:var(--muted)">' + (k + 1) + '</span><span class="rn">' + esc(P[id].n) + '</span><span></span></li>'
+      : '<li class="empty"><span class="num">' + (k + 1) + '</span><span>Open</span><span></span></li>';
+  }).join('');
+  const bandOf = v => v < 0.45 ? 'lo' : v <= 0.55 ? 'mid' : 'hi';
+  const mm = res.myMatch || [], avgM = mm.length ? mm.reduce((a, b) => a + b.p, 0) / mm.length : 0;
+  $('vsAvg').innerHTML = '<b class="num ' + bandOf(avgM) + '">' + Math.round(avgM * 100) + '%</b><span class="hint" style="margin:0">average against ' + mm.length + ' teams</span>';
+  $('vsList').innerHTML = mm.slice().sort((a, b) => a.p - b.p).map(m => '<li><span>' + esc(teamName(m.t)) + '</span><span class="num ' + bandOf(m.p) + '">' + Math.round(m.p * 100) + '%</span></li>').join('');
+  // Two columns: FG% FT% / PTS REB / ST BLK, then 3PM AST TO underneath
+  $('chances').innerHTML = [0, 1, 3, 4, 6, 7, 2, 5, 8].map(i => [CATS[i], i]).map(([c, i]) => {
+    if (i === E.TO && cfg.cats === 8) return '<div title="Not counted in 8-cat"><span>TO</span><span class="num" style="color:var(--muted)">—</span></div>';
+    const v = res.myChance[i], band = v < 0.45 ? 'lo' : v <= 0.55 ? 'mid' : 'hi';
+    return '<div><span>' + c.l + '</span><span class="num ' + band + '">' + Math.round(v * 100) + '%</span></div>';
+  }).join('');
+}
+function renderTeams() {
+  const key = cfg.scoring === 'roto' ? 'roto' : cfg.scoring === 'h2h' ? 'cats' : 'match';
+  const unit = key === 'roto' ? 'pts' : key === 'cats' ? 'cat W/wk' : 'match W';
+  const rows = res.standings.slice().sort((a, b) => b[key] - a[key]);
+  $('standUnit').textContent = { pts: 'roto pts', 'cat W/wk': 'cat wins / wk', 'match W': 'matchup wins' }[unit] + ' · picks';
+  $('stand').innerHTML = rows.map((s, i) => {
+    const T = res.teams[s.t];
+    const list = T.roster.map(r => '<li>' + esc(r.p.n) + '</li>').join('');
+    return '<tr class="' + (s.t === cfg.slot - 1 ? 'me' : '') + '"><td class="num" style="width:1.8em;color:var(--muted)">' + (i + 1) + '</td><td><details><summary title="' + esc(teamName(s.t)) + ' · slot ' + (s.t + 1) + '">' + esc(teamName(s.t)) + '</summary>' + (list ? '<ol>' + list + '</ol>' : '<ol><li>No picks yet</li></ol>') + '</details></td><td class="num" style="text-align:right;white-space:nowrap;width:3.6em">' + (key === 'cats' ? s[key].toFixed(2) : s[key].toFixed(1)) + '</td><td class="num" style="text-align:right;color:var(--muted);width:3.3em">' + T.roster.length + '/' + cfg.roster + '</td></tr>';
+  }).join('');
+}
+function renderSwing() {
+  $('swing').innerHTML = CATS.map((c, i) => '<span>' + c.l + ' ' + ctx.swing[i].toFixed(2) + '</span>').join('');
+}
+// Red → yellow → green by where a value ranks among the available players on screen, per column.
+let heatScales = {};
+function buildHeat(list, zd) {
+  heatScales = {};
+  const add = (k, f) => { heatScales[k] = list.map(f).filter(v => v != null && isFinite(v)).sort((a, b) => a - b); };
+  add('gain', p => p.gain); add('gainM', p => p.gainM);
+  zScaleMax = CATS.map((c, i) => Math.max(0.05, ...list.map(p => Math.abs(catZ(p, i)))));
+  CATS.forEach((c, i) => add('c' + i, p => p.gainC ? p.gainC[i] : null));
+  add('z', p => p.z[zd] * (p.scarMult || 1) * (p.poMult || 1));
+  add('po', p => { const g = playoffGamesP(p); return g ? g.total : null; });
+}
+// Category chips: green above zero, red below, deeper for bigger values; nothing under half a point.
+// Category cells can show Gain (default), weighted per-category Zscore, or raw per-game stats.
+const RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+const rawTxt = (p, i) => i < 2 ? (p[RAWK[i]] != null ? p[RAWK[i]].toFixed(3).replace(/^0/, '') : '—') : (p[RAWK[i]] != null ? p[RAWK[i]].toFixed(1) : '—');
+const catZ = (p, i) => p.boardC ? p.boardC[i] * (cfg.catW ? cfg.catW[i] : 1) : 0;
+let zScaleMax = new Array(9).fill(1);
+function chipZ(i, z, text) {
+  const m = zScaleMax[i] || 1, t = Math.min(1, Math.abs(z) / m);
+  if (Math.abs(z) < 0.03 * m) return '<span class="chip zero">' + text + '</span>';
+  return '<span class="chip" style="background:color-mix(in oklab, var(' + (z > 0 ? '--good' : '--bad') + ') ' + Math.round(18 + 62 * t) + '%, var(--surface))">' + text + '</span>';
+}
+// Zscore column chip: green above zero, red below, deeper relative to the largest Zscore among the comparison players
+function zChip(z) {
+  const a = heatScales.z; const m = a && a.length ? Math.max(Math.abs(a[0]), Math.abs(a[a.length - 1])) : 1;
+  const t = Math.min(1, Math.abs(z) / (m || 1)), txt = (z < 0 ? '−' : '') + Math.abs(z).toFixed(2);
+  if (Math.abs(z) < 0.02 * (m || 1)) return '<span class="chip zero">' + txt + '</span>';
+  return '<span class="chip" style="background:color-mix(in oklab, var(' + (z > 0 ? '--good' : '--bad') + ') ' + Math.round(18 + 62 * t) + '%, var(--surface))">' + txt + '</span>';
+}
+function chip(k, v100) {
+  const a = heatScales[k]; const m = a && a.length ? Math.max(Math.abs(a[0]), Math.abs(a[a.length - 1])) * 100 : 10;
+  const r = Math.round(v100 * 10) / 10;
+  if (Math.abs(v100) < 0.05) return '<span class="chip zero">0.0</span>';
+  const t = Math.min(1, Math.abs(v100) / (m || 1));
+  const pct = Math.round(18 + 62 * t);
+  return '<span class="chip" style="background:color-mix(in oklab, var(' + (v100 > 0 ? '--good' : '--bad') + ') ' + pct + '%, var(--surface))">' + (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r).toFixed(1) + '</span>';
+}
+const signCls = v => Math.abs(v) < 0.05 ? 'zero' : v > 0 ? 'pos' : 'neg';
+const pillOf = v => '<span class="pill ' + (v >= 0.75 ? 'hi' : v >= 0.4 ? 'mid' : 'lo') + '">' + Math.round(v * 100) + '%</span>';
+// Gain columns: zero is neutral (yellow); green grows with positive values, red with negative,
+// scaled by the largest absolute value in that column among the comparison players.
+function heatZero(k, v) {
+  const a = heatScales[k];
+  if (v == null || !a || !a.length) return '';
+  const m = Math.max(Math.abs(a[0]), Math.abs(a[a.length - 1])) || 1;
+  const t = Math.max(-1, Math.min(1, v / m));
+  return 'background:hsl(' + Math.round(60 + 60 * t) + ' var(--heat-s) var(--heat-l))';
+}
+function heat(k, v) {
+  const a = heatScales[k];
+  if (v == null || !a || a.length < 2) return '';
+  let lo = 0, hi = a.length;
+  { let l = 0, r = a.length; while (l < r) { const m = (l + r) >> 1; if (a[m] < v) l = m + 1; else r = m; } lo = l; }
+  { let l = lo, r = a.length; while (l < r) { const m = (l + r) >> 1; if (a[m] <= v) l = m + 1; else r = m; } hi = l; }
+  const pct = ((lo + hi) / 2) / a.length;
+  return 'background:hsl(' + Math.round(pct * 120) + ' var(--heat-s) var(--heat-l))';
+}
+function renderTable() {
+  const N = cfg.teams, me = cfg.slot - 1;
+  const p1 = res.p1, p2 = res.p2;
+  const thereH = p1 != null ? 'There at ' + ord(p1 + 1) : 'There at —';
+  const lastH = p2 != null ? 'Lasts to ' + ord(p2 + 1) : 'Lasts to —';
+  const th = (label, sort, cls, tip) => '<th' + (sort ? ' data-sort="' + sort + '"' : '') + ' class="' + (cls || '') + (sort ? ' sortable' : '') + ((sort && (sort === sortKey || (sortKey === 'cat' && sort === 'c' + sortCat))) ? ' on' : '') + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + label + '</th>';
+  $('thead').innerHTML = '<tr>' + th('Log', null, 'l') + th('Fantrax<br>ADP', 'adp', '', 'Fantrax ADP') + th('#', 'order', '', 'Rank by ' + ({ gainM: 'Gain M', z: 'the Zscore shown' }[cfg.orderBy] || 'Gain C') + ' (# order by). The Model pick badge marks the best pick most likely to get to you') + th('Edge<br><span style="font-weight:400;text-transform:none">vs ' + ({ z: 'Zscore', gain: 'Gain C', gainM: 'Gain M' }[cfg.edgeBy]) + '</span>', 'edge', '', ({ z: 'Fantrax ADP minus rank on the Zscore shown.', gain: 'Fantrax ADP minus the pick he would go at if the room drafted by Gain C from here.', gainM: 'Fantrax ADP minus the pick he would go at if the room drafted by Gain M from here.' }[cfg.edgeBy]) + ' Positive: going later than he should') + th('Playoff<br>games', 'po', '', 'Games in your playoff weeks') + th('G', 'g', '', 'Projected games played') + th('Player', null, 'l player') + th('Gain C', 'gain', '', 'Category wins added (×100)') + th('Gain M', 'gainM', '', 'Matchup win chance added (pts)') +
+    CATS.map((c, i) => th(c.l + (cfg.stats === 'z' && cfg.catW[i] !== 1 ? '<br><span style="font-weight:400">×' + cfg.catW[i] + '</span>' : ''), 'c' + i, '', ({ gain: 'Gain in ' + c.l, z: c.l + ' z-score' + (cfg.catW[i] !== 1 ? ' × weight ' + cfg.catW[i] : '') + ' (the nine add up to Zscore)', raw: 'Projected ' + c.l + ' per game' }[cfg.stats]) + '. Click to sort')).join('') +
+    th(['Zscore', '−1 Zscore', '−2 Zscore'][cfg.zdrop] + '<br><span style="font-weight:400;text-transform:none">' + ({ pergame: 'per game', mix: 'mix' }[cfg.basis] || 'season') + '</span>', 'board', '', ({ pergame: 'Per-game', mix: 'Mix (half season, half per-game)' }[cfg.basis] || 'Season') + ' value vs an average drafted player' + (cfg.catW.some(w => w !== 1) ? ', with category weights ' + CATS.map((c, i) => cfg.catW[i] !== 1 && !(i === E.TO && cfg.cats === 8) ? c.l + ' ×' + cfg.catW[i] : null).filter(Boolean).join(', ') : '') + (cfg.zdrop ? ', leaving out the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories') : '') + '. Small number is the rank')
+    + th('Scarcity<br>Cat', 'scarC', '', 'Scarcity of his best categories') + th('Scarcity<br>Position', 'scarP', '', 'Scarcity of his positions') + th(thereH.replace(' at ', ' at<br>'), null, '', 'Chance he is still there at your next pick') + th(lastH.replace(' to ', ' to<br>'), null, '', 'Chance he lasts to the pick after') +
+    th('Safe<br>until', null, '', 'Last pick with an 80% chance he is still there') + th('Gone<br>by', null, '', 'First pick where his chance falls to 20%') + th('Rank<br>range', null, '', 'ADP ± one standard deviation') + '</tr>';
+
+  const takenAt = new Map(); picks.forEach((id, k) => { if (id != null) takenAt.set(id, k); });
+  const q = norm($('q').value), hide = $('hide').checked;
+  const posOn = [...document.querySelectorAll('#posf input:checked')].map(i => i.value);
+  const posOk = p => !posOn.length || p.p.split('/').some(x => posOn.includes(x));
+  let rows = P.filter(p => (!hide || !takenAt.has(p.id)) && posOk(p) && (!q || p.key.includes(q) || p.t.toLowerCase() === q));
+  const big = 1e9, zd = cfg.zdrop;
+  // where a taken player would sit in # order: just after the available player with the next-higher value
+  const ordVal = p => cfg.orderBy === 'gainM' ? p.gainM : cfg.orderBy === 'z' ? p.z[zd] * (p.scarMult || 1) * (p.poMult || 1) : p.gain;
+  const availSorted = P.filter(p => p.order != null).sort((a, b) => a.order - b.order);
+  const orderSlot = p => { const v = ordVal(p); if (v == null) return big + p.boardRank; let n = 0; for (const a of availSorted) { if (ordVal(a) >= v) n = a.order; else break; } return n + 0.5; };
+  // Zscore shown with the scarcity adjustment when it's on; ranks follow the adjusted value
+  const scarOn = (cfg.scarZ && cfg.scarZ !== 'off') || (cfg.scarP && cfg.scarP !== 'off');
+  const zOf = p => p.z[zd] * (scarOn ? (p.scarMult || 1) : 1) * (p.poMult || 1);
+  const zRankMap = new Map(); P.slice().sort((a, b) => zOf(b) - zOf(a)).forEach((p, i) => zRankMap.set(p.id, i + 1));
+  const zRankOf = p => zRankMap.get(p.id);
+  if (res.scarcity) {
+    // every category in the usual order (punted ones marked), then every position
+    // pills like There at / Lasts to: red = scarce (drying up), amber = about average, green = plentiful
+    const band = v => v >= 1.15 ? 'lo' : v > 0.85 ? 'mid' : 'hi';
+    const pill = (lab, v) => '<span class="pill ' + band(v) + '" title="' + lab + ' ' + v.toFixed(2) + '× scarcity">' + lab + ' ' + v.toFixed(2) + '×</span>';
+    const ci = CATS.map((c, i) => res.scarcity.catIdx[i] != null ? pill(c.l, res.scarcity.catIdx[i]) : '').join('');
+    const pi = ['PG', 'SG', 'SF', 'PF', 'C'].map(P => pill(P, res.scarcity.posIdx[P])).join('');
+    $('scarStrip').innerHTML = '<span class="sc-head" title="Red is scarce, green is plentiful">Scarcity</span><span class="sc-lab">Categorical</span>' + ci + '<span class="sc-lab">Positional</span>' + pi;
+  } else $('scarStrip').innerHTML = '';
+  // Strategy: your projected matchup win chance if you follow each punt from here (best first)
+  if (res.strategies && res.strategies.length) {
+    const none = res.strategies.find(s => s.id === 'none'), v0 = none ? none.V : 0.5;
+    // colors spread across the strategies shown: best third green, middle amber, bottom third red
+    const band = s => { const vs = shown.map(x => x.V), lo = Math.min(...vs), hi = Math.max(...vs); if (hi - lo < 0.001) return 'mid'; const t = (s.V - lo) / (hi - lo); return t >= 2 / 3 ? 'hi' : t >= 1 / 3 ? 'mid' : 'lo'; };
+    const shown = res.strategies.slice(0, 6);
+    if (cfg.puntLock && !shown.some(s => s.id === cfg.puntLock)) { const l = res.strategies.find(s => s.id === cfg.puntLock); if (l) shown.push(l); }
+    const pills = shown.map(s => '<button type="button" class="pill strat ' + band(s) + (s.id === cfg.puntLock ? ' locked' : '') + (s.auto ? '' : ' lockonly') + '" data-strat="' + s.id + '" title="' + esc(s.label) + ': ' + (s.V * 100).toFixed(1) + '% matchup win chance' + (s.w != null && s.auto && !cfg.puntLock ? ', Auto weight ' + Math.round(s.w * 100) + '%' : '') + (s.auto ? '' : ' (lock only, not used by Auto)') + '. Click to ' + (s.id === cfg.puntLock ? 'unlock' : 'lock') + '">' + esc(s.id === 'none' ? 'No punt' : s.label.replace('Punt ', '')) + ' ' + (s.V * 100).toFixed(1) + '%</button>').join('');
+    let mode = cfg.puntLock ? 'Locked' : cfg.puntMode === 'auto' ? 'Auto' : 'Off';
+    if (mode === 'Auto') { const lead = res.strategies.filter(s => s.w != null).sort((x, y) => y.w - x.w)[0]; if (lead && lead.w >= 0.4) mode += ' · leaning ' + (lead.id === 'none' ? 'No punt' : lead.label) + ' (' + Math.round(lead.w * 100) + '%)'; }
+    $('stratStrip').innerHTML = '<span class="sc-head" title="Projected matchup win chance if you follow each punt from here">Strategy</span><span class="sc-lab">Punt ' + mode + '</span>' + pills;
+  } else $('stratStrip').innerHTML = '';
+  // Edge: Fantrax ADP minus the pick the chosen metric says he deserves.
+  // Gain and Gain M only exist for available players: implied pick = picks made + rank among available.
+  const made = takenAt.size, gRank = new Map();
+  if (cfg.edgeBy !== 'z') {
+    const k = cfg.edgeBy;
+    P.filter(p => !takenAt.has(p.id) && p[k] != null).sort((a, b) => b[k] - a[k]).forEach((p, i) => gRank.set(p.id, made + i + 1));
+  }
+  // ADP past the last pick of the draft means "goes undrafted", so it counts as the pick after the last one.
+  const lastPick = picks.length, adpCap = p => Math.min(p.adpUse, lastPick + 1);
+  const edgeOf = p => cfg.edgeBy === 'z' ? adpCap(p) - zRankOf(p) : (gRank.has(p.id) ? adpCap(p) - gRank.get(p.id) : null);
+  const keyFn = {
+    // taken players slot in by the same metric as # order, without taking a #
+    order: p => p.order != null ? p.order : orderSlot(p),
+    gain: p => p.gain != null ? -p.gain : big + p.boardRank,
+    gainM: p => p.gainM != null ? -p.gainM : big + p.boardRank,
+    board: p => -zOf(p), scarC: p => p.scar != null ? -p.scarCat : big, scarP: p => p.scar != null ? -p.scarPos : big, g: p => -p.g, po: p => { const g = playoffGamesP(p); return g ? -g.total : big; }, edge: p => { const e = edgeOf(p); return e == null || p.ftx == null ? big + p.boardRank : -e; }, adp: p => p.adpUse,
+    cat: p => cfg.stats === 'gain' ? (p.gainC ? -p.gainC[sortCat] : big + p.boardRank) : -catZ(p, sortCat)
+  }[sortKey] || (p => p.boardRank);
+  const matched = rows.length;
+  // Show picks the top players by # order (taken players after, by Zscore rank); the clicked column then sorts them.
+  if (cfg.shown > 0) {
+    const byOrder = p => p.order != null && !takenAt.has(p.id) ? p.order : big + p.boardRank;
+    rows = rows.slice().sort((a, b) => byOrder(a) - byOrder(b)).slice(0, cfg.shown);
+  }
+  rows.sort((a, b) => keyFn(a) - keyFn(b));
+  $('shownCount').textContent = 'Showing ' + rows.length + (rows.length < matched ? ' of ' + matched : '') + ' player' + (matched === 1 ? '' : 's');
+  const topId = res.modelPick != null ? res.modelPick : null;
+  const done = p1 == null;
+  // Colors compare players you'd actually consider: the top 50 available by # order among the rows listed
+  const HEAT_POOL = 50;
+  const heatPool = rows.filter(p => !takenAt.has(p.id) && !done).sort((a, b) => (a.order || 1e9) - (b.order || 1e9)).slice(0, HEAT_POOL);
+  buildHeat(heatPool, zd);
+  heatScales.edge = heatPool.filter(p => p.ftx != null).map(p => edgeOf(p)).filter(v => v != null).sort((a, b) => a - b);
+  const cells = rows.map(p => {
+    const k = takenAt.get(p.id), isT = k != null, mineT = isT && teamOf(k) === me;
+    const cls = [isT ? 'taken' : '', mineT ? 'mine' : '', !isT && p.id === topId && !done ? 'top' : '', !isT && !done && p.thereAt < 0.15 ? 'far' : ''].join(' ');
+    const logc = isT ? '<span style="font-size:.78rem">' + (k + 1) + ' · ' + teamName(teamOf(k)) + '</span>'
+      : '<button class="btn sm" type="button" data-id="' + p.id + '" data-act="taken" title="Log at the pick on the clock">Taken</button>';
+    const tags = (p.inj ? '<span class="tag inj" title="' + esc(p.inj) + '">inj</span>' : '') + ((p.risk === 'H' || p.risk === 'E') ? '<span class="tag" title="BBM injury risk: ' + (p.risk === 'E' ? 'extreme' : 'high') + '">risk ' + esc(p.risk) + '</span>' : '');
+    const tip = esc([p.inj, p.note].filter(Boolean).join(' — ') || (p.n + ', ' + p.t));
+    const adpCell = '<td>' + (p.ftx != null ? p.ftx.toFixed(1) : '<span class="dash" title="No Fantrax ADP">—</span>') + '</td>';
+    const e0 = edgeOf(p), ed = e0 == null ? null : Math.round(e0), capped = p.adpUse > lastPick + 1;
+    const edgeCell = (p.ftx == null || ed == null) ? '<td class="dash"' + (p.ftx == null ? ' title="No Fantrax ADP"' : '') + '>—</td>'
+      : '<td class="' + (isT ? '' : ed > 0 ? 'pos' : ed < 0 ? 'neg' : '') + '"' + (capped ? ' title="Undrafted (ADP ' + p.adpUse.toFixed(0) + ')"' : '') + '>' + sgn(ed) + (capped ? '<sup style="color:var(--muted)">*</sup>' : '') + '</td>';
+    const rangeCell = p.ftx == null ? '<td class="dash">—</td>' : '<td>' + Math.max(1, Math.round(p.adpUse - p.sd)) + '–' + Math.round(p.adpUse + p.sd) + '</td>';
+    const pg = playoffGamesP(p);
+    let poCell; if (!pg) poCell = '<td class="dash" title="No NBA team">—</td>';
+    else { const dpo = pg.total - poAvg; poCell = '<td class="' + (isT ? '' : dpo >= 1 ? 'pos' : dpo <= -1 ? 'neg' : '') + '" data-b2b="' + esc(p.n) + '" title="' + esc(p.t) + ': ' + pg.per.map(f1g).join(' · ') + ' by round, ' + (p.poEdge >= 0 ? '+' : '−') + Math.abs(Math.round(p.poEdge * 100)) + '% vs avg' + (p.poMult && p.poMult !== 1 ? ' · ×' + p.poMult.toFixed(2) : '') + (pg.rate ? '. Sits ' + Math.round(pg.rate * 100) + '% of back-to-backs' + ((cfg.b2bOv || {})[p.n] != null ? ' (your mark)' : ' (last two seasons)') + ': −' + pg.sat.toFixed(1) + ' of ' + pg.teamTotal + ' team games' : '') + (cfg.b2b === 'off' ? '' : '. Click to cycle: always sits back-to-backs, always plays them, use data') + '">' + f1g(pg.total) + (pg.rate >= 0.25 ? '<sup class="b2bmark">B2B</sup>' : '') + ' <span class="meta" style="display:inline;font-size:.66rem">' + pg.per.map(x => Math.round(x)).join('·') + '</span></td>'; }
+    let h = '<td class="l logc">' + logc + '</td>' + adpCell + '<td class="ord"' + (!isT && !done && p.thereAt < 0.15 ? ' title="Likely gone: ' + Math.round(p.thereAt * 100) + '% to reach ' + ord(res.p1 + 1) + '"' : '') + '>' + (!isT && p.order != null && !done ? p.order : '') + '</td>' + edgeCell + poCell + '<td>' + p.g + '</td>' +
+      '<td class="l player" title="' + tip + '"><span class="nm">' + esc(p.n) + '</span>' + (!isT && p.id === topId && !done ? '<span class="mp" title="Best pick likely to reach you">Model pick</span>' : '') + tags + '<span class="meta">' + esc(p.t) + ' · ' + esc(p.p) + ' · ' + p.m + ' mpg</span></td>';
+    const catCells = () => CATS.map((c, i) => {
+      if (i === E.TO && cfg.cats === 8) return '<td class="cat dash">—</td>';
+      if (cfg.stats === 'raw') return '<td class="cat">' + chipZ(i, p.boardC[i], rawTxt(p, i)) + '</td>';
+      if (cfg.stats === 'z') { const z = catZ(p, i); return '<td class="cat">' + chipZ(i, z, (z > 0.005 ? '+' : z < -0.005 ? '−' : '') + Math.abs(z).toFixed(2)) + '</td>'; }
+      return '<td class="cat">' + chip('c' + i, p.gainC[i] * 100) + '</td>';
+    }).join('');
+    if (done || p.gain == null) h += '<td class="dash">—</td><td class="dash">—</td>' + (cfg.stats === 'gain' ? CATS.map(() => '<td class="cat dash"></td>').join('') : catCells());
+    else {
+      const sg = v => (v > 0.05 ? '+' : '') + fmt1(v);
+      h += '<td class="gain ' + signCls(p.gain * 100) + '">' + sg(p.gain * 100) + '</td>';
+      h += '<td class="gain ' + signCls(p.gainM * 100) + '">' + sg(p.gainM * 100) + '</td>';
+      h += catCells();
+    }
+    const zv = zOf(p), dropped = p.zDrop.slice(0, zd).map(c => CATS[c].l);
+    h += '<td' + (zd ? ' title="Drops ' + p.zDrop.slice(0, zd).map(c => CATS[c].l + ' (' + fmt1(p.boardC[c]) + ')').join(' and ') + '"' : '') + '><span class="zcell"><span class="meta zd">' + (dropped.length ? '−' + dropped.join(' −') : '') + '</span>' + zChip(zv) + '<span class="meta zr">#' + zRankOf(p) + '</span></span></td>';
+    if (p.scar == null || done) h += '<td class="dash">—</td><td class="dash">—</td>';
+    else {
+      const sc1 = (v, m, on, lab) => { const r = Math.round(v * 100); return '<td class="' + (r >= 5 ? 'pos' : r <= -5 ? 'neg' : '') + '" title="' + (on ? 'Value ×' + m.toFixed(2) : lab + ' boost off') + '">' + (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r) + '</td>'; };
+      h += sc1(p.scarCat, p.scarMultZ || 1, cfg.scarZ !== 'off', 'Category') + sc1(p.scarPos, p.scarMultP || 1, cfg.scarP !== 'off', 'Position');
+    }
+    if (isT || done) h += '<td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td>';
+    else {
+      h += '<td>' + pillOf(p.thereAt) + '</td><td>' + (p.lastsTo != null ? pillOf(p.lastsTo) : '—') + '</td>';
+      h += '<td>' + p.safeUntil + '</td><td>' + (p.goneBy != null ? p.goneBy : '—') + '</td>';
+    }
+    h += rangeCell;
+    return '<tr class="' + cls + '">' + h + '</tr>';
+  });
+  $('tbody').innerHTML = cells.length ? cells.join('') : '<tr class="empty-row"><td colspan="26">No players match. Clear the search, untick a position or untick Hide taken.</td></tr>';
+  if (PHONE.matches) playerFirst();
+}
+// On phones the player name moves to the first column and stays pinned while the stats scroll sideways
+const PHONE = matchMedia('(max-width:700px)');
+function playerFirst() {
+  const head = $('thead').rows[0]; if (!head) return;
+  const idx = [...head.cells].findIndex(c => c.classList.contains('player')); if (idx <= 0) return;
+  const oi = [...head.cells].findIndex(c => c.dataset.sort === 'order');
+  for (const tr of [head, ...$('tbody').rows]) {
+    if (tr.cells.length <= idx) continue;
+    const pc = tr.cells[idx], oc = oi >= 0 ? tr.cells[oi] : null;
+    tr.insertBefore(pc, tr.cells[0]);
+    if (oc) tr.insertBefore(oc, pc.nextSibling);
+  }
+}
+try { PHONE.addEventListener('change', () => renderTable()); } catch (e) {}
+
+fit(); syncSetup(); renderFx(); renderSaves(); renderLeagues();
+if (fx && fx.order) { fxStatus('Reconnecting to league ' + fx.leagueId + '…'); setTimeout(() => fxConnect(fx.leagueId), 0); }
+if (picks.some(v => v != null)) $('setup').open = false;
+rebuild();
+})();
+</script>
