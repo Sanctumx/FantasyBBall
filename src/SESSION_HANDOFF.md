@@ -6,7 +6,7 @@
 
 ## 🛠️ 2. Architecture & Technical State
 *   **Tech Stack / Tools:** A single self-contained HTML page (vanilla JS, no framework) built from a template plus a pure-JS engine. A Netlify site with a serverless proxy for Fantrax. Node for the engine and backtests, Python for data prep, Playwright for UI tests.
-*   **Files (scratchpad of the previous session; only in that container):**
+*   **Files (all in the GitHub repo under `src/`; see `src/README.md` for the build and data pipeline):**
     *   `engine.js`: the engine (`prepPlayers`, `buildContext`, `evaluate`, `strategiesFor`, `teamAt`, `Phi`, …).
     *   `app.html`: the page template with placeholders `/*__DATA__*/`, `/*__SCHED__*/`, `/*__ENGINE__*/`.
     *   `gen.py`: builds `courtside-draft-board.html` from the template, players.json, sched.json and engine.js.
@@ -71,11 +71,9 @@
     *   Don't state "facts" the data contradicts. Check the logs first (for example Kawhi on back-to-backs).
 
 ## 📋 4. Next Session Action Items
-1.  [ ] **Immediate Priority:** Recover the source files. They live only in the old session's container.
-    *   With permission: push to GitHub, or save engine.js, app.html, gen.py, build_site.py, players.json, sched.json and the backtest scripts to the claude.ai Project.
-    *   Otherwise: rebuild from the latest artifact (v92 contains the full engine and data inline).
+1.  [ ] **Immediate Priority:** Clone `Sanctumx/FantasyBBall` and work from `src/`. It has the engine, page template, build scripts, all data (players.json, sched.json, logs3.csv, bt_data.json, bt_daily.json) and every backtest script. Build with `python3 gen.py && python3 build_site.py`. To keep updating the same board artifact, publish to claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz (read it first).
 2.  [ ] **Secondary Goal:** Run the weekly-adds backtest (0 vs 4 vs unlimited adds) to decide whether a Weekly adds setting should auto-set the games weighting.
-3.  [ ] **Open Question:** Does the user want GitHub/Netlify updated now? Everything since commit a8c70da is unpushed: punt strategies, synergy Auto, Model pick = Gain M, Board users, B2B rest, IL spots, correlation, fitted variances, mobile layout, centered columns, header rename.
+3.  [ ] **Status:** GitHub is up to date (commit 3aa5e00 adds the backtest data and scripts). Netlify deploys from main.
 4.  [ ] **Backlog ideas (not started):**
     *   Lineup-slot/position-aware values.
     *   Read opponents' punts from their rosters.
@@ -88,4 +86,4 @@
     *   Test Fantrax sync on a real league.
 
 ## 📥 5. Cold Bootstrap Prompt (Copy & Paste Into New Chat)
-> *Instructions for Next Chat:* "Hello Claude! We are picking up from a prior session on the Courtside Draft Kit (Fantasy BBall project). Please ingest the following context as your baseline ground-truth system instruction. Do not deviate from the constraints or architecture decisions outlined in Sections 2 & 3. In particular, never push to GitHub unless I say so. Our first immediate action item is **recovering the board's source (engine.js, app.html, data) from the latest published artifact claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz into a working build setup, then running the weekly-adds backtest (0 vs 4 vs unlimited adds) to decide whether to add a Weekly adds league setting**."
+> *Instructions for Next Chat:* "Hello Claude! We are picking up from a prior session on the Courtside Draft Kit (Fantasy BBall project). Please ingest the following context as your baseline ground-truth system instruction. Do not deviate from the constraints or architecture decisions outlined in Sections 2 & 3. In particular, never push to GitHub unless I say so. Our first immediate action item is **cloning Sanctumx/FantasyBBall, setting up the build from `src/` (see src/README.md), then running the weekly-adds backtest (0 vs 4 vs unlimited adds) with `stream_sim.js` to decide whether to add a Weekly adds league setting**."
