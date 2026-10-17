@@ -1,5 +1,6 @@
 [build]
   publish = "."
   functions = "netlify/functions"
-  # Skip the deploy (and its credits) when a push changes nothing the site serves, e.g. only src/ backtests or data
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- index.html netlify/ netlify.toml"
+  # Netlify deploys only when asked (2026-10-17): the site now deploys on Cloudflare from every push. A push builds here only
+  # if its commit message contains [netlify]; otherwise the ignore command exits 0 and Netlify skips it (no credits used).
+  ignore = "git log -1 --pretty=%B | grep -qF '[netlify]' && exit 1 || exit 0"

@@ -1,4 +1,5 @@
 <title>Courtside Draft Kit</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%2315191B%22/%3E%3Ccircle cx=%2232%22 cy=%2232%22 r=%2222%22 fill=%22%23EC7840%22/%3E%3Cg fill=%22none%22 stroke=%22%2315191B%22 stroke-width=%223.6%22 stroke-linecap=%22round%22%3E%3Cpath d=%22M32 10v44M10 32h44%22/%3E%3Cpath d=%22M17.5 15.5c6.5 5 6.5 28 0 33M46.5 15.5c-6.5 5-6.5 28 0 33%22/%3E%3C/g%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -318,7 +319,7 @@ label.f select,label.f input{font-weight:400}
       <h4>Logging picks</h4>
       <p>Type a name and press Enter or Taken, or press Taken on his row; the pick goes to the team on the clock. Undo pick takes back the last one; tap a recent pick twice to take back an earlier one.</p>
       <h4>Fantrax sync</h4>
-      <p>Paste your league ID or URL and press Connect (on the Netlify copy). Picks arrive every 10 seconds on the right teams, traded picks included, and leagues are saved for one-click switching. Choose your team so Win and availability are worked out for you.</p>
+      <p>Paste your league ID or URL and press Connect (on the hosted site). Picks arrive every 10 seconds on the right teams, traded picks included, and leagues are saved for one-click switching. Choose your team so Win and availability are worked out for you.</p>
       <h4>Stats and weights</h4>
       <p>Stats picks what the nine category columns show: Win added, Zscore or projected per-game stats. Category weights (×0 to ×2; TO starts at ×0.5) change Zscore only; Win always counts every category.</p>
       <h4>Saved drafts</h4>
@@ -734,7 +735,7 @@ async function fxGet(what) {
   return body;
 }
 function fxErr(e) {
-  if (e.message === 'nohost') return 'Sync runs on the hosted copy of the board (Netlify). Here, log picks by hand.';
+  if (e.message === 'nohost') return 'Sync runs on the hosted site (courtside-basketball on Cloudflare). Here, log picks by hand.';
   if (e.message === 'offline') return 'Couldn\'t reach the sync service. Check your connection; it will retry.';
   return e.message;
 }
