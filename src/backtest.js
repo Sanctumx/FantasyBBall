@@ -7,10 +7,26 @@ function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 10139
 function gauss(r) { let u = 0, v = 0; while (u === 0) u = r(); v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
 const N = 14, R = 12, TOTAL = N * R;
 const ctxCache = {};
+// Real preseason projections (2026-10-17, bt_proj.py → bt_proj.json): cfgExtra.proj 'bbm' | 'hs' | 'avg' replaces each
+// matched player's projection (unmatched keep the prior-season line); cfgExtra.realAdp uses the real preseason ADP as the
+// market (players without one go after everyone who has one). cfgExtra.oppProj: the projections the opponents and the
+// market see (default: the same as the board's), so the board's source can change while the rest of the league stays fixed.
+let PROJ = null; try { PROJ = require('./bt_proj.json'); } catch (e) {}
+const PK = ['g', 'm', 'pts', 'tpm', 'reb', 'ast', 'stl', 'blk', 'fga', 'fta', 'to'];
+function projApply(p, season, x) {
+  const e = PROJ && PROJ[season] && PROJ[season][String(p.pid)]; if (!e) return p;
+  const o = Object.assign({}, p);
+  let st = null;
+  if (x.proj === 'avg') { if (e.bbm && e.hs) { st = {}; PK.forEach(k => { st[k] = (e.bbm[k] + e.hs[k]) / 2; }); st.fgp = st.fga ? (e.bbm.fgp * e.bbm.fga + e.hs.fgp * e.hs.fga) / 2 / st.fga : e.bbm.fgp; st.ftp = st.fta ? (e.bbm.ftp * e.bbm.fta + e.hs.ftp * e.hs.fta) / 2 / st.fta : e.bbm.ftp; } else st = e.bbm || e.hs || null; }
+  else if (x.proj) st = e[x.proj] || null;
+  if (st) { PK.concat(['fgp', 'ftp']).forEach(k => { o[k] = st[k]; }); o.g = Math.max(1, Math.min(82, o.g)); }
+  if (x.realAdp) { o.adp = o.ftx = e.adp != null ? e.adp : 250 + p.ftx; }
+  return o;
+}
 function setup(season, cfgExtra) {
   const key = season + JSON.stringify(cfgExtra);
   if (ctxCache[key]) return ctxCache[key];
-  const P = E.prepPlayers(DATA[season].players);
+  const P = E.prepPlayers(DATA[season].players.map(p => projApply(p, season, cfgExtra || {})));
   // fast: skip page-only work and run punt-plan Gain passes on the top 40 (2026-10-16: identical rosters in 72/72 test drafts, 3.4x faster)
   const cfg = Object.assign({ fast: true, teams: N, roster: R, slot: 1, order: 'snake', scoring: 'most', cats: 9, adpSrc: 'ftx', basis: 'mix', orderBy: 'gainM', catW: [1,1,1,1,1,1,1,1,1], scarZ: 'off', scarP: 'off', zdrop: 0 }, cfgExtra);
   const ctx = E.buildContext(P, cfg);
@@ -125,17 +141,20 @@ function upsidePick(av, k, lam) {
 function draft(season, slot, seed, cfgExtra, opp) {
   const { P, ctx } = setup(season, cfgExtra);
   const cfg = Object.assign({}, setup(season, cfgExtra).cfg, { slot });
+  // the league's world: opponents and the market use cfgExtra.oppProj when it differs from the board's projections
+  const WO = cfgExtra && cfgExtra.oppProj !== undefined && cfgExtra.oppProj !== cfgExtra.proj ? setup(season, Object.assign({}, cfgExtra, { proj: cfgExtra.oppProj })) : null;
+  const PO = WO ? WO.P : P, ctxO = WO ? WO.ctx : ctx, ORD = cfg.order || 'snake';
   const r = rng(seed * 7919 + slot);
   // opp.trueSd ('v1' | 'v2'): opponents' real draft scatter, independent of the spread the board assumes (cfg.sdModel)
   const sdTrue = opp && opp.trueSd ? (p => E.adpSd(p, cfg.adpSrc, opp.trueSd)) : (p => p.sd);
-  const T = P.map(p => p.adpUse + gauss(r) * sdTrue(p));
+  const T = PO.map(p => p.adpUse + gauss(r) * sdTrue(p));
   const picks = new Array(TOTAL).fill(null), taken = new Set();
   // opponents who punt: opp = { n, gamma }; each gets a single punt or a top-8 synergy pair, fixed from pick 1
   const oppPunt = new Array(N).fill(null);
   if (opp && opp.n) {
     const ro = rng(seed * 104729 + slot * 7 + opp.n);
     const others = [...Array(N).keys()].filter(t => t !== slot - 1).sort(() => ro() - 0.5).slice(0, opp.n);
-    const opts = [...Array(9).keys()].map(c => [c]).concat(ctx.synPairs.slice(0, 8).map(([a, b2]) => [a, b2]));
+    const opts = [...Array(9).keys()].map(c => [c]).concat(ctxO.synPairs.slice(0, 8).map(([a, b2]) => [a, b2]));
     others.forEach(t => { oppPunt[t] = opts[Math.floor(ro() * opts.length)]; });
   }
   const gamma = opp && opp.gamma != null ? opp.gamma : 3;
@@ -151,16 +170,16 @@ function draft(season, slot, seed, cfgExtra, opp) {
     const rx = rng(seed * 31337 + slot * 17), others = [...Array(N).keys()].filter(t => t !== slot - 1).sort(() => rx() - 0.5);
     const m = opp.mix; let i = 0;
     for (let j = 0; j < (m.model || 0); j++) oppModel[others[i++]] = true;
-    const opts = [...Array(9).keys()].map(c => [c]).concat(ctx.synPairs.slice(0, 8).map(([a, b2]) => [a, b2]));
+    const opts = [...Array(9).keys()].map(c => [c]).concat(ctxO.synPairs.slice(0, 8).map(([a, b2]) => [a, b2]));
     for (let j = 0; j < (m.punt || 0); j++) oppPunt[others[i++]] = opts[Math.floor(rx() * opts.length)];
     for (let j = 0; j < (m.sharp || 0); j++) oppSharp[others[i++]] = true;
-    const order = P.slice().sort((a, b2) => b2.boardRaw - a.boardRaw); zr = new Float64Array(P.length);
+    const order = PO.slice().sort((a, b2) => b2.boardRaw - a.boardRaw); zr = new Float64Array(PO.length);
     order.forEach((p, k2) => { zr[p.id] = k2 + 1 + gauss(rx) * (1 + 0.1 * k2); });
   }
   const sharpW = opp && opp.mix && opp.mix.sharpW != null ? opp.mix.sharpW : 0.5;
   if (opp && opp.report) Object.assign(opp.report, { oppPunt: oppPunt.slice(), oppModel: oppModel.slice(), oppSharp: oppSharp.slice() });
   for (let k = 0; k < TOTAL; k++) {
-    const t = E.teamAt(k, N, 'snake');
+    const t = E.teamAt(k, N, ORD);
     let id;
     if (t === slot - 1) {
       // cfg.poBoost: playoff boost strength; cfg.poSurv: scale it by the chance this pick survives to the playoffs
@@ -187,23 +206,25 @@ function draft(season, slot, seed, cfgExtra, opp) {
     } else if (oppModel[t]) {
       P.forEach(p => { p.poMult = 1; });
       const ocfg = Object.assign({}, cfg, { slot: t + 1, puntMode: opp.modelPunt || (opp.mix ? 'auto' : 'off'), puntLock: '', poBoost: 'off' });
-      E.evaluate(P, ctx, ocfg, { picks });
+      if (WO) PO.forEach(p => { p.poMult = 1; });
+      E.evaluate(PO, ctxO, ocfg, { picks });
       const av = P.filter(p => !taken.has(p.id));
-      id = av.reduce((b2, p) => (p.gainM > b2.gainM ? p : b2), av[0]).id;
+      const avO = WO ? PO.filter(p => !taken.has(p.id)) : av;
+      id = avO.reduce((b2, p) => (p.gainM > b2.gainM ? p : b2), avO[0]).id;
     } else if (oppSharp[t]) {
       let best = -1, bt = Infinity;
-      for (const p of P) if (!taken.has(p.id)) { const sc = (1 - sharpW) * T[p.id] + sharpW * zr[p.id]; if (sc < bt) { bt = sc; best = p.id; } }
+      for (const p of PO) if (!taken.has(p.id)) { const sc = (1 - sharpW) * T[p.id] + sharpW * zr[p.id]; if (sc < bt) { bt = sc; best = p.id; } }
       id = best;
     } else {
       let best = -1, bt = Infinity;
       const pc = oppPunt[t];
-      for (const p of P) if (!taken.has(p.id)) { const sc = pc ? T[p.id] + gamma * pc.reduce((s, c) => s + p.boardC[c], 0) : T[p.id]; if (sc < bt) { bt = sc; best = p.id; } }
+      for (const p of PO) if (!taken.has(p.id)) { const sc = pc ? T[p.id] + gamma * pc.reduce((s, c) => s + p.boardC[c], 0) : T[p.id]; if (sc < bt) { bt = sc; best = p.id; } }
       id = best;
     }
     picks[k] = id; taken.add(id);
   }
   const rosters = Array.from({ length: N }, () => []);
-  picks.forEach((id, k) => rosters[E.teamAt(k, N, 'snake')].push(P[id].pid));
+  picks.forEach((id, k) => rosters[E.teamAt(k, N, ORD)].push(P[id].pid));
   rosters.picks = picks;
   return rosters;
 }

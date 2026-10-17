@@ -659,7 +659,9 @@
 
     // model pick order: the chosen metric (Gain or Gain M) now plus what is likely left at the following pick
     // Zscore option: the Zscore version currently shown (0 / −1 / −2), same look-ahead in Zscore units
-    if (cfg.orderBy === 'z') avail.forEach(p => { p.zSel = p.z[cfg.zdrop || 0] * (p.scarMult || 1) * (p.poMult || 1); });
+    // cfg.zdropPct (0-100): share of the dropped categories that still counts in −1 / −2 (0 = dropped, 100 = Normal)
+    const zKeep = Math.max(0, Math.min(100, +cfg.zdropPct || 0)) / 100, zOfE = p => { const d = cfg.zdrop || 0; return d ? p.z[d] + zKeep * (p.z[0] - p.z[d]) : p.z[0]; };
+    if (cfg.orderBy === 'z') avail.forEach(p => { p.zSel = zOfE(p) * (p.scarMult || 1) * (p.poMult || 1); });
     // The Model pick always uses Gain M (matchup win chance), whatever # order by is set to
     const mk = 'gainM';
     const ordKey = cfg.orderBy === 'gainM' ? 'gainM' : cfg.orderBy === 'z' ? 'zSel' : 'gain';
