@@ -8,7 +8,7 @@
   ];
   const NC = 9, TO = 8;
   const PUNT_BETA = 1.5;       // how hard your future picks lean toward a strategy's fit (tuned by backtest)
-  const PUNT_TAU = 0.005;      // softmax temperature on strategy win chance (tuned by backtest)
+  const PUNT_TAU = 0.01;       // softmax temperature on strategy win chance (2026-10-16: 0.01 beat 0.005 by +0.70 ± 0.23 on 320 fresh drafts)
   const PUNT_SYN_PAIRS = 8;    // synergy pairs Auto may blend
   const PUNT_TOPK = 8;         // strategies that get a full Gain pass in Auto
   const WEEKS = 24;           // season split into weekly matchups
@@ -16,6 +16,9 @@
   const VAR_GAMES = 0.55;
   const SEASON_G = 80;        // games a fantasy roster spot can fill in a season
   const STREAM_G = 100;       // games a streaming spot fills in a season (streamers chosen for games)
+  // Streamability (weekly adds patch weak counting categories): games each add brings in (picked up mid-week),
+  // share of a week's adds aimed at any one category (managers chase about 3 close categories at once), and a cap.
+  const STREAM_GPA = 1.75, STREAM_SHARE = 1 / 3, STREAM_CAP = 0.6, STREAM_MAX_ADDS = 10;
   const SIGMA_G2 = 1.87;      // weekly variance of one rostered player's games, from 2024-26 logs (team gap sd 6.7 / 12 players)
   const GH_Z = [-2.8569700139, -1.3556261800, 0, 1.3556261800, 2.8569700139];   // Gauss-Hermite nodes for N(0,1)
   const GH_W = [0.0112574113, 0.2220759220, 0.5333333333, 0.2220759220, 0.0112574113];     // variance of a player's games in a week
@@ -54,9 +57,16 @@
     }
     return a != null ? a : (f != null ? f : UNKNOWN_ADP);
   }
-  function adpSd(p, src) {
+  // How far a player's real draft slot strays from his ADP (one standard deviation, in picks).
+  // 'v2': fitted on 50 real 12-team 9-cat Fantrax snake drafts (LOFB Bowl 2022-24, 9,120 picks): scatter around a
+  //       league's own consensus is 0.42·ADP^0.68, plus about 5% of ADP for how far a league's consensus sits from
+  //       Fantrax's global ADP (estimated from the BBM vs Fantrax ADP gap; to be measured on live drafts).
+  // 'v1': the original hand-set line, 0.9 + 0.13·ADP (kept for backtests).
+  function adpSd(p, src, model) {
     const adp = adpOf(p, src);
-    let sd = 0.9 + 0.13 * adp;
+    let sd;
+    if (model === 'v1') sd = 0.9 + 0.13 * adp;      // v2 is the default: backtest 2026-10-16 showed no difference in results (0.0 ± 0.4 pts)
+    else { const w = 0.42 * Math.pow(Math.max(adp, 1), 0.68), g = 0.05 * adp; sd = Math.sqrt(w * w + g * g); }
     if (src === 'blend' && p.adp != null && p.ftx != null) { const d = (p.adp - p.ftx) / 2; sd = Math.sqrt(sd * sd + d * d); }
     if (adp === UNKNOWN_ADP) sd = Math.max(sd, 25);
     return sd;
@@ -101,6 +111,19 @@
     return w;
   }
 
+  // ---------- playoff boost ----------
+  // Chance a player drafted with `roundsLeft` rounds still to come (0 = last round) is on the drafting team when the
+  // fantasy playoffs start. Fitted on LOFB Bowl 2022-24 (50 real 12-team 9-cat drafts): 25% for a last-round pick,
+  // 54% with 3 rounds left, 88% with 8, about 95% early (trades and season-ending injuries).
+  function playoffSurvival(roundsLeft) { return 0.965 / (1 + Math.exp(1.04 - 0.43 * Math.max(0, roundsLeft))); }
+  // Playoff multiplier: 1 + strength × edge (his playoff games ÷ league average − 1), with the edge scaled by the
+  // survival chance when `surv` is given; kept within ×0.5–×1.5.
+  function playoffMult(edge, lam, surv) {
+    if (!lam) return 1;
+    return Math.max(0.5, Math.min(1.5, 1 + lam * (surv == null ? 1 : surv) * edge));
+  }
+  const PO_STRENGTH = { off: 0, light: 0.25, medium: 0.5, strong: 0.75, vstrong: 1 };
+
   // ---------- draft order ----------
   function teamAt(pick, N, order) {
     const r = Math.floor(pick / N), i = pick % N;
@@ -123,7 +146,7 @@
     const s1 = new Float64Array(NC), s2 = new Float64Array(NC), wpg = new Float64Array(NC); let rN = 0;
     let teamsN = 0, dN = 0;
     for (let s = 0; s < SIMS; s++) {
-      const draws = players.map((p, i) => ({ i, t: adpOf(p, src) + gauss(r) * adpSd(p, src) })).sort((a, b) => a.t - b.t);
+      const draws = players.map((p, i) => ({ i, t: adpOf(p, src) + gauss(r) * adpSd(p, src, cfg.sdModel) })).sort((a, b) => a.t - b.t);
       const tot = Array.from({ length: N }, () => new Float64Array(NC));
       const wk = Array.from({ length: N }, () => new Float64Array(NC));
       const picks = Math.min(N * R, draws.length);
@@ -180,8 +203,10 @@
     const pg = scaleFor(players, cfg, ctx, () => G0);
     // Mix: halfway between season and per game. Every category is linear in games, so the
     // midpoint of the two games counts gives exactly the average of the two stat lines.
-    const gOf = ctx.basis === 'pergame' ? (() => G0) : ctx.basis === 'mix' ? (p => (p.g + G0) / 2) : (p => p.g);
-    const act = ctx.basis === 'pergame' ? pg : ctx.basis === 'mix' ? scaleFor(players, cfg, ctx, gOf) : tot;
+    // cfg.missW (0..1): share of projected missed games that counts — G0 + w × (g − G0); 1 = Season, 0 = Per game, 0.5 = Mix
+    const mw = cfg.missW != null ? Math.max(0, Math.min(1, +cfg.missW)) : null;
+    const gOf = mw != null ? (p => G0 + mw * (p.g - G0)) : ctx.basis === 'pergame' ? (() => G0) : ctx.basis === 'mix' ? (p => (p.g + G0) / 2) : (p => p.g);
+    const act = mw != null ? scaleFor(players, cfg, ctx, gOf) : ctx.basis === 'pergame' ? pg : ctx.basis === 'mix' ? scaleFor(players, cfg, ctx, gOf) : tot;
     players.forEach((p, i) => {
       p.x = act.X[i]; p.wv = act.WV[i]; p.pv = projVar(p, gOf(p));
       p.board = act.boards[i].b; p.boardRaw = act.boards[i].raw; p.boardC = act.boards[i].bc; p.z = act.boards[i].z; p.zDrop = act.boards[i].drop;
@@ -192,11 +217,31 @@
     ctx.idioNoise = Array.from(act.corr.idio, v => 2 * v * WEEKS * WEEKS);          // season units, per pair
     ctx.gapSd = Math.sqrt(2 * act.corr.sigD2);                                      // weekly games gap between two teams
     ctx.loadS = Array.from(act.corr.load, l => l * WEEKS);                           // season units per game of gap
+    // Streamability: with weekly adds, a team behind in a counting category can stream players who help there.
+    // Per category: (best free agents' per-game production − a generic streamer's) × streamer games aimed at that
+    // category per week, as a share of how far apart two teams typically finish in a week. Capped at 60%.
+    // Every category gap then counts for (1 − streamability): in Gain, Gain M, standings and scarcity.
+    // Not exposed on the board (cfg.weeklyAdds is never set there): backtest 2026-10-16 with targeted streaming in every
+    // league, 4 adds vs 0 = −2.1 ± 0.9 matchup pts. Kept for a future version that credits only out-streaming opponents.
+    ctx.stream = new Float64Array(NC); ctx.streamK = new Float64Array(NC).fill(1);
+    const adds = Math.min(STREAM_MAX_ADDS, Math.max(0, +cfg.weeklyAdds || 0));
+    if (adds > 0) {
+      const fa = byAdp.slice(Math.min(byAdp.length - 1, N * R), Math.min(byAdp.length, N * R + 40)).map(p => vec(p, ctx, 1));
+      const vol = adds * STREAM_GPA * STREAM_SHARE;
+      for (let c = 0; c < NC; c++) {
+        const vals = fa.map(v => v[c]).sort((a, b) => b - a);
+        const top = vals.slice(0, 5).reduce((a, b) => a + b, 0) / Math.min(5, vals.length);
+        const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const weekGap = Math.SQRT2 * ctx.teamSd[c] / WEEKS;
+        ctx.stream[c] = Math.min(STREAM_CAP, Math.max(0, top - avg) * vol / Math.max(1e-9, weekGap));
+        ctx.streamK[c] = 1 - ctx.stream[c];
+      }
+    }
     const rankBy = (key, out) => players.slice().sort((a, b) => b[key] - a[key]).forEach((p, i) => { p[out] = i + 1; });
     rankBy('board', 'boardRank');
     players.forEach(p => { p.zRank = [0, 0, 0]; });
     [0, 1, 2].forEach(d => players.slice().sort((a, b) => b.z[d] - a.z[d]).forEach((p, i) => { p.zRank[d] = i + 1; }));
-    players.forEach(p => { p.adpUse = adpOf(p, src); p.sd = adpSd(p, src); p.edge = p.adpUse - p.boardRank; });
+    players.forEach(p => { p.adpUse = adpOf(p, src); p.sd = adpSd(p, src, cfg.sdModel); p.edge = p.adpUse - p.boardRank; });
     ctx.swing = ctx.teamWeekVar.map((v, c) => Math.sqrt(2 * v) / (ctx.teamSd[c] / WEEKS));
     // Punt synergy: correlation of category z among the players likely to be drafted. Pairs where weakness
     // in one category goes with weakness in the other let you stack the same player type.
@@ -234,10 +279,33 @@
     out.forEach(s => { s.auto = true; });
     if (set === 'basic') { [[5, 8], [4, 7], [1, 2]].forEach(pr => { if (pr.every(c => c < nc)) out.push(Object.assign(mk(pr), { auto: true })); }); return out; }
     // 'synPtT': singles + top P synergy pairs + top T synergy triples (e.g. syn8t2)
+    // '+to' suffix (e.g. syn8t0+to): also every pair with TO. Synergy never ranks TO pairs, because players weak in TO
+    // are high-usage stars who are strong elsewhere, not weak.
+    // 'thrNN' (e.g. thr40): every pair and triple with synergy ≥ NN/100, recomputed from each season's projections.
+    // '+to': also every pair with TO. '+tt': also TO added to each stand-out non-TO pair when that triple's synergy ≥ 0.15
+    // (the "guard" builds FG%/REB/BLK + TO; TO next to PTS/AST/3PM has negative synergy).
+    if (set.startsWith('thr') && ctx && ctx.synPairs) {
+      const cut = +set.match(/^thr(\d+)/)[1] / 100, add = (pr) => { const id = 'p' + pr.join('_'); if (!out.some(s => s.id === id)) out.push(Object.assign(mk(pr), { auto: true })); };
+      const standout = ctx.synPairs.filter(p => p[2] >= cut);
+      standout.forEach(([a, b]) => add([a, b]));
+      ctx.synTriples.filter(t => t[3] >= cut).forEach(([a, b, c]) => add([a, b, c]));
+      if (set.includes('+to') && cfg.cats === 9) for (let c = 0; c < TO; c++) add([c, TO]);
+      if (set.includes('+tt') && cfg.cats === 9) standout.filter(p => p[0] !== TO && p[1] !== TO).forEach(([a, b]) => {
+        const tr = [a, b, TO].sort((x, y) => x - y), syn = ctx.synTriples.find(t => t[0] === tr[0] && t[1] === tr[1] && t[2] === tr[2]);
+        if (syn && syn[3] >= 0.15) add(tr);
+      });
+      return out;
+    }
     if (set.startsWith('syn') && ctx && ctx.synPairs) {
-      const [P2, T3] = set.slice(3).split('t').map(x => +x || 0);
+      // '+tt3' suffix: also TO plus each of the top 3 synergy pairs, as triples (e.g. syn2t0+to+tt3)
+      const ttm = set.match(/\+tt(\d+)$/), TT = ttm ? +ttm[1] : 0;
+      const core = set.replace(/\+tt\d+$/, '');
+      const withTO = core.endsWith('+to');
+      const [P2, T3] = core.slice(3).replace('+to', '').split('t').map(x => +x || 0);
       ctx.synPairs.slice(0, P2).forEach(([a, b]) => out.push(Object.assign(mk([a, b]), { auto: true })));
       ctx.synTriples.slice(0, T3).forEach(([a, b, c]) => out.push(Object.assign(mk([a, b, c]), { auto: true })));
+      if (withTO && cfg.cats === 9) for (let c = 0; c < TO; c++) { const id = 'p' + c + '_' + TO; if (!out.some(s => s.id === id)) out.push(Object.assign(mk([c, TO]), { auto: true })); }
+      if (TT && cfg.cats === 9) ctx.synPairs.filter(pr => !pr.includes(TO)).slice(0, TT).forEach(([a, b]) => { const tr = [a, b, TO].sort((x, y) => x - y); const id = 'p' + tr.join('_'); if (!out.some(s => s.id === id)) out.push(Object.assign(mk(tr), { auto: true })); });
       return out;
     }
     else if (set === 'common') PUNT_COMMON.forEach(pr => { if (pr.every(c => c < nc)) out.push(mk(pr)); });
@@ -335,7 +403,8 @@
     const corrOn = cfg.scoring !== 'roto' && cfg.corr !== 'off' && ctx.corr;
     // marginal category win chance: with the games factor its full variance is idiosyncratic + factor
     const margNoise = corrOn ? ctx.idioNoise.map((v, c) => v + Math.pow(ctx.loadS[c] * ctx.gapSd, 2)) : noise;
-    const winP = (a, av, b, bv, c) => Phi((a[c] - b[c]) / Math.sqrt(av[c] + bv[c] + margNoise[c] + 1e-9));
+    const SK = ctx.streamK || new Float64Array(NC).fill(1);   // streamability: share of each category gap that counts
+    const winP = (a, av, b, bv, c) => Phi((a[c] - b[c]) * SK[c] / Math.sqrt(av[c] + bv[c] + margNoise[c] + 1e-9));
 
     // standings & my category chances
     // Matchup win chance: categories are independent given the weekly games gap, so average over the gap
@@ -344,7 +413,7 @@
       let M = 0; const ps = new Array(nc);
       for (let k = 0; k < GH_Z.length; k++) {
         const g = GH_Z[k] * ctx.gapSd;
-        for (let c = 0; c < nc; c++) ps[c] = Phi((a[c] - b[c] + ctx.loadS[c] * g) / Math.sqrt(av[c] + bv[c] + ctx.idioNoise[c] + 1e-9));
+        for (let c = 0; c < nc; c++) ps[c] = Phi(((a[c] - b[c]) * SK[c] + ctx.loadS[c] * g) / Math.sqrt(av[c] + bv[c] + ctx.idioNoise[c] + 1e-9));
         M += GH_W[k] * matchProb(ps);
       }
       return M;
@@ -386,13 +455,16 @@
       for (let i = lo; i <= hi; i++) { n++; for (let c = 0; c < NC; c++) { rep[c] += avail[i].x[c]; repPv[c] += avail[i].pv[c]; } }
       for (let c = 0; c < NC; c++) { rep[c] /= n; repPv[c] /= n; } }
     // With weekly adds, the slot you are filling is worth at least a streaming spot all season
-    if ((+cfg.weeklyAdds || 0) > 0 && ctx.pgRepl) { const sg = STREAM_G * Math.min(1, (+cfg.weeklyAdds) / 4); for (let c = 0; c < NC; c++) rep[c] = Math.max(rep[c], ctx.pgRepl[c] * sg); }
+    // streamer baseline (cfg.streamBase = adds/week): not exposed, backtest showed no change in picks
+    if ((+cfg.streamBase || 0) > 0 && ctx.pgRepl) { const sg = STREAM_G * Math.min(1, (+cfg.streamBase) / 4); for (let c = 0; c < NC; c++) rep[c] = Math.max(rep[c], ctx.pgRepl[c] * sg); }
     const opps = teams.filter(T => T !== meT);
-    const cand = avail.concat([...taken].map(id => players[id]));
+    // cfg.fast (backtests): skip work that only feeds the page, and run punt-plan Gain passes on the top 40 only
+    const fast = !!cfg.fast;
+    const cand = fast ? avail.slice() : avail.concat([...taken].map(id => players[id]));
     const L = cand.length;
     // Gains for one forecast of my team: meMu/meV is my full forecast, slot* is what it assumed at my next pick,
     // mask[c] = 1 for categories that count toward Gain C (0 = punted under a strategy)
-    function gainsFor(meMu, meV, slotMean, slotVar, slotPv, mask) {
+    function gainsFor(meMu, meV, slotMean, slotVar, slotPv, mask, inSub) {
       const baseMu = meMu.slice(), baseV = meV.slice();
       for (let c = 0; c < NC; c++) { baseMu[c] += rep[c] - slotMean[c]; baseV[c] += repPv[c] - slotPv[c] - 2 * slotVar[c]; }
       // baseline probabilities and (for most-cats) how often each category decides the week
@@ -418,6 +490,7 @@
       const G = new Float64Array(L), GM = new Float64Array(L), GC = new Float64Array(L * NC);
       const mu = new Float64Array(NC), v = new Float64Array(NC), q = new Array(nc);
       for (let i = 0; i < L; i++) {
+        if (inSub && !inSub[i]) continue;
         const p = cand[i];
         for (let c = 0; c < NC; c++) { mu[c] = baseMu[c] - rep[c] + p.x[c]; v[c] = baseV[c] - repPv[c] + p.pv[c]; }
         let gm = 0;
@@ -460,7 +533,8 @@
       for (let i = lo; i <= hi; i++) { const wt = wts[i - lo] / ws, x = avail[i].x; for (let c = 0; c < NC; c++) vr[c] += wt * Math.pow(x[c] - mean[c], 2); }
       return { mean, vr, pv };
     }
-    const stratRes = strats.map(S => {
+    const stratsEval = !fast ? strats : ((cfg.puntMode || 'off') === 'off' && !cfg.puntLock) ? [] : strats.filter(S => S.auto || S.id === cfg.puntLock);
+    const stratRes = stratsEval.map(S => {
       const mask = new Array(NC).fill(1); S.punt.forEach(c => { mask[c] = 0; });
       const zOf = p => { let z = 0; for (let c = 0; c < nc; c++) if (mask[c]) z += p.boardC[c]; return z; };
       const mu = myDrafted.mu.slice(), v = myDrafted.v.slice();
@@ -477,20 +551,23 @@
     const lockId = cfg.puntLock || '';
     let wts = null;
     if (mode !== 'off' || lockId) {
-      if (lockId && strats.some(S => S.id === lockId)) wts = stratRes.map(r => r.S.id === lockId ? 1 : 0);
+      if (lockId && stratsEval.some(S => S.id === lockId)) wts = stratRes.map(r => r.S.id === lockId ? 1 : 0);
       else { const vmax = Math.max(...stratRes.filter(r => r.S.auto).map(r => r.V)); const e = stratRes.map(r => r.S.auto ? Math.exp((r.V - vmax) / tau) : 0); const es = e.reduce((a, b) => a + b, 0); wts = e.map(x => x / es); }
       const G = new Float64Array(L), GM = new Float64Array(L), GC = new Float64Array(L * NC);
       // only the strongest strategies get a full Gain pass (the rest carry negligible weight)
       const keep = new Set(wts.map((w, k) => [w, k]).sort((a, b) => b[0] - a[0]).slice(0, PUNT_TOPK).map(x => x[1]));
       wts = wts.map((w, k) => keep.has(k) && w >= 1e-4 ? w : 0);
+      let inSub = null;
+      if (fast && L > 40) { inSub = new Uint8Array(L); Array.from(res0.GM, (g, i) => [g, i]).sort((a, b) => b[0] - a[0]).slice(0, 40).forEach(([, i]) => { inSub[i] = 1; }); }
       stratRes.forEach((r, k) => {
         if (wts[k] < 1e-4) return;
-        const g = gainsFor(r.mu, r.v, r.slot1.mean, r.slot1.vr, r.slot1.pv, r.mask);
+        const g = gainsFor(r.mu, r.v, r.slot1.mean, r.slot1.vr, r.slot1.pv, r.mask, inSub);
         for (let i = 0; i < L; i++) { G[i] += wts[k] * g.G[i]; GM[i] += wts[k] * g.GM[i]; }
         for (let i = 0; i < L * NC; i++) GC[i] += wts[k] * g.GC[i];
       });
       const ws = wts.reduce((a, b, k) => a + (b >= 1e-4 ? b : 0), 0) || 1;
       for (let i = 0; i < L; i++) { G[i] /= ws; GM[i] /= ws; } for (let i = 0; i < L * NC; i++) GC[i] /= ws;
+      if (inSub) for (let i = 0; i < L; i++) if (!inSub[i]) { G[i] = res0.G[i]; GM[i] = res0.GM[i]; for (let c = 0; c < NC; c++) GC[i * NC + c] = res0.GC[i * NC + c]; }
       res0 = { G, GM, GC };
     }
     out.strategies = stratRes.map((r, k) => ({ id: r.S.id, label: r.S.label, punt: r.S.punt, size: r.S.size, auto: !!r.S.auto, V: r.V, catP: Array.from(r.catP), w: wts ? wts[k] : null })).sort((a, b) => b.V - a.V);
@@ -524,7 +601,7 @@
       cats.forEach(c => {
         const vals = pool.map(p => Math.max(0, p.boardC[c])).sort((a, b) => b - a);
         const mean = (a, b) => { const s = vals.slice(a, b); return s.length ? s.reduce((x, y) => x + y, 0) / s.length : 0; };
-        drop[c] = Math.max(0.02, mean(0, 6) - mean(gap, gap + 6)); dsum += drop[c];
+        drop[c] = Math.max(0.02, (mean(0, 6) - mean(gap, gap + 6)) * SK[c]); dsum += drop[c];   // in streamability-adjusted terms
       });
       const catIdx = {}; cats.forEach(c => { catIdx[c] = drop[c] / (dsum / cats.length); });
       // positions: remaining need across all teams vs supply among the players who will be drafted
@@ -548,7 +625,7 @@
       // taken players get scarcity too, so their stats still show when Hide taken is off
       for (const p of avail.concat([...taken].map(id => players[id]))) {
         let w = 0, ws = 0;
-        cats.forEach(c => { const v = Math.max(0, p.boardC[c]); w += v * (catIdx[c] - 1); ws += v; });
+        cats.forEach(c => { const v = Math.max(0, p.boardC[c]) * SK[c]; w += v * (catIdx[c] - 1); ws += v; });
         const sc = ws > 0 ? Math.max(-0.5, Math.min(0.5, w / ws)) : 0;
         const sp = Math.max(-0.5, Math.min(0.5, Math.max(...elig(p).map(P => posIdx[P])) - 1));
         p.scarCat = sc; p.scarPos = sp; p.scar = (sc + sp) / 2;
@@ -576,23 +653,26 @@
     const byGain = avail.slice().sort((a, b) => val(b) - val(a));
     const K = Math.min(10, byGain.length);
     const backToBack = p2 != null && unfilled.indexOf(p2) === unfilled.indexOf(p1) + 1;
-    byGain.forEach(p => { p.score = val(p); });
-    if (p2 != null) {
-      // look-ahead: best player likely left at the following pick if you take this one now
-      const look = avail.slice().sort((a, b) => b[mk] - a[mk]).slice(0, 30);
-      const tail = look.length ? look[look.length - 1][mk] : 0;
-      for (let i = 0; i < K; i++) {
-        const cand = byGain[i];
-        let mass = 1, E = 0;
-        for (const o of look) {
-          if (o === cand) continue;
-          const q = backToBack ? there(o) : (o.lastsTo == null ? 0 : o.lastsTo);
-          E += mass * q * o[mk]; mass *= (1 - q);
-          if (mass < 1e-4) break;
-        }
-        E += mass * tail;
-        cand.score = there(cand) * (cand[mk] + E);
+    const look = avail.slice().sort((a, b) => b[mk] - a[mk]).slice(0, 30);
+    const tail = look.length ? look[look.length - 1][mk] : 0;
+    // expected value of the best other player, each still available with chance qOf(o)
+    const bestOther = (cand, qOf) => {
+      let mass = 1, E = 0;
+      for (const o of look) {
+        if (o === cand) continue;
+        const q = qOf(o); E += mass * q * o[mk]; mass *= (1 - q);
+        if (mass < 1e-4) break;
       }
+      return E + mass * tail;
+    };
+    // Planning to take him at your next pick: you get him if he's there; if he's gone you take the best player
+    // left instead (fallback). Your following pick is worth the same either way, so it is not discounted.
+    // cfg.modelPickV1 restores the old score, there × (metric + following pick), which wrongly zeroed both when he's gone.
+    for (let i = 0; i < K; i++) {
+      const cand = byGain[i], th = there(cand);
+      const E = p2 != null ? bestOther(cand, o => backToBack ? there(o) : (o.lastsTo == null ? 0 : o.lastsTo)) : 0;
+      if (cfg.modelPickV1) cand.score = p2 != null ? th * (cand[mk] + E) : val(cand);
+      else cand.score = th * cand[mk] + (1 - th) * bestOther(cand, there) + E;
     }
     // Model pick (under the hood): best expected value counting availability and the following pick.
     const top = byGain.slice(0, K).sort((a, b) => b.score - a.score);
@@ -605,6 +685,6 @@
     return out;
   }
 
-  const api = { strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi };
+  const api = { strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);

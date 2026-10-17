@@ -1,5 +1,8 @@
 const E = require('./engine.js');
 const DATA = require('./bt_data.json');
+const SCHED = require('./bt_sched.json');
+// fantasy playoffs in the backtest seasons: calendar weeks 18-23 (index 17-22), rounds of 2 weeks (All-Star week merged into round 1)
+const PO_WEEKS = [17, 18, 19, 20, 21, 22];
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 function gauss(r) { let u = 0, v = 0; while (u === 0) u = r(); v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
 const N = 14, R = 12, TOTAL = N * R;
@@ -8,15 +11,22 @@ function setup(season, cfgExtra) {
   const key = season + JSON.stringify(cfgExtra);
   if (ctxCache[key]) return ctxCache[key];
   const P = E.prepPlayers(DATA[season].players);
-  const cfg = Object.assign({ teams: N, roster: R, slot: 1, order: 'snake', scoring: 'most', cats: 9, adpSrc: 'ftx', basis: 'mix', orderBy: 'gainM', catW: [1,1,1,1,1,1,1,1,1], scarZ: 'off', scarP: 'off', zdrop: 0 }, cfgExtra);
+  // fast: skip page-only work and run punt-plan Gain passes on the top 40 (2026-10-16: identical rosters in 72/72 test drafts, 3.4x faster)
+  const cfg = Object.assign({ fast: true, teams: N, roster: R, slot: 1, order: 'snake', scoring: 'most', cats: 9, adpSrc: 'ftx', basis: 'mix', orderBy: 'gainM', catW: [1,1,1,1,1,1,1,1,1], scarZ: 'off', scarP: 'off', zdrop: 0 }, cfgExtra);
   const ctx = E.buildContext(P, cfg);
+  // each player's playoff edge from his team's real games in the playoff weeks (as the page does from the NBA schedule)
+  const G = SCHED[season].games, teamPo = t => G[t] ? PO_WEEKS.reduce((s, w) => s + G[t][w], 0) : null;
+  const avg = Object.keys(G).reduce((s, t) => s + teamPo(t), 0) / Object.keys(G).length;
+  P.forEach(p => { const g = teamPo(p.t); p.poEdge = g != null ? g / avg - 1 : 0; });
   return ctxCache[key] = { P, cfg, ctx };
 }
 function draft(season, slot, seed, cfgExtra, opp) {
   const { P, ctx } = setup(season, cfgExtra);
   const cfg = Object.assign({}, setup(season, cfgExtra).cfg, { slot });
   const r = rng(seed * 7919 + slot);
-  const T = P.map(p => p.adpUse + gauss(r) * p.sd);
+  // opp.trueSd ('v1' | 'v2'): opponents' real draft scatter, independent of the spread the board assumes (cfg.sdModel)
+  const sdTrue = opp && opp.trueSd ? (p => E.adpSd(p, cfg.adpSrc, opp.trueSd)) : (p => p.sd);
+  const T = P.map(p => p.adpUse + gauss(r) * sdTrue(p));
   const picks = new Array(TOTAL).fill(null), taken = new Set();
   // opponents who punt: opp = { n, gamma }; each gets a single punt or a top-8 synergy pair, fixed from pick 1
   const oppPunt = new Array(N).fill(null);
@@ -34,10 +44,17 @@ function draft(season, slot, seed, cfgExtra, opp) {
     const t = E.teamAt(k, N, 'snake');
     let id;
     if (t === slot - 1) {
+      // cfg.poBoost: playoff boost strength; cfg.poSurv: scale it by the chance this pick survives to the playoffs
+      const lam = E.PO_STRENGTH[cfg.poBoost] || 0, roundsLeft = R - 1 - Math.floor(k / N);
+      P.forEach(p => { p.poMult = E.playoffMult(p.poEdge, lam, cfg.poSurv ? E.playoffSurvival(roundsLeft) : null); });
       const res = E.evaluate(P, ctx, cfg, { picks });
+      if (opp && opp.onMyPick) opp.onMyPick(res, k);   // diagnostics hook (e.g. punt weights per pick)
       const av = P.filter(p => !taken.has(p.id));
-      id = av.reduce((b, p) => (p.gainM > b.gainM ? p : b), av[0]).id;
+      // cfg.pickBy 'model': take the board's Model pick (Gain M × chance he's there, plus look-ahead); default: highest Gain M
+      if (cfg.pickBy === 'model' && res && res.modelPick != null && !taken.has(res.modelPick)) id = res.modelPick;
+      else id = av.reduce((b, p) => (p.gainM > b.gainM ? p : b), av[0]).id;
     } else if (oppModel[t]) {
+      P.forEach(p => { p.poMult = 1; });
       const ocfg = Object.assign({}, cfg, { slot: t + 1, puntMode: opp.modelPunt || 'off', puntLock: '' });
       E.evaluate(P, ctx, ocfg, { picks });
       const av = P.filter(p => !taken.has(p.id));
@@ -72,7 +89,7 @@ function score(season, rosters) {
   }
   return wins.map(x => x / (games * (N - 1)));
 }
-module.exports = { draft, score, setup, oppInfo: null };
+module.exports = { draft, score, setup, oppInfo: null, PO_WEEKS };
 if (require.main === module) {
   const t = Date.now();
   for (const mode of [{ puntMode: 'off' }, { puntMode: 'auto' }]) {

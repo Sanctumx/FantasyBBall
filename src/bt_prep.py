@@ -1,8 +1,9 @@
+# Logs: logs_early.csv (2021-22, 2022-23) + logs3.csv (2023-24 to 2025-26)
 import pandas as pd, numpy as np, json
-d=pd.read_csv('logs3.csv',dtype={'game_id':str}); d=d[d.minutes>0].copy()
+d=pd.concat([pd.read_csv(f, dtype={'game_id': str}) for f in ('logs_early.csv', 'logs3.csv')], ignore_index=True); d=d[d.minutes>0].copy()
 d['game_date']=pd.to_datetime(d.game_date)
 out={}
-for prior,target in [('2023-24','2024-25'),('2024-25','2025-26')]:
+for prior,target in [('2021-22','2022-23'),('2022-23','2023-24'),('2023-24','2024-25'),('2024-25','2025-26')]:
     a=d[d.season==prior]; t=d[d.season==target]
     g=a.groupby('player_id').agg(n=('player_name','last'),t=('team','last'),g=('game_id','size'),m=('minutes','mean'),
         pts=('pts','mean'),tpm=('fg3m','mean'),reb=('reb','mean'),ast=('ast','mean'),stl=('stl','mean'),blk=('blk','mean'),
@@ -14,7 +15,7 @@ for prior,target in [('2023-24','2024-25'),('2024-25','2025-26')]:
     lfg=pool.fgm.sum()/pool.fga_t.sum(); lft=pool.ftm.sum()/pool.fta_t.sum()
     X=pd.DataFrame({'fg':(g.fgp-lfg)*g.fga_t,'ft':(g.ftp-lft)*g.fta_t,'tpm':g.tpm*g.g,'pts':g.pts*g.g,'reb':g.reb*g.g,'ast':g.ast*g.g,'stl':g.stl*g.g,'blk':g.blk*g.g,'to':-g.to*g.g})
     top=X.loc[pool.index]; val=((X-top.mean())/top.std()).sum(axis=1)
-    rng=np.random.default_rng(7 if target=='2024-25' else 11)
+    rng=np.random.default_rng({'2022-23':3,'2023-24':5,'2024-25':7,'2025-26':11}[target])
     noisy=val.rank(ascending=False)*np.exp(rng.normal(0,0.25,len(val)))
     g['ftx']=noisy.rank().values; g=g.sort_values('ftx').head(260)
     players=[dict(pid=int(i),n=r.n,t=r.t,p='SF',g=float(min(r.g,82)),m=round(r.m,1),pts=r.pts,tpm=r.tpm,reb=r.reb,ast=r.ast,stl=r.stl,blk=r.blk,

@@ -1,0 +1,6 @@
+# Fantrax league IDs to collect draft results from, one per line.
+# The ID is the part of the league URL after /league/  (fantrax.com/fantasy/league/<ID>/home).
+# Best: H2H categories, 12-14 teams. A trailing # comment can note the format.
+3j4mzn4ym0uezl91  # LOFB Bowl 9 Cat Red, 2024-25: 9-cat H2H, 10 divisions x 12 teams, 16 rounds, snake (slow draft Oct 1-12, 2024)
+7gck6gj5lme4prx7  # LOFB Bowl 9 Cat 2023 South, 2023-24: 9-cat, 10 divisions x 12 teams, 18 rounds, snake (Oct 3-12, 2023)
+vnmb7hk2l7qsej5d  # LOFB Bowl 9 Cat, 2022-23: 9-cat (extra tracked stats), 30 divisions x 12 teams, 14 rounds, snake (Sep 29-Oct 9, 2022)

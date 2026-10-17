@@ -7,10 +7,11 @@ function perGameValue(players) {
   const f = p => [ (p.fgp - 0.47) * p.fga, (p.ftp - 0.78) * p.fta, p.tpm, p.pts, p.reb, p.ast, p.stl, p.blk, -p.to ];
   const X = players.map(f), n = X.length, m = [], s = [];
   for (let c = 0; c < 9; c++) { m[c] = X.reduce((a, x) => a + x[c], 0) / n; s[c] = Math.sqrt(X.reduce((a, x) => a + (x[c] - m[c]) ** 2, 0) / n) || 1; }
-  const v = {}; players.forEach((p, i) => { v[p.pid] = X[i].reduce((a, x, c) => a + (x - m[c]) / s[c], 0); }); return v;
+  const v = {}, zc = {}; players.forEach((p, i) => { zc[p.pid] = X[i].map((x, c) => (x - m[c]) / s[c]); v[p.pid] = zc[p.pid].reduce((a, x) => a + x, 0); }); v.zc = zc; return v;
 }
 function scoreLeague(season, rosters, opts = {}) {
-  const active = opts.active ?? 10, il = opts.il ?? 2, adds = opts.adds ?? 4, seed = opts.seed ?? 1;
+  // opts.target: stream for the categories each team is losing or close in (by totals so far), not generic value
+  const active = opts.active ?? 10, il = opts.il ?? 2, adds = opts.adds ?? 4, seed = opts.seed ?? 1, target = !!opts.target;
   const { daily, ndays } = DAILY[season]; const nweeks = Math.ceil(ndays / 7);
   const players = DATA[season].players, val = perGameValue(players);
   const byDay = {}; for (const pid in daily) { const m = new Map(); daily[pid].forEach(r => m.set(r[0], r.slice(1))); byDay[pid] = m; }
@@ -27,6 +28,14 @@ function scoreLeague(season, rosters, opts = {}) {
     const order = [...Array(N).keys()].sort(() => r() - 0.5);
     const claimed = [new Set(), new Set()];
     const lineups = Array.from({ length: N }, () => [[], []]);   // players on roster for each half-week
+    // targeted streaming: per team, weight 1 on categories where it ranks outside the top third so far, 0.25 where it leads
+    const catW = Array.from({ length: N }, () => new Array(9).fill(1));
+    if (target && w > 0) {
+      const sumTo = weekTot.map(tw => { const a = new Array(11).fill(0); for (let k = 0; k < w; k++) tw[k].forEach((x, c) => { a[c] += x; }); return a; });
+      const cv = sumTo.map(a => [a[1] ? a[0] / a[1] : 0, a[3] ? a[2] / a[3] : 0, a[4], a[5], a[6], a[7], a[8], a[9], -a[10]]);
+      for (let c = 0; c < 9; c++) { const ord = [...Array(N).keys()].sort((x, y) => cv[y][c] - cv[x][c]); ord.forEach((t, rk) => { catW[t][c] = rk < Math.floor(N / 3) ? 0.25 : 1; }); }
+    }
+    const tval = (t, pid) => { const z = val.zc[pid]; if (!target || !z) return val[pid]; let s2 = 0; for (let c = 0; c < 9; c++) s2 += catW[t][c] * z[c]; return s2; };
     for (const t of order) {
       const T = teams[t]; let left = adds;
       // IL: a core player with no games last week and none this week goes to IL (max il); best free agent fills his spot
@@ -47,8 +56,8 @@ function scoreLeague(season, rosters, opts = {}) {
         for (let sl = 0; sl < slots; sl++) {
           if (!plan[sl][h] && h === 1 && plan[sl][0]) { roster.push(lineups[t][0][base.length + sl]); continue; }   // keep the Mon-Thu streamer
           if (!plan[sl][h]) continue;
-          const pool = fa.filter(x => !held.has(x) && !claimed[h].has(x)).sort((x, y) => val[y] - val[x]).slice(0, 15);
-          const pick = pool.sort((x, y) => gamesIn(y, s0, s1) - gamesIn(x, s0, s1) || val[y] - val[x])[0];
+          const pool = fa.filter(x => !held.has(x) && !claimed[h].has(x)).sort((x, y) => tval(t, y) - tval(t, x)).slice(0, 15);
+          const pick = pool.sort((x, y) => gamesIn(y, s0, s1) - gamesIn(x, s0, s1) || tval(t, y) - tval(t, x))[0];
           if (pick != null) { claimed[h].add(pick); if (h === 0) claimed[1].add(pick); roster.push(pick); }
         }
         lineups[t][h] = roster;
