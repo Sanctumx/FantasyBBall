@@ -8,12 +8,13 @@
   ];
   const NC = 9, TO = 8;
   const PUNT_BETA = 1.5;       // how hard your future picks lean toward a strategy's fit (tuned by backtest)
+  const IL_FILL = [0, 0.47, 0.70, 0.79, 0.81];   // share of missed games filled at waiver level, by IL spots (2026-10-17)
   const PUNT_TAU = 0.01;       // softmax temperature on strategy win chance (2026-10-16: 0.01 beat 0.005 by +0.70 ± 0.23 on 320 fresh drafts)
-  const PUNT_SYN_PAIRS = 8;    // synergy pairs Auto may blend
+  const PUNT_SYN_PAIRS = 24;   // synergy pairs Auto may blend (2026-10-17 realistic league, titles vs 20: 24 +1.9 ± 1.4, 28/32 +2.2, 16 −0.6, 8 −2.2)
   const PUNT_TOPK = 8;         // strategies that get a full Gain pass in Auto
   const WEEKS = 24;           // season split into weekly matchups
-  const GPW = 3.45;           // average games per NBA team per week
-  const VAR_GAMES = 0.55;
+  const GPW = 3.42;           // average games per NBA team per matchup week (82 / 24; 2026-10-17)
+  const VAR_GAMES = 0.82;     // variance of a player's games in a week he plays (2022-26 logs, drafted players; 2026-10-17)
   const SEASON_G = 80;        // games a fantasy roster spot can fill in a season
   const STREAM_G = 100;       // games a streaming spot fills in a season (streamers chosen for games)
   // Streamability (weekly adds patch weak counting categories): games each add brings in (picked up mid-week),
@@ -198,14 +199,24 @@
     { const fa = byAdp.slice(Math.min(byAdp.length - 1, N * R), Math.min(byAdp.length, N * R + 20)); ctx.pgRepl = new Float64Array(NC);
       fa.forEach(p => { const v = vec(p, ctx, 1); for (let c = 0; c < NC; c++) ctx.pgRepl[c] += v[c] / fa.length; }); }
     // IL spots: games a player misses are partly filled by a replacement on your roster (share grows with IL spots)
-    ctx.ilFill = Math.min(0.9, 0.35 * (+cfg.ilSpots || 0));
+    // Share of missed games filled, by IL spots: 2 spots kept at the backtested 0.70; the curve follows real coverage with
+    // overlapping absences (il_cover.py, 2022-26 logs: absences of 3+ games, 0.45 / 0.66 / 0.74 / 0.76 for 1-4 spots).
+    // Old line: min(0.9, 0.35 × spots). cfg.ilShare (backtests) sets the share directly.
+    const k = Math.max(0, Math.min(4, +cfg.ilSpots || 0)), f = Math.floor(k);
+    ctx.ilFill = cfg.ilShare != null ? +cfg.ilShare : IL_FILL[f] + (k - f) * ((IL_FILL[f + 1] ?? IL_FILL[f]) - IL_FILL[f]);
     const tot = scaleFor(players, cfg, ctx, p => p.g);
     const pg = scaleFor(players, cfg, ctx, () => G0);
     // Mix: halfway between season and per game. Every category is linear in games, so the
     // midpoint of the two games counts gives exactly the average of the two stat lines.
     // cfg.missW (0..1): share of projected missed games that counts — G0 + w × (g − G0); 1 = Season, 0 = Per game, 0.5 = Mix
     const mw = cfg.missW != null ? Math.max(0, Math.min(1, +cfg.missW)) : null;
-    const gOf = mw != null ? (p => G0 + mw * (p.g - G0)) : ctx.basis === 'pergame' ? (() => G0) : ctx.basis === 'mix' ? (p => (p.g + G0) / 2) : (p => p.g);
+    // cfg.riskK (backtests, 2026-10-17): convex injury discount, extra missed games = 82 × k × max(0, missed share − 0.15)²
+    // cfg.knownW (2026-10-17): players out at the start of the season (p.kg known missed games, from BBM's injury note)
+    // get a share of those games credited back at their usual availability, since early absences hurt the regular season
+    // (where you only need to qualify) and not the playoffs.
+    const kw = +cfg.knownW || 0, gK = p => (kw && p.kg > 0 ? Math.min(82, p.g + kw * p.kg * p.g / Math.max(1, 82 - p.kg)) : p.g);
+    const rk = +cfg.riskK || 0, gR = rk ? (p => Math.max(1, gK(p) - 82 * rk * Math.pow(Math.max(0, 1 - gK(p) / 82 - 0.15), 2))) : gK;
+    const gOf = mw != null ? (p => G0 + mw * (gR(p) - G0)) : ctx.basis === 'pergame' ? (() => G0) : ctx.basis === 'mix' ? (p => (gR(p) + G0) / 2) : (p => gR(p));
     const act = mw != null ? scaleFor(players, cfg, ctx, gOf) : ctx.basis === 'pergame' ? pg : ctx.basis === 'mix' ? scaleFor(players, cfg, ctx, gOf) : tot;
     players.forEach((p, i) => {
       p.x = act.X[i]; p.wv = act.WV[i]; p.pv = projVar(p, gOf(p));
@@ -301,7 +312,7 @@
       const ttm = set.match(/\+tt(\d+)$/), TT = ttm ? +ttm[1] : 0;
       const core = set.replace(/\+tt\d+$/, '');
       const withTO = core.endsWith('+to');
-      const [P2, T3] = core.slice(3).replace('+to', '').split('t').map(x => +x || 0);
+      const [P2 = 0, T3 = 0] = core.slice(3).replace('+to', '').split('t').map(x => +x || 0);   // 'syn20' = 20 pairs, no triples (a missing count used to mean all triples)
       ctx.synPairs.slice(0, P2).forEach(([a, b]) => out.push(Object.assign(mk([a, b]), { auto: true })));
       ctx.synTriples.slice(0, T3).forEach(([a, b, c]) => out.push(Object.assign(mk([a, b, c]), { auto: true })));
       if (withTO && cfg.cats === 9) for (let c = 0; c < TO; c++) { const id = 'p' + c + '_' + TO; if (!out.some(s => s.id === id)) out.push(Object.assign(mk([c, TO]), { auto: true })); }
@@ -313,7 +324,7 @@
       for (let a = 0; a < nc; a++) for (let b = a + 1; b < nc; b++) out.push(mk([a, b]));
       for (let a = 0; a < nc; a++) for (let b = a + 1; b < nc; b++) for (let c = b + 1; c < nc; c++) out.push(mk([a, b, c]));
     }
-    // Auto blends single punts plus the 8 most synergistic pairs from the current projections
+    // Auto blends single punts plus the PUNT_SYN_PAIRS (20) most synergistic pairs from the current projections
     // (backtest: slightly ahead of fixed classic pairs; adding triples did not help)
     const autoPairs = ctx && ctx.synPairs ? ctx.synPairs.slice(0, PUNT_SYN_PAIRS).map(([a, b]) => 'p' + a + '_' + b) : AUTO_PAIRS;
     out.forEach(s => { if (s.size === 2 && autoPairs.includes(s.id)) s.auto = true; });
@@ -685,6 +696,75 @@
     return out;
   }
 
-  const api = { strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  // ---------- two-pick look-ahead (2026-10-17) ----------
+  // On the clock: for the K best available players by Win M, re-run the board with him on your roster and value your
+  // next pick as the expected Win M of the best player likely still there (each with his chance of lasting). The pick is
+  // the one with the best Win M now + that next-pick value, so your next pick is valued for the roster it will join.
+  // Backtest (realistic league, 640 paired drafts): titles +2.7 ± 2.1, playoffs made +5.5 ± 1.5, matchups +2.2 ± 0.5.
+  // Returns the evaluation of the real state (re-run last, so every player's numbers are current) with modelPick set.
+  function lookAhead2(players, ctx, cfg, state, K, res0) {
+    const cur = state.picks.indexOf(null);
+    const taken = new Set(state.picks.filter(v => v != null));
+    const cands = players.filter(p => !taken.has(p.id)).sort((a, b) => b.gainM - a.gainM).slice(0, K || 4).map(p => ({ id: p.id, now: p.gainM }));
+    if (cur < 0 || cands.length < 2) return res0;
+    let best = cands[0].id, bs = -Infinity;
+    for (const c of cands) {
+      const pk = state.picks.slice(); pk[cur] = c.id;
+      E2(players, ctx, cfg, Object.assign({}, state, { picks: pk }));
+      const t2 = new Set(pk.filter(v => v != null));
+      const left = players.filter(p => !t2.has(p.id)).sort((a, b) => b.gainM - a.gainM).slice(0, 30);
+      let mass = 1, nxt = 0;
+      for (const o of left) { const q = o.thereAt == null ? 1 : o.thereAt; nxt += mass * q * o.gainM; mass *= 1 - q; if (mass < 1e-4) break; }
+      c.score = c.now + nxt; if (c.score > bs) { bs = c.score; best = c.id; }
+    }
+    const res = E2(players, ctx, cfg, state);
+    res.modelPick = best; res.look2 = cands;
+    return res;
+  }
+  // ---------- value-to-fit slide (2026-10-17) ----------
+  // On the clock: score = (1 − w)·value + w·fit, w = √t, t = your pick index / your last pick index (0 → 1).
+  // value = 50/50 standardized soft −1 Zscore (worst category's negative z counts half) and Win C, re-standardized;
+  // fit = Win M + the look-ahead's next-pick value, for the 4 best by Win M and the 4 best by value.
+  // Pool = the 40 best by Win M, soft Zscore and Win C. Mirrors backtest.js slidePick2 (value 'blend', fit 'look2').
+  // Backtest vs Model pick + look-ahead (realistic league, 320 paired drafts): titles +4.1 ± 2.9, prize +3.5 ± 1.6,
+  // playoffs made +3.1 ± 1.8, matchups +3.2 ± 0.6.
+  function slidePick(players, ctx, cfg, state, t, res0) {
+    const cur = state.picks.indexOf(null);
+    const taken = new Set(state.picks.filter(v => v != null));
+    const av = players.filter(p => !taken.has(p.id));
+    if (cur < 0 || av.length < 2) return res0;
+    const w = Math.sqrt(Math.max(0, Math.min(1, t))), a1 = 0.5, wc = 0.5;
+    const soft = p => { const srt = p.boardC.slice(0, 9).slice().sort((x, y) => x - y); return p.board - a1 * Math.min(0, srt[0]); };
+    const byF = av.slice().sort((a, b) => b.gainM - a.gainM), byS = av.slice().sort((a, b) => soft(b) - soft(a)), byC = av.slice().sort((a, b) => b.gain - a.gain);
+    const P2 = [...new Set(byF.slice(0, 40).concat(byS.slice(0, 40), byC.slice(0, 40)))];
+    const ms = A => { const m = A.reduce((x, y) => x + y, 0) / A.length, s = Math.sqrt(A.reduce((x, y) => x + (y - m) ** 2, 0) / A.length) || 1; return [m, s]; };
+    const S = P2.map(soft), C = P2.map(p => p.gain), F = P2.map(p => p.gainM), [mS, sS] = ms(S), [mC, sC] = ms(C), [mF, sF] = ms(F);
+    let V = P2.map((p, i) => (1 - wc) * (S[i] - mS) / sS + wc * (C[i] - mC) / sC);
+    const [mV, sV] = ms(V); V = V.map(v => (v - mV) / sV);
+    const idx = P2.map((p, i) => i), order = A => idx.slice().sort((x, y) => A[y] - A[x]);
+    const top = [...new Set(order(F).slice(0, 4).concat(order(V).slice(0, 4)))];
+    const ids = P2.map(p => p.id), nxt = {};
+    for (const i of top) {
+      const pk = state.picks.slice(); pk[cur] = ids[i];
+      E2(players, ctx, cfg, Object.assign({}, state, { picks: pk }));
+      const t2 = new Set(pk.filter(v => v != null));
+      const left = players.filter(p => !t2.has(p.id)).sort((a, b) => b.gainM - a.gainM).slice(0, 30);
+      let mass = 1, e = 0;
+      for (const o of left) { const q = o.thereAt == null ? 1 : o.thereAt; e += mass * q * o.gainM; mass *= 1 - q; if (mass < 1e-4) break; }
+      nxt[i] = e;
+    }
+    const res = E2(players, ctx, cfg, state);
+    const mN = top.reduce((a, i) => a + nxt[i], 0) / top.length;
+    let best = ids[top[0]], bs = -Infinity; const cands = [];
+    for (const i of top) {
+      const fit = (F[i] + nxt[i] - mN - mF) / sF, sc = (1 - w) * V[i] + w * fit;
+      cands.push({ id: ids[i], value: V[i], fit, score: sc });
+      if (sc > bs) { bs = sc; best = ids[i]; }
+    }
+    res.modelPick = best; res.slide = { w, cands };
+    return res;
+  }
+  const E2 = (...a) => evaluate(...a);
+  const api = { slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);

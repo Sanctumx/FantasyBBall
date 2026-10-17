@@ -1,4 +1,5 @@
-// Realistic league scoring: daily lineups (10 active of 12), 2 IL spots, 4 adds a week used on the 2 weakest roster spots.
+// Realistic league scoring: daily lineups (10 active of 12), 2 IL spots, opts.adds a week (default 4) used on the 2 weakest roster spots.
+// adds 0: all 12 drafted players kept, no IL fill-ins. adds > 4: the 2 spots are streamed daily (adds ≥ 14 = unlimited).
 const DAILY = require('./bt_daily.json'), DATA = require('./bt_data.json');
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 const N = 14;
@@ -9,9 +10,21 @@ function perGameValue(players) {
   for (let c = 0; c < 9; c++) { m[c] = X.reduce((a, x) => a + x[c], 0) / n; s[c] = Math.sqrt(X.reduce((a, x) => a + (x[c] - m[c]) ** 2, 0) / n) || 1; }
   const v = {}, zc = {}; players.forEach((p, i) => { zc[p.pid] = X[i].map((x, c) => (x - m[c]) / s[c]); v[p.pid] = zc[p.pid].reduce((a, x) => a + x, 0); }); v.zc = zc; return v;
 }
+// Lineup slots: G = PG/SG, F = SF/PF, U = anyone. Players go in by value; each one is placed if any assignment of the
+// players already in can make room for him (augmenting path), which is optimal for this kind of slot matching.
+const SLOT_OK = { PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'], G: ['PG', 'SG'], F: ['SF', 'PF'], U: ['PG', 'SG', 'SF', 'PF', 'C'] };
+function fillSlots(players, slots, pos) {
+  const elig = pid => { const ps = String((pos && pos[pid]) || 'SF').split('/'); return slots.map(sl => SLOT_OK[sl].some(x => ps.includes(x))); };
+  const holder = new Array(slots.length).fill(-1), E = [], inn = [];
+  const tryPlace = (i, seen) => { for (let k = 0; k < slots.length; k++) if (E[i][k] && !seen[k]) { seen[k] = 1; if (holder[k] < 0 || tryPlace(holder[k], seen)) { holder[k] = i; return true; } } return false; };
+  players.forEach((pid, i) => { E[i] = elig(pid); if (tryPlace(i, new Array(slots.length).fill(0))) inn.push(pid); });
+  return inn;
+}
 function scoreLeague(season, rosters, opts = {}) {
   // opts.target: stream for the categories each team is losing or close in (by totals so far), not generic value
   const active = opts.active ?? 10, il = opts.il ?? 2, adds = opts.adds ?? 4, seed = opts.seed ?? 1, target = !!opts.target;
+  // opts.slots: daily lineup slots (e.g. ['PG','SG','G','SF','PF','F','C','C','U','U']) filled from opts.pos eligibility; default: any 10
+  const slots = opts.slots || null, played = new Array(N).fill(0);
   const { daily, ndays } = DAILY[season]; const nweeks = Math.ceil(ndays / 7);
   const players = DATA[season].players, val = perGameValue(players);
   const byDay = {}; for (const pid in daily) { const m = new Map(); daily[pid].forEach(r => m.set(r[0], r.slice(1))); byDay[pid] = m; }
@@ -25,9 +38,13 @@ function scoreLeague(season, rosters, opts = {}) {
   const held = new Set();   // free agents currently on someone's roster as IL fill-ins
   for (let w = 0; w < nweeks; w++) {
     const d0 = w * 7, mid = d0 + 4, d1 = Math.min(ndays, d0 + 7);
+    // streaming periods: Mon-Thu / Fri-Sun, or daily when adds allow more than 4 a week (opts.periods overrides)
+    const H = opts.periods ?? (adds > 4 ? 7 : 2);
+    const bnd = H === 2 ? [d0, mid, d1] : Array.from({ length: H + 1 }, (_, i) => Math.min(d1, d0 + Math.round(i * 7 / H)));
+    const perOf = d => { let h = 0; while (h < H - 1 && d >= bnd[h + 1]) h++; return h; };
     const order = [...Array(N).keys()].sort(() => r() - 0.5);
-    const claimed = [new Set(), new Set()];
-    const lineups = Array.from({ length: N }, () => [[], []]);   // players on roster for each half-week
+    const claimed = Array.from({ length: H }, () => new Set());
+    const lineups = Array.from({ length: N }, () => Array.from({ length: H }, () => []));   // players on roster for each period
     // targeted streaming: per team, weight 1 on categories where it ranks outside the top third so far, 0.25 where it leads
     const catW = Array.from({ length: N }, () => new Array(9).fill(1));
     if (target && w > 0) {
@@ -48,26 +65,27 @@ function scoreLeague(season, rosters, opts = {}) {
       }
       const base = T.core.filter(pid => !T.ilOn.includes(pid)).concat([...T.ilRep.values()]);
       // streaming: remaining adds over the 2 open spots, half-weeks Mon-Thu and Fri-Sun; pick among the 15 best available by games then value
-      const slots = adds > 0 ? 2 : 0; const plan = [[0, 0], [0, 0]];
-      let a = left; for (let h = 0; h < 2 && a > 0; h++) for (let sl = 0; sl < slots && a > 0; sl++) { plan[sl][h] = 1; a--; }
-      for (let h = 0; h < 2; h++) {
-        const [s0, s1] = h === 0 ? [d0, mid] : [mid, d1];
+      const slots = adds > 0 ? 2 : 0; const plan = [new Array(H).fill(0), new Array(H).fill(0)], cur = [null, null];
+      let a = left; for (let h = 0; h < H && a > 0; h++) for (let sl = 0; sl < slots && a > 0; sl++) { plan[sl][h] = 1; a--; }
+      for (let h = 0; h < H; h++) {
+        const s0 = bnd[h], s1 = bnd[h + 1];
         const roster = base.slice();
         for (let sl = 0; sl < slots; sl++) {
-          if (!plan[sl][h] && h === 1 && plan[sl][0]) { roster.push(lineups[t][0][base.length + sl]); continue; }   // keep the Mon-Thu streamer
-          if (!plan[sl][h]) continue;
+          if (!plan[sl][h]) { if (cur[sl] != null) roster.push(cur[sl]); continue; }   // keep the earlier streamer
           const pool = fa.filter(x => !held.has(x) && !claimed[h].has(x)).sort((x, y) => tval(t, y) - tval(t, x)).slice(0, 15);
           const pick = pool.sort((x, y) => gamesIn(y, s0, s1) - gamesIn(x, s0, s1) || tval(t, y) - tval(t, x))[0];
-          if (pick != null) { claimed[h].add(pick); if (h === 0) claimed[1].add(pick); roster.push(pick); }
+          if (pick != null) { for (let k = h; k < H; k++) claimed[k].add(pick); roster.push(pick); cur[sl] = pick; }
         }
         lineups[t][h] = roster;
       }
     }
     // daily scoring with an active-slot cap
     for (let t = 0; t < N; t++) for (let d = d0; d < d1; d++) {
-      const roster = lineups[t][d < mid ? 0 : 1].filter(x => x != null);
+      const roster = lineups[t][perOf(d)].filter(x => x != null);
       let playing = roster.filter(pid => byDay[pid] && byDay[pid].has(d));
-      if (playing.length > active) playing = playing.sort((a, b) => val[b] - val[a]).slice(0, active);
+      if (slots) playing = fillSlots(playing.sort((a, b) => val[b] - val[a]), slots, opts.pos);
+      else if (playing.length > active) playing = playing.sort((a, b) => val[b] - val[a]).slice(0, active);
+      played[t] += playing.length;
       playing.forEach(pid => { const s = byDay[pid].get(d); for (let c = 0; c < 11; c++) weekTot[t][w][c] += s[c]; });
     }
   }
@@ -78,7 +96,7 @@ function scoreLeague(season, rosters, opts = {}) {
     const cs = weekTot.map(t => cats(t[w]));
     for (let a = 0; a < N; a++) for (let b = 0; b < N; b++) if (a !== b) { let wa = 0, wb = 0; for (let c = 0; c < 9; c++) { if (cs[a][c] > cs[b][c]) wa++; else if (cs[a][c] < cs[b][c]) wb++; } wins[a] += wa > wb ? 1 : wa === wb ? 0.5 : 0; }
   }
-  return { rates: wins.map(x => x / (games * (N - 1))), weekTot };
+  return { rates: wins.map(x => x / (games * (N - 1))), weekTot, played };
 }
 module.exports = { scoreLeague };
 if (require.main === module) {

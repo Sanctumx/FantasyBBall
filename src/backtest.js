@@ -20,6 +20,106 @@ function setup(season, cfgExtra) {
   P.forEach(p => { const g = teamPo(p.t); p.poEdge = g != null ? g / avg - 1 : 0; });
   return ctxCache[key] = { P, cfg, ctx };
 }
+// cfg.posScar (backtests, 2026-10-17): position "wait cost". For each role (G = PG/SG, F = SF/PF, C) the drop in the best
+// Win M available from now to my next pick (expected, from each player's chance to last), minus the same drop over all
+// players. A player who fills a role my roster still needs (G 3, F 3, C 2 eligible players, for PG SG G / SF PF F / C C)
+// gets λ × the largest such extra drop among his roles. Positions from p.p ('PG/SG').
+const ROLE = { G: ['PG', 'SG'], F: ['SF', 'PF'], C: ['C'] }, ROLE_NEED = { G: 3, F: 3, C: 2 };
+const roleOf = p => { const ps = String(p.p || '').split('/'); return Object.keys(ROLE).filter(r => ROLE[r].some(x => ps.includes(x))); };
+function expBest(list) { let e = 0, none = 1; for (const p of list) { const a = p.lastsTo == null ? 0 : p.lastsTo; e += none * a * p.gainM; none *= 1 - a; } return e; }
+function posScarPick(P, av, picks, k, me, lam) {
+  const mine = picks.slice(0, k).map((id, j) => (id != null && E.teamAt(j, N, 'snake') === me ? P[id] : null)).filter(Boolean);
+  const byV = av.slice().sort((a, b) => b.gainM - a.gainM);
+  const drop = list => (list.length ? list[0].gainM - expBest(list) : 0), dAll = drop(byV), extra = {};
+  for (const r in ROLE) {
+    const have = mine.filter(p => roleOf(p).includes(r)).length;
+    extra[r] = have >= ROLE_NEED[r] ? 0 : Math.max(0, drop(byV.filter(p => roleOf(p).includes(r))) - dAll);
+  }
+  let best = null, bs = -Infinity;
+  for (const p of av) { const sc = p.gainM + lam * Math.max(0, ...roleOf(p).map(r => extra[r])); if (sc > bs) { bs = sc; best = p.id; } }
+  return best;
+}
+// cfg.look2 = K (backtests, 2026-10-17): two-pick joint look-ahead. For the K best players by Win M now, the board
+// re-runs with him added to your roster and values your next pick as the expected Win M of the best player likely still
+// there (each with his chance of lasting); it takes the player with the best Win M now + that next-pick value, so the
+// next pick is valued for the roster it will actually join (overlap and complements), not the current one.
+function look2Pick(P, ctx, cfg, picks, k, av, K) {
+  if (cfg.look2Engine) return E.lookAhead2(P, ctx, cfg, { picks }, K, null).modelPick;
+  const cands = av.slice().sort((a, b) => b.gainM - a.gainM).slice(0, K).map(p => ({ id: p.id, now: p.gainM }));
+  let best = cands[0].id, bs = -Infinity;
+  for (const c of cands) {
+    const pk = picks.slice(); pk[k] = c.id;
+    const res = E.evaluate(P, ctx, cfg, { picks: pk });
+    const left = P.filter(p => p.id !== c.id && !pk.includes(p.id)).sort((a, b) => b.gainM - a.gainM).slice(0, 30);
+    let mass = 1, nxt = 0; for (const o of left) { const q = o.thereAt == null ? 1 : o.thereAt; nxt += mass * q * o.gainM; mass *= 1 - q; if (mass < 1e-4) break; }
+    const sc = c.now + nxt; if (sc > bs) { bs = sc; best = c.id; }
+  }
+  return best;
+}
+// sl.value 'blend': value = mean of standardized soft Zscore and standardized Win C (sl.wc = Win C share, default 0.5).
+// sl.fit 'look2': fit = Win M + the look-ahead's next-pick value (minus its average), computed for the 4 best by Win M
+// and the 4 best by value; only those candidates are scored. Needs P, ctx, cfg, picks, k (passed via sl._ctx).
+function slidePick(av, myRound, sl) {
+  if (sl.value === 'blend' || sl.fit === 'look2') return slidePick2(av, myRound, sl);
+  const w = Math.pow(myRound / (R - 1), sl.p == null ? 1 : sl.p), a1 = sl.alpha || 0, a2 = sl.alpha2 || 0;
+  const val = sl.value === 'winc' ? (p => p.gain) : (p => { const z = p.boardC.slice(0, 9).map((x, c) => x); const srt = z.slice().sort((x, y) => x - y); return p.board - a1 * Math.min(0, srt[0]) - a2 * Math.min(0, srt[1]); });   // sl.value 'winc': Win C as the value side
+  const pool = new Set([...av].sort((a, b) => b.gainM - a.gainM).slice(0, 40).concat([...av].sort((a, b) => val(b) - val(a)).slice(0, 40)));
+  const P2 = [...pool], V = P2.map(val), F = P2.map(p => p.gainM);
+  const std = A => { const m = A.reduce((x, y) => x + y, 0) / A.length, s = Math.sqrt(A.reduce((x, y) => x + (y - m) ** 2, 0) / A.length) || 1; return A.map(x => (x - m) / s); };
+  const zv = std(V), zf = std(F); let best = P2[0].id, bs = -Infinity;
+  P2.forEach((p, i) => { const sc = (1 - w) * zv[i] + w * zf[i]; if (sc > bs) { bs = sc; best = p.id; } });
+  return best;
+}
+function slidePick2(av, myRound, sl) {
+  // shape: w = w0 + (1 − w0)·t^p, capped at sl.cap; or a logistic switch at round sl.mid (0-based) with steepness sl.k
+  const t = myRound / (R - 1);
+  let w = sl.mid != null ? 1 / (1 + Math.exp(-sl.k * (myRound - sl.mid))) : (sl.w0 || 0) + (1 - (sl.w0 || 0)) * Math.pow(t, sl.p == null ? 1 : sl.p);
+  if (sl.cap != null) w = Math.min(sl.cap, w);
+  const a1 = sl.alpha == null ? 0.5 : sl.alpha, wc = sl.wc == null ? 0.5 : sl.wc;
+  // sl.zval 'auto': Zscore under each of Auto's punt plans (punted categories count zero), averaged with Auto's current plan
+  // weights for this roster; otherwise soft −1 (worst category's negative z counts at 1 − alpha)
+  const strat = sl.zval === 'auto' && sl._ctx && sl._ctx.res && sl._ctx.res.strategies ? sl._ctx.res.strategies.filter(S => S.w != null && S.w > 1e-6) : null;
+  const wsum = strat ? strat.reduce((a, S) => a + S.w, 0) : 0;
+  const soft = strat && wsum > 0
+    ? (p => strat.reduce((a, S) => a + S.w * (p.board - S.punt.reduce((b, c) => b + p.boardC[c], 0)), 0) / wsum)
+    : (p => { const srt = p.boardC.slice(0, 9).slice().sort((x, y) => x - y); return p.board - a1 * Math.min(0, srt[0]); });
+  const byF = [...av].sort((a, b) => b.gainM - a.gainM), byS = [...av].sort((a, b) => soft(b) - soft(a)), byC = [...av].sort((a, b) => b.gain - a.gain);
+  const P2 = [...new Set(byF.slice(0, 40).concat(byS.slice(0, 40), byC.slice(0, 40)))];
+  const ms = A => { const m = A.reduce((x, y) => x + y, 0) / A.length, s = Math.sqrt(A.reduce((x, y) => x + (y - m) ** 2, 0) / A.length) || 1; return [m, s]; };
+  const S = P2.map(soft), C = P2.map(p => p.gain), F = P2.map(p => p.gainM), [mS, sS] = ms(S), [mC, sC] = ms(C), [mF, sF] = ms(F);
+  let V = P2.map((p, i) => sl.value === 'blend' ? (1 - wc) * (S[i] - mS) / sS + wc * (C[i] - mC) / sC : (S[i] - mS) / sS);
+  const [mV, sV] = ms(V); V = V.map(v => (v - mV) / sV);
+  let cand = P2.map((p, i) => i), fit = F.map(f => (f - mF) / sF);
+  if (sl.fit === 'look2') {
+    const { P, ctx, cfg, picks, k } = sl._ctx, order = (A) => cand.slice().sort((x, y) => A[y] - A[x]);
+    const top = [...new Set(order(F).slice(0, 4).concat(order(V).slice(0, 4)))];
+    const nxt = {};
+    for (const i of top) {
+      const pk = picks.slice(); pk[k] = P2[i].id; E.evaluate(P, ctx, cfg, { picks: pk });
+      const t2 = new Set(pk.filter(v => v != null)), left = P.filter(p => !t2.has(p.id)).sort((a, b) => b.gainM - a.gainM).slice(0, 30);
+      let mass = 1, e = 0; for (const o of left) { const q = o.thereAt == null ? 1 : o.thereAt; e += mass * q * o.gainM; mass *= 1 - q; if (mass < 1e-4) break; }
+      nxt[i] = e;
+    }
+    E.evaluate(P, ctx, cfg, { picks });   // restore every player's numbers to the real state
+    const mN = top.reduce((a, i) => a + nxt[i], 0) / top.length;
+    cand = top; fit = F.map((f, i) => nxt[i] != null ? (f + nxt[i] - mN - mF) / sF : (f - mF) / sF);
+  }
+  let best = P2[cand[0]].id, bs = -Infinity;
+  for (const i of cand) { const sc = (1 - w) * V[i] + w * fit[i]; if (sc > bs) { bs = sc; best = P2[i].id; } }
+  return best;
+}
+// cfg.upside = λ (backtests, 2026-10-17): late-round upside. Each player has an upside score u (his predicted outcome
+// spread, set with setUpside); at overall pick k the board adds λ × k/(last pick) × (Win M scale) × clamp((u − mean u)/sd u, 0, 2),
+// so the bonus is 0 at pick 1 and largest at the last pick. Win M scale = mean Win M of the 10 best available.
+let UPSIDE = null; function setUpside(m) { UPSIDE = m; }
+function upsidePick(av, k, lam) {
+  const top = av.slice().sort((a, b) => b.gainM - a.gainM), gs = top.slice(0, 10).reduce((a, p) => a + Math.max(0, p.gainM), 0) / 10;
+  const us = av.map(p => (UPSIDE && UPSIDE[p.pid] != null ? UPSIDE[p.pid] : null)).filter(x => x != null);
+  const mu = us.reduce((a, b) => a + b, 0) / (us.length || 1), sd = Math.sqrt(us.reduce((a, b) => a + (b - mu) ** 2, 0) / (us.length || 1)) || 1;
+  const w = k / (TOTAL - 1); let best = null, bs = -Infinity;
+  for (const p of av) { const u = UPSIDE && UPSIDE[p.pid] != null ? Math.min(2, Math.max(0, (UPSIDE[p.pid] - mu) / sd)) : 0;   /* bonus only, capped at 2 sd */ const sc = p.gainM + lam * w * gs * u; if (sc > bs) { bs = sc; best = p.id; } }
+  return best;
+}
 function draft(season, slot, seed, cfgExtra, opp) {
   const { P, ctx } = setup(season, cfgExtra);
   const cfg = Object.assign({}, setup(season, cfgExtra).cfg, { slot });
@@ -40,6 +140,23 @@ function draft(season, slot, seed, cfgExtra, opp) {
   // opponents who draft with this board (Gain M, Punt Off): opp.model = how many
   const oppModel = new Array(N).fill(false);
   if (opp && opp.model) { const rm = rng(seed * 7727 + slot * 13 + opp.model); [...Array(N).keys()].filter(t => t !== slot - 1).sort(() => rm() - 0.5).slice(0, opp.model).forEach(t => { oppModel[t] = true; }); }
+  // opp.mix (2026-10-17): a league of opponent types on separate teams, { model, punt, sharp, sharpW }.
+  // model = drafts with this board (Win M, Auto unless opp.modelPunt), punt = a fixed single punt or top-8 synergy pair,
+  // sharp = ranks players by a blend of their value rank (Zscore) and ADP, the rest draft from ADP.
+  const oppSharp = new Array(N).fill(false);
+  let zr = null;
+  if (opp && opp.mix) {
+    const rx = rng(seed * 31337 + slot * 17), others = [...Array(N).keys()].filter(t => t !== slot - 1).sort(() => rx() - 0.5);
+    const m = opp.mix; let i = 0;
+    for (let j = 0; j < (m.model || 0); j++) oppModel[others[i++]] = true;
+    const opts = [...Array(9).keys()].map(c => [c]).concat(ctx.synPairs.slice(0, 8).map(([a, b2]) => [a, b2]));
+    for (let j = 0; j < (m.punt || 0); j++) oppPunt[others[i++]] = opts[Math.floor(rx() * opts.length)];
+    for (let j = 0; j < (m.sharp || 0); j++) oppSharp[others[i++]] = true;
+    const order = P.slice().sort((a, b2) => b2.boardRaw - a.boardRaw); zr = new Float64Array(P.length);
+    order.forEach((p, k2) => { zr[p.id] = k2 + 1 + gauss(rx) * (1 + 0.1 * k2); });
+  }
+  const sharpW = opp && opp.mix && opp.mix.sharpW != null ? opp.mix.sharpW : 0.5;
+  if (opp && opp.report) Object.assign(opp.report, { oppPunt: oppPunt.slice(), oppModel: oppModel.slice(), oppSharp: oppSharp.slice() });
   for (let k = 0; k < TOTAL; k++) {
     const t = E.teamAt(k, N, 'snake');
     let id;
@@ -51,14 +168,30 @@ function draft(season, slot, seed, cfgExtra, opp) {
       if (opp && opp.onMyPick) opp.onMyPick(res, k);   // diagnostics hook (e.g. punt weights per pick)
       const av = P.filter(p => !taken.has(p.id));
       // cfg.pickBy 'model': take the board's Model pick (Gain M × chance he's there, plus look-ahead); default: highest Gain M
-      if (cfg.pickBy === 'model' && res && res.modelPick != null && !taken.has(res.modelPick)) id = res.modelPick;
+      // cfg.earlyBy = { by: 'gain' | 'z', rounds: n } (backtests, 2026-10-17): in your first n picks take the top player by
+      // Win C ('gain') or Zscore ('z', p.board) instead of the Model pick
+      const myRound = Math.floor(k / N);
+      // cfg.slide = { alpha, alpha2, p } (backtests, 2026-10-17): score = (1 − w)·value + w·fit, w = (my pick / my last pick)^p.
+      // value = Zscore with the worst category's negative z added back at share alpha (alpha2: second worst too);
+      // fit = Win M. Both standardized over the 40 best available by either.
+      if (cfg.slideEngine) { const r2 = E.slidePick(P, ctx, cfg, { picks }, myRound / (R - 1), res); id = r2.modelPick; }
+      else if (cfg.slide) { id = slidePick(av, myRound, Object.assign({}, cfg.slide, { _ctx: { P, ctx, cfg, picks, k, res } })); }
+      else if (cfg.earlyBy && myRound < cfg.earlyBy.rounds) { const key = cfg.earlyBy.by === 'z' ? 'board' : 'gain'; id = av.reduce((b, p) => (p[key] > b[key] ? p : b), av[0]).id; }
+      else if (cfg.look2) id = look2Pick(P, ctx, cfg, picks, k, av, cfg.look2);
+      else if (cfg.upside != null) id = upsidePick(av, k, cfg.upside);
+      else if (cfg.posScar) id = posScarPick(P, av, picks, k, slot - 1, cfg.posScar);
+      else if (cfg.pickBy === 'model' && res && res.modelPick != null && !taken.has(res.modelPick)) id = res.modelPick;
       else id = av.reduce((b, p) => (p.gainM > b.gainM ? p : b), av[0]).id;
     } else if (oppModel[t]) {
       P.forEach(p => { p.poMult = 1; });
-      const ocfg = Object.assign({}, cfg, { slot: t + 1, puntMode: opp.modelPunt || 'off', puntLock: '' });
+      const ocfg = Object.assign({}, cfg, { slot: t + 1, puntMode: opp.modelPunt || (opp.mix ? 'auto' : 'off'), puntLock: '', poBoost: 'off' });
       E.evaluate(P, ctx, ocfg, { picks });
       const av = P.filter(p => !taken.has(p.id));
       id = av.reduce((b2, p) => (p.gainM > b2.gainM ? p : b2), av[0]).id;
+    } else if (oppSharp[t]) {
+      let best = -1, bt = Infinity;
+      for (const p of P) if (!taken.has(p.id)) { const sc = (1 - sharpW) * T[p.id] + sharpW * zr[p.id]; if (sc < bt) { bt = sc; best = p.id; } }
+      id = best;
     } else {
       let best = -1, bt = Infinity;
       const pc = oppPunt[t];
@@ -89,7 +222,7 @@ function score(season, rosters) {
   }
   return wins.map(x => x / (games * (N - 1)));
 }
-module.exports = { draft, score, setup, oppInfo: null, PO_WEEKS };
+module.exports = { draft, score, setup, oppInfo: null, PO_WEEKS, setUpside };
 if (require.main === module) {
   const t = Date.now();
   for (const mode of [{ puntMode: 'off' }, { puntMode: 'auto' }]) {

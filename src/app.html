@@ -94,7 +94,8 @@ select,input[type=text],textarea{background:var(--sunk);border:1px solid var(--l
 .topband{grid-area:top;display:flex;flex-wrap:wrap;gap:16px;align-items:stretch;min-width:0}
 #mine{flex:1 1 52rem;min-width:0;max-width:100%}
 #teams{flex:0 0 17.5rem;max-width:100%}
-@media (max-width:1100px){#teams{flex:1 1 100%}}
+/* when Your team and Teams can't sit side by side (phones, narrow windows), Teams goes first, full width */
+@media (max-width:1180px){#teams{flex:1 1 100%;order:-1}}
 .mine-body{display:grid;grid-template-columns:minmax(17rem,1fr) minmax(19rem,1.2fr) minmax(17rem,1fr);gap:10px 32px;align-items:stretch}
 /* every section runs to the same bottom line: lists stretch their rows, notes sit at the foot */
 .mine-body>*{min-width:0;display:flex;flex-direction:column}
@@ -269,7 +270,7 @@ label.f select,label.f input{font-weight:400}
 </header>
 <dialog class="how" id="how" aria-labelledby="how-title">
   <div class="how-head"><h2 id="how-title">How the board works</h2><button class="btn" type="button" id="how-close">Close</button></div>
-  <p class="how-intro">Formulas, fitted numbers and every backtest behind these choices are in the <a href="https://claude.ai/code/artifact/2d4059a8-f9ad-465d-bfa7-41ef6990e7a8" target="_blank" rel="noopener">model math doc</a>.</p>
+  <p class="how-intro">Formulas, fitted numbers and every backtest behind these choices are in <a href="https://claude.ai/code/artifact/2d4059a8-f9ad-465d-bfa7-41ef6990e7a8" target="_blank" rel="noopener">The Math Behind the Model</a> doc.</p>
   <div class="how-grid">
    <div class="how-col">
     <section class="how-card">
@@ -277,7 +278,7 @@ label.f select,label.f input{font-weight:400}
       <h4>Zscore</h4>
       <p>Season value against an average drafted player. Each category is scaled by how far apart teams finish in simulated ADP drafts, so small edges count more where teams bunch together. −1 and −2 leave out his worst one or two categories, as on a punt team.</p>
       <h4>Basis and IL spots</h4>
-      <p>How much projected missed games count: in full (Season), not at all (Per game) or half (Mix, the default and best in backtests). IL spots then count a share of missed games at waiver level: 35% per spot, up to 90%.</p>
+      <p>How much projected missed games count: in full (Season, the default and best in backtests), not at all (Per game) or half (Mix). BBM's projected games already expect injury-prone players to bounce back, so counting them in full doesn't over-penalize risk. IL spots then count a share of missed games at waiver level: 47% with 1 spot, 70% with 2, 79% with 3, 81% with 4. Each extra spot adds less, because injuries overlap and short absences can't use one.</p>
       <h4>Win C</h4>
       <p>How much he raises your chance of winning each category against the other teams, compared with leaving the pick to waivers, summed in hundredths of a category win (72 is about three-quarters of a win). Your forecast is your picks plus a typical player at each pick left, so it changes every pick: a third big man adds less once you have two.</p>
       <h4>Win M</h4>
@@ -289,9 +290,9 @@ label.f select,label.f input{font-weight:400}
     <section class="how-card">
       <h3>Picking</h3>
       <h4># and the Model pick</h4>
-      <p># ranks available players by "# order by": Win C, Win M or the Zscore shown. The Model pick badge always uses Win M: his Win M if he's still there at your pick (if he's gone, the best player left instead), plus what is likely left at your following pick. On the clock everyone is 100% there. Grey names probably won't reach you.</p>
-      <h4>There at, Lasts to, Safe until, Gone by</h4>
-      <p>His chance of still being there at your next pick and the one after, from ADP and how far real drafters stray from it (fitted on 50 real 12-team Fantrax drafts). Safe until is the last pick with an 80% chance, Gone by the first at 20%. Rank range is ADP ± one standard deviation.</p>
+      <p># ranks available players by "# order by": Win C, Win M or the Zscore shown. Off the clock the Model pick badge uses Win M: his Win M if he's still there at your pick (if he's gone, the best player left instead), plus what is likely left at your following pick. On the clock everyone is 100% there, and the badge slides from value to fit (Model pick: Value → fit, the default). Value is half Zscore, with a player's worst category counting half when it is negative, and half Win C. Fit is Win M plus a look two picks ahead: the board re-runs with him on your roster and adds the best player likely left at your next pick, so that pick is valued for the roster it will join. The weight on fit is √(your picks made ÷ your last pick): 0 at your first pick, about half by your fourth of 12, and all fit at your last. Model pick: Win M uses Win M plus the look-ahead at every pick. Grey names probably won't reach you.</p>
+      <h4>There at, Lasts to, Pick range</h4>
+      <p>His chance of still being there at your next pick and the one after, from ADP and how far real drafters stray from it (fitted on 50 real 12-team Fantrax drafts). Pick range is ADP ± one standard deviation.</p>
       <h4>Edge</h4>
       <p>ADP minus the pick his value says he deserves. Positive means he is going later than he should. Edge vs picks the value; an ADP past your draft's last pick counts as just after it (marked *).</p>
       <h4>ADP</h4>
@@ -302,7 +303,7 @@ label.f select,label.f input{font-weight:400}
     <section class="how-card">
       <h3>Strategy and league</h3>
       <h4>Punt</h4>
-      <p>For each punt plan the board forecasts your open picks as players near ADP who fit it and works out your matchup win chance; the Strategy line shows the best. Auto blends no punt, the single punts and the 8 most synergistic pairs (categories where weak players tend to be weak together) by how far ahead each is. In practice it mostly chooses between no punt and a single punt, which beat not punting in four seasons of backtests. Lock any of the 130 plans in the Punt dropdown or by clicking its pill; a punted category then counts zero in Win C.</p>
+      <p>For each punt plan the board forecasts your open picks as players near ADP who fit it and works out your matchup win chance; the Strategy line shows the best. Auto blends no punt, the single punts and the 24 most synergistic pairs (categories where weak players tend to be weak together) by how far ahead each is. In practice it mostly chooses between no punt and a single punt, which beat not punting in four seasons of backtests. Lock any of the 130 plans in the Punt dropdown or by clicking its pill; a punted category then counts zero in Win C.</p>
       <h4>Kit users</h4>
       <p>How many opponents draft with this kit. They are expected to take value instead of ADP, which changes who will still be there and the punt forecasts.</p>
       <h4>Playoff games</h4>
@@ -425,6 +426,7 @@ label.f select,label.f input{font-weight:400}
       <label class="f" for="q">Find player<input type="text" id="q" placeholder="Name or team"></label>
       <label class="f zsel" for="zdrop">Zscore<select id="zdrop"><option value="0" title="All categories">Normal</option><option value="1" title="Drop worst category">−1</option><option value="2" title="Drop worst two categories">−2</option></select></label>
       <label class="f zsel" for="statsel" title="What the nine category columns show: Win added, Zscore or projected stats">Stats<select id="statsel"><option value="gain">Win</option><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
+      <label class="f zsel" for="s-pickby" title="How the Model pick chooses on the clock">Model pick<select id="s-pickby"><option value="slide" title="Value early, roster fit late">Value → fit</option><option value="winm" title="Win M with the two-pick look-ahead at every pick">Win M</option></select></label>
       <label class="f zsel" for="s-poboost" title="Boost players whose teams play more games in your playoff weeks">Playoff boost<select id="s-poboost"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
       <label class="f zsel" for="s-b2b" title="Lower playoff games for players who sit back-to-backs, from the last two seasons or your marks">B2B rest<select id="s-b2b"><option value="on">On</option><option value="off">Off</option></select></label>
       <label class="f zsel" for="puntsel" title="Off: no punt plans. Auto: Win leans toward the punt your roster is heading for. Pick one to lock it">Punt<select id="puntsel"></select></label>
@@ -471,8 +473,11 @@ label.f select,label.f input{font-weight:400}
 const E = Engine, CATS = E.CATS;
 const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
-const DEF = { ilSpots: 2, b2b: 'on', b2bOv: {}, oppBoard: 0, puntMode: 'auto', puntLock: '', stats: 'gain', poBoost: 'medium', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 1], asb: 'merged', poStart: 18, poFmt: '1-2-2', shown: 0, orderBy: 'gainM', edgeBy: 'gainM', zdrop: 1, teams: 14, slot: 7, order: 'snake', adpSrc: 'ftx', scoring: 'most', cats: 9, roster: 12, basis: 'mix' };
+const DEF = { ilSpots: 2, b2b: 'on', b2bOv: {}, oppBoard: 0, puntMode: 'auto', puntLock: '', stats: 'gain', poBoost: 'medium', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 1], asb: 'merged', poStart: 18, poFmt: '1-2-2', shown: 0, orderBy: 'gainM', edgeBy: 'gainM', zdrop: 1, teams: 14, slot: 7, order: 'snake', adpSrc: 'ftx', scoring: 'most', cats: 9, roster: 12, basis: 'total', basisV: 2, pickBy: 'slide' };
 let cfg = Object.assign({}, DEF), picks = [], log = [];
+// Settings saved before 2026-10-17 had Mix as the default Basis; Season replaced it (it won more titles in backtests with
+// BBM-style projected games), so an old saved Mix moves to Season once. A Basis chosen after that is kept.
+function migrate(c, saved) { if (!(saved && saved.basisV >= 2)) { if (c.basis === 'mix') c.basis = 'total'; c.basisV = 2; } return c; }
 let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
 const $ = id => document.getElementById(id);
@@ -485,7 +490,7 @@ const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(0);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let owner = [], fx = null, extra = [];   // owner: team per pick from Fantrax; fx: connected league; extra: drafted players missing from the projections
-try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { cfg = Object.assign({}, DEF, s.cfg); picks = s.picks || []; log = s.log || []; owner = s.owner || []; fx = s.fx || null; extra = s.extra || []; } } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { cfg = migrate(Object.assign({}, DEF, s.cfg), s.cfg); picks = s.picks || []; log = s.log || []; owner = s.owner || []; fx = s.fx || null; extra = s.extra || []; } } catch (e) {}
 cfg.scarZ = 'off'; cfg.scarP = 'off';   // scarcity is shown as information only (backtest 2026-10-16: boosting by it cost matchups)
 delete cfg.modelPickV1;   // Model pick fix (2026-10-16) applies to every saved board
 extra.forEach(addExtra);
@@ -552,7 +557,7 @@ function syncPlayoffs() {
   if (cfg.poStart < 10) cfg.poStart = 10;
   const sel = $('s-po'); sel.innerHTML = '';
   for (let w = 10; w <= plan.count; w++) sel.add(new Option('Wk ' + w + ' · ' + fmtDay(plan.starts[w - 1]), String(w)));
-  sel.value = String(cfg.poStart); $('s-asb').value = cfg.asb; $('s-pofmt').value = cfg.poFmt; $('s-poboost').value = cfg.poBoost;
+  sel.value = String(cfg.poStart); $('s-asb').value = cfg.asb; $('s-pofmt').value = cfg.poFmt; $('s-poboost').value = cfg.poBoost; $('s-pickby').value = cfg.pickBy;
   const { rounds, fits } = playoffRounds();
   const all = rounds.flat(), first = all[0], last = all[all.length - 1];
   const end = new Date(plan.starts[last - 1] + 'T12:00:00'); const endIso = last < plan.count ? plan.starts[last] : '2027-04-12';
@@ -595,6 +600,7 @@ $('s-oppb').addEventListener('change', e => { cfg.oppBoard = +e.target.value; re
   syncPlayoffs(); recompute();
 }));
 $('s-poboost').addEventListener('change', e => { cfg.poBoost = e.target.value; recompute(); });
+$('s-pickby').addEventListener('change', e => { cfg.pickBy = e.target.value; recompute(); });
 
 // ---------- engine ----------
 function rebuild() { ctx = E.buildContext(P, cfg); recompute(); }
@@ -607,7 +613,19 @@ function setPlayoffMult() {
     p.poMult = lam ? Math.max(0.5, Math.min(1.5, 1 + lam * p.poEdge)) : 1;
   });
 }
-function recompute() { setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner }); render(); save(); }
+// On your turn the Model pick slides from value to fit (engine slidePick; 'Win M' setting: lookAhead2), each looking two picks ahead: run after the first render so the board stays quick.
+let look2Timer = null;
+function recompute() {
+  setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner }); render(); save();
+  clearTimeout(look2Timer);
+  const cur = picks.indexOf(null);
+  if (cur >= 0 && teamOf(cur) === cfg.slot - 1) look2Timer = setTimeout(() => {
+    if (picks.indexOf(null) !== cur) return;
+    if (cfg.pickBy === 'winm') res = E.lookAhead2(P, ctx, cfg, { picks, owner }, 4, res);
+    else { let mine = 0; for (let i = 0; i < cur; i++) if (teamOf(i) === cfg.slot - 1) mine++; res = E.slidePick(P, ctx, cfg, { picks, owner }, cfg.roster > 1 ? mine / (cfg.roster - 1) : 1, res); }
+    render();
+  }, 30);
+}
 
 // ---------- logging ----------
 function findPlayer(q) {
@@ -864,7 +882,7 @@ $('sv-list').addEventListener('click', e => {
   if (lb) {
     const d = list.find(x => x.name === lb.dataset.load); if (!d) return;
     if (picks.some(v => v != null) && curName !== d.name && !arm('load:' + d.name, lb, 'Replace?')) { svSay('Loading replaces the draft on the board. Press Replace? to continue, or save this one first.'); return; }
-    cfg = Object.assign({}, DEF, d.cfg); picks = (d.picks || []).slice(); log = (d.log || []).slice(); owner = (d.owner || []).slice(); fx = d.fx || null;
+    cfg = migrate(Object.assign({}, DEF, d.cfg), d.cfg); picks = (d.picks || []).slice(); log = (d.log || []).slice(); owner = (d.owner || []).slice(); fx = d.fx || null;
     (d.extra || []).forEach(raw => { if (!P.some(p => p.unlisted && p.n === raw.n)) { extra.push(raw); addExtra(raw); } });
     fit(); syncSetup(); renderFx(); setCur(d.name); $('sv-name').value = d.name;
     svSay('Loaded "' + d.name + '".'); rebuild(); renderSaves();
@@ -1087,7 +1105,7 @@ function renderTable() {
     CATS.map((c, i) => th(c.l + (cfg.stats === 'z' && cfg.catW[i] !== 1 ? '<br><span style="font-weight:400">×' + cfg.catW[i] + '</span>' : ''), 'c' + i, '', ({ gain: 'Win chance added in ' + c.l, z: c.l + ' z-score' + (cfg.catW[i] !== 1 ? ' × weight ' + cfg.catW[i] : '') + ' (the nine add up to Zscore)', raw: 'Projected ' + c.l + ' per game' }[cfg.stats]) + '. Click to sort')).join('') +
     th(['Zscore', '−1 Zscore', '−2 Zscore'][cfg.zdrop] + '<br><span style="font-weight:400;text-transform:none">' + ({ pergame: 'per game', mix: 'mix' }[cfg.basis] || 'season') + '</span>', 'board', '', ({ pergame: 'Per-game', mix: 'Mix (half season, half per-game)' }[cfg.basis] || 'Season') + ' value vs an average drafted player' + (cfg.catW.some(w => w !== 1) ? ', with category weights ' + CATS.map((c, i) => cfg.catW[i] !== 1 && !(i === E.TO && cfg.cats === 8) ? c.l + ' ×' + cfg.catW[i] : null).filter(Boolean).join(', ') : '') + (cfg.zdrop ? ', leaving out the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories') : '') + '. Small number is the rank')
     + th('Scarcity<br>Cat', 'scarC', '', 'How fast his best categories are drying up (information only)') + th('Scarcity<br>Position', 'scarP', '', 'How scarce his positions are (information only)') + th(thereH.replace(' at ', ' at<br>'), null, '', 'Chance he is still there at your next pick') + th(lastH.replace(' to ', ' to<br>'), null, '', 'Chance he lasts to the pick after') +
-    th('Safe<br>until', null, '', 'Last pick with an 80% chance he is still there') + th('Gone<br>by', null, '', 'First pick where his chance falls to 20%') + th('Rank<br>range', null, '', 'Where he usually goes: ADP ± one standard deviation') + '</tr>';
+    th('Pick<br>range', null, '', 'Where he usually goes: ADP ± one standard deviation') + '</tr>';
 
   const takenAt = new Map(); picks.forEach((id, k) => { if (id != null) takenAt.set(id, k); });
   const q = norm($('q').value), hide = $('hide').checked;
@@ -1174,7 +1192,7 @@ function renderTable() {
     let poCell; if (!pg) poCell = '<td class="dash" title="No NBA team">—</td>';
     else { const dpo = pg.total - poAvg; poCell = '<td class="' + (isT ? '' : dpo >= 1 ? 'pos' : dpo <= -1 ? 'neg' : '') + '" data-b2b="' + esc(p.n) + '" title="' + esc(p.t) + ': ' + pg.per.map(f1g).join(' · ') + ' by round, ' + (p.poEdge >= 0 ? '+' : '−') + Math.abs(Math.round(p.poEdge * 100)) + '% vs avg' + (p.poMult && p.poMult !== 1 ? ' · ×' + p.poMult.toFixed(2) : '') + (pg.rate ? '. Sits ' + Math.round(pg.rate * 100) + '% of back-to-backs' + ((cfg.b2bOv || {})[p.n] != null ? ' (your mark)' : ' (last two seasons)') + ': −' + pg.sat.toFixed(1) + ' of ' + pg.teamTotal + ' team games' : '') + (cfg.b2b === 'off' ? '' : '. Click to cycle: always sits back-to-backs, always plays them, use data') + '">' + f1g(pg.total) + (pg.rate >= 0.25 ? '<sup class="b2bmark">B2B</sup>' : '') + ' <span class="meta" style="display:inline;font-size:.66rem">' + pg.per.map(x => Math.round(x)).join('·') + '</span></td>'; }
     let h = '<td class="l logc">' + logc + '</td>' + adpCell + '<td class="ord"' + (!isT && !done && p.thereAt < 0.15 ? ' title="Likely gone: ' + Math.round(p.thereAt * 100) + '% to reach ' + ord(res.p1 + 1) + '"' : '') + '>' + (!isT && p.order != null && !done ? p.order : '') + '</td>' + edgeCell + poCell + '<td>' + p.g + '</td>' +
-      '<td class="l player" title="' + tip + '"><span class="nm">' + esc(p.n) + '</span>' + (!isT && p.id === topId && !done ? '<span class="mp" title="Best pick for you: Win M, counting his chance of still being there and what is likely left at your following pick">Model pick</span>' : '') + tags + '<span class="meta">' + esc(p.t) + ' · ' + esc(p.p) + ' · ' + p.m + ' mpg</span></td>';
+      '<td class="l player" title="' + tip + '"><span class="nm">' + esc(p.n) + '</span>' + (!isT && p.id === topId && !done ? '<span class="mp" title="Best pick for you. On the clock: value early, roster fit late, looking two picks ahead. Otherwise: Win M, counting his chance of still being there and what is likely left at your following pick">Model pick</span>' : '') + tags + '<span class="meta">' + esc(p.t) + ' · ' + esc(p.p) + ' · ' + p.m + ' mpg</span></td>';
     const catCells = () => CATS.map((c, i) => {
       if (i === E.TO && cfg.cats === 8) return '<td class="cat dash">—</td>';
       if (cfg.stats === 'raw') return '<td class="cat">' + chipZ(i, p.boardC[i], rawTxt(p, i)) + '</td>';
@@ -1195,10 +1213,9 @@ function renderTable() {
       const sc1 = (v, m, on, lab) => { const r = Math.round(v * 100); return '<td class="' + (r >= 5 ? 'pos' : r <= -5 ? 'neg' : '') + '" title="' + lab + ' scarcity: how short supply is in his ' + (lab === 'Category' ? 'best categories' : 'positions') + ' (information only)">' + (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r) + '</td>'; };
       h += sc1(p.scarCat, p.scarMultZ || 1, cfg.scarZ !== 'off', 'Category') + sc1(p.scarPos, p.scarMultP || 1, cfg.scarP !== 'off', 'Position');
     }
-    if (isT || done) h += '<td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td>';
+    if (isT || done) h += '<td class="dash">—</td><td class="dash">—</td>';
     else {
       h += '<td>' + pillOf(p.thereAt) + '</td><td>' + (p.lastsTo != null ? pillOf(p.lastsTo) : '—') + '</td>';
-      h += '<td>' + p.safeUntil + '</td><td>' + (p.goneBy != null ? p.goneBy : '—') + '</td>';
     }
     h += rangeCell;
     return '<tr class="' + cls + '">' + h + '</tr>';

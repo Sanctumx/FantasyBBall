@@ -1,3 +1,5 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+  # Skip the deploy (and its credits) when a push changes nothing the site serves, e.g. only src/ backtests or data
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- index.html netlify/ netlify.toml"
