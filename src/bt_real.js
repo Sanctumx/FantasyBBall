@@ -28,14 +28,21 @@ const ARMS = [['Current board', {}], ['Win M + look-ahead (no slide)', { slideEn
   ['NEW + IL fill 0.60', { slideEngine: false, look2: 4, look2Engine: true, puntMode: 'off', ilShare: 0.6 }],
   ['NEW + look-ahead 8 candidates', { slideEngine: false, look2: 4, look2Engine: true, puntMode: 'off', look2: 8 }],
   ['NEW + IL fill 0.50', { slideEngine: false, look2: 4, look2Engine: true, puntMode: 'off', ilShare: 0.5 }],
-  ['NEW + IL fill 0.70', { slideEngine: false, look2: 4, look2Engine: true, puntMode: 'off', ilShare: 0.7 }]];
+  ['NEW + IL fill 0.70', { slideEngine: false, look2: 4, look2Engine: true, puntMode: 'off', ilShare: 0.7 }],
+  // value early, then fit (2026-10-17): value = 50/50 soft −1 Zscore + Win C, fit = Win M + look-ahead; Punt Off
+  ['NEW + value first 2 picks', { slideEngine: false, puntMode: 'off', slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 50 } }],
+  ['NEW + fast slide t^0.25', { slideEngine: false, puntMode: 'off', slide: { value: 'blend', fit: 'look2', alpha: 0.5, p: 0.25 } }],
+  // logistic drop: value share = 1 / (1 + e^(k (pick − 2.5))), pick 1-based (mid 1.5 on the 0-based index)
+  ['NEW + logistic value k=2', { slideEngine: false, puntMode: 'off', slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 } }],
+  ['NEW + logistic value k=3', { slideEngine: false, puntMode: 'off', slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 3 } }],
+  ['NEW + logistic k=2, value = Win C only', { slideEngine: false, puntMode: 'off', slide: { value: 'wincOnly', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 } }]];
 const [name, c] = ARMS[arm], rows = [], t0 = Date.now();
 for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
   const { fmt, ...cx } = c, old = fmt === 'old';
   const ro = draft(season, slot, seed, Object.assign({}, base, cx), OPP);
   const sc = scoreLeague(season, ro, { seed, target: true, il: old ? 2 : 3 });
   const t = titleScore(sc.weekTot, old ? {} : { rsMode: 'each', rsWeeks: 17, rounds: [[17, 18], [19, 20], [21, 22]] }), m = slot - 1;
-  rows.push({ season, arm, slot, seed, me: sc.rates[m], made: t.made[m], rounds: t.roundsWon[m], title: t.title[m], roster: ro[m].slice().sort().join(',') });
+  rows.push({ season, arm, slot, seed, me: sc.rates[m], made: t.made[m], poAll: t.poAll[m], rounds: t.roundsWon[m], title: t.title[m], roster: ro[m].slice().sort().join(',') });
 }
 require('fs').writeFileSync(`bt_real_${season}_a${arm}_${s0}-${s1}.json`, JSON.stringify({ name, rows }));
 console.log(season, name, ((Date.now() - t0) / 1000).toFixed(0) + 's');

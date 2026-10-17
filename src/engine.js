@@ -729,18 +729,19 @@
     return res;
   }
   // ---------- value-to-fit slide (2026-10-17) ----------
-  // On the clock: score = (1 − w)·value + w·fit, w = √t, t = your pick index / your last pick index (0 → 1).
+  // On the clock: score = (1 − w)·value + w·fit. Fit share w = 1 / (1 + e^(−k·(i − 1.5))), i = your 0-based pick index, k = 2
+  // (2026-10-17, real-projection backtests): value share 95% / 73% / 27% / 5% at your picks 1-4, then ~0 (pure fit).
   // value = 50/50 standardized soft −1 Zscore (worst category's negative z counts half) and Win C, re-standardized;
   // fit = Win M + the look-ahead's next-pick value, for the 4 best by Win M and the 4 best by value.
   // Pool = the 40 best by Win M, soft Zscore and Win C. Mirrors backtest.js slidePick2 (value 'blend', fit 'look2').
-  // Backtest vs Model pick + look-ahead (realistic league, 320 paired drafts): titles +4.1 ± 2.9, prize +3.5 ± 1.6,
-  // playoffs made +3.1 ± 1.8, matchups +3.2 ± 0.6.
-  function slidePick(players, ctx, cfg, state, t, res0) {
+  // Backtest (real projections + real ADP, the user's format, 2022-26, 320 paired drafts) vs Win M + look-ahead, Punt Off:
+  // titles +1.3 ± 1.5, prize +1.7 ± 0.9, playoffs made +3.1 ± 2.1, matchups +1.8 ± 0.5. (The old √t slide lost there.)
+  function slidePick(players, ctx, cfg, state, myIdx, res0) {
     const cur = state.picks.indexOf(null);
     const taken = new Set(state.picks.filter(v => v != null));
     const av = players.filter(p => !taken.has(p.id));
     if (cur < 0 || av.length < 2) return res0;
-    const w = Math.sqrt(Math.max(0, Math.min(1, t))), a1 = 0.5, wc = 0.5;
+    const SLIDE_K = 2, SLIDE_MID = 1.5, w = 1 / (1 + Math.exp(-SLIDE_K * (myIdx - SLIDE_MID))), a1 = 0.5, wc = 0.5;
     // soft −1 ignores category weights (TO ×0.5 default included): unweighted Zscore over the scoring categories, worst one at half
     const sc = cfg.cats === 9 ? 9 : 8;
     const soft = p => { let b = 0, lo = Infinity; for (let c = 0; c < 9; c++) { if (sc === 8 && c === TO) continue; b += p.boardC[c]; if (p.boardC[c] < lo) lo = p.boardC[c]; } return b - a1 * Math.min(0, lo); };

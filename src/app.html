@@ -294,7 +294,7 @@ label.f select,label.f input{font-weight:400}
     <section class="how-card">
       <h3>Picking</h3>
       <h4># and the Model pick / Likely pick</h4>
-      <p># ranks available players by "# order by": Win C, Win M or the Zscore shown. Off the clock the badge reads Likely pick, your best target for your next pick, using Win M: his Win M if he's still there at your pick (if he's gone, the best player left instead), plus what is likely left at your following pick. On the clock it reads Model pick: everyone left is 100% there, and it looks two picks ahead. For the 4 best players by Win M, the board re-runs with each one on your roster and adds the best player likely left at your next pick, so that pick is valued for the roster it will join. Grey names probably won't reach you.</p>
+      <p># ranks available players by "# order by": Win C, Win M or the Zscore shown. Off the clock the badge reads Likely pick, your best target for your next pick, using Win M: his Win M if he's still there at your pick (if he's gone, the best player left instead), plus what is likely left at your following pick. On the clock it reads Model pick: everyone left is 100% there. Your first picks lean on value (half Zscore with a player's worst category counting half when negative, half Win C): 95% at your first pick, 73% at your second, 27% at your third, 5% at your fourth. After that it is Win M plus a look two picks ahead: the board re-runs with each candidate on your roster and adds the best player likely left at your next pick, so that pick is valued for the roster it will join. Grey names probably won't reach you.</p>
       <h4>There at, Lasts to, Pick range</h4>
       <p>His chance of still being there at your next pick and the one after, from ADP and how far real drafters stray from it (fitted on 50 real 12-team Fantrax drafts). Pick range is ADP ± one standard deviation.</p>
       <h4>Edge</h4>
@@ -655,7 +655,7 @@ function setPlayoffMult() {
     p.poMult = lam ? Math.max(0.5, Math.min(1.5, 1 + lam * p.poEdge)) : 1;
   });
 }
-// On your turn the Model pick is Win M plus a two-pick look-ahead (engine lookAhead2): run after the first render so the board stays quick.
+// On your turn the Model pick weighs value early and Win M + look-ahead after (engine slidePick): run after the first render so the board stays quick.
 let look2Timer = null;
 function recompute() {
   setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner }); render(); save();
@@ -663,8 +663,9 @@ function recompute() {
   const cur = picks.indexOf(null);
   if (cur >= 0 && teamOf(cur) === cfg.slot - 1) look2Timer = setTimeout(() => {
     if (picks.indexOf(null) !== cur) return;
-    // Win M + two-pick look-ahead (2026-10-17: beat the value-to-fit slide with real projections in the user's format, 4 seasons)
-    res = E.lookAhead2(P, ctx, cfg, { picks, owner }, 4, res);
+    // Value early, then Win M + look-ahead: value share 95% / 73% / 27% / 5% at your picks 1-4 (engine slidePick, logistic k = 2)
+    let mine = 0; for (let i = 0; i < cur; i++) if (teamOf(i) === cfg.slot - 1) mine++;
+    res = E.slidePick(P, ctx, cfg, { picks, owner }, mine, res);
     render();
   }, 30);
 }

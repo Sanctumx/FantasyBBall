@@ -76,7 +76,7 @@ function look2Pick(P, ctx, cfg, picks, k, av, K) {
 // sl.fit 'look2': fit = Win M + the look-ahead's next-pick value (minus its average), computed for the 4 best by Win M
 // and the 4 best by value; only those candidates are scored. Needs P, ctx, cfg, picks, k (passed via sl._ctx).
 function slidePick(av, myRound, sl) {
-  if (sl.value === 'blend' || sl.fit === 'look2') return slidePick2(av, myRound, sl);
+  if (sl.value === 'blend' || sl.value === 'wincOnly' || sl.fit === 'look2') return slidePick2(av, myRound, sl);
   const w = Math.pow(myRound / (R - 1), sl.p == null ? 1 : sl.p), a1 = sl.alpha || 0, a2 = sl.alpha2 || 0;
   const val = sl.value === 'winc' ? (p => p.gain) : (p => { const z = p.boardC.slice(0, 9).map((x, c) => x); const srt = z.slice().sort((x, y) => x - y); return p.board - a1 * Math.min(0, srt[0]) - a2 * Math.min(0, srt[1]); });   // sl.value 'winc': Win C as the value side
   const pool = new Set([...av].sort((a, b) => b.gainM - a.gainM).slice(0, 40).concat([...av].sort((a, b) => val(b) - val(a)).slice(0, 40)));
@@ -105,7 +105,8 @@ function slidePick2(av, myRound, sl) {
   const P2 = [...new Set(byF.slice(0, 40).concat(byS.slice(0, 40), byC.slice(0, 40)))];
   const ms = A => { const m = A.reduce((x, y) => x + y, 0) / A.length, s = Math.sqrt(A.reduce((x, y) => x + (y - m) ** 2, 0) / A.length) || 1; return [m, s]; };
   const S = P2.map(soft), C = P2.map(p => p.gain), F = P2.map(p => p.gainM), [mS, sS] = ms(S), [mC, sC] = ms(C), [mF, sF] = ms(F);
-  let V = P2.map((p, i) => sl.value === 'blend' ? (1 - wc) * (S[i] - mS) / sS + wc * (C[i] - mC) / sC : (S[i] - mS) / sS);
+  // sl.value: 'blend' = 50/50 soft −1 Zscore + Win C; 'wincOnly' = Win C alone (2026-10-17); otherwise soft −1 Zscore alone
+  let V = P2.map((p, i) => sl.value === 'blend' ? (1 - wc) * (S[i] - mS) / sS + wc * (C[i] - mC) / sC : sl.value === 'wincOnly' ? (C[i] - mC) / sC : (S[i] - mS) / sS);
   const [mV, sV] = ms(V); V = V.map(v => (v - mV) / sV);
   let cand = P2.map((p, i) => i), fit = F.map(f => (f - mF) / sF);
   if (sl.fit === 'look2') {
@@ -195,7 +196,7 @@ function draft(season, slot, seed, cfgExtra, opp) {
       // cfg.slide = { alpha, alpha2, p } (backtests, 2026-10-17): score = (1 − w)·value + w·fit, w = (my pick / my last pick)^p.
       // value = Zscore with the worst category's negative z added back at share alpha (alpha2: second worst too);
       // fit = Win M. Both standardized over the 40 best available by either.
-      if (cfg.slideEngine) { const r2 = E.slidePick(P, ctx, cfg, { picks }, myRound / (R - 1), res); id = r2.modelPick; }
+      if (cfg.slideEngine) { const r2 = E.slidePick(P, ctx, cfg, { picks }, myRound, res); id = r2.modelPick; }
       else if (cfg.slide) { id = slidePick(av, myRound, Object.assign({}, cfg.slide, { _ctx: { P, ctx, cfg, picks, k, res } })); }
       else if (cfg.earlyBy && myRound < cfg.earlyBy.rounds) { const key = cfg.earlyBy.by === 'z' ? 'board' : 'gain'; id = av.reduce((b, p) => (p[key] > b[key] ? p : b), av[0]).id; }
       else if (cfg.look2) id = look2Pick(P, ctx, cfg, picks, k, av, cfg.look2);

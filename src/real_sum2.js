@@ -20,4 +20,5 @@ cmp(1, 0, 'No slide (Win M + look-ahead)'); cmp(3, 0, 'Punt Off'); cmp(7, 0, 'No
 console.log('\nWhat breaks the slide: no slide vs current board, in each world');
 cmp(9, 8, 'OLD FORMAT (snake, most, 2 IL), real proj'); cmp(11, 10, 'Your format, OLD PROJECTIONS'); cmp(1, 0, 'Your format, real projections');
 console.log('\nSettings on the NEW board (Win M + look-ahead, Punt Off), vs the new board');
-[12, 13, 14, 15, 16, 17, 18, 19, 20].forEach(a => cmp(a, 7, names[a] || ('arm ' + a)));
+[12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].forEach(a => cmp(a, 7, names[a] || ('arm ' + a)));
+cmp(25, 23, 'Win C only vs blend (both logistic k=2)');
