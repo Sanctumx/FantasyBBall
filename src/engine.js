@@ -342,6 +342,10 @@
 
   // ---------- live evaluation ----------
   // state: { picks: Array(N*R) of player id | null }
+  // Draft field: share of the room drafting by value instead of ADP. f = (kit-style + 0.5 × sharp) / 13 for opponent mixes
+  // Easy 10 ADP / 2 sharp / 1 punter; Average 5 / 4 / 2 + 2 kit-style (the backtest league, = 4 kit users);
+  // Strong 2 / 6 / 2 + 3; Very strong 0 / 6 / 2 + 5. Labelled guesses until fitted on a real draft against that day's ADP.
+  const FIELD_F = { easy: 0.08, average: 0.31, strong: 0.46, vstrong: 0.62 };
   function evaluate(players, ctx, cfg, state) {
     const N = cfg.teams, R = cfg.roster, me = cfg.slot - 1, total = N * R;
     const nc = cfg.cats === 9 ? NC : NC - 1;
@@ -350,7 +354,8 @@
     // Each player's expected draft slot blends his ADP with where his value ranks among players left.
     {
       const cur0 = state.picks.indexOf(null), cur = cur0 < 0 ? total : cur0;
-      const f = Math.min(1, Math.max(0, (+cfg.oppBoard || 0) / Math.max(1, N - 1)));
+      // cfg.field (Draft field, 2026-10-17) sets the room's value weight f directly; otherwise f = kit users / (teams − 1)
+      const f = cfg.field && FIELD_F[cfg.field] != null ? FIELD_F[cfg.field] : Math.min(1, Math.max(0, (+cfg.oppBoard || 0) / Math.max(1, N - 1)));
       players.forEach(p => { p.adpE = p.adpUse; p.sdE = p.sd; });
       if (f > 0) {
         const left = players.filter(p => !taken.has(p.id)).sort((a, b) => b.boardRaw - a.boardRaw);
@@ -765,6 +770,6 @@
     return res;
   }
   const E2 = (...a) => evaluate(...a);
-  const api = { slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);
