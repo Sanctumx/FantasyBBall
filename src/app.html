@@ -472,7 +472,7 @@ label.f select,label.f input{font-weight:400}
 const E = Engine, CATS = E.CATS;
 const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
-const DEF = { ilSpots: 2, b2b: 'on', b2bOv: {}, oppBoard: 0, puntMode: 'auto', puntLock: '', stats: 'gain', poBoost: 'medium', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], asb: 'merged', poStart: 18, poFmt: '1-2-2', shown: 0, orderBy: 'z', edgeBy: 'z', zdrop: 0, teams: 14, slot: 7, order: 'snake', adpSrc: 'ftx', scoring: 'most', cats: 9, roster: 12, basis: 'total', basisV: 3 };
+const DEF = { ilSpots: 2, b2b: 'off', b2bOv: {}, oppBoard: 4, puntMode: 'auto', puntLock: '', stats: 'gain', poBoost: 'medium', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], asb: 'merged', poStart: 18, poFmt: '2-2-2', shown: 0, orderBy: 'z', edgeBy: 'z', zdrop: 0, teams: 14, slot: 7, order: '3rr', adpSrc: 'ftx', scoring: 'h2h', cats: 9, roster: 12, basis: 'total', basisV: 5 };
 let cfg = Object.assign({}, DEF, { catW: DEF.catW.slice() }), picks = [], log = [];
 // Settings saved before 2026-10-17 had Mix as the default Basis; Season replaced it (it won more titles in backtests with
 // BBM-style projected games), so an old saved Mix moves to Season once. A Basis chosen after that is kept.
@@ -481,7 +481,10 @@ function migrate(c, saved) {
   if (!(saved && saved.basisV >= 2)) { if (c.basis === 'mix') c.basis = 'total'; }
   // v3 (2026-10-17): Zscore Normal, # order by and Edge vs Zscore, TO ×0.5 become the defaults, applied once to saved boards
   if (!(saved && saved.basisV >= 3)) { c.zdrop = 0; c.orderBy = 'z'; c.edgeBy = 'z'; if (Array.isArray(c.catW) && c.catW.length === 9 && c.catW[8] === 1) c.catW[8] = 0.5; }
-  c.basisV = 3; delete c.pickBy; return c;
+  // v4 (2026-10-17): league defaults 3RR, H2H each category, 2-2-2 playoffs, 4 kit users, applied once to saved boards
+  if (!(saved && saved.basisV >= 4)) { c.order = '3rr'; c.scoring = 'h2h'; c.poFmt = '2-2-2'; c.oppBoard = 4; c.teams = 14; c.roster = 12; c.cats = 9; c.asb = 'merged'; c.ilSpots = 2; }
+  if (!(saved && saved.basisV >= 5)) c.b2b = 'off';   // v5: B2B rest off by default
+  c.basisV = 5; delete c.pickBy; return c;
 }
 let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
