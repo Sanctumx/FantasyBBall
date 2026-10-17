@@ -2,7 +2,7 @@
 
 ## 🎯 1. High-Level Objective
 *   **Current Project Scope:** A live snake-draft board for 9-cat/8-cat fantasy basketball (modeled on draftdesk-beta.netlify.app/snake), built on BBM 2026-27 projections + Fantrax ADP. It ranks players by Zscore, Gain C, Gain M (matchup win-chance gain), availability (There at / Lasts to), Edge, and a Model pick. It has punt-aware strategy logic, Fantrax live sync, and saved drafts/leagues. It's shared with friends via Cloudflare.
-*   **Standing user rules:** push only when told (or on /release); never Netlify unless asked; ask before every use of the user's computer (they start PC runs themselves); report test results in title equity.
+*   **Standing user rules:** push only when told (or on /release: the user's saved skill that updates this handoff, mirrors it to the project, rebuilds if the board changed, then commits and pushes); never Netlify unless asked; ask before every use of the user's computer (they start PC runs themselves); report test results in title equity.
 *   **Next Active Milestone:** None open. Fantrax sync tested on a real league (works). ADP spread is fitted and applied (item 4, done). Punt, upside and settings tests are closed (items 56-60).
 
 ## 🛠️ 2. Architecture & Technical State
