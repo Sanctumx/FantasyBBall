@@ -417,7 +417,7 @@ label.f select,label.f input{font-weight:400}
 
   <div class="topband">
   <section class="panel" id="mine">
-    <h2>Your team <span class="hint" id="mineSub" style="margin:0;text-transform:none;letter-spacing:0;font:400 .8rem var(--f-body)"></span></h2>
+    <h2><span id="mineTitle">Your team</span> <span class="hint" id="mineSub" style="margin:0;text-transform:none;letter-spacing:0;font:400 .8rem var(--f-body)"></span></h2>
     <div class="mine-body">
       <div><div class="bigstat" id="mineStat"></div><div class="poscount" id="posCount"></div>
         <h3 class="sub-h">Category win chance</h3><div class="chances" id="chances"></div>
@@ -1834,6 +1834,7 @@ function renderMine() {
   const third = rank <= Math.ceil(N / 3) ? 'hi' : rank > N - Math.ceil(N / 3) ? 'lo' : 'mid';
   $('mineStat').innerHTML = '<div class="rank ' + third + '"><b>' + ord(rank) + '</b><span>of ' + N + ' teams</span></div>' +
     '<div class="score"><b>' + big + '</b> ' + lab + '</div>';
+  $('mineTitle').textContent = (fx && fx.myTeam && fx.names && fx.names[fx.myTeam]) || 'Your team';
   $('mineSub').textContent = 'Slot ' + cfg.slot + ' · ' + T.roster.length + ' of ' + cfg.roster + ' picked';
   // how far away your next pick is, shown on Your team and the Player list
   { const until = res.p1 != null ? res.unfilled.indexOf(res.p1) : -1;
