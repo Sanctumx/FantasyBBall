@@ -2,6 +2,7 @@
 // regular season = weeks 1-17 (all-play H2H most categories, which ranks teams with less schedule luck than a real
 // schedule); the top 8 make the playoffs; rounds of 1-2-2 weeks (weeks 18, 19-20, 21-22) on summed totals, most
 // categories wins, ties go to the higher seed; bracket 1v8, 4v5, 2v7, 3v6.
+// opts.rsMode 'each' (2026-10-17): regular season ranked by share of categories won (H2H each category) instead of matchups.
 const cats = s => [s[1] ? s[0] / s[1] : 0, s[3] ? s[2] / s[3] : 0, s[4], s[5], s[6], s[7], s[8], s[9], -s[10]];
 function beats(a, b) { let wa = 0, wb = 0; for (let c = 0; c < 9; c++) { if (a[c] > b[c]) wa++; else if (a[c] < b[c]) wb++; } return wa > wb ? 1 : wa < wb ? -1 : 0; }
 function titleScore(weekTot, opts = {}) {
@@ -11,7 +12,10 @@ function titleScore(weekTot, opts = {}) {
   for (let w = 0; w < RS; w++) {
     if (weekTot.every(t => !t[w] || t[w][5] === 0)) continue; gw++;
     const cs = weekTot.map(t => cats(t[w]));
-    for (let a = 0; a < N; a++) for (let b = 0; b < N; b++) if (a !== b) { const r = beats(cs[a], cs[b]); rs[a] += r > 0 ? 1 : r === 0 ? 0.5 : 0; }
+    for (let a = 0; a < N; a++) for (let b = 0; b < N; b++) if (a !== b) {
+      if (opts.rsMode === 'each') { let wa = 0; for (let c = 0; c < 9; c++) wa += cs[a][c] > cs[b][c] ? 1 : cs[a][c] === cs[b][c] ? 0.5 : 0; rs[a] += wa / 9; }   // H2H each category: share of categories won
+      else { const r = beats(cs[a], cs[b]); rs[a] += r > 0 ? 1 : r === 0 ? 0.5 : 0; }
+    }
   }
   const rsRate = rs.map(x => x / (gw * (N - 1)));
   const seed = [...Array(N).keys()].sort((a, b) => rsRate[b] - rsRate[a]);
