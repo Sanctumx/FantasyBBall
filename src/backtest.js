@@ -82,7 +82,9 @@ function slidePick2(av, myRound, sl) {
   const wsum = strat ? strat.reduce((a, S) => a + S.w, 0) : 0;
   const soft = strat && wsum > 0
     ? (p => strat.reduce((a, S) => a + S.w * (p.board - S.punt.reduce((b, c) => b + p.boardC[c], 0)), 0) / wsum)
-    : (p => { const srt = p.boardC.slice(0, 9).slice().sort((x, y) => x - y); return p.board - a1 * Math.min(0, srt[0]); });
+    : sl.toW != null   // sl.toW (2026-10-17): TO weighted inside soft −1 (worst category judged on weighted z)
+      ? (p => { const z = p.boardC.slice(0, 9).map((x, c) => c === 8 ? x * sl.toW : x); return z.reduce((a, b) => a + b, 0) - a1 * Math.min(0, Math.min(...z)); })
+      : (p => { const srt = p.boardC.slice(0, 9).slice().sort((x, y) => x - y); return p.board - a1 * Math.min(0, srt[0]); });
   const byF = [...av].sort((a, b) => b.gainM - a.gainM), byS = [...av].sort((a, b) => soft(b) - soft(a)), byC = [...av].sort((a, b) => b.gain - a.gain);
   const P2 = [...new Set(byF.slice(0, 40).concat(byS.slice(0, 40), byC.slice(0, 40)))];
   const ms = A => { const m = A.reduce((x, y) => x + y, 0) / A.length, s = Math.sqrt(A.reduce((x, y) => x + (y - m) ** 2, 0) / A.length) || 1; return [m, s]; };

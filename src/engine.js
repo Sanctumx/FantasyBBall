@@ -739,7 +739,9 @@
     const av = players.filter(p => !taken.has(p.id));
     if (cur < 0 || av.length < 2) return res0;
     const w = Math.sqrt(Math.max(0, Math.min(1, t))), a1 = 0.5, wc = 0.5;
-    const soft = p => { const srt = p.boardC.slice(0, 9).slice().sort((x, y) => x - y); return p.board - a1 * Math.min(0, srt[0]); };
+    // soft −1 ignores category weights (TO ×0.5 default included): unweighted Zscore over the scoring categories, worst one at half
+    const sc = cfg.cats === 9 ? 9 : 8;
+    const soft = p => { let b = 0, lo = Infinity; for (let c = 0; c < 9; c++) { if (sc === 8 && c === TO) continue; b += p.boardC[c]; if (p.boardC[c] < lo) lo = p.boardC[c]; } return b - a1 * Math.min(0, lo); };
     const byF = av.slice().sort((a, b) => b.gainM - a.gainM), byS = av.slice().sort((a, b) => soft(b) - soft(a)), byC = av.slice().sort((a, b) => b.gain - a.gain);
     const P2 = [...new Set(byF.slice(0, 40).concat(byS.slice(0, 40), byC.slice(0, 40)))];
     const ms = A => { const m = A.reduce((x, y) => x + y, 0) / A.length, s = Math.sqrt(A.reduce((x, y) => x + (y - m) ** 2, 0) / A.length) || 1; return [m, s]; };
