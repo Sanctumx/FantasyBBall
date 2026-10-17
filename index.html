@@ -1251,7 +1251,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
 const E = Engine, CATS = E.CATS;
 const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
-const DEF = { ilSpots: 2, b2b: 'off', b2bOv: {}, oppBoard: 4, puntMode: 'auto', puntLock: '', stats: 'gain', poBoost: 'medium', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], asb: 'merged', poStart: 18, poFmt: '2-2-2', shown: 0, orderBy: 'z', edgeBy: 'z', zdrop: 0, teams: 14, slot: 7, order: '3rr', adpSrc: 'ftx', scoring: 'h2h', cats: 9, roster: 12, basis: 'total', basisV: 5 };
+const DEF = { ilSpots: 2, b2b: 'off', b2bOv: {}, oppBoard: 4, puntMode: 'auto', puntLock: '', stats: 'raw', poBoost: 'light', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], asb: 'merged', poStart: 18, poFmt: '2-2-2', shown: 0, orderBy: 'z', edgeBy: 'z', zdrop: 0, teams: 14, slot: 7, order: '3rr', adpSrc: 'ftx', scoring: 'h2h', cats: 9, roster: 12, basis: 'total', basisV: 6 };
 let cfg = Object.assign({}, DEF, { catW: DEF.catW.slice() }), picks = [], log = [];
 // Settings saved before 2026-10-17 had Mix as the default Basis; Season replaced it (it won more titles in backtests with
 // BBM-style projected games), so an old saved Mix moves to Season once. A Basis chosen after that is kept.
@@ -1263,7 +1263,8 @@ function migrate(c, saved) {
   // v4 (2026-10-17): league defaults 3RR, H2H each category, 2-2-2 playoffs, 4 kit users, applied once to saved boards
   if (!(saved && saved.basisV >= 4)) { c.order = '3rr'; c.scoring = 'h2h'; c.poFmt = '2-2-2'; c.oppBoard = 4; c.teams = 14; c.roster = 12; c.cats = 9; c.asb = 'merged'; c.ilSpots = 2; }
   if (!(saved && saved.basisV >= 5)) c.b2b = 'off';   // v5: B2B rest off by default
-  c.basisV = 5; delete c.pickBy; return c;
+  if (!(saved && saved.basisV >= 6)) { c.stats = 'raw'; c.poBoost = 'light'; c.basis = 'total'; }   // v6: Stats Raw, Playoff boost Light, Basis Season
+  c.basisV = 6; delete c.pickBy; return c;
 }
 let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
