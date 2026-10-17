@@ -22,3 +22,5 @@ cmp(9, 8, 'OLD FORMAT (snake, most, 2 IL), real proj'); cmp(11, 10, 'Your format
 console.log('\nSettings on the NEW board (Win M + look-ahead, Punt Off), vs the new board');
 [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].forEach(a => cmp(a, 7, names[a] || ('arm ' + a)));
 cmp(25, 23, 'Win C only vs blend (both logistic k=2)');
+console.log('\nPunt on the current board (k=2 blend), vs Punt Off');
+[26, 27, 28].forEach(a => cmp(a, 23, names[a] || ('arm ' + a)));

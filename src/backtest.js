@@ -186,6 +186,17 @@ function draft(season, slot, seed, cfgExtra, opp) {
       // cfg.poBoost: playoff boost strength; cfg.poSurv: scale it by the chance this pick survives to the playoffs
       const lam = E.PO_STRENGTH[cfg.poBoost] || 0, roundsLeft = R - 1 - Math.floor(k / N);
       P.forEach(p => { p.poMult = E.playoffMult(p.poEdge, lam, cfg.poSurv ? E.playoffSurvival(roundsLeft) : null); });
+      // punt variants (2026-10-17): cfg.tauSched = [τ at your 1st pick, τ floor, picks to reach it] (commitment that firms up);
+      // cfg.oppPunt = { from, thr }: from your pick index `from`, lock a punt of your weakest category once its win chance
+      // (no-punt forecast, vs an average opponent) is below thr; it stays locked for the rest of the draft
+      { const mr = Math.floor(k / N);
+        if (cfg.tauSched) { const [t0, t1, n] = cfg.tauSched; cfg.puntTau = Math.max(t1, t0 - (t0 - t1) * mr / n); }
+        if (cfg.oppPunt && !cfg._oppLock && mr >= cfg.oppPunt.from) {
+          const r0 = E.evaluate(P, ctx, Object.assign({}, cfg, { puntMode: 'off', puntLock: 'none' }), { picks });
+          const sn = r0.strategies && r0.strategies.find(x => x.id === 'none');
+          if (sn) { let c = -1, lo = 1; sn.catP.slice(0, cfg.cats === 9 ? 9 : 8).forEach((q, i) => { if (q < lo) { lo = q; c = i; } }); if (lo < cfg.oppPunt.thr) cfg._oppLock = 'p' + c; }
+        }
+        if (cfg._oppLock) cfg.puntLock = cfg._oppLock; }
       const res = E.evaluate(P, ctx, cfg, { picks });
       if (opp && opp.onMyPick) opp.onMyPick(res, k);   // diagnostics hook (e.g. punt weights per pick)
       const av = P.filter(p => !taken.has(p.id));

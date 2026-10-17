@@ -35,7 +35,11 @@ const ARMS = [['Current board', {}], ['Win M + look-ahead (no slide)', { slideEn
   // logistic drop: value share = 1 / (1 + e^(k (pick − 2.5))), pick 1-based (mid 1.5 on the 0-based index)
   ['NEW + logistic value k=2', { slideEngine: false, puntMode: 'off', slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 } }],
   ['NEW + logistic value k=3', { slideEngine: false, puntMode: 'off', slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 3 } }],
-  ['NEW + logistic k=2, value = Win C only', { slideEngine: false, puntMode: 'off', slide: { value: 'wincOnly', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 } }]];
+  ['NEW + logistic k=2, value = Win C only', { slideEngine: false, puntMode: 'off', slide: { value: 'wincOnly', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 } }],
+  // punt re-test on the current board (logistic k=2 blend; baseline = arm 23, Punt Off)
+  ['K2 + Auto as is', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'auto' }],
+  ['K2 + Auto, commitment firms up (tau 0.05 to 0.01 by pick 6)', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'auto', tauSched: [0.05, 0.01, 5] }],
+  ['K2 + opportunistic punt (from pick 6, weakest category < 25%)', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', oppPunt: { from: 5, thr: 0.25 } }]];
 const [name, c] = ARMS[arm], rows = [], t0 = Date.now();
 for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
   const { fmt, ...cx } = c, old = fmt === 'old';
