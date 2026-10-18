@@ -228,6 +228,10 @@
     ctx.idioNoise = Array.from(act.corr.idio, v => 2 * v * WEEKS * WEEKS);          // season units, per pair
     ctx.gapSd = Math.sqrt(2 * act.corr.sigD2);                                      // weekly games gap between two teams
     ctx.loadS = Array.from(act.corr.load, l => l * WEEKS);                           // season units per game of gap
+    // cfg.noiseK (backtests, 2026-10-17): scales the weekly matchup noise. Summing 2 weeks halves the noise variance
+    // relative to the gap, so 0.5 = a 2-week playoff matchup; the board leaves it unset (1 = one-week matchups).
+    { const nk = cfg.noiseK != null ? +cfg.noiseK : 1;
+      if (nk !== 1) { ctx.h2hNoise = ctx.h2hNoise.map(v => v * nk); ctx.idioNoise = ctx.idioNoise.map(v => v * nk); ctx.gapSd *= Math.sqrt(nk); } }
     // Streamability: with weekly adds, a team behind in a counting category can stream players who help there.
     // Per category: (best free agents' per-game production − a generic streamer's) × streamer games aimed at that
     // category per week, as a share of how far apart two teams typically finish in a week. Capped at 60%.
@@ -252,7 +256,7 @@
     rankBy('board', 'boardRank');
     players.forEach(p => { p.zRank = [0, 0, 0]; });
     [0, 1, 2].forEach(d => players.slice().sort((a, b) => b.z[d] - a.z[d]).forEach((p, i) => { p.zRank[d] = i + 1; }));
-    players.forEach(p => { p.adpUse = adpOf(p, src); p.sd = adpSd(p, src, cfg.sdModel); p.edge = p.adpUse - p.boardRank; });
+    players.forEach(p => { p.adpUse = adpOf(p, src); p.sd = adpSd(p, src, cfg.sdModel) * (cfg.sdK != null ? +cfg.sdK : 1);   /* cfg.sdK: backtests only (2026-10-17) */ p.edge = p.adpUse - p.boardRank; });
     ctx.swing = ctx.teamWeekVar.map((v, c) => Math.sqrt(2 * v) / (ctx.teamSd[c] / WEEKS));
     // Punt synergy: correlation of category z among the players likely to be drafted. Pairs where weakness
     // in one category goes with weakness in the other let you stack the same player type.

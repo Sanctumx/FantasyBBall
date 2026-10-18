@@ -39,11 +39,26 @@ const ARMS = [['Current board', {}], ['Win M + look-ahead (no slide)', { slideEn
   // punt re-test on the current board (logistic k=2 blend; baseline = arm 23, Punt Off)
   ['K2 + Auto as is', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'auto' }],
   ['K2 + Auto, commitment firms up (tau 0.05 to 0.01 by pick 6)', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'auto', tauSched: [0.05, 0.01, 5] }],
-  ['K2 + opportunistic punt (from pick 6, weakest category < 25%)', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', oppPunt: { from: 5, thr: 0.25 } }]];
+  ['K2 + opportunistic punt (from pick 6, weakest category < 25%)', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', oppPunt: { from: 5, thr: 0.25 } }],
+  // projections blended toward ADP-implied value (adp_fit.py, LOSO ADP weight ≈ 0.25); baseline = arm 23 (current board)
+  ['K2 + ADP blend w 0.25', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', adpBlend: 0.25 }],
+  ['K2 + ADP blend w 0.4', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', adpBlend: 0.4 }],
+  // 2-week playoff matchups have less noise: matchup noise variance × 0.5 (pure 2-week) / × 0.75 (halfway); baseline = arm 23
+  ['K2 + matchup noise × 0.5 (2-week)', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', noiseK: 0.5 }],
+  ['K2 + matchup noise × 0.75', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', noiseK: 0.75 }],
+  // IL stashes (2026-10-17): known-injured players credited back 0.85 × their projected missed games (≈ usual availability);
+  // arm 33 = only in your last 3 picks, arm 34 = every pick. Baseline = arm 23.
+  ['K2 + IL stash, last 3 picks', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', stash: { last: 3, w: 0.85 } }],
+  ['K2 + known injuries credited, all picks', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', knownW: 0.85 }],
+  // Loose field (2026-10-17): 2 of the 5 ADP drafters are sloppy (spread × 2.5); arm 35 = current board in that league,
+  // 36 = board told the field is Easy, 37 = board assumes 1.5× the ADP spread. Compare 36/37 with 35 (same league).
+  ['SLOPPY: current board', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'sloppy' }],
+  ['SLOPPY: Draft field Easy', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'sloppy', field: 'easy' }],
+  ['SLOPPY: ADP spread x1.5', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'sloppy', sdK: 1.5 }]];
 const [name, c] = ARMS[arm], rows = [], t0 = Date.now();
 for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
-  const { fmt, ...cx } = c, old = fmt === 'old';
-  const ro = draft(season, slot, seed, Object.assign({}, base, cx), OPP);
+  const { fmt, opp: oppKind, ...cx } = c, old = fmt === 'old';
+  const ro = draft(season, slot, seed, Object.assign({}, base, cx), oppKind === 'sloppy' ? { trueSd: 'v2', mix: Object.assign({}, OPP.mix, { sloppy: 2 }) } : OPP);
   const sc = scoreLeague(season, ro, { seed, target: true, il: old ? 2 : 3 });
   const t = titleScore(sc.weekTot, old ? {} : { rsMode: 'each', rsWeeks: 17, rounds: [[17, 18], [19, 20], [21, 22]] }), m = slot - 1;
   rows.push({ season, arm, slot, seed, me: sc.rates[m], made: t.made[m], poAll: t.poAll[m], rounds: t.roundsWon[m], title: t.title[m], roster: ro[m].slice().sort().join(',') });

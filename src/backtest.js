@@ -12,6 +12,11 @@ const ctxCache = {};
 // market (players without one go after everyone who has one). cfgExtra.oppProj: the projections the opponents and the
 // market see (default: the same as the board's), so the board's source can change while the rest of the league stays fixed.
 let PROJ = null; try { PROJ = require('./bt_proj.json'); } catch (e) {}
+// cfgExtra.adpBlend = w (2026-10-17, adp_fit.py → adp_blend.json): the board's per-game volume scaled so each player's season
+// value = (1 − w)·projected + w·ADP-implied. Board only: opponents and the market keep the unblended projections.
+let BLEND = null; try { BLEND = require('./adp_blend.json'); } catch (e) {}
+let KINJ = null; try { KINJ = require('./known_inj.json'); } catch (e) {}
+const VOL = ['m', 'pts', 'tpm', 'reb', 'ast', 'stl', 'blk', 'fga', 'fta', 'to'];
 const PK = ['g', 'm', 'pts', 'tpm', 'reb', 'ast', 'stl', 'blk', 'fga', 'fta', 'to'];
 function projApply(p, season, x) {
   const e = PROJ && PROJ[season] && PROJ[season][String(p.pid)]; if (!e) return p;
@@ -20,6 +25,10 @@ function projApply(p, season, x) {
   if (x.proj === 'avg') { if (e.bbm && e.hs) { st = {}; PK.forEach(k => { st[k] = (e.bbm[k] + e.hs[k]) / 2; }); st.fgp = st.fga ? (e.bbm.fgp * e.bbm.fga + e.hs.fgp * e.hs.fga) / 2 / st.fga : e.bbm.fgp; st.ftp = st.fta ? (e.bbm.ftp * e.bbm.fta + e.hs.ftp * e.hs.fta) / 2 / st.fta : e.bbm.ftp; } else st = e.bbm || e.hs || null; }
   else if (x.proj) st = e[x.proj] || null;
   if (st) { PK.concat(['fgp', 'ftp']).forEach(k => { o[k] = st[k]; }); o.g = Math.max(1, Math.min(82, o.g)); }
+  // known preseason injury (known_inj.json: out 5+ opening games) with a real projection of 10-69 games: kg = the games the
+  // projection leaves out (82 − g), as BBM's injury notes imply. Used only when cfg.knownW > 0 (IL stash tests, 2026-10-17).
+  if (st && KINJ && KINJ[season] && KINJ[season][String(p.pid)] && o.g >= 10 && o.g < 70) o.kg = 82 - o.g;
+  if (x.adpBlend) { const sc = BLEND && BLEND[season] && BLEND[season][String(x.adpBlend)]; const f = sc && sc[String(p.pid)]; if (f) VOL.forEach(k => { o[k] *= f; }); }
   if (x.realAdp) { o.adp = o.ftx = e.adp != null ? e.adp : 250 + p.ftx; }
   return o;
 }
@@ -140,10 +149,10 @@ function upsidePick(av, k, lam) {
   return best;
 }
 function draft(season, slot, seed, cfgExtra, opp) {
-  const { P, ctx } = setup(season, cfgExtra);
+  const { P, ctx } = setup(season, cfgExtra), P0 = P, ctx0 = ctx;
   const cfg = Object.assign({}, setup(season, cfgExtra).cfg, { slot });
   // the league's world: opponents and the market use cfgExtra.oppProj when it differs from the board's projections
-  const WO = cfgExtra && cfgExtra.oppProj !== undefined && cfgExtra.oppProj !== cfgExtra.proj ? setup(season, Object.assign({}, cfgExtra, { proj: cfgExtra.oppProj })) : null;
+  const WO = cfgExtra && ((cfgExtra.oppProj !== undefined && cfgExtra.oppProj !== cfgExtra.proj) || cfgExtra.adpBlend) ? setup(season, Object.assign({}, cfgExtra, { proj: cfgExtra.oppProj !== undefined ? cfgExtra.oppProj : cfgExtra.proj, adpBlend: undefined })) : null;
   const PO = WO ? WO.P : P, ctxO = WO ? WO.ctx : ctx, ORD = cfg.order || 'snake';
   const r = rng(seed * 7919 + slot);
   // opp.trueSd ('v1' | 'v2'): opponents' real draft scatter, independent of the spread the board assumes (cfg.sdModel)
@@ -166,7 +175,7 @@ function draft(season, slot, seed, cfgExtra, opp) {
   // model = drafts with this board (Win M, Auto unless opp.modelPunt), punt = a fixed single punt or top-8 synergy pair,
   // sharp = ranks players by a blend of their value rank (Zscore) and ADP, the rest draft from ADP.
   const oppSharp = new Array(N).fill(false);
-  let zr = null;
+  let zr = null; const oppSloppyT = new Array(N).fill(null);
   if (opp && opp.mix) {
     const rx = rng(seed * 31337 + slot * 17), others = [...Array(N).keys()].filter(t => t !== slot - 1).sort(() => rx() - 0.5);
     const m = opp.mix; let i = 0;
@@ -174,6 +183,9 @@ function draft(season, slot, seed, cfgExtra, opp) {
     const opts = [...Array(9).keys()].map(c => [c]).concat(ctxO.synPairs.slice(0, 8).map(([a, b2]) => [a, b2]));
     for (let j = 0; j < (m.punt || 0); j++) oppPunt[others[i++]] = opts[Math.floor(rx() * opts.length)];
     for (let j = 0; j < (m.sharp || 0); j++) oppSharp[others[i++]] = true;
+    // m.sloppy (2026-10-17): that many of the remaining ADP drafters are sloppy: each draws his own draft slots with the
+    // real-draft spread × m.sloppyK (default 2.5), from a separate random stream so every other draw is unchanged
+    for (let j = 0; j < (m.sloppy || 0); j++) { const t2 = others[i++], rs = rng(seed * 6007 + slot * 31 + t2), kk = m.sloppyK || 2.5; oppSloppyT[t2] = PO.map(p => p.adpUse + gauss(rs) * sdTrue(p) * kk); }
     const order = PO.slice().sort((a, b2) => b2.boardRaw - a.boardRaw); zr = new Float64Array(PO.length);
     order.forEach((p, k2) => { zr[p.id] = k2 + 1 + gauss(rx) * (1 + 0.1 * k2); });
   }
@@ -183,6 +195,12 @@ function draft(season, slot, seed, cfgExtra, opp) {
     const t = E.teamAt(k, N, ORD);
     let id;
     if (t === slot - 1) {
+      // cfg.stash = { last, w } (2026-10-17): IL stashes. In your last `last` picks the board credits back w × the games a
+      // known-injured player misses (knownW), since 3 IL spots hold him while he is out and the title is decided in the
+      // playoff weeks when he is back. Earlier picks use the normal board.
+      const stashOn = cfg.stash && Math.floor(k / N) >= R - cfg.stash.last;
+      const SM = stashOn ? setup(season, Object.assign({}, cfgExtra, { stash: undefined, knownW: cfg.stash.w })) : null;
+      const P = SM ? SM.P : P0, ctx = SM ? SM.ctx : ctx0;
       // cfg.poBoost: playoff boost strength; cfg.poSurv: scale it by the chance this pick survives to the playoffs
       const lam = E.PO_STRENGTH[cfg.poBoost] || 0, roundsLeft = R - 1 - Math.floor(k / N);
       P.forEach(p => { p.poMult = E.playoffMult(p.poEdge, lam, cfg.poSurv ? E.playoffSurvival(roundsLeft) : null); });
@@ -229,8 +247,8 @@ function draft(season, slot, seed, cfgExtra, opp) {
       id = best;
     } else {
       let best = -1, bt = Infinity;
-      const pc = oppPunt[t];
-      for (const p of PO) if (!taken.has(p.id)) { const sc = pc ? T[p.id] + gamma * pc.reduce((s, c) => s + p.boardC[c], 0) : T[p.id]; if (sc < bt) { bt = sc; best = p.id; } }
+      const pc = oppPunt[t], TT = oppSloppyT[t] || T;
+      for (const p of PO) if (!taken.has(p.id)) { const sc = pc ? TT[p.id] + gamma * pc.reduce((s, c) => s + p.boardC[c], 0) : TT[p.id]; if (sc < bt) { bt = sc; best = p.id; } }
       id = best;
     }
     picks[k] = id; taken.add(id);
