@@ -512,7 +512,7 @@
       const ps = []; for (let c = 0; c < nc; c++) ps.push(winP(meT.mu, meT.v, B.mu, B.v, c));
       return { t: B.t, p: pairMatch(meT.mu, meT.v, B.mu, B.v) };
     });
-    const out = { current, p1, p2, unfilled, avail, teams, standings, myChance, myMatch, rows: [], pairProb: (A, B) => pairMatch(A.mu, A.v, B.mu, B.v) };
+    const out = { current, p1, p2, unfilled, avail, teams, standings, myChance, myMatch, rows: [], pairProb: (A, B) => pairMatch(A.mu, A.v, B.mu, B.v), catProb: (A, B, c) => winP(A.mu, A.v, B.mu, B.v, c) };
     if (p1 == null) { players.forEach(p => { p.gain = 0; p.gainM = 0; p.gainC = new Float64Array(NC); }); return out; }
     const j1 = jOf.get(p1);
     // Baseline: the slot filled by a replacement-level player (best of what is left once the draft ends),
