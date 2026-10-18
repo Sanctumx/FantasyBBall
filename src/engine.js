@@ -653,24 +653,36 @@
     }
 
     // ---------- scarcity ----------
-    // Category: value lost in each category between the best players available now and the ones
-    // likely left at your following pick. Position: lineup slots teams still need at each position
+    // Category: how thin each category is after the next round, per roster spot left (see below). Position: lineup slots teams still need at each position
     // versus good players left who can fill them. Both are indexes with 1 = average.
     {
       const POS = ['PG', 'SG', 'SF', 'PF', 'C'];
       const NEED = { PG: 1.5, SG: 1.5, SF: 1.5, PF: 1.5, C: 2 };
       const cats = []; for (let c = 0; c < NC; c++) if (c !== TO || cfg.cats === 9) cats.push(c);
       const byVal = avail.slice().sort((a, b) => b.boardRaw - a.boardRaw);   // unweighted: weights only affect Zscore
-      const gap = p2 != null ? Math.max(4, unfilled.indexOf(p2)) : N;
-      // rank the players who will still be drafted by each category on its own
-      const pool = byVal.slice(0, Math.max(gap + 20, Math.min(byVal.length, unfilled.length)));
-      const drop = {}; let dsum = 0;
+      // Category scarcity (2026-10-18, info only; user: scarce from the start AND scarce once a category is gone). Per
+      // category, value = Zscore above the average drafted player, floored at 0. Take the players still likely to be drafted (the best `unfilled` available), remove the next round's
+      // best in this category (N players: what the room takes before it comes back around), and measure the value per
+      // roster spot left after that, against the value per spot of the whole draftable pool before any pick. Concentrated
+      // categories (blocks, assists) score low early because the next round takes most of them; depleted ones (points late)
+      // score low because little is left. Index = geometric mean over categories ÷ this category's ratio (1 = typical,
+      // above 1 = scarce), clamped 0.2-5.
+      if (!ctx._scarRef) {
+        const all = players.filter(p => p.boardC).sort((a, b) => b.boardRaw - a.boardRaw), T0 = Math.min(all.length, N * cfg.roster);
+        const repl = new Array(NC).fill(0);   // baseline = the average drafted player (Zscore 0): late, a category is thin when nobody left is above average in it
+        const per = Array.from({ length: NC }, (_, c) => Math.max(1e-6, all.slice(0, T0).reduce((a, p) => a + Math.max(0, p.boardC[c] - repl[c]), 0) / Math.max(1, T0)));
+        ctx._scarRef = { repl, per };
+      }
+      const M = Math.min(byVal.length, unfilled.length), draftable = byVal.slice(0, M), take = Math.min(N, Math.floor(M / 2));
+      // eps (a tenth of a typical category's value per spot) keeps categories that have run out distinguishable late
+      const eps = 0.1 * cats.reduce((a, c) => a + ctx._scarRef.per[c], 0) / cats.length;
+      const cRatio = {}; let lsum = 0;
       cats.forEach(c => {
-        const vals = pool.map(p => Math.max(0, p.boardC[c])).sort((a, b) => b - a);
-        const mean = (a, b) => { const s = vals.slice(a, b); return s.length ? s.reduce((x, y) => x + y, 0) / s.length : 0; };
-        drop[c] = Math.max(0.02, (mean(0, 6) - mean(gap, gap + 6)) * SK[c]); dsum += drop[c];   // in streamability-adjusted terms
+        const v = draftable.map(p => Math.max(0, p.boardC[c] - ctx._scarRef.repl[c])).sort((a, b) => b - a);
+        const left = v.slice(take), perLeft = left.length ? left.reduce((a, x) => a + x, 0) / left.length : 0;
+        cRatio[c] = (perLeft + eps) / (ctx._scarRef.per[c] + eps); lsum += Math.log(cRatio[c]);
       });
-      const catIdx = {}; cats.forEach(c => { catIdx[c] = drop[c] / (dsum / cats.length); });
+      const gm = Math.exp(lsum / cats.length), catIdx = {}; cats.forEach(c => { catIdx[c] = Math.max(0.2, Math.min(5, gm / cRatio[c])); });
       // positions: remaining need across all teams vs supply among the players who will be drafted
       const elig = p => { const ps = String(p.p || '').split('/').filter(x => NEED[x] != null); return ps.length ? ps : ['SF']; };
       const need = {}; POS.forEach(P => { need[P] = 0; });

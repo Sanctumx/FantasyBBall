@@ -331,7 +331,7 @@ label.f select,label.f input{font-weight:400}
       <h4>Playoff games</h4>
       <p>His team's games in your playoff weeks (2026-27 schedule; small numbers per round), Playoff boost scales Win and Zscore by 1 + strength × (his games ÷ the average − 1), kept within ×0.5–×1.5. Schedules differ by about ±11%, so it is a tiebreaker more than a driver. The Model pick keeps it Off, which did best in backtests.</p>
       <h4>Scarcity</h4>
-      <p>Information only. Category scarcity is the value lost between the best players left now and those likely left at your next pick; position scarcity compares slots teams still need with good players left. Above 1× (green) a category or position is drying up faster than average, so it's worth more now; below 1× (red) it's plentiful and can wait. Boosting values by it cost about 5 points in backtests, because Win already counts what will be left.</p>
+      <p>Information only. Category scarcity is how thin each category is per roster spot once the next round's best in it are gone, among the players still likely to be drafted, against the whole pool before the draft and the other categories: a few players holding most of a category (blocks) makes it scarce from the start, and a category already drafted out (points late) makes it scarce later; position scarcity compares slots teams still need with good players left. Above 1× (red) there is less left than usual, below 1× (green) more. Boosting values by it cost about 5 points in backtests, because Win already counts what will be left.</p>
     </section>
     <section class="how-card">
       <h3>Using the board</h3>
@@ -1154,24 +1154,36 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     }
 
     // ---------- scarcity ----------
-    // Category: value lost in each category between the best players available now and the ones
-    // likely left at your following pick. Position: lineup slots teams still need at each position
+    // Category: how thin each category is after the next round, per roster spot left (see below). Position: lineup slots teams still need at each position
     // versus good players left who can fill them. Both are indexes with 1 = average.
     {
       const POS = ['PG', 'SG', 'SF', 'PF', 'C'];
       const NEED = { PG: 1.5, SG: 1.5, SF: 1.5, PF: 1.5, C: 2 };
       const cats = []; for (let c = 0; c < NC; c++) if (c !== TO || cfg.cats === 9) cats.push(c);
       const byVal = avail.slice().sort((a, b) => b.boardRaw - a.boardRaw);   // unweighted: weights only affect Zscore
-      const gap = p2 != null ? Math.max(4, unfilled.indexOf(p2)) : N;
-      // rank the players who will still be drafted by each category on its own
-      const pool = byVal.slice(0, Math.max(gap + 20, Math.min(byVal.length, unfilled.length)));
-      const drop = {}; let dsum = 0;
+      // Category scarcity (2026-10-18, info only; user: scarce from the start AND scarce once a category is gone). Per
+      // category, value = Zscore above the average drafted player, floored at 0. Take the players still likely to be drafted (the best `unfilled` available), remove the next round's
+      // best in this category (N players: what the room takes before it comes back around), and measure the value per
+      // roster spot left after that, against the value per spot of the whole draftable pool before any pick. Concentrated
+      // categories (blocks, assists) score low early because the next round takes most of them; depleted ones (points late)
+      // score low because little is left. Index = geometric mean over categories ÷ this category's ratio (1 = typical,
+      // above 1 = scarce), clamped 0.2-5.
+      if (!ctx._scarRef) {
+        const all = players.filter(p => p.boardC).sort((a, b) => b.boardRaw - a.boardRaw), T0 = Math.min(all.length, N * cfg.roster);
+        const repl = new Array(NC).fill(0);   // baseline = the average drafted player (Zscore 0): late, a category is thin when nobody left is above average in it
+        const per = Array.from({ length: NC }, (_, c) => Math.max(1e-6, all.slice(0, T0).reduce((a, p) => a + Math.max(0, p.boardC[c] - repl[c]), 0) / Math.max(1, T0)));
+        ctx._scarRef = { repl, per };
+      }
+      const M = Math.min(byVal.length, unfilled.length), draftable = byVal.slice(0, M), take = Math.min(N, Math.floor(M / 2));
+      // eps (a tenth of a typical category's value per spot) keeps categories that have run out distinguishable late
+      const eps = 0.1 * cats.reduce((a, c) => a + ctx._scarRef.per[c], 0) / cats.length;
+      const cRatio = {}; let lsum = 0;
       cats.forEach(c => {
-        const vals = pool.map(p => Math.max(0, p.boardC[c])).sort((a, b) => b - a);
-        const mean = (a, b) => { const s = vals.slice(a, b); return s.length ? s.reduce((x, y) => x + y, 0) / s.length : 0; };
-        drop[c] = Math.max(0.02, (mean(0, 6) - mean(gap, gap + 6)) * SK[c]); dsum += drop[c];   // in streamability-adjusted terms
+        const v = draftable.map(p => Math.max(0, p.boardC[c] - ctx._scarRef.repl[c])).sort((a, b) => b - a);
+        const left = v.slice(take), perLeft = left.length ? left.reduce((a, x) => a + x, 0) / left.length : 0;
+        cRatio[c] = (perLeft + eps) / (ctx._scarRef.per[c] + eps); lsum += Math.log(cRatio[c]);
       });
-      const catIdx = {}; cats.forEach(c => { catIdx[c] = drop[c] / (dsum / cats.length); });
+      const gm = Math.exp(lsum / cats.length), catIdx = {}; cats.forEach(c => { catIdx[c] = Math.max(0.2, Math.min(5, gm / cRatio[c])); });
       // positions: remaining need across all teams vs supply among the players who will be drafted
       const elig = p => { const ps = String(p.p || '').split('/').filter(x => NEED[x] != null); return ps.length ? ps : ['SF']; };
       const need = {}; POS.forEach(P => { need[P] = 0; });
@@ -1395,6 +1407,13 @@ let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
 const $ = id => document.getElementById(id);
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+const stripSfx = k => k.replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '').replace(/\s+/g, ' ').trim();
+const BASE_N = PLAYERS.length;
+const NAME_ALIAS = (() => { const m = {}, pairs = [['alex sarr', 'alexandre sarr'], ['cameron johnson', 'cam johnson'], ['herbert jones', 'herb jones'], ['luguentz dort', 'lu dort'],
+  ['nicolas claxton', 'nic claxton'], ['carlton carrington', 'bub carrington'], ['gregory jackson', 'gg jackson'], ['moritz wagner', 'moe wagner'], ['nahshon hyland', 'bones hyland'], ['kenyon martin', 'kj martin']];
+  pairs.forEach(([a, b]) => { m[a] = b; m[b] = a; }); return m; })();
+// the projected player a name means: exact, without suffixes, a known alias, or the same last name with one first name a short
+// form of the other (Cam / Cameron), using the team to break a tie
 P.forEach(p => { p.key = norm(p.n); });
 const ord = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const fmt1 = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
@@ -1406,7 +1425,34 @@ let owner = [], fx = null, extra = [];   // owner: team per pick from Fantrax; f
 try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { cfg = migrate(Object.assign({}, DEF, s.cfg), s.cfg); picks = s.picks || []; log = s.log || []; owner = s.owner || []; fx = s.fx || null; extra = s.extra || []; } } catch (e) {}
 cfg.scarZ = 'off'; cfg.scarP = 'off';   // scarcity is shown as information only (backtest 2026-10-16: boosting by it cost matchups)
 delete cfg.modelPickV1;   // Model pick fix (2026-10-16) applies to every saved board
-extra.forEach(addExtra);
+// Fantrax and the projections spell some players differently (Alex / Alexandre Sarr, Cameron / Cam Johnson, Herbert / Herb
+// Jones, Luguentz / Lu Dort …). findListed matches those to the projected player; older boards that already got a second,
+// waiver-level copy have those picks moved onto the real player (2026-10-18).
+{ const sv = extra; extra = []; picks = absorbExtras(sv, picks); }
+function findListed(name, team) {
+  const k2 = stripSfx(norm(name || '')), L = P.filter(q => !q.unlisted), key2 = q => stripSfx(q.key);
+  let p = L.find(q => key2(q) === k2) || (NAME_ALIAS[k2] && L.find(q => key2(q) === NAME_ALIAS[k2]));
+  if (p) return p;
+  const parts = k2.split(' '); if (parts.length < 2 || parts[0].length < 2) return null;
+  const first = parts[0], last = parts.slice(1).join(' ');
+  const c = L.filter(q => { const qp = key2(q).split(' '); return qp.length > 1 && qp.slice(1).join(' ') === last && qp[0].length >= 2 && (qp[0].startsWith(first) || first.startsWith(qp[0])); });
+  if (c.length === 1) return c[0];
+  if (c.length > 1 && team) { const t = c.filter(q => q.t === team); if (t.length === 1) return t[0]; }
+  return null;
+}
+// adds saved extras (ids BASE_N + index when saved) and returns picks with those ids remapped: an extra that is really a
+// projected player points to him, the rest to their (possibly new) extra entry
+function absorbExtras(raws, pk) {
+  const map = {};
+  raws.forEach((raw, i) => {
+    const q = findListed(raw.n, raw.t);
+    if (q) { map[BASE_N + i] = q.id; return; }
+    let e = P.find(x => x.unlisted && x.n === raw.n);
+    if (!e) { extra.push(raw); e = addExtra(raw); if (raw.fid) e.fid = raw.fid; }
+    map[BASE_N + i] = e.id;
+  });
+  return (pk || []).map(id => id != null && map[id] != null ? map[id] : id);
+}
 function addExtra(raw) { const p = E.prepPlayers([raw])[0]; p.id = P.length; p.key = norm(p.n); p.unlisted = true; P.push(p); return p; }
 function fit() {
   if (!Array.isArray(cfg.catW) || cfg.catW.length !== 9) { cfg.catW = DEF.catW.slice(); (cfg.punt || []).forEach(c => { cfg.catW[c] = 0; }); }
@@ -1646,7 +1692,6 @@ $('tbody').addEventListener('click', e => {
 // ---------- Fantrax sync ----------
 const API = 'api/fantrax';
 let fxPlayers = null, fxTimer = null, fxBusy = false;
-const stripSfx = k => k.replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '').replace(/\s+/g, ' ').trim();
 function fxStatus(text, mode) { $('fx-text').textContent = text; $('fx-status').className = 'sync-status' + (mode ? ' ' + mode : ''); }
 async function fxGet(what) {
   let r;
@@ -1679,8 +1724,8 @@ function swapName(n) { const i = n.indexOf(','); return i < 0 ? n : (n.slice(i +
 function matchFantrax(fid) {
   const info = fxPlayers && fxPlayers[fid];
   if (!info || !info.name) return null;
-  const name = swapName(info.name), k = norm(name), k2 = stripSfx(k);
-  let p = P.find(q => q.key === k) || P.find(q => stripSfx(q.key) === k2);
+  const name = swapName(info.name);
+  let p = findListed(name, info.team);
   if (p) return p;
   p = P.find(q => q.unlisted && q.fid === fid);
   if (p) return p;
@@ -1906,7 +1951,7 @@ $('sv-list').addEventListener('click', e => {
     const d = list.find(x => x.name === lb.dataset.load); if (!d) return;
     if (picks.some(v => v != null) && curName !== d.name && !arm('load:' + d.name, lb, 'Replace?')) { svSay('Loading replaces the draft on the board. Press Replace? to continue, or save this one first.'); return; }
     cfg = migrate(Object.assign({}, DEF, d.cfg), d.cfg); picks = (d.picks || []).slice(); log = (d.log || []).slice(); owner = (d.owner || []).slice(); fx = d.fx || null;
-    (d.extra || []).forEach(raw => { if (!P.some(p => p.unlisted && p.n === raw.n)) { extra.push(raw); addExtra(raw); } });
+    picks = absorbExtras(d.extra || [], picks);
     fit(); syncSetup(); renderFx(); setCur(d.name); $('sv-name').value = d.name;
     svSay('Loaded "' + d.name + '".'); rebuild(); renderSaves();
   } else if (db) {
@@ -2170,12 +2215,12 @@ function renderTable() {
   const zRankOf = p => zRankMap.get(p.id);
   if (res.scarcity) {
     // every category in the usual order (punted ones marked), then every position
-    // green = scarce (drying up: worth more now, as a ×1.5 boost reads), amber = about average, red = plentiful (can wait)
-    const band = v => v >= 1.15 ? 'hi' : v > 0.85 ? 'mid' : 'lo';
-    const pill = (lab, v) => '<span class="pill ' + band(v) + '" title="' + lab + ' ' + v.toFixed(2) + '×: ' + (v >= 1.15 ? 'drying up fast, worth more now' : v > 0.85 ? 'about average' : 'plentiful, can wait') + '">' + lab + ' ' + v.toFixed(2) + '×</span>';
+    // red = scarce (less left than usual among the best available), amber = about average, green = plentiful
+    const band = v => v >= 1.15 ? 'lo' : v > 0.85 ? 'mid' : 'hi';
+    const pill = (lab, v) => '<span class="pill ' + band(v) + '" title="' + lab + ' ' + v.toFixed(2) + '×: ' + (v >= 1.15 ? 'scarce' : v > 0.85 ? 'about average' : 'plentiful') + '">' + lab + ' ' + v.toFixed(2) + '×</span>';
     const ci = CATS.map((c, i) => res.scarcity.catIdx[i] != null ? pill(c.l, res.scarcity.catIdx[i]) : '').join('');
     const pi = ['PG', 'SG', 'SF', 'PF', 'C'].map(P => pill(P, res.scarcity.posIdx[P])).join('');
-    $('scarStrip').innerHTML = '<span class="sc-head" title="How fast each category and position is drying up (info only). Green scarce (worth more now), red plentiful (can wait)">Scarcity</span><span class="sc-lab">Categorical</span>' + ci + '<span class="sc-lab">Positional</span>' + pi;
+    $('scarStrip').innerHTML = '<span class="sc-head" title="How thin each category and position is getting (info only). Red scarce, green plentiful">Scarcity</span><span class="sc-lab">Categorical</span>' + ci + '<span class="sc-lab">Positional</span>' + pi;
   } else $('scarStrip').innerHTML = '';
   // Strategy: your projected matchup win chance if you follow each punt from here (best first)
   if ($('stratStrip') && res.strategies && res.strategies.length) {
@@ -2243,7 +2288,7 @@ function renderTable() {
     let poCell; if (!pg) poCell = '<td class="dash" title="No NBA team">—</td>';
     else { const dpo = pg.total - poAvg; poCell = '<td class="' + (isT ? '' : dpo >= 1 ? 'pos' : dpo <= -1 ? 'neg' : '') + '" data-b2b="' + esc(p.n) + '" title="' + esc(p.t) + ': ' + pg.per.map(f1g).join(' · ') + ' by round, ' + (p.poEdge >= 0 ? '+' : '−') + Math.abs(Math.round(p.poEdge * 100)) + '% vs avg' + (p.poMult && p.poMult !== 1 ? ' · ×' + p.poMult.toFixed(2) : '') + (pg.rate ? '. Sits ' + Math.round(pg.rate * 100) + '% of back-to-backs' + ((cfg.b2bOv || {})[p.n] != null ? ' (your mark)' : ' (last two seasons)') + ': −' + pg.sat.toFixed(1) + ' of ' + pg.teamTotal + ' team games' : '') + (cfg.b2b === 'off' ? '' : '. Click to cycle: sits, plays, use data') + '">' + f1g(pg.total) + (pg.rate >= 0.25 ? '<sup class="b2bmark">B2B</sup>' : '') + ' <span class="meta" style="display:inline;font-size:.66rem">' + pg.per.map(x => Math.round(x)).join('·') + '</span></td>'; }
     let h = '<td class="l logc">' + logc + '</td>' + adpCell + '<td class="ord"' + (!isT && !done && p.thereAt < 0.15 ? ' title="Likely gone: ' + Math.round(p.thereAt * 100) + '% to reach ' + ord(res.p1 + 1) + '"' : '') + '>' + (!isT && p.order != null && !done ? p.order : '') + '</td>' + edgeCell + poCell + '<td>' + p.g + '</td>' +
-      '<td class="l player" title="' + tip + '"><span class="nm">' + esc(p.n) + '</span>' + (!isT && p.id === topId && !done ? '<span class="mp" title="' + esc(mpTip) + '">' + mpLabel + '</span>' : '') + tags + '<span class="meta">' + esc(p.t) + ' · ' + esc(p.p) + ' · ' + p.m + ' mpg</span></td>';
+      '<td class="l player" title="' + tip + '"><span class="nm">' + esc(p.n) + '</span>' + (!isT && p.id === topId && !done ? '<span class="mp" title="' + esc(mpTip) + '">' + mpLabel + '</span>' : '') + tags + '<span class="meta">' + esc(p.t) + ' · ' + esc(p.p) + ' · ' + (Math.round(p.m * 100) / 100) + ' mpg</span></td>';
     const catCells = () => CATS.map((c, i) => {
       if (i === E.TO && cfg.cats === 8) return '<td class="cat dash">—</td>';
       if (cfg.stats === 'raw') return '<td class="cat">' + chipZ(i, bcArr(p)[i], rawTxt(p, i)) + '</td>';
