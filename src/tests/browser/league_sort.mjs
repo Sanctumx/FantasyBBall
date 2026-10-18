@@ -1,0 +1,52 @@
+// League page: sortable columns and one-decimal percentages (2026-10-18). Needs playwright and the repo root on :8765.
+import { chromium } from 'playwright';
+import fs from 'fs';
+const PLAYERS = JSON.parse(fs.readFileSync('/root/FantasyBBall/src/players.json', 'utf8'));
+const byAdp = PLAYERS.map((p, i) => [p.ftx || 999, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+const cfg = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 3, field: 'easy', poStart: 18, asb: 'merged', proj: 'avg' };
+const fails = []; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.push(m); };
+const num = s => parseFloat(String(s).replace(/[,%+]/g, '').replace('−', '-'));
+const sortedDesc = a => a.every((v, i) => i === 0 || a[i - 1] >= v), sortedAsc = a => a.every((v, i) => i === 0 || a[i - 1] <= v);
+
+const b = await chromium.launch();
+const ctx = await b.newContext({ viewport: { width: 1500, height: 1000 } });
+await ctx.route(/fonts\.g/, r => r.fulfill({ body: '', contentType: 'text/css' }));
+await ctx.addInitScript(s => { if (!sessionStorage.getItem('s')) { localStorage.clear(); localStorage.setItem('courtside-board-v1', s); sessionStorage.setItem('s', '1'); } }, JSON.stringify({ cfg, picks: byAdp.slice(0, 168) }));
+const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:8765/league.html'); await p.waitForTimeout(2000);
+const col = async (table, name) => p.evaluate(([t, n]) => { const ths = [...document.querySelectorAll('#' + t + ' thead th')]; const i = ths.findIndex(th => th.textContent.trim() === n);
+  return [...document.querySelectorAll('#' + t + ' tbody tr')].map(r => r.children[i].textContent); }, [table, name]);
+const click = async (table, name) => { await p.evaluate(([t, n]) => [...document.querySelectorAll('#' + t + ' thead th')].find(th => th.textContent.trim() === n).click(), [table, name]); await p.waitForTimeout(150); };
+
+ok((await col('mx', '2')).filter(v => v !== '—').every(v => /^\d{1,3}\.\d$/.test(v)), 'matrix win % has one decimal');
+ok((await col('h2h', 'Match')).every(v => /^\d{1,3}\.\d$/.test(v)), 'head-to-head win % has one decimal');
+ok(/^\d{1,3}\.\d%$/.test(await p.evaluate(() => document.querySelectorAll('#kpis .kpi b')[2].textContent)), 'matchup wins KPI has one decimal');
+ok((await col('prof', 'Win %')).every(v => /^\d{1,3}\.\d%$/.test(v)), 'profile win % has one decimal');
+
+await click('ts', 'PTS'); ok(sortedDesc((await col('ts', 'PTS')).map(num)), 'stats: PTS sorts most first');
+ok(await p.evaluate(() => [...document.querySelectorAll('#ts thead th')].find(th => th.textContent.trim() === 'PTS').getAttribute('aria-sort')) === 'descending', 'stats: PTS header marked descending');
+await click('ts', 'PTS'); ok(sortedAsc((await col('ts', 'PTS')).map(num)), 'stats: second click reverses');
+await click('ts', 'TO'); ok(sortedAsc((await col('ts', 'TO')).map(num)), 'stats: TO sorts fewest first');
+await p.click('#tsv button[data-v="rank"]'); await p.waitForTimeout(150);
+await click('ts', 'REB'); ok(sortedAsc((await col('ts', 'REB')).map(num)), 'rank view: rank 1 first');
+await click('mx', 'Avg'); ok(sortedDesc((await col('mx', 'Avg')).map(num)), 'matrix: Avg sorts best first');
+await p.click('#mxv button[data-v="exp"]'); await p.waitForTimeout(150);
+ok(sortedDesc((await col('mx', 'Avg')).map(num)), 'matrix: sort kept after switching view');
+await click('h2h', 'Match'); ok(sortedDesc((await col('h2h', 'Match')).map(num)), 'head-to-head: Match sorts best first');
+await click('h2h', 'Opponent'); const names = await col('h2h', 'Opponent'); ok(names.join() === names.slice().sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(), 'names sort A to Z');
+await click('prof', 'Rank'); ok(sortedAsc((await col('prof', 'Rank')).map(num)), 'profile: Rank sorts 1 first');
+const mxBefore = await col('mx', '2');
+ok(await p.$eval('#basis', e => e.value) === 'total', 'basis defaults to Total');
+await p.selectOption('#basis', 'pergame'); await p.waitForTimeout(400);
+ok((await col('mx', '2')).join() !== mxBefore.join(), 'Per game changes the matrix');
+await p.click('#tsv button[data-v="raw"]'); await p.waitForTimeout(150);
+const ptsG = (await col('ts', 'PTS')).map(num);
+ok(ptsG.every(v => v > 50 && v < 400), 'Per game stats are per-game sizes (' + ptsG[0] + ')');
+ok(!(await p.isVisible('#tsv button[data-v="week"]')), 'Per week hidden in Per game');
+ok(/per game/i.test(await p.textContent('#ts-sub')), 'stats subtitle says per game');
+await p.reload(); await p.waitForTimeout(1500);
+ok(await p.$eval('#basis', e => e.value) === 'pergame', 'basis remembered');
+ok(errs.length === 0, 'no page errors ' + errs.join('; '));
+await b.close();
+console.log(fails.length ? 'FAILED ' + fails.length : 'ALL PASS');
+process.exit(fails.length ? 1 : 0);

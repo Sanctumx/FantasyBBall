@@ -22,16 +22,19 @@
     return { P, picks: pk };
   }
 
-  // a player's projected season line: FG makes, FG attempts, FT makes, FT attempts, 3PM, PTS, REB, AST, ST, BLK, TO
-  const line = p => { const g = p.g; return [p.fgp * p.fga * g, p.fga * g, p.ftp * p.fta * g, p.fta * g, p.tpm * g, p.pts * g, p.reb * g, p.ast * g, p.stl * g, p.blk * g, p.to * g]; };
+  // a player's projected season line (gm = 1: per-game line): FG makes, FG attempts, FT makes, FT attempts, 3PM, PTS, REB, AST, ST, BLK, TO
+  const line = (p, gm) => { const g = gm || p.g; return [p.fgp * p.fga * g, p.fga * g, p.ftp * p.fta * g, p.fta * g, p.tpm * g, p.pts * g, p.reb * g, p.ast * g, p.stl * g, p.blk * g, p.to * g]; };
   // summed lines → totals in board category order: FG%, FT%, 3PM, PTS, REB, AST, ST, BLK, TO
   const finish = a => [a[1] ? a[0] / a[1] : 0, a[3] ? a[2] / a[3] : 0, a[4], a[5], a[6], a[7], a[8], a[9], a[10]];
   const addTo = (acc, l, w) => { for (let i = 0; i < 11; i++) acc[i] += w * l[i]; };
   // raw projected season totals of a list of players
   function rawTotals(roster) { const a = new Array(11).fill(0); roster.forEach(p => addTo(a, line(p), 1)); return finish(a); }
 
-  function computeLeague(PLAYERS, src, proj) {
-    const cfg = Object.assign({}, src.cfg, { basis: 'total', poBoost: 'off', proj });
+  // basis 'total' (Season: projected games count, as the Model pick) or 'pergame' (missed games don't count): the win
+  // chances use it, and the stats show season totals or per-game lines
+  function computeLeague(PLAYERS, src, proj, basis) {
+    basis = basis === 'pergame' ? 'pergame' : 'total';
+    const cfg = Object.assign({}, src.cfg, { basis, poBoost: 'off', proj });
     const N = cfg.teams, total = N * cfg.roster;
     cfg.slot = Math.min(Math.max(1, Math.round(+cfg.slot) || 1), N);   // a slot from another league can't point past this one
     const { P, picks } = playersFor(PLAYERS, proj, src.extra, (src.picks || []).slice(0, total).concat(new Array(Math.max(0, total - (src.picks || []).length)).fill(null)));
@@ -57,15 +60,17 @@
     // open picks count a typical player at that pick in the raw stats too, the same window the engine uses for the win chances
     // (players by expected draft slot, Gaussian weights around the j-th upcoming pick)
     const acc = rosters.map(r => { const a = new Array(11).fill(0); r.forEach(p => addTo(a, line(p), 1)); return a; }), open = new Array(N).fill(0);
+    const accG = rosters.map(r => { const a = new Array(11).fill(0); r.forEach(p => addTo(a, line(p, 1), 1)); return a; });
     const av = res.avail, A = av.length, tAt = k => (state.owner && state.owner[k] != null) ? state.owner[k] : E.teamAt(k, N, cfg.order);
     res.unfilled.forEach((k, j) => {
       const t = tAt(k); open[t]++; if (!A) return;
       const c0 = Math.min(j, A - 1), w = 1.5 + 0.12 * j, lo = Math.max(0, Math.floor(c0 - 3 * w)), hi = Math.min(A - 1, Math.ceil(c0 + 3 * w));
       let ws = 0; for (let i = lo; i <= hi; i++) ws += Math.exp(-0.5 * Math.pow((i - c0) / w, 2));
-      for (let i = lo; i <= hi; i++) addTo(acc[t], line(av[i]), Math.exp(-0.5 * Math.pow((i - c0) / w, 2)) / ws);
+      for (let i = lo; i <= hi; i++) { const wt = Math.exp(-0.5 * Math.pow((i - c0) / w, 2)) / ws; addTo(acc[t], line(av[i]), wt); addTo(accG[t], line(av[i], 1), wt); }
     });
-    const raw = acc.map(finish), weeks = Math.max(1, (cfg.poStart || 18) - 1);
-    const perWeek = raw.map(r => r.map((v, c) => c < 2 ? v : v / weeks));
+    const perGame = accG.map(finish), weeks = Math.max(1, (cfg.poStart || 18) - 1);
+    const raw = basis === 'pergame' ? perGame : acc.map(finish);
+    const perWeek = basis === 'pergame' ? null : raw.map(r => r.map((v, c) => c < 2 ? v : v / weeks));
     const z = raw.map(() => new Array(E.NC).fill(0)), rank = raw.map(() => new Array(E.NC).fill(0));
     for (let c = 0; c < E.NC; c++) {
       const col = raw.map(r => r[c]), m = col.reduce((a, b) => a + b, 0) / N, sd = Math.sqrt(col.reduce((a, b) => a + (b - m) ** 2, 0) / N) || 1;
@@ -78,7 +83,7 @@
       let w = 0; for (let j = 0; j < N; j++) if (j !== t) w += cat[t][j][c] / (N - 1);
       return { c, win: w, raw: raw[t][c], rank: rank[t][c] };
     });
-    return { N, nc: cats.length, cats, me, names, open, picked: picks.filter(v => v != null).length, total, cfg,
+    return { N, nc: cats.length, cats, me, names, open, basis, perGame, picked: picks.filter(v => v != null).length, total, cfg,
       match, cat, expCats, standings, rosters, raw, perWeek, z, rank, profile };
   }
 

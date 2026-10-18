@@ -76,3 +76,20 @@ test('mid-draft team stats include a typical player at each open pick, as the wi
   assert.ok(full.open.every(n => n === 0));
   assert.deepStrictEqual(full.raw[3], L.rawTotals(full.rosters[3]));
 });
+
+test('per game adds up the roster per-game lines (missed games do not count)', () => {
+  const R = L.computeLeague(PLAYERS, src(168), 'avg'), r = R.rosters[2];
+  assert.ok(near(R.perGame[2][3], r.reduce((a, p) => a + p.pts, 0)));
+  assert.ok(near(R.perGame[2][0], r.reduce((a, p) => a + p.fgp * p.fga, 0) / r.reduce((a, p) => a + p.fga, 0)));
+  const R2 = L.computeLeague(PLAYERS, src(100), 'avg');
+  assert.ok(R2.perGame.every(row => row.every(Number.isFinite)));
+});
+
+test('per game basis changes the win chances and shows per-game stats', () => {
+  const T = L.computeLeague(PLAYERS, src(168), 'avg'), G = L.computeLeague(PLAYERS, src(168), 'avg', 'pergame');
+  assert.strictEqual(T.basis, 'total'); assert.strictEqual(G.basis, 'pergame');
+  assert.ok(T.match.some((r, i) => r.some((v, j) => i !== j && Math.abs(v - G.match[i][j]) > 1e-6)), 'win chances differ');
+  assert.deepStrictEqual(G.raw[2], G.perGame[2]);
+  assert.strictEqual(G.perWeek, null);
+  for (const c of G.cats) assert.deepStrictEqual(G.rank.map(r => r[c]).sort((a, b) => a - b), Array.from({ length: 14 }, (_, i) => i + 1));
+});
