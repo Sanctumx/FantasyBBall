@@ -92,7 +92,11 @@ const ARMS = [['Current board', {}], ['Win M + look-ahead (no slide)', { slideEn
   // Average in an Easy room (61 vs 62). Easy room = 10 ADP drafters, 2 sharp, 1 punter, no value drafters (engine FIELD_F easy 0.08)
   ['K2 + board told Easy, room Average', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', field: 'easy' }],
   ['EASY ROOM: board told Average', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'easy' }],
-  ['EASY ROOM: board told Easy', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'easy', field: 'easy' }]];
+  ['EASY ROOM: board told Easy', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'easy', field: 'easy' }],
+  // New category scarcity (2026-10-18: concentration + depletion, engine catIdx) as a boost on Win / Win M, vs arm 23.
+  // The old drop-based scarcity cost about 5 points when boosted (handoff); this re-tests the new measure.
+  ['K2 + category scarcity boost Light', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', scarZ: 'light' }],
+  ['K2 + category scarcity boost Medium', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', scarZ: 'medium' }]];
 const [name, c] = ARMS[arm], rows = [], t0 = Date.now();
 for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
   const { fmt, opp: oppKind, ...cx } = c, old = fmt === 'old';
