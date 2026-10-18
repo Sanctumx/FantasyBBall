@@ -2,3 +2,4 @@ src/smoke_*.png
 src/site/
 src/courtside-draft-board.html
 src/*.log
+.superpowers/
