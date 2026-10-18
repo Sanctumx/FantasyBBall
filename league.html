@@ -39,7 +39,7 @@ header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--
 header.top h1 .logo{width:.9em;height:.9em;flex:none}
 header.top .top-r{margin-right:24px}
 @media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}}
-main{display:flex;flex-direction:column;gap:16px;max-width:1500px}
+main{display:flex;flex-direction:column;gap:16px}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:10px}
 .ctl{display:flex;gap:12px 16px;flex-wrap:wrap;align-items:flex-end}
 .f{display:flex;flex-direction:column;gap:4px;font:600 .7rem var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-width:0}
@@ -69,6 +69,8 @@ td.x{color:var(--line)}
 .h5{background:color-mix(in srgb,var(--good) 40%,transparent)}.h4{background:color-mix(in srgb,var(--good) 18%,transparent)}
 .h2{background:color-mix(in srgb,var(--bad) 17%,transparent)}.h1{background:color-mix(in srgb,var(--bad) 36%,transparent)}
 .topgrid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px}
+.botgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+@media (min-width:1400px){.botgrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}.botgrid th,.botgrid td{padding:5px 4px}}   /* wide screens: league matrix and team stats side by side */
 @media (max-width:1000px){.topgrid{grid-template-columns:1fr}}
 .kpis{display:flex;gap:24px;flex-wrap:wrap}
 .kpi b{display:block;font:700 2rem/1 var(--f-display)}
@@ -107,7 +109,8 @@ td.x{color:var(--line)}
       </section>
     </div>
 
-    <section class="panel" style="margin-top:16px">
+    <div class="botgrid">
+    <section class="panel">
       <h2>Matchup matrix <span>Row beats column</span></h2>
       <div class="ctl">
         <span class="seg" id="mxv" role="group" aria-label="Matrix view"><button type="button" data-v="match">Matchup win %</button><button type="button" data-v="cat">Category win %</button><button type="button" data-v="exp">Expected categories</button></span>
@@ -116,12 +119,13 @@ td.x{color:var(--line)}
       <div class="scroll"><table id="mx"></table></div>
     </section>
 
-    <section class="panel" style="margin-top:16px">
+    <section class="panel">
       <h2>Team stats <span id="ts-sub">Projected season totals for each roster as drafted</span></h2>
       <div class="ctl"><span class="seg" id="tsv" role="group" aria-label="Stats view"><button type="button" data-v="raw">Raw</button><button type="button" data-v="week">Per week</button><button type="button" data-v="z">Zscore</button><button type="button" data-v="rank">Rank</button></span></div>
       <div class="scroll"><table id="ts"></table></div>
-      <p class="hint">Raw: season totals, or with Stats set to Per game the roster's per-game lines added up (FG% and FT% from total makes and attempts). Per week: totals over the regular-season weeks. Zscore: against the league's teams. Rank: 1 is best (fewest turnovers).</p>
+      <p class="hint">Per game adds up each roster's per-game lines (FG% and FT% from makes and attempts). Zscore is against the league's teams; Rank 1 is best (fewest TO).</p>
     </section>
+    </div>
   </div>
 </main>
 
