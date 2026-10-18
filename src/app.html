@@ -272,13 +272,13 @@ label.f select,label.f input{font-weight:400}
 </header>
 <dialog class="how" id="how" aria-labelledby="how-title">
   <div class="how-head"><h2 id="how-title">How it works</h2><button class="btn" type="button" id="how-close">Close</button></div>
-  <p class="how-intro">Formulas, fitted numbers and every backtest behind these choices are in <a href="https://claude.ai/code/artifact/2d4059a8-f9ad-465d-bfa7-41ef6990e7a8" target="_blank" rel="noopener">The Math Behind the Model</a> doc.</p>
+  <p class="how-intro">Formulas, fitted numbers and every backtest behind these choices are in <a href="math.html" target="_blank" rel="noopener">The Math Behind the Model</a>.</p>
   <div class="how-grid">
    <div class="how-col">
     <section class="how-card">
       <h3>The values</h3>
       <h4>Zscore</h4>
-      <p>Season value against an average drafted player. Each category is scaled by how far apart teams finish in simulated ADP drafts, so small edges count more where teams bunch together. −1 and −2 take out his worst one or two categories, as on a punt team: 100% leaves them out, 50% counts them half.</p>
+      <p>Season value against an average drafted player. Each category is scaled by how far apart teams finish in simulated ADP drafts, so small edges count more where teams bunch together. Zscore type picks which one you see: Standard (each category's mean and spread over the top players, as BBM and Hashtag compute it, so about 2.5× larger), ROTO-Adjusted (this scaling) or H2H-Adjusted (scaled by a weekly head-to-head gap, season spread plus week-to-week swing, so swingy categories like points and steals count less). It changes the Zscore column, sorting, and # and Edge when they use Zscore, never Win or the Model pick. −1 and −2 take out his worst one or two categories, as on a punt team: 100% leaves them out, 50% counts them half.</p>
       <h4>Projections</h4>
       <p>Average (the default), BBM (Basketball Monster) or Hashtag (Hashtag Basketball). Average is the mean of both: games, minutes and per-game stats averaged, with FG% and FT% from the averaged makes and attempts. The two players Hashtag doesn't project keep their BBM numbers. On 2024-25 preseason projections scored against what happened, Average ranked players best and had the smallest stat errors, though the gaps were small. Backtests use each season's real preseason projections.</p>
       <h4>Basis and IL spots</h4>
@@ -311,7 +311,7 @@ label.f select,label.f input{font-weight:400}
       <h4>Draft field</h4>
       <p>How sharp the room is: the share of opponents' picks made by value instead of Fantrax ADP. Easy is mostly ADP drafters (8% by value), Average a mix of ADP, sharp and value drafters (31%, the league every backtest uses), Strong mostly sharp drafters (46%) and Very strong sharp and value drafters only (62%). A sharper field takes good-value players earlier, which changes who will still be there. The levels are estimates until they can be fitted on a real draft against that day's ADP.</p>
       <h4>Playoff games</h4>
-      <p>His team's games in your playoff weeks (2026-27 schedule; small numbers per round), minus back-to-backs he tends to sit (B2B rest; click the cell to override). Playoff boost scales Win and Zscore by 1 + strength × (his games ÷ the average − 1), kept within ×0.5–×1.5. Schedules differ by about ±11%, so it is a tiebreaker more than a driver.</p>
+      <p>His team's games in your playoff weeks (2026-27 schedule; small numbers per round), Playoff boost scales Win and Zscore by 1 + strength × (his games ÷ the average − 1), kept within ×0.5–×1.5. Schedules differ by about ±11%, so it is a tiebreaker more than a driver.</p>
       <h4>Scarcity</h4>
       <p>Information only. Category scarcity is the value lost between the best players left now and those likely left at your next pick; position scarcity compares slots teams still need with good players left. Boosting values by it cost about 5 points in backtests, because Win already counts what will be left.</p>
     </section>
@@ -429,9 +429,9 @@ label.f select,label.f input{font-weight:400}
     <div class="listbar">
       <label class="f" for="q">Find player<input type="text" id="q" placeholder="Name or team"></label>
       <label class="f zsel" for="zdrop" title="Discount each player's worst one (−1) or two (−2) categories">Zscore<select id="zdrop"><option value="0,0" title="All categories">Normal</option><option value="1,50" title="Worst category counts half">−1 50%</option><option value="1,0" title="Worst category left out">−1 100%</option><option value="2,50" title="Worst two categories count half">−2 50%</option><option value="2,0" title="Worst two categories left out">−2 100%</option></select></label>
+      <label class="f zsel" for="zscale" title="Which Zscore the board shows: Standard (mean and spread over the top players, as BBM and Hashtag compute it), ROTO-Adjusted (each category scaled by how far apart teams finish; what the Model pick uses) or H2H-Adjusted (scaled by a weekly head-to-head gap: season spread plus week-to-week swing)">Zscore type<select id="zscale"><option value="classic" title="Mean and spread over the top players by value, as BBM and Hashtag">Standard</option><option value="adj" title="Scaled by how far apart teams finish in simulated drafts">ROTO-Adjusted</option><option value="h2h" title="Scaled by a weekly head-to-head gap: season spread plus week-to-week swing">H2H-Adjusted</option></select></label>
       <label class="f zsel" for="statsel" title="What the category columns show">Stats<select id="statsel"><option value="gain">Win</option><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
       <label class="f zsel" for="s-poboost" title="Boost players with more games in your playoff weeks">Playoff boost<select id="s-poboost"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
-      <label class="f zsel" for="s-b2b" title="Cut playoff games for players who rest back-to-backs">B2B rest<select id="s-b2b"><option value="on">On</option><option value="off">Off</option></select></label>
       <label class="f zsel" for="shown" title="How many players to list">Show<select id="shown"><option value="25">Top 25</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="0">All</option></select></label>
       <label class="f zsel" for="orderby" title="What the # column ranks by"># order by<select id="orderby"><option value="gain">Win C</option><option value="gainM">Win M</option><option value="z">Zscore</option></select></label>
       <label class="f zsel" for="edgeby" title="What Edge compares with ADP">Edge vs<select id="edgeby"><option value="z">Zscore</option><option value="gain">Win C</option><option value="gainM">Win M</option></select></label>
@@ -476,7 +476,7 @@ label.f select,label.f input{font-weight:400}
 const E = Engine, CATS = E.CATS;
 const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
-const DEF = { ilSpots: 3, b2b: 'off', b2bOv: {}, field: 'average', puntMode: 'off', puntLock: '', stats: 'raw', poBoost: 'off', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], asb: 'merged', poStart: 18, poFmt: '2-2-2', shown: 0, orderBy: 'z', edgeBy: 'z', zdrop: 0, teams: 14, slot: 7, order: '3rr', adpSrc: 'ftx', scoring: 'h2h', cats: 9, roster: 12, basis: 'total', proj: 'avg', zdropPct: 0, basisV: 11 };
+const DEF = { ilSpots: 3, b2b: 'off', b2bOv: {}, field: 'easy', puntMode: 'off', puntLock: '', stats: 'raw', poBoost: 'off', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], asb: 'merged', poStart: 18, poFmt: '2-2-2', shown: 0, orderBy: 'z', edgeBy: 'z', zdrop: 0, teams: 14, slot: 1, order: '3rr', adpSrc: 'ftx', scoring: 'h2h', cats: 9, roster: 12, basis: 'pergame', proj: 'avg', zdropPct: 0, zScale: 'classic', fieldZ: 'std', basisV: 12 };
 let cfg = Object.assign({}, DEF, { catW: DEF.catW.slice() }), picks = [], log = [];
 // Settings saved before 2026-10-17 had Mix as the default Basis; Season replaced it (it won more titles in backtests with
 // BBM-style projected games), so an old saved Mix moves to Season once. A Basis chosen after that is kept.
@@ -487,7 +487,8 @@ function migrate(c, saved) {
   if (!(saved && saved.basisV >= 3)) { c.zdrop = 0; c.orderBy = 'z'; c.edgeBy = 'z'; if (Array.isArray(c.catW) && c.catW.length === 9 && c.catW[8] === 1) c.catW[8] = 0.5; }
   // v4 (2026-10-17): league defaults 3RR, H2H each category, 2-2-2 playoffs, 4 kit users, applied once to saved boards
   if (!(saved && saved.basisV >= 4)) { c.order = '3rr'; c.scoring = 'h2h'; c.poFmt = '2-2-2'; c.oppBoard = 4; c.teams = 14; c.roster = 12; c.cats = 9; c.asb = 'merged'; c.ilSpots = 2; }
-  if (!(saved && saved.basisV >= 5)) c.b2b = 'off';   // v5: B2B rest off by default
+  c.b2b = 'off';   // B2B rest removed from the page (2026-10-18): always off, saved boards included
+  c.fieldZ = 'std';   // There at / Lasts to: the room ranks by Standard Zscore with TO ×0.5 (2026-10-18), whatever the Zscore type or weights
   if (!(saved && saved.basisV >= 6)) { c.stats = 'raw'; c.poBoost = 'light'; c.basis = 'total'; }   // v6: Stats Raw, Playoff boost Light, Basis Season
   if (!(saved && saved.basisV >= 7)) { c.ilSpots = 3; c.poStart = 18; c.poFmt = '2-2-2'; }   // v7: 3 IL spots, playoffs from week 18, 2-2-2
   // v8: Kit users → Draft field, nearest level to the saved kit users' share
@@ -496,8 +497,9 @@ function migrate(c, saved) {
   if (!(saved && saved.basisV >= 9)) c.proj = 'avg';   // v9: Average projections by default (best on 2024-25 preseason vs real results)
   if (c.zdrop === 3) { c.zdrop = 1; c.zdropPct = 50; }   // the short-lived Soft −1 option = −1 with the worst at 50%
   if (!(saved && saved.basisV >= 11)) c.poBoost = 'off';   // v11: Playoff boost Off by default
+  if (!(saved && saved.basisV >= 12)) { c.zScale = 'classic'; c.basis = 'pergame'; c.field = 'easy'; c.slot = 1; }   // v12 (2026-10-18, user's defaults): Zscore type Standard, Basis Per game, Draft field Easy, slot 1
   c.puntMode = 'off'; c.puntLock = '';   // the board never punts (no Auto, no locks): real-projection backtests
-  delete c.oppBoard; c.basisV = 11; delete c.pickBy; return c;
+  delete c.oppBoard; c.basisV = 12; delete c.pickBy; return c;
 }
 let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
@@ -600,10 +602,10 @@ function syncSetup() {
   fillSelect($('s-teams'), 4, 20, cfg.teams);
   fillSelect($('s-slot'), 1, cfg.teams, cfg.slot);
   fillSelect($('s-roster'), 8, 25, cfg.roster);
-  $('s-b2b').value = cfg.b2b === 'off' ? 'off' : 'on';
+
   $('s-il').value = String(cfg.ilSpots != null ? cfg.ilSpots : 2);
   $('s-field').value = cfg.field;
-  $('s-order').value = cfg.order; $('s-scoring').value = cfg.scoring; $('s-cats').value = String(cfg.cats); $('s-basis').value = cfg.basis; $('s-proj').value = cfg.proj; basisTip(); syncPlayoffs(); syncZkeep(); $('edgeby').value = cfg.edgeBy; $('orderby').value = cfg.orderBy; $('statsel').value = cfg.stats; syncPunt(); syncWeights(); $('shown').value = String(cfg.shown);
+  $('s-order').value = cfg.order; $('s-scoring').value = cfg.scoring; $('s-cats').value = String(cfg.cats); $('s-basis').value = cfg.basis; $('s-proj').value = cfg.proj; basisTip(); syncPlayoffs(); syncZkeep(); $('zscale').value = ['classic', 'h2h'].includes(cfg.zScale) ? cfg.zScale : 'adj'; $('edgeby').value = cfg.edgeBy; $('orderby').value = cfg.orderBy; $('statsel').value = cfg.stats; syncPunt(); syncWeights(); $('shown').value = String(cfg.shown);
 }
 function onSetup(e) {
   const id = e.target.id, v = e.target.value;
@@ -613,7 +615,7 @@ function onSetup(e) {
   if (id === 's-scoring' || id === 's-slot') recompute(); else rebuild();
 }
 ['s-teams','s-slot','s-roster','s-order','s-scoring','s-cats','s-basis','s-proj','s-il'].forEach(id => $(id).addEventListener('change', onSetup));
-$('s-b2b').addEventListener('change', e => { cfg.b2b = e.target.value; recompute(); });
+
 $('s-field').addEventListener('change', e => { cfg.field = e.target.value; recompute(); });
 ['s-asb','s-po','s-pofmt'].forEach(id => $(id).addEventListener('change', e => {
   if (id === 's-asb') { const was = cfg.asb; cfg.asb = e.target.value; if (was !== cfg.asb) cfg.poStart += cfg.asb === 'merged' ? -1 : 1; }
@@ -971,6 +973,7 @@ $('zdrop').addEventListener('change', e => { const [d, k] = e.target.value.split
 $('shown').addEventListener('change', e => { cfg.shown = +e.target.value; save(); renderTable(); });
 $('orderby').addEventListener('change', e => { cfg.orderBy = e.target.value; recompute(); });
 $('edgeby').addEventListener('change', e => { cfg.edgeBy = e.target.value; save(); renderTable(); });
+$('zscale').addEventListener('change', e => { cfg.zScale = e.target.value; save(); renderTable(); });
 $('thead').addEventListener('click', e => {
   const th = e.target.closest('th[data-sort]'); if (!th) return;
   const s = th.dataset.sort;
@@ -1092,14 +1095,20 @@ function buildHeat(list, zd) {
   add('gain', p => p.gain); add('gainM', p => p.gainM);
   zScaleMax = CATS.map((c, i) => Math.max(0.05, ...list.map(p => Math.abs(catZ(p, i)))));
   CATS.forEach((c, i) => add('c' + i, p => p.gainC ? p.gainC[i] : null));
-  add('z', p => p.z[zd] * (p.scarMult || 1) * (p.poMult || 1));
+  add('z', p => zArr(p)[zd] * (p.scarMult || 1) * (p.poMult || 1));
   add('po', p => { const g = playoffGamesP(p); return g ? g.total : null; });
 }
 // Category chips: green above zero, red below, deeper for bigger values; nothing under half a point.
 // Category cells can show Gain (default), weighted per-category Zscore, or raw per-game stats.
 const RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
 const rawTxt = (p, i) => i < 2 ? (p[RAWK[i]] != null ? p[RAWK[i]].toFixed(3).replace(/^0/, '') : '—') : (p[RAWK[i]] != null ? p[RAWK[i]].toFixed(1) : '—');
-const catZ = (p, i) => p.boardC ? p.boardC[i] * (cfg.catW ? cfg.catW[i] : 1) : 0;
+// Zscore type (2026-10-18): ROTO-Adjusted ('adj') = engine's team-spread Zscore; H2H-Adjusted ('h2h') = p.zH; Standard ('classic') = the true Zscore, mean and sd over
+// the top N × R players (p.zCl). The Model pick and Win never read the choice. Everything the page shows or ranks by
+// Zscore goes through these.
+const zCl = () => cfg.zScale === 'classic', zH2 = () => cfg.zScale === 'h2h';
+const zSrc = p => (zCl() && p.zCl ? p.zCl : zH2() && p.zH ? p.zH : null);
+const zArr = p => { const o = zSrc(p); return o ? o.z : p.z; }, bcArr = p => { const o = zSrc(p); return o ? o.bc : p.boardC; }, dropArr = p => { const o = zSrc(p); return o ? o.drop : p.zDrop; };
+const catZ = (p, i) => bcArr(p) ? bcArr(p)[i] * (cfg.catW ? cfg.catW[i] : 1) : 0;
 let zScaleMax = new Array(9).fill(1);
 function chipZ(i, z, text) {
   const m = zScaleMax[i] || 1, t = Math.min(1, Math.abs(z) / m);
@@ -1149,7 +1158,7 @@ function renderTable() {
   const th = (label, sort, cls, tip) => '<th' + (sort ? ' data-sort="' + sort + '"' : '') + ' class="' + (cls || '') + (sort ? ' sortable' : '') + ((sort && (sort === sortKey || (sortKey === 'cat' && sort === 'c' + sortCat))) ? ' on' : '') + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + label + '</th>';
   $('thead').innerHTML = '<tr>' + th('Log', null, 'l') + th('ADP', 'adp', '', 'Average draft position') + th('#', 'order', '', 'Rank by ' + ({ gainM: 'Win M', z: 'Zscore' }[cfg.orderBy] || 'Win C') + '. The badge marks the best pick for you') + th('Edge<br><span style="font-weight:400;text-transform:none">vs ' + ({ z: 'Zscore', gain: 'Win C', gainM: 'Win M' }[cfg.edgeBy]) + '</span>', 'edge', '', 'ADP minus his ' + ({ z: 'Zscore', gain: 'Win C', gainM: 'Win M' }[cfg.edgeBy]) + ' rank. Positive: going later than he should') + th('Playoff<br>games', 'po', '', 'Team games in your playoff weeks, minus back-to-backs he rests') + th('G', 'g', '', 'Projected games played') + th('Player', null, 'l player') + th('Win C', 'gain', '', 'Category wins added, in hundredths of a win') + th('Win M', 'gainM', '', 'Matchup win chance added, in percentage points') +
     CATS.map((c, i) => th(c.l + (cfg.stats === 'z' && cfg.catW[i] !== 1 ? '<br><span style="font-weight:400">×' + cfg.catW[i] + '</span>' : ''), 'c' + i, '', ({ gain: 'Win chance added in ' + c.l, z: c.l + ' z-score' + (cfg.catW[i] !== 1 ? ' × ' + cfg.catW[i] : ''), raw: 'Projected ' + c.l + (i < 2 ? '' : ' per game') }[cfg.stats]))).join('') +
-    th((cfg.zdrop ? '−' + cfg.zdrop + ' ' + (100 - (cfg.zdropPct || 0)) + '% Zscore' : 'Zscore') + '<br><span style="font-weight:400;text-transform:none">' + ({ pergame: 'per game', mix: 'mix' }[cfg.basis] || 'season') + '</span>', 'board', '', ({ pergame: 'Per-game', mix: 'Mix (half season, half per-game)' }[cfg.basis] || 'Season') + ' value vs an average drafted player' + (cfg.catW.some(w => w !== 1) ? ', with category weights ' + CATS.map((c, i) => cfg.catW[i] !== 1 && !(i === E.TO && cfg.cats === 8) ? c.l + ' ×' + cfg.catW[i] : null).filter(Boolean).join(', ') : '') + (cfg.zdrop ? (cfg.zdropPct ? ', with the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories') + ' counting ' + cfg.zdropPct + '%' : ', leaving out the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories')) : '') + '. Small number is the rank')
+    th((cfg.zdrop ? '−' + cfg.zdrop + ' ' + (100 - (cfg.zdropPct || 0)) + '% Zscore' : 'Zscore') + '<br><span style="font-weight:400;text-transform:none">' + ({ pergame: 'per game', mix: 'mix' }[cfg.basis] || 'season') + (zCl() ? ' · standard' : zH2() ? ' · H2H-adj.' : ' · roto-adj.') + '</span>', 'board', '', ({ pergame: 'Per-game', mix: 'Mix (half season, half per-game)' }[cfg.basis] || 'Season') + ' value vs an average drafted player' + (cfg.catW.some(w => w !== 1) ? ', with category weights ' + CATS.map((c, i) => cfg.catW[i] !== 1 && !(i === E.TO && cfg.cats === 8) ? c.l + ' ×' + cfg.catW[i] : null).filter(Boolean).join(', ') : '') + (cfg.zdrop ? (cfg.zdropPct ? ', with the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories') + ' counting ' + cfg.zdropPct + '%' : ', leaving out the worst ' + (cfg.zdrop === 1 ? 'category' : 'two categories')) : '') + '. Small number is the rank')
     + th('Scarcity<br>Cat', 'scarC', '', 'How fast his best categories are drying up (info only)') + th('Scarcity<br>Position', 'scarP', '', 'How scarce his positions are (info only)') + th(thereH.replace(' at ', ' at<br>'), null, '', 'Chance he is still there at your next pick') + th(lastH.replace(' to ', ' to<br>'), null, '', 'Chance he lasts to the pick after') +
     th('Pick<br>range', null, '', 'Usual draft range: ADP ± one standard deviation') + '</tr>';
 
@@ -1160,12 +1169,12 @@ function renderTable() {
   let rows = P.filter(p => (!hide || !takenAt.has(p.id)) && posOk(p) && (!q || p.key.includes(q) || p.t.toLowerCase() === q));
   const big = 1e9, zd = cfg.zdrop;
   // where a taken player would sit in # order: just after the available player with the next-higher value
-  const ordVal = p => cfg.orderBy === 'gainM' ? p.gainM : cfg.orderBy === 'z' ? (zd ? p.z[zd] + (cfg.zdropPct || 0) / 100 * (p.z[0] - p.z[zd]) : p.z[0]) * (p.scarMult || 1) * (p.poMult || 1) : p.gain;
+  const ordVal = p => cfg.orderBy === 'gainM' ? p.gainM : cfg.orderBy === 'z' ? (zd ? zArr(p)[zd] + (cfg.zdropPct || 0) / 100 * (zArr(p)[0] - zArr(p)[zd]) : zArr(p)[0]) * (p.scarMult || 1) * (p.poMult || 1) : p.gain;
   const availSorted = P.filter(p => p.order != null).sort((a, b) => a.order - b.order);
   const orderSlot = p => { const v = ordVal(p); if (v == null) return big + p.boardRank; let n = 0; for (const a of availSorted) { if (ordVal(a) >= v) n = a.order; else break; } return n + 0.5; };
   // Zscore shown with the scarcity adjustment when it's on; ranks follow the adjusted value
   const scarOn = (cfg.scarZ && cfg.scarZ !== 'off') || (cfg.scarP && cfg.scarP !== 'off');
-  const zKeep = (cfg.zdropPct || 0) / 100, zBase = p => zd ? p.z[zd] + zKeep * (p.z[0] - p.z[zd]) : p.z[0];
+  const zKeep = (cfg.zdropPct || 0) / 100, zBase = p => zd ? zArr(p)[zd] + zKeep * (zArr(p)[0] - zArr(p)[zd]) : zArr(p)[0];
   const zOf = p => zBase(p) * (scarOn ? (p.scarMult || 1) : 1) * (p.poMult || 1);
   const zRankMap = new Map(); P.slice().sort((a, b) => zOf(b) - zOf(a)).forEach((p, i) => zRankMap.set(p.id, i + 1));
   const zRankOf = p => zRankMap.get(p.id);
@@ -1247,7 +1256,7 @@ function renderTable() {
       '<td class="l player" title="' + tip + '"><span class="nm">' + esc(p.n) + '</span>' + (!isT && p.id === topId && !done ? '<span class="mp" title="' + esc(mpTip) + '">' + mpLabel + '</span>' : '') + tags + '<span class="meta">' + esc(p.t) + ' · ' + esc(p.p) + ' · ' + p.m + ' mpg</span></td>';
     const catCells = () => CATS.map((c, i) => {
       if (i === E.TO && cfg.cats === 8) return '<td class="cat dash">—</td>';
-      if (cfg.stats === 'raw') return '<td class="cat">' + chipZ(i, p.boardC[i], rawTxt(p, i)) + '</td>';
+      if (cfg.stats === 'raw') return '<td class="cat">' + chipZ(i, bcArr(p)[i], rawTxt(p, i)) + '</td>';
       if (cfg.stats === 'z') { const z = catZ(p, i); return '<td class="cat">' + chipZ(i, z, (z > 0.005 ? '+' : z < -0.005 ? '−' : '') + Math.abs(z).toFixed(2)) + '</td>'; }
       return '<td class="cat">' + chip('c' + i, p.gainC[i] * 100) + '</td>';
     }).join('');
@@ -1259,8 +1268,8 @@ function renderTable() {
       h += catCells();
     }
     // −1 / −2: the dropped categories, marked − (or with the share that still counts when the slider is above 0%)
-    const pct = cfg.zdropPct || 0, zv = zOf(p), dropped = p.zDrop.slice(0, zd).map(c => CATS[c].l);
-    const zTitle = zd ? ' title="' + (pct ? 'Counts ×0.5: ' : 'Drops ') + p.zDrop.slice(0, zd).map(c => CATS[c].l + ' (' + fmt1(p.boardC[c]) + ')').join(' and ') + '"' : '';
+    const pct = cfg.zdropPct || 0, zv = zOf(p), dropped = dropArr(p).slice(0, zd).map(c => CATS[c].l);
+    const zTitle = zd ? ' title="' + (pct ? 'Counts ×0.5: ' : 'Drops ') + dropArr(p).slice(0, zd).map(c => CATS[c].l + ' (' + fmt1(bcArr(p)[c]) + ')').join(' and ') + '"' : '';
     h += '<td' + zTitle + '><span class="zcell"><span class="meta zd">' + (dropped.length ? (pct ? dropped.map(l => l + ' ×0.5').join(' ') : '−' + dropped.join(' −')) : '') + '</span>' + zChip(zv) + '<span class="meta zr">#' + zRankOf(p) + '</span></span></td>';
     if (p.scar == null || done) h += '<td class="dash">—</td><td class="dash">—</td>';
     else {

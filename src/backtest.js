@@ -109,11 +109,22 @@ function slidePick2(av, myRound, sl) {
     ? (p => strat.reduce((a, S) => a + S.w * (p.board - S.punt.reduce((b, c) => b + p.boardC[c], 0)), 0) / wsum)
     : sl.toW != null   // sl.toW (2026-10-17): TO weighted inside soft −1 (worst category judged on weighted z)
       ? (p => { const z = p.boardC.slice(0, 9).map((x, c) => c === 8 ? x * sl.toW : x); return z.reduce((a, b) => a + b, 0) - a1 * Math.min(0, Math.min(...z)); })
-      : (p => { const srt = p.boardC.slice(0, 9).slice().sort((x, y) => x - y); return p.board - a1 * Math.min(0, srt[0]); });
-  const byF = [...av].sort((a, b) => b.gainM - a.gainM), byS = [...av].sort((a, b) => soft(b) - soft(a)), byC = [...av].sort((a, b) => b.gain - a.gain);
-  const P2 = [...new Set(byF.slice(0, 40).concat(byS.slice(0, 40), byC.slice(0, 40)))];
+      : sl.zTrue   // sl.zTrue (2026-10-18): soft −1 on the true Zscore (engine p.zCl: mean/sd over the top N × R players)
+        ? (p => { const z = Array.from(p.zCl.bc).slice(0, 9), srt = z.slice().sort((x, y) => x - y); return p.zCl.z[0] - a1 * Math.min(0, srt[0]); })
+        : sl.zH      // sl.zH (2026-10-18): soft −1 on the H2H-adjusted Zscore (engine p.zH: season gap + weekly noise)
+        ? (p => { const z = Array.from(p.zH.bc).slice(0, 9), srt = z.slice().sort((x, y) => x - y); return p.zH.z0 - a1 * Math.min(0, srt[0]); })
+        : (p => { const q = sl._ctx && sl._ctx.Pv ? sl._ctx.Pv[p.id] : p, srt = q.boardC.slice(0, 9).slice().sort((x, y) => x - y); return q.board - a1 * Math.min(0, srt[0]); });
   const ms = A => { const m = A.reduce((x, y) => x + y, 0) / A.length, s = Math.sqrt(A.reduce((x, y) => x + (y - m) ** 2, 0) / A.length) || 1; return [m, s]; };
-  const S = P2.map(soft), C = P2.map(p => p.gain), F = P2.map(p => p.gainM), [mS, sS] = ms(S), [mC, sC] = ms(C), [mF, sF] = ms(F);
+  // sl.fitC (2026-10-18): what the fit side (and the look-ahead's next pick) maximizes. Default Win M; 'c' = Win C (the
+  // regular season ranks by share of categories won); 'mix' = Win C and Win M at equal weight, each scaled by its spread
+  // over the 40 best available now.
+  const byM = [...av].sort((a, b) => b.gainM - a.gainM);
+  const gF = sl.fitC === 'c' ? (p => p.gain) : sl.fitC === 'mix'
+    ? (() => { const t = byM.slice(0, 40), s1 = ms(t.map(p => p.gain))[1], s2 = ms(t.map(p => p.gainM))[1]; return p => 0.5 * p.gain / s1 + 0.5 * p.gainM / s2; })()
+    : (p => p.gainM);
+  const byF = [...av].sort((a, b) => gF(b) - gF(a)), byS = [...av].sort((a, b) => soft(b) - soft(a)), byC = [...av].sort((a, b) => b.gain - a.gain);
+  const P2 = [...new Set(byF.slice(0, 40).concat(byS.slice(0, 40), byC.slice(0, 40)))];
+  const S = P2.map(soft), C = P2.map(p => p.gain), F = P2.map(gF), [mS, sS] = ms(S), [mC, sC] = ms(C), [mF, sF] = ms(F);
   // sl.value: 'blend' = 50/50 soft −1 Zscore + Win C; 'wincOnly' = Win C alone (2026-10-17); otherwise soft −1 Zscore alone
   let V = P2.map((p, i) => sl.value === 'blend' ? (1 - wc) * (S[i] - mS) / sS + wc * (C[i] - mC) / sC : sl.value === 'wincOnly' ? (C[i] - mC) / sC : (S[i] - mS) / sS);
   const [mV, sV] = ms(V); V = V.map(v => (v - mV) / sV);
@@ -124,8 +135,8 @@ function slidePick2(av, myRound, sl) {
     const nxt = {};
     for (const i of top) {
       const pk = picks.slice(); pk[k] = P2[i].id; E.evaluate(P, ctx, cfg, { picks: pk });
-      const t2 = new Set(pk.filter(v => v != null)), left = P.filter(p => !t2.has(p.id)).sort((a, b) => b.gainM - a.gainM).slice(0, 30);
-      let mass = 1, e = 0; for (const o of left) { const q = o.thereAt == null ? 1 : o.thereAt; e += mass * q * o.gainM; mass *= 1 - q; if (mass < 1e-4) break; }
+      const t2 = new Set(pk.filter(v => v != null)), left = P.filter(p => !t2.has(p.id)).sort((a, b) => gF(b) - gF(a)).slice(0, 30);
+      let mass = 1, e = 0; for (const o of left) { const q = o.thereAt == null ? 1 : o.thereAt; e += mass * q * gF(o); mass *= 1 - q; if (mass < 1e-4) break; }
       nxt[i] = e;
     }
     E.evaluate(P, ctx, cfg, { picks });   // restore every player's numbers to the real state
@@ -186,7 +197,10 @@ function draft(season, slot, seed, cfgExtra, opp) {
     // m.sloppy (2026-10-17): that many of the remaining ADP drafters are sloppy: each draws his own draft slots with the
     // real-draft spread × m.sloppyK (default 2.5), from a separate random stream so every other draw is unchanged
     for (let j = 0; j < (m.sloppy || 0); j++) { const t2 = others[i++], rs = rng(seed * 6007 + slot * 31 + t2), kk = m.sloppyK || 2.5; oppSloppyT[t2] = PO.map(p => p.adpUse + gauss(rs) * sdTrue(p) * kk); }
-    const order = PO.slice().sort((a, b2) => b2.boardRaw - a.boardRaw); zr = new Float64Array(PO.length);
+    // opp.stdField (2026-10-18): sharp drafters rank by the Standard Zscore with TO ×0.5 (engine p.fieldV), as real Zscore
+    // drafters reading BBM/Hashtag likely do; default: the board's team-spread Zscore (boardRaw)
+    const fvOpp = opp.stdField ? (p => p.fieldV) : (p => p.boardRaw);
+    const order = PO.slice().sort((a, b2) => fvOpp(b2) - fvOpp(a)); zr = new Float64Array(PO.length);
     order.forEach((p, k2) => { zr[p.id] = k2 + 1 + gauss(rx) * (1 + 0.1 * k2); });
   }
   const sharpW = opp && opp.mix && opp.mix.sharpW != null ? opp.mix.sharpW : 0.5;
@@ -226,7 +240,10 @@ function draft(season, slot, seed, cfgExtra, opp) {
       // value = Zscore with the worst category's negative z added back at share alpha (alpha2: second worst too);
       // fit = Win M. Both standardized over the 40 best available by either.
       if (cfg.slideEngine) { const r2 = E.slidePick(P, ctx, cfg, { picks }, myRound, res); id = r2.modelPick; }
-      else if (cfg.slide) { id = slidePick(av, myRound, Object.assign({}, cfg.slide, { _ctx: { P, ctx, cfg, picks, k, res } })); }
+      // cfg.slide.valueMissW (2026-10-18): the value side's Zscore uses its own basis (share of missed games that counts),
+      // separate from the fit side's (cfgExtra.missW); Pv = the players under that basis, matched by id
+      else if (cfg.slide) { const Pv = cfg.slide.valueMissW != null ? setup(season, Object.assign({}, cfgExtra, { missW: cfg.slide.valueMissW, slide: Object.assign({}, cfg.slide, { valueMissW: undefined }) })).P : null;
+        id = slidePick(av, myRound, Object.assign({}, cfg.slide, { _ctx: { P, ctx, cfg, picks, k, res, Pv } })); }
       else if (cfg.earlyBy && myRound < cfg.earlyBy.rounds) { const key = cfg.earlyBy.by === 'z' ? 'board' : 'gain'; id = av.reduce((b, p) => (p[key] > b[key] ? p : b), av[0]).id; }
       else if (cfg.look2) id = look2Pick(P, ctx, cfg, picks, k, av, cfg.look2);
       else if (cfg.upside != null) id = upsidePick(av, k, cfg.upside);
@@ -235,7 +252,7 @@ function draft(season, slot, seed, cfgExtra, opp) {
       else id = av.reduce((b, p) => (p.gainM > b.gainM ? p : b), av[0]).id;
     } else if (oppModel[t]) {
       P.forEach(p => { p.poMult = 1; });
-      const ocfg = Object.assign({}, cfg, { slot: t + 1, puntMode: opp.modelPunt || (opp.mix ? 'auto' : 'off'), puntLock: '', poBoost: 'off' });
+      const ocfg = Object.assign({}, cfg, { slot: t + 1, puntMode: opp.modelPunt || (opp.mix ? 'auto' : 'off'), puntLock: '', poBoost: 'off', fieldZ: opp.stdField ? 'std' : undefined });   // kit users read the league's field the same way whatever the board arm
       if (WO) PO.forEach(p => { p.poMult = 1; });
       E.evaluate(PO, ctxO, ocfg, { picks });
       const av = P.filter(p => !taken.has(p.id));

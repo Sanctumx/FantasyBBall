@@ -164,15 +164,46 @@
     const teamWeekVar = Array.from(wsum, v => v / teamsN);
     // Zscore sums each category's z times its weight; weight 0 = punted
     const W = catWeights(cfg);
-    const boards = X.map(x => {
+    const zFrom = (x, sd) => {
       const bc = new Float64Array(NC); let b = 0;
-      for (let c = 0; c < NC; c++) { bc[c] = (x[c] - avgX[c]) / teamSd[c]; b += bc[c] * W[c]; }
+      for (let c = 0; c < NC; c++) { bc[c] = (x[c] - avgX[c]) / sd[c]; b += bc[c] * W[c]; }
       const worst = []; for (let c = 0; c < NC; c++) if (W[c] > 0) worst.push(c);
       worst.sort((a, b2) => bc[a] * W[a] - bc[b2] * W[b2]);
       const d = i => worst[i] != null ? bc[worst[i]] * W[worst[i]] : 0;
       let raw = 0; for (let c = 0; c < NC; c++) if (c !== TO || cfg.cats === 9) raw += bc[c];
       return { b, raw, bc, z: [b, b - d(0), b - d(0) - d(1)], drop: worst.slice(0, 2) };
-    });
+    };
+    // True Zscore (2026-10-18): the classic z-score BBM and Hashtag show. Each category's mean and sd are taken over the
+    // top N × R players by their own value (re-ranked until the pool settles), not over simulated drafts and team totals.
+    // Shown when the page's Zscore type is "Zscore"; the Model pick reads it only when cfg.slideZ = 'true' (backtests).
+    const K = Math.min(X.length, N * R);
+    let rankV = X.map(x => { let v = 0; for (let c = 0; c < NC; c++) v += (x[c] - avgX[c]) / teamSd[c] * W[c]; return v; });
+    let tMean = avgX.slice(), tSd = teamSd.slice();
+    for (let it = 0; it < 4; it++) {
+      const pool = rankV.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, K).map(a => a[1]);
+      tMean = Array.from({ length: NC }, (_, c) => pool.reduce((s, i) => s + X[i][c], 0) / K);
+      tSd = Array.from({ length: NC }, (_, c) => Math.sqrt(Math.max(1e-9, pool.reduce((s, i) => s + (X[i][c] - tMean[c]) ** 2, 0) / K)));
+      rankV = X.map(x => { let v = 0; for (let c = 0; c < NC; c++) v += (x[c] - tMean[c]) / tSd[c] * W[c]; return v; });
+    }
+    const zTrue = x => { const bc = new Float64Array(NC); let b = 0;
+      for (let c = 0; c < NC; c++) { bc[c] = (x[c] - tMean[c]) / tSd[c]; b += bc[c] * W[c]; }
+      const worst = []; for (let c = 0; c < NC; c++) if (W[c] > 0) worst.push(c);
+      worst.sort((a, b2) => bc[a] * W[a] - bc[b2] * W[b2]);
+      const d = i => worst[i] != null ? bc[worst[i]] * W[worst[i]] : 0;
+      return { bc, z: [b, b - d(0), b - d(0) - d(1)], drop: worst.slice(0, 2) }; };
+    // Field value (2026-10-18): how the room ranks players by value, for There at / Lasts to when cfg.fieldZ = 'std' (the
+    // page). Standard Zscore with fixed weights, every category ×1 and TO ×0.5 (×0 in 8-cat), the way most drafters read
+    // BBM/Hashtag. Fixed: the user's category weights and Zscore type never move it.
+    const Wf = Array.from({ length: NC }, (_, c) => c === TO ? (cfg.cats === 9 ? 0.5 : 0) : 1);
+    let fV = X.map(x => { let v = 0; for (let c = 0; c < NC; c++) v += (x[c] - avgX[c]) / teamSd[c] * Wf[c]; return v; });
+    let fMean = avgX.slice(), fSd = teamSd.slice();
+    for (let it = 0; it < 4; it++) {
+      const pool = fV.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, K).map(a => a[1]);
+      fMean = Array.from({ length: NC }, (_, c) => pool.reduce((s, i) => s + X[i][c], 0) / K);
+      fSd = Array.from({ length: NC }, (_, c) => Math.sqrt(Math.max(1e-9, pool.reduce((s, i) => s + (X[i][c] - fMean[c]) ** 2, 0) / K)));
+      fV = X.map(x => { let v = 0; for (let c = 0; c < NC; c++) v += (x[c] - fMean[c]) / fSd[c] * Wf[c]; return v; });
+    }
+    const boards = X.map((x, i) => { const o = zFrom(x, teamSd); o.cl = zTrue(x); o.fv = fV[i]; return o; });
     // Shared games factor: a team's weekly total in every category moves with how many player-games it gets.
     // Per team: loading = average per-game production, factor variance = n * SIGMA_G2, rest is per-category noise.
     const nT = rN / teamsN, corr = { n: nT, load: new Float64Array(NC), idio: new Float64Array(NC), sigD2: nT * SIGMA_G2 };
@@ -221,6 +252,8 @@
     players.forEach((p, i) => {
       p.x = act.X[i]; p.wv = act.WV[i]; p.pv = projVar(p, gOf(p));
       p.board = act.boards[i].b; p.boardRaw = act.boards[i].raw; p.boardC = act.boards[i].bc; p.z = act.boards[i].z; p.zDrop = act.boards[i].drop;
+      p.zCl = act.boards[i].cl;   // true (classic) Zscore
+      p.fieldV = act.boards[i].fv;   // the room's value: Standard Zscore, TO ×0.5, fixed weights
     });
     ctx.avgX = act.avgX; ctx.teamSd = act.teamSd; ctx.teamWeekVar = act.teamWeekVar;
     ctx.h2hNoise = ctx.teamWeekVar.map(v => 2 * v * WEEKS * WEEKS);
@@ -232,6 +265,17 @@
     // relative to the gap, so 0.5 = a 2-week playoff matchup; the board leaves it unset (1 = one-week matchups).
     { const nk = cfg.noiseK != null ? +cfg.noiseK : 1;
       if (nk !== 1) { ctx.h2hNoise = ctx.h2hNoise.map(v => v * nk); ctx.idioNoise = ctx.idioNoise.map(v => v * nk); ctx.gapSd *= Math.sqrt(nk); } }
+    // H2H-adjusted Zscore (2026-10-18, backtests: slide.zKind 'h2h'): each category's z in units of the spread of a weekly
+    // head-to-head gap between two teams, season difference plus week-to-week noise (with the shared games factor), the
+    // same noise Win C uses. Volatile categories (steals, points) count less than in the team-spread Zscore.
+    { const Wh = catWeights(cfg), sdH = ctx.teamSd.map((s, c) => Math.sqrt(s * s + (ctx.idioNoise[c] + Math.pow(ctx.loadS[c] * ctx.gapSd, 2)) / 2));
+      players.forEach(p => { const bc = new Float64Array(NC); let b = 0;
+        for (let c = 0; c < NC; c++) { bc[c] = (p.x[c] - ctx.avgX[c]) / sdH[c]; b += bc[c] * Wh[c]; }
+        const worst = []; for (let c = 0; c < NC; c++) if (Wh[c] > 0) worst.push(c);
+        worst.sort((a, b2) => bc[a] * Wh[a] - bc[b2] * Wh[b2]);
+        const d = i => worst[i] != null ? bc[worst[i]] * Wh[worst[i]] : 0;
+        p.zH = { bc, z0: b, z: [b, b - d(0), b - d(0) - d(1)], drop: worst.slice(0, 2) }; });
+      ctx.sdH = sdH; }
     // Streamability: with weekly adds, a team behind in a counting category can stream players who help there.
     // Per category: (best free agents' per-game production − a generic streamer's) × streamer games aimed at that
     // category per week, as a share of how far apart two teams typically finish in a week. Capped at 60%.
@@ -362,7 +406,10 @@
       const f = cfg.field && FIELD_F[cfg.field] != null ? FIELD_F[cfg.field] : Math.min(1, Math.max(0, (+cfg.oppBoard || 0) / Math.max(1, N - 1)));
       players.forEach(p => { p.adpE = p.adpUse; p.sdE = p.sd; });
       if (f > 0) {
-        const left = players.filter(p => !taken.has(p.id)).sort((a, b) => b.boardRaw - a.boardRaw);
+        // the room's value ranking: Standard Zscore with TO ×0.5 when cfg.fieldZ = 'std' (the page, 2026-10-18); else the
+        // unweighted team-spread Zscore (backtests, where the simulated sharp drafters rank that way)
+        const fvOf = cfg.fieldZ === 'std' ? (p => p.fieldV) : (p => p.boardRaw);
+        const left = players.filter(p => !taken.has(p.id)).sort((a, b) => fvOf(b) - fvOf(a));
         left.forEach((p, i) => {
           const bAdp = cur + 1 + i, sb = 0.8 + 0.08 * i;
           p.adpE = (1 - f) * p.adpUse + f * bAdp;
@@ -748,7 +795,9 @@
     const SLIDE_K = 2, SLIDE_MID = 1.5, w = 1 / (1 + Math.exp(-SLIDE_K * (myIdx - SLIDE_MID))), a1 = 0.5, wc = 0.5;
     // soft −1 ignores category weights (TO ×0.5 default included): unweighted Zscore over the scoring categories, worst one at half
     const sc = cfg.cats === 9 ? 9 : 8;
-    const soft = p => { let b = 0, lo = Infinity; for (let c = 0; c < 9; c++) { if (sc === 8 && c === TO) continue; b += p.boardC[c]; if (p.boardC[c] < lo) lo = p.boardC[c]; } return b - a1 * Math.min(0, lo); };
+    // cfg.slideZ 'true' (2026-10-18): the value side uses the true Zscore instead of the team-spread one
+    const bcOf = cfg.slideZ === 'true' ? (p => p.zCl.bc) : (p => p.boardC);
+    const soft = p => { const bc = bcOf(p); let b = 0, lo = Infinity; for (let c = 0; c < 9; c++) { if (sc === 8 && c === TO) continue; b += bc[c]; if (bc[c] < lo) lo = bc[c]; } return b - a1 * Math.min(0, lo); };
     const byF = av.slice().sort((a, b) => b.gainM - a.gainM), byS = av.slice().sort((a, b) => soft(b) - soft(a)), byC = av.slice().sort((a, b) => b.gain - a.gain);
     const P2 = [...new Set(byF.slice(0, 40).concat(byS.slice(0, 40), byC.slice(0, 40)))];
     const ms = A => { const m = A.reduce((x, y) => x + y, 0) / A.length, s = Math.sqrt(A.reduce((x, y) => x + (y - m) ** 2, 0) / A.length) || 1; return [m, s]; };

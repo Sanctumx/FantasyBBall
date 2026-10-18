@@ -54,11 +54,44 @@ const ARMS = [['Current board', {}], ['Win M + look-ahead (no slide)', { slideEn
   // 36 = board told the field is Easy, 37 = board assumes 1.5× the ADP spread. Compare 36/37 with 35 (same league).
   ['SLOPPY: current board', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'sloppy' }],
   ['SLOPPY: Draft field Easy', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'sloppy', field: 'easy' }],
-  ['SLOPPY: ADP spread x1.5', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'sloppy', sdK: 1.5 }]];
+  ['SLOPPY: ADP spread x1.5', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'sloppy', sdK: 1.5 }],
+  // True Zscore in the Model pick's value side (2026-10-18): 50/50 soft −1 TRUE Zscore + Win C, and true Zscore alone; baseline = arm 23
+  ['K2 + value = true Zscore + Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, zTrue: true }, puntMode: 'off' }],
+  ['K2 + value = true Zscore only', { slideEngine: false, slide: { value: 'z', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, zTrue: true }, puntMode: 'off' }],
+  // Zscore grid in the value blend (2026-10-18), each 50/50 with Win C; alpha 0 = Normal, 0.5 = −1 50% (arm 23 = adjusted −1 50%, arm 38 = true −1 50%)
+  ['K2 + value = true Zscore Normal + Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0, mid: 1.5, k: 2, zTrue: true }, puntMode: 'off' }],
+  ['K2 + value = H2H Zscore Normal + Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0, mid: 1.5, k: 2, zH: true }, puntMode: 'off' }],
+  ['K2 + value = H2H Zscore -1 50% + Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, zH: true }, puntMode: 'off' }],
+  ['K2 + value = adjusted Zscore Normal + Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0, mid: 1.5, k: 2 }, puntMode: 'off' }],
+  // Pure H2H-adjusted Zscore as the value side, no Win C (2026-10-18): Normal / −1 50% / −1 100% (worst negative category left out)
+  ['K2 + value = H2H Zscore Normal only', { slideEngine: false, slide: { value: 'z', fit: 'look2', alpha: 0, mid: 1.5, k: 2, zH: true }, puntMode: 'off' }],
+  ['K2 + value = H2H Zscore -1 50% only', { slideEngine: false, slide: { value: 'z', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, zH: true }, puntMode: 'off' }],
+  ['K2 + value = H2H Zscore -1 100% only', { slideEngine: false, slide: { value: 'z', fit: 'look2', alpha: 1, mid: 1.5, k: 2, zH: true }, puntMode: 'off' }],
+  // Turnover weight inside the value side's soft −1 (2026-10-18): the room drafts as if TO counted ×0; baseline arm 23 = TO ×1
+  ['K2 + value TO x0', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, toW: 0 }, puntMode: 'off' }],
+  ['K2 + value TO x0.5', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, toW: 0.5 }, puntMode: 'off' }],
+  // Fit objective (2026-10-18): the regular season ranks by share of categories won (Win C's objective); playoffs by matchups (Win M)
+  ['K2 + fit = Win C + look-ahead', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, fitC: 'c' }, puntMode: 'off' }],
+  ['K2 + fit = 50/50 Win C and Win M + look-ahead', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, fitC: 'mix' }, puntMode: 'off' }],
+  ['K2 + value blend 70% Zscore / 30% Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, wc: 0.3 }, puntMode: 'off' }],
+  ['K2 + value blend 30% Zscore / 70% Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, wc: 0.7 }, puntMode: 'off' }],
+  // Basis re-check on the current board (2026-10-18): share of projected missed games that counts (1 = Season, 0.5 = Mix)
+  ['K2 + basis: 75% of missed games count', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', missW: 0.75 }],
+  ['K2 + basis Mix (50%)', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', missW: 0.5 }],
+  // League where sharp drafters rank by Standard Zscore TO ×0.5 (2026-10-18): 55 = current board there, 56 = board whose field
+  // model ranks the same way (cfg.fieldZ 'std', as the page now does). Compare 56 with 55.
+  ['STDFIELD: current board', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'stdField' }],
+  ['STDFIELD: board field = Standard TO 0.5', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'stdField', fieldZ: 'std' }],
+  // Basis 2×2 (2026-10-18): value-side basis × fit-side basis at Season (1) / Mix (0.5). Cells: (1,1) = arm 23, (0.5,0.5) = arm 54,
+  // 57 = value Mix only, 58 = fit Mix only. Main effects and interaction from four cells of 160 drafts.
+  ['K2 + basis: value side Mix, fit Season', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, valueMissW: 0.5 }, puntMode: 'off' }],
+  ['K2 + basis: value side Season, fit Mix', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, valueMissW: 1 }, puntMode: 'off', missW: 0.5 }],
+  // Value blend follow-up (2026-10-18): 52 (30/70) was +0.9 ± 0.8 on seeds 145-152; run 31 re-runs 52 on 153-160 and adds 20/80
+  ['K2 + value blend 20% Zscore / 80% Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, wc: 0.8 }, puntMode: 'off' }]];
 const [name, c] = ARMS[arm], rows = [], t0 = Date.now();
 for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
   const { fmt, opp: oppKind, ...cx } = c, old = fmt === 'old';
-  const ro = draft(season, slot, seed, Object.assign({}, base, cx), oppKind === 'sloppy' ? { trueSd: 'v2', mix: Object.assign({}, OPP.mix, { sloppy: 2 }) } : OPP);
+  const ro = draft(season, slot, seed, Object.assign({}, base, cx), oppKind === 'sloppy' ? { trueSd: 'v2', mix: Object.assign({}, OPP.mix, { sloppy: 2 }) } : oppKind === 'stdField' ? Object.assign({}, OPP, { stdField: true }) : OPP);
   const sc = scoreLeague(season, ro, { seed, target: true, il: old ? 2 : 3 });
   const t = titleScore(sc.weekTot, old ? {} : { rsMode: 'each', rsWeeks: 17, rounds: [[17, 18], [19, 20], [21, 22]] }), m = slot - 1;
   rows.push({ season, arm, slot, seed, me: sc.rates[m], made: t.made[m], poAll: t.poAll[m], rounds: t.roundsWon[m], title: t.title[m], roster: ro[m].slice().sort().join(',') });

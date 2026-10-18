@@ -2,7 +2,7 @@
 # to a page anyone can read without signing in. Export the doc's tab as HTML (Claude Docs export), save it, then:
 #   python3 build_math.py <export.html>
 # Formulas (```latex blocks) are typeset here with KaTeX (node + `npm i katex@0.16.9`; pass its folder as the 2nd
-# argument), so the page needs only KaTeX's stylesheet; styling follows the board (light/dark).
+# argument); KaTeX's stylesheet and fonts are inlined, so the page loads nothing but Google Fonts; styling follows the board.
 import sys, re, html as H, json, subprocess
 src = open(sys.argv[1], encoding='utf-8').read()
 src = re.sub(r'\s*·\s*<span data-atom="mention"[^>]*>.*?</span>', '', src)           # byline: keep the as-of date only
@@ -14,6 +14,14 @@ js = "const k=require(process.argv[1]);const a=JSON.parse(require('fs').readFile
 out = json.loads(subprocess.run(['node', '-e', js, KATEX], input=json.dumps(blocks), capture_output=True, text=True, check=True).stdout)
 it = iter(out)
 src = re.sub(r'<pre><code class="language-latex">.*?</code></pre>', lambda m: '<div class="eq">' + next(it) + '</div>', src, flags=re.S)
+# KaTeX's stylesheet and fonts go inline (woff2 as data URIs): pages hosted as Claude artifacts can't load a cdnjs stylesheet,
+# and without it every formula shows as doubled plain text.
+import os, base64
+KD = os.path.join(KATEX, 'dist') if os.path.isdir(os.path.join(KATEX, 'dist')) else KATEX
+kcss = open(os.path.join(KD, 'katex.min.css'), encoding='utf-8').read()
+kcss = re.sub(r'url\(fonts/([\w-]+)\.woff2\) format\("woff2"\)(,url\(fonts/[^)]+\) format\("[a-z]+"\))*',
+              lambda m: 'url(data:font/woff2;base64,' + base64.b64encode(open(os.path.join(KD, 'fonts', m.group(1) + '.woff2'), 'rb').read()).decode() + ') format("woff2")', kcss)
+assert 'url(fonts/' not in kcss, 'unexpected KaTeX font rule'
 title = H.unescape(re.search(r'<h1[^>]*>(.*?)</h1>', src).group(1))
 page = f'''<!doctype html>
 <html lang="en">
@@ -25,7 +33,7 @@ page = f'''<!doctype html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>{kcss}</style>
 <style>
 :root{{--bg:#EFF1EE;--surface:#FFFFFF;--sunk:#F6F7F5;--ink:#15191B;--muted:#5D666B;--line:#D8DCD7;--accent:#C24E1B;color-scheme:light}}
 @media (prefers-color-scheme: dark){{:root{{--bg:#0F1214;--surface:#171B1E;--sunk:#13171A;--ink:#E6E9E5;--muted:#99A2A7;--line:#2A3135;--accent:#EC7840;color-scheme:dark}}}}
