@@ -1656,9 +1656,20 @@ async function fxGet(what) {
   if (!type.includes('json')) throw new Error('nohost');
   let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
   if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
-  if (!r.ok || body.error) throw new Error(body.error || ('Fantrax answered ' + r.status));
+  if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
   return body;
 }
+// Busy (429), relay or Fantrax hiccups (5xx) and dropped connections pass: keep the league and try again, waiting
+// 10 s, 20 s, 40 s … up to 2 minutes; a good answer resets the wait (2026-10-18)
+const fxTransient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
+let fxWait = 0, fxHold = 0, fxRetryT = null;
+function fxBackoff(e, retry) {
+  fxWait = Math.min(120, fxWait ? fxWait * 2 : 10); fxHold = Date.now() + fxWait * 1000;
+  const why = e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer';
+  fxStatus(why + '. Retrying in ' + fxWait + ' s…', 'err');
+  clearTimeout(fxRetryT); if (retry) fxRetryT = setTimeout(retry, fxWait * 1000);
+}
+function fxOk() { fxWait = 0; fxHold = 0; clearTimeout(fxRetryT); fxRetryT = null; }
 function fxErr(e) {
   if (e.message === 'nohost') return 'Sync runs on the hosted site (courtside-basketball on Cloudflare). Here, log picks by hand.';
   if (e.message === 'offline') return 'Couldn\'t reach the sync service. Check your connection; it will retry.';
@@ -1729,6 +1740,7 @@ $('lg-del').addEventListener('click', e => {
 
 async function fxConnect(id) {
   const prevMine = fx && fx.leagueId === id ? fx.myTeam : null;
+  clearTimeout(fxRetryT);   // a manual Connect replaces a pending retry (the wait keeps growing until an answer comes)
   fx = { leagueId: id };
   fxStatus('Connecting to league ' + id + '…');
   try {
@@ -1745,9 +1757,12 @@ async function fxConnect(id) {
     rememberLeague(id, league.leagueName || league.name || (league.leagueInfo && league.leagueInfo.name) || null, prevMine);
     if (!fxPlayers) { fxStatus('Loading Fantrax player list…'); fxPlayers = await fxGet('players'); }
     renderFx();
-    await fxApply(draft, true);
+    fxOk(); await fxApply(draft, true);
     fxSchedule();
-  } catch (e) { fxStatus(fxErr(e), 'err'); if (e.message !== 'offline') { fx = null; renderFx(); } save(); }
+  } catch (e) {
+    if (fxTransient(e)) { fx = Object.assign({ leagueId: id }, fx && fx.leagueId === id ? { myTeam: fx.myTeam || prevMine } : { myTeam: prevMine }); fxBackoff(e, () => { if (fx && fx.leagueId === id && !fx.order) fxConnect(id); }); save(); return; }
+    fxOk(); fxStatus(fxErr(e), 'err'); fx = null; renderFx(); save();
+  }
 }
 async function fxApply(draft, first) {
   const order = fx.order, N = order.length;
@@ -1784,8 +1799,8 @@ async function fxApply(draft, first) {
   if (made >= picks.length) fxStop('Draft complete. Synced all ' + made + ' picks.');
 }
 async function fxTick() {
-  if (!fx || fxBusy) return; fxBusy = true;
-  try { await fxApply(await fxGet('draft'), false); } catch (e) { fxStatus(fxErr(e), 'err'); }
+  if (!fx || fxBusy || Date.now() < fxHold) return; fxBusy = true;
+  try { const d = await fxGet('draft'); fxOk(); await fxApply(d, false); } catch (e) { if (fxTransient(e)) fxBackoff(e, null); else fxStatus(fxErr(e), 'err'); }
   fxBusy = false;
 }
 function fxSchedule() { clearInterval(fxTimer); fxTimer = null; if (fx && $('fx-auto').checked) fxTimer = setInterval(fxTick, 10000); }
@@ -1815,7 +1830,7 @@ $('fx-team').addEventListener('change', e => {
 });
 $('fx-auto').addEventListener('change', () => { fxSchedule(); if ($('fx-auto').checked) fxTick(); });
 $('fx-now').addEventListener('click', fxTick);
-$('fx-off').addEventListener('click', () => { fxStop(); fx = null; owner = []; renderFx(); fxStatus('Disconnected. Picks already synced stay on the board.'); recompute(); });
+$('fx-off').addEventListener('click', () => { fxStop(); fxOk(); fx = null; owner = []; renderFx(); fxStatus('Disconnected. Picks already synced stay on the board.'); recompute(); });
 
 // ---------- help dialog ----------
 $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
@@ -2277,7 +2292,7 @@ function playerFirst() {
 try { PHONE.addEventListener('change', () => renderTable()); } catch (e) {}
 
 fit(); syncSetup(); renderFx(); renderSaves(); renderLeagues();
-if (fx && fx.order) { fxStatus('Reconnecting to league ' + fx.leagueId + '…'); setTimeout(() => fxConnect(fx.leagueId), 0); }
+if (fx && fx.leagueId) { fxStatus('Reconnecting to league ' + fx.leagueId + '…'); setTimeout(() => fxConnect(fx.leagueId), 0); }
 if (picks.some(v => v != null)) $('setup').open = false;
 rebuild();
 })();
