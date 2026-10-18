@@ -9,7 +9,7 @@
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.45 system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
-<title>League · Courtside Draft Kit</title>
+<title>League dashboard · Courtside Draft Kit</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%2315191B%22/%3E%3Ccircle cx=%2232%22 cy=%2232%22 r=%2222%22 fill=%22%23EC7840%22/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -77,12 +77,97 @@ td.x{color:var(--line)}
 .kpi span{color:var(--muted);font-size:.82rem}
 #prof td.cat{font:600 .75rem var(--f-body);letter-spacing:.05em;text-align:left}
 .hint{color:var(--muted);font-size:.82rem;margin:0}
+.btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+header.top .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-radius:6px}
+@media (max-width:640px){header.top #how-open{padding:8px 14px}}
+/* How it works dialog: same markup and look as the Draft Kit (markup copied in by gen.py from app.html) */
+.how{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:0;width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+.how::backdrop{background:rgba(0,0,0,.45)}
+.how-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);padding:14px 20px 10px;border-bottom:1px solid var(--line)}
+.how h2{font:700 1.5rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin:0}
+.how .how-intro{margin:12px 20px 0;max-width:none;color:var(--muted);font-size:.9rem}
+.how-intro a{color:var(--mine);text-underline-offset:2px}
+.how-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;padding:12px 20px 20px;align-items:start}
+.how-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.how-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px 10px}
+.how h3{font:700 1.2rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.how h4{font:600 .82rem/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:12px 0 3px}
+.how p{margin:0 0 4px;max-width:70ch;color:var(--ink);font-size:.9rem;line-height:1.45}
+.how .swing{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.how .swing span{font:500 .78rem var(--f-data);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
 </style>
 
 <header class="top">
-  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>League</h1>
-  <div class="top-r"><span id="sitenav"></span></div>
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>League dashboard</h1>
+  <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
 </header>
+<dialog class="how" id="how" aria-labelledby="how-title">
+  <div class="how-head"><h2 id="how-title">How it works</h2><button class="btn" type="button" id="how-close">Close</button></div>
+  <p class="how-intro">Formulas, fitted numbers and every backtest behind these choices are in <a href="math.html" target="_blank" rel="noopener">The Math Behind the Model</a>.</p>
+  <div class="how-grid">
+   <div class="how-col">
+    <section class="how-card">
+      <h3>The values</h3>
+      <h4>Zscore</h4>
+      <p>Season value against an average drafted player. Zscore type picks the scaling: Standard (the default; each category's mean and spread over the top players, as BBM and Hashtag compute it), ROTO-Adjusted (each category scaled by how far apart teams finish in simulated drafts, about 2.5× smaller; what the Model pick uses) or H2H-Adjusted (scaled by the weekly head-to-head gap, season spread plus week-to-week swing, so swingy categories like points and steals count less). It changes the Zscore column, sorting, and # and Edge when they use Zscore, never Win or the Model pick. −1 and −2 take out his worst one or two categories, as on a punt team: 100% leaves them out, 50% counts them half.</p>
+      <h4>Projections</h4>
+      <p>Average (the default), BBM (Basketball Monster) or Hashtag (Hashtag Basketball). Average is the mean of both: games, minutes and per-game stats averaged, with FG% and FT% from the averaged makes and attempts. The two players Hashtag doesn't project keep their BBM numbers. On 2024-25 preseason projections scored against what happened, Average ranked players best and had the smallest stat errors, though the gaps were small, so the Model pick always uses Average. Backtests use each season's real preseason projections.</p>
+      <h4>Basis and IL spots</h4>
+      <p>How much projected missed games count: in full (Season), not at all (Per game, the default, as BBM ranks) or half (Mix). Season did best in backtests, so the Model pick always uses it. BBM's projected games already expect injury-prone players to bounce back, so counting them in full doesn't over-penalize risk. IL spots then count a share of missed games at waiver level: 47% with 1 spot, 70% with 2, 79% with 3, 81% with 4. Each extra spot adds less, because injuries overlap and short absences can't use one.</p>
+      <h4>Win C</h4>
+      <p>How much he raises your chance of winning each category against the other teams, compared with leaving the pick to waivers, summed in hundredths of a category win (72 is about three-quarters of a win). Your forecast is your picks plus a typical player at each pick left, so it changes every pick: a third big man adds less once you have two.</p>
+      <h4>Win M</h4>
+      <p>How much he raises your chance of winning the whole matchup (more categories than the opponent, ties half), in percentage points, averaged over opponents. It rewards close categories and gives little for ones you already win or can't.</p>
+      <h4>Weekly swing (H2H)</h4>
+      <p>Each category's week-to-week swing compared with how far apart teams sit; higher means a lead there is less reliable, so it counts for less. Teams with more games in a week tend to win the counting stats together, and the board accounts for that.</p>
+      <div class="swing" id="swing"></div>
+    </section>
+    <section class="how-card">
+      <h3>Picking</h3>
+      <h4># and the Model pick / Likely pick</h4>
+      <p># ranks available players by "# order by": Win C, Win M or the Zscore shown. Off the clock the badge reads Likely pick, your best target for your next pick, using Win M: his Win M if he's still there at your pick (if he's gone, the best player left instead), plus what is likely left at your following pick. On the clock it reads Model pick: everyone left is 100% there. Your first picks lean on value (half Zscore with a player's worst category counting half when negative, half Win C): 95% at your first pick, 73% at your second, 27% at your third, 5% at your fourth. After that it is Win M plus a look two picks ahead: the board re-runs with each candidate on your roster and adds the best player likely left at your next pick, so that pick is valued for the roster it will join. It always drafts with the settings that did best in backtests (Season, Average projections, Playoff boost Off), whatever the list shows; only league settings and Draft field reach it. In a backtest league where every team drafted by one pure strategy, it earned 14.8 prize equity per 100 seasons against 13.0 for H2H-Adjusted Zscore, 11.7 for ADP and 8.1 for Standard Zscore (an even share is 11.9). Grey names probably won't reach you.</p>
+      <h4>There at, Lasts to, Pick range</h4>
+      <p>His chance of still being there at your next pick and the one after, from ADP and how far real drafters stray from it (fitted on 50 real 12-team Fantrax drafts). Value drafters in the room are assumed to rank by Standard Zscore with TO ×0.5, whatever you choose here. Pick range is ADP ± one standard deviation.</p>
+      <h4>Edge</h4>
+      <p>ADP minus the pick his value says he deserves. Positive means he is going later than he should. Edge vs picks the value; an ADP past your draft's last pick counts as just after it (marked *).</p>
+      <h4>ADP</h4>
+      <p>Fantrax average draft position. Players without one are treated as late picks with a wide range.</p>
+    </section>
+   </div>
+   <div class="how-col">
+    <section class="how-card">
+      <h3>League</h3>
+      <h4>Punting</h4>
+      <p>The board doesn't punt for you. With real projections and real ADP, every automatic punt tried (planned, softened or opportunistic) did worse than not punting in four seasons of backtests. To lean into a punt yourself, set that category's weight to ×0, which changes Zscore.</p>
+      <h4>Draft field</h4>
+      <p>How sharp the room is: the share of opponents' picks made by value instead of Fantrax ADP. Easy (the default) is mostly ADP drafters (8% by value), Average a mix of ADP, sharp and value drafters (31%, the league every backtest uses), Strong mostly sharp drafters (46%) and Very strong sharp and value drafters only (62%). A sharper field takes good-value players earlier, which changes who will still be there. Measured on real rooms it sits between Easy and Average, and a wrong guess either way cost little in backtests.</p>
+      <h4>Playoff games</h4>
+      <p>His team's games in your playoff weeks (2026-27 schedule; small numbers per round), Playoff boost scales Win and Zscore by 1 + strength × (his games ÷ the average − 1), kept within ×0.5–×1.5. Schedules differ by about ±11%, so it is a tiebreaker more than a driver. The Model pick keeps it Off, which did best in backtests.</p>
+      <h4>Scarcity</h4>
+      <p>Information only. Category scarcity is how thin each category is per roster spot once the next round's best in it are gone, among the players still likely to be drafted, against the whole pool before the draft and the other categories: a few players holding most of a category (blocks) makes it scarce from the start, and a category already drafted out (points late) makes it scarce later; position scarcity compares slots teams still need with good players left. Above 1× (red) there is less left than usual, below 1× (green) more. Boosting values by it cost about 5 points in backtests, because Win already counts what will be left.</p>
+    </section>
+    <section class="how-card">
+      <h3>Using the board</h3>
+      <h4>Logging picks</h4>
+      <p>Type a name and press Enter or Taken, or press Taken on his row; the pick goes to the team on the clock. Undo pick takes back the last one; tap a recent pick twice to take back an earlier one.</p>
+      <h4>Fantrax sync</h4>
+      <p>Open your league's home page on Fantrax and copy the address from the browser bar (it looks like fantrax.com/fantasy/league/<b>abc123xyz</b>/home). Paste it into the box under Fantrax sync and press Connect; the ID alone works too. Then choose your team, so Win and availability are worked out for you. Teams, roster size and lineup slots are read from the league, and picks arrive every 10 seconds on the right teams, traded picks included. Sync runs on the hosted site only. Leagues are saved for one-click switching (Rename gives one your own name).</p>
+      <h4>Stats and weights</h4>
+      <p>Stats picks what the nine category columns show: Win added, Zscore or projected stats. Category weights (×0 to ×2; TO starts at ×0.5) change Zscore only; Win always counts every category.</p>
+      <h4>League dashboard</h4>
+      <p>League dashboard (top right) analyzes a finished draft: pick the Draft Kit's current draft, a saved draft or a saved Fantrax league. On top, the team in focus against each opponent (chance to win the matchup and each category) and its category profile (win chance against an average team, projected total, rank). Below, every team against every team (matchup win %, category win % or expected categories) and every team's projected stats (raw, per week, Zscore or rank). Stats Total or Per game sets the basis for every number on that page (Per game ignores missed games); Playoff boost is Off, like the Model pick, so with the same Basis and Projections here its numbers match Your team. Click any column header to sort; percentages show one decimal.</p>
+      <h4>Saved drafts</h4>
+      <p>Save, load, rename, delete or start a new draft; anything that would lose work asks for a second tap. Drafts live in this browser only.</p>
+      <h4>Colors</h4>
+      <p>Green helps, red hurts, deeper means a bigger effect. There at and Lasts to are green from 75%, amber from 40%. Playoff games are green or red one game above or below average.</p>
+      <h4>Limits</h4>
+      <p>Games caps aren't modeled. Lineup slots (League settings: Positions and C, G, F, G/C, F/C and UTIL slots, read from Fantrax when you connect; the rest of the roster is Reserve) are shown as position coverage under Your team but don't change values or the Model pick: in backtests slot conflicts cost only 0.1–0.3% of player-games, because on a typical day 6–8 of 12 players play and most have 2–3 positions.</p>
+    </section>
+   </div>
+  </div>
+</dialog>
 
 <main>
   <section class="panel" aria-label="League to analyze">
@@ -1015,7 +1100,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   // Toolbar between the two pages; `active` is 'kit' or 'league'
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
     '<a href="./"' + (active === 'kit' ? ' aria-current="page"' : '') + '>Draft Kit</a>' +
-    '<a href="league.html"' + (active === 'league' ? ' aria-current="page"' : '') + '>League</a></nav>';
+    '<a href="league.html"' + (active === 'league' ? ' aria-current="page"' : '') + '>League dashboard</a></nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
     '.sitenav a:hover{color:var(--ink)}' +
@@ -1111,7 +1196,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
       return { c, win: w, raw: raw[t][c], rank: rank[t][c] };
     });
     return { N, nc: cats.length, cats, me, names, open, basis, perGame, picked: picks.filter(v => v != null).length, total, cfg,
-      match, cat, expCats, standings, rosters, raw, perWeek, z, rank, profile };
+      match, cat, expCats, standings, rosters, raw, perWeek, z, rank, profile, swing: ctx.swing };
   }
 
   // ---------- sources ----------
@@ -1252,6 +1337,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   function compute() {
     if (!src) return;
     R = League.computeLeague(PLAYERS, src, $('proj').value, ui.basis);
+    if ($('swing')) $('swing').innerHTML = CATS.map((c, i) => '<span>' + c.l + ' ' + R.swing[i].toFixed(2) + '</span>').join('');
     $('ts-sub').textContent = R.basis === 'pergame' ? 'Projected per game for each roster as drafted (missed games don\'t count)' : 'Projected season totals for each roster as drafted';
     $('tsv').querySelector('[data-v="week"]').hidden = R.basis === 'pergame';
     if (R.basis === 'pergame' && ui.tsv === 'week') ui.tsv = 'raw';
@@ -1336,6 +1422,9 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   }
 
   $('retry').addEventListener('click', () => { fxWait = 0; loadSource(); });
+  $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
+  $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
+  $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
   $('src').addEventListener('change', e => { ui.src = e.target.value; ui.team = null; save(); loadSource(); });
   $('team').addEventListener('change', e => { ui.team = +e.target.value; save(); render(); });
   $('proj').addEventListener('change', e => { ui.proj = e.target.value; save(); compute(); });

@@ -84,7 +84,7 @@
       return { c, win: w, raw: raw[t][c], rank: rank[t][c] };
     });
     return { N, nc: cats.length, cats, me, names, open, basis, perGame, picked: picks.filter(v => v != null).length, total, cfg,
-      match, cat, expCats, standings, rosters, raw, perWeek, z, rank, profile };
+      match, cat, expCats, standings, rosters, raw, perWeek, z, rank, profile, swing: ctx.swing };
   }
 
   // ---------- sources ----------
