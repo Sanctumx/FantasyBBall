@@ -36,7 +36,8 @@ Ground truth for the model, the backtests and every decision so far is `src/SESS
    `gh api repos/Sanctumx/FantasyBBall/pulls -f title=… -f head=<branch> -f base=main -F body=@pr.md`.
 8. **Merge = deploy.** Only when the user says push: `gh pr merge <n> --merge --delete-branch`
    (REST: `gh api -X PUT repos/Sanctumx/FantasyBBall/pulls/<n>/merge -f merge_method=merge`, then
-   `git push origin --delete <branch>`). A merge commit keeps
+   `git push origin --delete <branch>`; cloud sessions can't delete remote branches, so the user presses
+   "Delete branch" on the merged PR's page). A merge commit keeps
    the step-by-step history. Cloudflare deploys main within a couple of minutes. Then
    `git checkout main && git pull` locally.
    Small fixes the user asks to push right away may go straight to main, after the tests pass and a
