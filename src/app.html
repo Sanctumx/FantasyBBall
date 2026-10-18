@@ -320,7 +320,7 @@ label.f select,label.f input{font-weight:400}
       <h4>Playoff games</h4>
       <p>His team's games in your playoff weeks (2026-27 schedule; small numbers per round), Playoff boost scales Win and Zscore by 1 + strength × (his games ÷ the average − 1), kept within ×0.5–×1.5. Schedules differ by about ±11%, so it is a tiebreaker more than a driver. The Model pick keeps it Off, which did best in backtests.</p>
       <h4>Scarcity</h4>
-      <p>Information only. Category scarcity is the value lost between the best players left now and those likely left at your next pick; position scarcity compares slots teams still need with good players left. Boosting values by it cost about 5 points in backtests, because Win already counts what will be left.</p>
+      <p>Information only. Category scarcity is the value lost between the best players left now and those likely left at your next pick; position scarcity compares slots teams still need with good players left. Above 1× (green) a category or position is drying up faster than average, so it's worth more now; below 1× (red) it's plentiful and can wait. Boosting values by it cost about 5 points in backtests, because Win already counts what will be left.</p>
     </section>
     <section class="how-card">
       <h3>Using the board</h3>
@@ -1326,12 +1326,12 @@ function renderTable() {
   const zRankOf = p => zRankMap.get(p.id);
   if (res.scarcity) {
     // every category in the usual order (punted ones marked), then every position
-    // pills like There at / Lasts to: red = scarce (drying up), amber = about average, green = plentiful
-    const band = v => v >= 1.15 ? 'lo' : v > 0.85 ? 'mid' : 'hi';
-    const pill = (lab, v) => '<span class="pill ' + band(v) + '" title="' + lab + ' ' + v.toFixed(2) + '×: ' + (v >= 1.15 ? 'drying up fast' : v > 0.85 ? 'about average' : 'plentiful') + '">' + lab + ' ' + v.toFixed(2) + '×</span>';
+    // green = scarce (drying up: worth more now, as a ×1.5 boost reads), amber = about average, red = plentiful (can wait)
+    const band = v => v >= 1.15 ? 'hi' : v > 0.85 ? 'mid' : 'lo';
+    const pill = (lab, v) => '<span class="pill ' + band(v) + '" title="' + lab + ' ' + v.toFixed(2) + '×: ' + (v >= 1.15 ? 'drying up fast, worth more now' : v > 0.85 ? 'about average' : 'plentiful, can wait') + '">' + lab + ' ' + v.toFixed(2) + '×</span>';
     const ci = CATS.map((c, i) => res.scarcity.catIdx[i] != null ? pill(c.l, res.scarcity.catIdx[i]) : '').join('');
     const pi = ['PG', 'SG', 'SF', 'PF', 'C'].map(P => pill(P, res.scarcity.posIdx[P])).join('');
-    $('scarStrip').innerHTML = '<span class="sc-head" title="How fast each category and position is drying up (info only). Red scarce, green plentiful">Scarcity</span><span class="sc-lab">Categorical</span>' + ci + '<span class="sc-lab">Positional</span>' + pi;
+    $('scarStrip').innerHTML = '<span class="sc-head" title="How fast each category and position is drying up (info only). Green scarce (worth more now), red plentiful (can wait)">Scarcity</span><span class="sc-lab">Categorical</span>' + ci + '<span class="sc-lab">Positional</span>' + pi;
   } else $('scarStrip').innerHTML = '';
   // Strategy: your projected matchup win chance if you follow each punt from here (best first)
   if ($('stratStrip') && res.strategies && res.strategies.length) {
