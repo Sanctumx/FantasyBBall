@@ -64,3 +64,15 @@ test('an old duplicate extra counts as the projected player', () => {
   assert.ok(R.rosters[t].some(p => p.n === 'Alexandre Sarr'));
   assert.ok(!R.rosters[t].some(p => p.n === 'Alex Sarr'));
 });
+
+test('mid-draft team stats include a typical player at each open pick, as the win chances do', () => {
+  const R = L.computeLeague(PLAYERS, src(100), 'avg');
+  for (let t = 0; t < 14; t++) {
+    const drafted = L.rawTotals(R.rosters[t]);
+    assert.strictEqual(R.open[t], 12 - R.rosters[t].length);
+    if (R.open[t] > 0) assert.ok(R.raw[t][3] > drafted[3] && R.raw[t][4] > drafted[4], 'team ' + t);
+  }
+  const full = L.computeLeague(PLAYERS, src(168), 'avg');
+  assert.ok(full.open.every(n => n === 0));
+  assert.deepStrictEqual(full.raw[3], L.rawTotals(full.rosters[3]));
+});

@@ -49,3 +49,15 @@ test('a Fantrax draft maps picks by name, adds unknown players, and names teams'
   const R = L.computeLeague(PLAYERS, s, 'avg');
   assert.ok(R.rosters[5].some(p => p.n === 'Real Nobody'));
 });
+
+test('a Fantrax league without your team in it still computes when the board slot is past its team count', () => {
+  const order = Array.from({ length: 10 }, (_, i) => 'u' + i);
+  const draft = { draftOrder: order, draftPicks: [{ round: 1, pick: 1, pickInRound: 1, teamId: 'u0', playerId: 'p2' }] };
+  const s = L.sourceFromFantrax({ teamInfo: {} }, draft, { p2: { name: 'Jokic, Nikola', team: 'DEN' } }, PLAYERS, { slot: 12 }, null);
+  const R = L.computeLeague(PLAYERS, s, 'avg');
+  assert.strictEqual(R.N, 10); assert.ok(R.me >= 0 && R.me < 10);
+});
+
+test('a Fantrax league with no teams or draft order is an error, not a made-up league', () => {
+  assert.throws(() => L.sourceFromFantrax({ teamInfo: {} }, { draftOrder: [], draftPicks: [] }, {}, PLAYERS, {}, null), /no teams or draft order/);
+});

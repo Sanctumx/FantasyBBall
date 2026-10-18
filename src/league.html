@@ -36,6 +36,8 @@ main{display:flex;flex-direction:column;gap:16px;max-width:1500px}
 #fmt{margin:0 0 0 auto;color:var(--muted);font-size:.85rem}
 .msg{margin:0;font-size:.9rem;color:var(--muted)}
 .msg.err{color:var(--bad)}
+.msgrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.retry{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;flex-wrap:wrap}
 .seg button{border:0;border-right:1px solid var(--line);background:var(--surface);padding:6px 11px;cursor:pointer;font-size:.88rem}
 .seg button:last-child{border-right:0}
@@ -73,10 +75,10 @@ td.x{color:var(--line)}
       <label class="f" for="proj">Projections<select id="proj"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></select></label>
       <p id="fmt"></p>
     </div>
-    <p class="msg" id="msg" role="status"></p>
+    <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
   </section>
 
-  <div id="body">
+  <div id="body" hidden>
     <div class="topgrid">
       <section class="panel">
         <h2><span id="focusName" style="font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit">Your team</span> vs each team <span>Chance to win the weekly matchup and each category</span></h2>
@@ -153,7 +155,13 @@ td.x{color:var(--line)}
   async function loadSource() {
     const seq = ++loadSeq, s = sources.find(x => x.id === ui.src); clearTimeout(fxTimer);
     if (!s) return;
-    if (s.kind !== 'fantrax') { src = League.sourceFromStore(store, s.id); fxWait = 0; say(''); return compute(); }
+    // nothing from the previous league stays on screen while this one loads or if it fails
+    $('body').hidden = true; $('fmt').textContent = ''; $('retry').hidden = true;
+    if (s.kind !== 'fantrax') {
+      src = League.sourceFromStore(store, s.id); fxWait = 0;
+      if (!src) { say('That draft is no longer saved. Pick another league.', true); return; }
+      say(''); return compute();
+    }
     say('Loading ' + s.label + ' from Fantrax…');
     try {
       const league = await fxGet('league', s.leagueId), draft = await fxGet('draft', s.leagueId);
@@ -164,6 +172,7 @@ td.x{color:var(--line)}
       fxWait = 0; say(''); compute();
     } catch (e) {
       if (seq !== loadSeq) return;
+      $('retry').hidden = false;
       if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site. Here, pick a saved draft or the Draft Kit\'s current draft.', true); return; }
       if (transient(e)) {
         fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
@@ -236,6 +245,7 @@ td.x{color:var(--line)}
     return fmtStat(ui.tsv === 'week' ? R.perWeek[i][c] : R.raw[i][c], c, ui.tsv);
   }
 
+  $('retry').addEventListener('click', () => { fxWait = 0; loadSource(); });
   $('src').addEventListener('change', e => { ui.src = e.target.value; ui.team = null; save(); loadSource(); });
   $('team').addEventListener('change', e => { ui.team = +e.target.value; save(); render(); });
   $('proj').addEventListener('change', e => { ui.proj = e.target.value; save(); compute(); });

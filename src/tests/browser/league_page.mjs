@@ -71,6 +71,26 @@ const seed = { 'courtside-board-v1': JSON.stringify(boardState), 'courtside-save
   ok(errs.length === 0, 'Fantrax path no errors ' + errs.join('; '));
   await ctx.close(); }
 
+{ let up = false; const order = Array.from({ length: 14 }, (_, i) => 't' + i);
+  const fx = r => { const w = new URL(r.request().url()).searchParams.get('what');
+    if (!up) return r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'League ID should be letters and numbers.' }) });
+    if (w === 'league') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ leagueName: 'Home', teamInfo: Object.fromEntries(order.map((t, i) => [t, { id: t, name: 'Club ' + i }])) }) });
+    if (w === 'draft') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ draftOrder: order, draftPicks: [{ round: 1, pick: 1, pickInRound: 1, teamId: 't0', playerId: 'p1' }] }) });
+    return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ p1: { name: 'Jokic, Nikola', team: 'DEN' } }) }); };
+  const s2 = Object.assign({}, seed, { 'courtside-leagues-v1': JSON.stringify([{ id: 'zz9', name: 'Broken', myTeam: null, used: 1 }]) });
+  const { p, errs, ctx } = await page(s2, { fx: r => (up || new URL(r.request().url()).searchParams.get('what')) ? fx(r) : fx(r) });
+  ok((await p.$$eval('#mx tbody tr', r => r.length)) === 14, 'board draft shown first');
+  up = false; await p.route(/api\/fantrax/, r => r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'League ID should be letters and numbers.' }) }));
+  await p.selectOption('#src', 'fx:zz9'); await p.waitForTimeout(800);
+  ok(await p.$eval('#body', e => e.hidden) && (await p.textContent('#fmt')) === '', 'failed Fantrax load hides the previous league');
+  ok(await p.isVisible('#retry'), 'Retry button shown after a failed load');
+  await p.unroute(/api\/fantrax/); up = true;
+  await p.route(/api\/fantrax/, fx);
+  await p.click('#retry'); await p.waitForTimeout(1500);
+  ok(/Club 0/.test(await p.textContent('#mx')) && !(await p.isVisible('#retry')), 'Retry loads the league and hides the button');
+  ok(errs.length === 0, 'retry path no errors ' + errs.join('; '));
+  await ctx.close(); }
+
 await b.close();
 console.log(fails.length ? 'FAILED ' + fails.length : 'ALL PASS');
 process.exit(fails.length ? 1 : 0);
