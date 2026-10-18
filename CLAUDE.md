@@ -32,7 +32,11 @@ Ground truth for the model, the backtests and every decision so far is `src/SESS
 7. **Pull request.** `git push -u origin <branch>`, then
    `gh pr create --base main --title "<what changed>" --body "<summary, tests run, decisions made>"`.
    The PR is the record of what changed and why.
-8. **Merge = deploy.** Only when the user says push: `gh pr merge <n> --merge --delete-branch`. A merge commit keeps
+   In Claude Code cloud sessions `gh pr …` commands fail (GraphQL is blocked); use the REST API instead:
+   `gh api repos/Sanctumx/FantasyBBall/pulls -f title=… -f head=<branch> -f base=main -F body=@pr.md`.
+8. **Merge = deploy.** Only when the user says push: `gh pr merge <n> --merge --delete-branch`
+   (REST: `gh api -X PUT repos/Sanctumx/FantasyBBall/pulls/<n>/merge -f merge_method=merge`, then
+   `git push origin --delete <branch>`). A merge commit keeps
    the step-by-step history. Cloudflare deploys main within a couple of minutes. Then
    `git checkout main && git pull` locally.
    Small fixes the user asks to push right away may go straight to main, after the tests pass and a
