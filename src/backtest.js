@@ -205,10 +205,21 @@ function draft(season, slot, seed, cfgExtra, opp) {
   }
   const sharpW = opp && opp.mix && opp.mix.sharpW != null ? opp.mix.sharpW : 0.5;
   if (opp && opp.report) Object.assign(opp.report, { oppPunt: oppPunt.slice(), oppModel: oppModel.slice(), oppSharp: oppSharp.slice() });
+  // opp.strat (2026-10-18): one strategy per team, for a league of drafting strategies; 'board' = this board's Model pick
+  // drafting for that team, 'z' = best Standard Zscore with TO ×0.5 (p.fieldV), 'h2h' = best H2H-Adjusted Zscore with TO ×0.5,
+  // 'adp' = the ADP drafters' board T (real-draft scatter around ADP). The `slot` team must be a 'board' team.
+  const strat = opp && opp.strat, cfgMain = cfg, cfgFor = t => t === slot - 1 ? cfgMain : Object.assign({}, cfgMain, { slot: t + 1 });
+  const h2hV = p => { let v = 0; for (let c = 0; c < 9; c++) v += p.zH.bc[c] * (c === 8 ? 0.5 : 1); return v; };
   for (let k = 0; k < TOTAL; k++) {
     const t = E.teamAt(k, N, ORD);
     let id;
-    if (t === slot - 1) {
+    if (strat && t !== slot - 1 && strat[t] !== 'board') {
+      const av = PO.filter(p => !taken.has(p.id)), s0 = strat[t];
+      if (s0 === 'z') id = av.reduce((b2, p) => (p.fieldV > b2.fieldV ? p : b2), av[0]).id;
+      else if (s0 === 'h2h') id = av.reduce((b2, p) => (h2hV(p) > h2hV(b2) ? p : b2), av[0]).id;
+      else id = av.reduce((b2, p) => (T[p.id] < T[b2.id] ? p : b2), av[0]).id;
+    } else if (t === slot - 1 || (strat && strat[t] === 'board')) {
+      const cfg = cfgFor(t);
       // cfg.stash = { last, w } (2026-10-17): IL stashes. In your last `last` picks the board credits back w × the games a
       // known-injured player misses (knownW), since 3 IL spots hold him while he is out and the title is decided in the
       // playoff weeks when he is back. Earlier picks use the normal board.
