@@ -1,5 +1,4 @@
-<title>League dashboard · Courtside Draft Kit</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%2315191B%22/%3E%3Ccircle cx=%2232%22 cy=%2232%22 r=%2222%22 fill=%22%23EC7840%22/%3E%3C/svg%3E">
+<title>League Dashboard · Courtside Draft Kit</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -8,17 +7,17 @@
 /* Layout: post-draft analysis. Team in focus on top (head-to-head | category profile), whole league below (matrix, stats). */
 :root{
   --bg:#EFF1EE; --surface:#FFFFFF; --sunk:#F6F7F5; --ink:#15191B; --muted:#5D666B; --line:#D8DCD7;
-  --accent:#C24E1B; --mine:#1F5FA8; --mine-soft:#DFE9F6; --good:#1A7F45; --bad:#C2372F;
+  --accent:#C24E1B; --mine:#1F5FA8; --mine-soft:#DFE9F6; --good:#1A7F45; --bad:#C2372F; --warn:#A85A0D; --r:6px;
   --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
-  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; color-scheme:dark}}
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
-  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; color-scheme:dark}
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
 button,select{font:inherit;color:inherit}
@@ -29,42 +28,54 @@ header.top h1 .logo{width:.9em;height:.9em;flex:none}
 header.top .top-r{margin-right:24px}
 @media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}}
 main{display:flex;flex-direction:column;gap:16px}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:10px}
-.ctl{display:flex;gap:12px 16px;flex-wrap:wrap;align-items:flex-end}
-.f{display:flex;flex-direction:column;gap:4px;font:600 .7rem var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-width:0}
-.f select{font:400 .92rem var(--f-body);letter-spacing:0;text-transform:none;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;max-width:100%}
-#fmt{margin:0 0 0 auto;color:var(--muted);font-size:.85rem}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ctl{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:flex-end}
+.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
+.f select{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+#src{min-width:15em}
+#fmt{margin:0 0 0 auto;color:var(--muted);font-size:.8rem;align-self:center}
 .msg{margin:0;font-size:.9rem;color:var(--muted)}
+.msg:empty{display:none}
 .msg.err{color:var(--bad)}
 .msgrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.retry{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;flex-wrap:wrap}
-.seg button{border:0;border-right:1px solid var(--line);background:var(--surface);padding:6px 11px;cursor:pointer;font-size:.88rem}
-.seg button:last-child{border-right:0}
-.seg button.on{background:var(--ink);color:var(--surface)}
-h2{font:700 1.15rem var(--f-display);letter-spacing:.06em;text-transform:uppercase;margin:0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
-h2 span{font:400 .82rem var(--f-body);letter-spacing:0;text-transform:none;color:var(--muted)}
+.msgrow:has(.msg:empty):has(.retry[hidden]){display:none}
+.retry{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:5px 12px;cursor:pointer;font-weight:600}
+/* view switches: same look as the Draft Kit / League Dashboard toolbar */
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:6px;color:var(--muted);font-weight:600;font-size:.86rem;cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+h2{font:600 1.15rem/1.1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;margin:0;display:flex;gap:4px 12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+h2 .meta{font:400 .8rem var(--f-body);letter-spacing:0;text-transform:none;color:var(--muted)}
 .scroll{overflow-x:auto;min-width:0}
-table{border-collapse:collapse;font:12px/1.3 var(--f-data);font-variant-numeric:tabular-nums;white-space:nowrap;width:100%}
-th,td{padding:5px 7px;text-align:center;border-bottom:1px solid var(--line)}
+table{border-collapse:collapse;font:12.5px/1.3 var(--f-data);font-variant-numeric:tabular-nums;white-space:nowrap;width:100%}
+th,td{padding:3px 5px;text-align:center;border-bottom:1px solid var(--line)}
+th{font:600 .72rem/1.15 var(--f-body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-block:7px;border-bottom:1px solid var(--ink)}
 thead th:not([data-nosort]){cursor:pointer;user-select:none}
-thead th:not([data-nosort]):hover{color:var(--ink)}
+thead th:not([data-nosort]):hover,th[aria-sort]{color:var(--ink)}
 th[aria-sort="descending"]::after{content:" ▼";font-size:.6rem}
 th[aria-sort="ascending"]::after{content:" ▲";font-size:.6rem}
-th{font:600 .68rem var(--f-body);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-td.l,th.l{text-align:left;font:12.5px var(--f-body)}
-tr.me td.l{font-weight:600;color:var(--mine);background:var(--mine-soft)}   /* your row: name cell only, so its heat colors stay readable */
+td.l,th.l{text-align:left}
+td.l{font:13px var(--f-body);padding-right:10px}
+tbody tr:hover td{background:var(--sunk)}
+tr.me td.l{font-weight:600;color:var(--mine)}   /* your team: blue name, as on the Draft Kit */
 td.x{color:var(--line)}
-.h5{background:color-mix(in srgb,var(--good) 40%,transparent)}.h4{background:color-mix(in srgb,var(--good) 18%,transparent)}
-.h2{background:color-mix(in srgb,var(--bad) 17%,transparent)}.h1{background:color-mix(in srgb,var(--bad) 36%,transparent)}
+/* heat chips, as on the Draft Kit's player list: deeper green or red the further from even */
+.chip{display:inline-block;min-width:3.4em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
+td b .chip,.chip.b{font-weight:700}
 .topgrid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px}
-.botgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
-@media (min-width:1400px){.botgrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}.botgrid th,.botgrid td{padding:5px 4px}}   /* wide screens: league matrix and team stats side by side */
 @media (max-width:1000px){.topgrid{grid-template-columns:1fr}}
-.kpis{display:flex;gap:24px;flex-wrap:wrap}
-.kpi b{display:block;font:700 2rem/1 var(--f-display)}
-.kpi span{color:var(--muted);font-size:.82rem}
-#prof td.cat{font:600 .75rem var(--f-body);letter-spacing:.05em;text-align:left}
+.botgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+@media (min-width:1400px){.botgrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}.botgrid th,.botgrid td{padding-inline:3px}.botgrid .chip{min-width:3.1em}}   /* wide screens: league matrix and team stats side by side */
+.kpis{display:flex;gap:6px 22px;flex-wrap:wrap;align-items:baseline}
+.kpi b{font:700 1.7rem/1 var(--f-display)}
+.kpi span{color:var(--muted);font-size:.82rem;margin-left:6px}
+.kpi.big{flex-basis:100%}
+.kpi.big b{font-size:2.8rem}
+.kpi.big span{font:600 1.1rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin-left:8px}
+.kpi.hi b,.lvl.hi{color:var(--good)}.kpi.mid b,.lvl.mid{color:var(--warn)}.kpi.lo b,.lvl.lo{color:var(--bad)}
+#prof td.cat{font:600 .8rem var(--f-body);letter-spacing:.04em;text-align:left}
+.lvl{font-weight:600}
 .hint{color:var(--muted);font-size:.82rem;margin:0}
 .btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
 .btn:hover{border-color:var(--muted)}
@@ -89,7 +100,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 </style>
 
 <header class="top">
-  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>League dashboard</h1>
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>League Dashboard</h1>
   <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
 </header>
 <!--__HOW__-->
@@ -109,11 +120,11 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   <div id="body" hidden>
     <div class="topgrid">
       <section class="panel">
-        <h2><span id="focusName" style="font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit">Your team</span> vs each team <span>Chance to win the weekly matchup and each category</span></h2>
+        <h2><span><span id="focusName">Your team</span> vs each team</span><span class="meta">Chance to win the weekly matchup and each category</span></h2>
         <div class="scroll"><table id="h2h"></table></div>
       </section>
       <section class="panel">
-        <h2>Category profile <span>Against an average team in this league</span></h2>
+        <h2>Category profile <span class="meta">Against an average team in this league</span></h2>
         <div class="kpis" id="kpis"></div>
         <div class="scroll"><table id="prof"></table></div>
       </section>
@@ -121,7 +132,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 
     <div class="botgrid">
     <section class="panel">
-      <h2>Matchup matrix <span>Row beats column</span></h2>
+      <h2>Matchup matrix <span class="meta">Row beats column · click a heading to sort</span></h2>
       <div class="ctl">
         <span class="seg" id="mxv" role="group" aria-label="Matrix view"><button type="button" data-v="match">Matchup win %</button><button type="button" data-v="cat">Category win %</button><button type="button" data-v="exp">Expected categories</button></span>
         <label class="f" for="mxc" id="mxc-lab">Category<select id="mxc"></select></label>
@@ -130,7 +141,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     </section>
 
     <section class="panel">
-      <h2>Team stats <span id="ts-sub">Projected season totals for each roster as drafted</span></h2>
+      <h2>Team stats <span class="meta" id="ts-sub">Projected season totals for each roster as drafted</span></h2>
       <div class="ctl"><span class="seg" id="tsv" role="group" aria-label="Stats view"><button type="button" data-v="raw">Raw</button><button type="button" data-v="week">Per week</button><button type="button" data-v="z">Zscore</button><button type="button" data-v="rank">Rank</button></span></div>
       <div class="scroll"><table id="ts"></table></div>
       <p class="hint">Per game adds up each roster's per-game lines (FG% and FT% from makes and attempts). Zscore is against the league's teams; Rank 1 is best (fewest TO).</p>
@@ -157,7 +168,11 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const ord = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
   const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
-  const heat = q => q >= .62 ? 'h5' : q >= .54 ? 'h4' : q > .46 ? '' : q > .38 ? 'h2' : 'h1';
+  // q is a 0..1 'how good' value (win chance, or rank turned into 0..1); 0.5 is even. Same chip as the Draft Kit.
+  const chip = (q, txt, b) => { const d = q - .5, t = Math.min(1, Math.abs(d) / .25);
+    const bg = Math.abs(d) < .015 ? 'transparent' : 'color-mix(in oklab, var(' + (d > 0 ? '--good' : '--bad') + ') ' + Math.round(12 + 58 * t) + '%, var(--surface))';
+    return '<span class="chip' + (b ? ' b' : '') + '" style="background:' + bg + '">' + txt + '</span>'; };
+  const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
   const pct = v => (v * 100).toFixed(1);
   const store = { getItem: k => { try { return localStorage.getItem(k); } catch (e) { return null; } } };
   let sources = [], src = null, R = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0;
@@ -240,13 +255,14 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     $('focusName').textContent = name(t);
     // head-to-head
     let h = '<thead><tr><th class="l">Opponent</th><th>Match</th>' + R.cats.map(c => '<th>' + CATS[c].l + '</th>').join('') + '</tr></thead><tbody>';
-    for (let j = 0; j < N; j++) if (j !== t) h += '<tr data-t="' + j + '"><td class="l">' + esc(name(j)) + '</td><td class="m ' + heat(R.match[t][j]) + '">' + pct(R.match[t][j]) + '</td>' + R.cats.map(c => '<td class="' + heat(R.cat[t][j][c]) + '">' + pct(R.cat[t][j][c]) + '</td>').join('') + '</tr>';
+    for (let j = 0; j < N; j++) if (j !== t) h += '<tr data-t="' + j + '"><td class="l">' + esc(name(j)) + '</td><td class="m">' + chip(R.match[t][j], pct(R.match[t][j]), 1) + '</td>' + R.cats.map(c => '<td>' + chip(R.cat[t][j][c], pct(R.cat[t][j][c])) + '</td>').join('') + '</tr>';
     $('h2h').innerHTML = h + '</tbody>'; applySort('h2h');
     // profile
     const st = R.standings[t];
-    $('kpis').innerHTML = '<div class="kpi"><b>' + ord(st.rank) + '</b><span>of ' + N + ' teams</span></div><div class="kpi"><b>' + st.catsPerWeek.toFixed(1) + '</b><span>categories won per week</span></div><div class="kpi"><b>' + pct(st.matchAvg) + '%</b><span>matchup wins vs the league</span></div>';
+    const third = st.rank <= Math.ceil(N / 3) ? 'hi' : st.rank > N - Math.ceil(N / 3) ? 'lo' : 'mid';
+    $('kpis').innerHTML = '<div class="kpi big ' + third + '"><b>' + ord(st.rank) + '</b><span>of ' + N + ' teams</span></div><div class="kpi"><b>' + st.catsPerWeek.toFixed(1) + '</b><span>categories won per week</span></div><div class="kpi ' + band(st.matchAvg) + '"><b>' + pct(st.matchAvg) + '%</b><span>matchup wins vs the league</span></div>';
     $('prof').innerHTML = '<thead><tr><th class="l">Category</th><th>Win %</th><th data-nosort="1">Projected</th><th data-low="1">Rank</th></tr></thead><tbody>' + R.profile(t).map(p =>
-      '<tr><td class="cat">' + CATS[p.c].l + '</td><td class="' + heat(p.win) + '">' + pct(p.win) + '%</td><td>' + fmtStat(p.raw, p.c, 'raw') + '</td><td class="' + heat(rankQ(p.rank)) + '">' + p.rank + '</td></tr>').join('') + '</tbody>'; applySort('prof');
+      '<tr><td class="cat">' + CATS[p.c].l + '</td><td class="lvl ' + band(p.win) + '">' + pct(p.win) + '%</td><td>' + fmtStat(p.raw, p.c, 'raw') + '</td><td>' + chip(rankQ(p.rank), p.rank) + '</td></tr>').join('') + '</tbody>'; applySort('prof');
     // matrix
     document.querySelectorAll('#mxv button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.mxv));
     $('mxc-lab').hidden = ui.mxv !== 'cat';
@@ -259,15 +275,15 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     let m = '<thead><tr><th class="l">Team</th>' + R.names.map((n, j) => '<th title="' + esc(name(j)) + '">' + (j + 1) + '</th>').join('') + '<th>Avg</th></tr></thead><tbody>';
     for (let i = 0; i < N; i++) {
       let s = 0; const tds = [];
-      for (let j = 0; j < N; j++) { if (i === j) { tds.push('<td class="v x">—</td>'); continue; } const [q, txt] = cell(i, j); s += q; tds.push('<td class="v ' + heat(q) + '">' + txt + '</td>'); }
+      for (let j = 0; j < N; j++) { if (i === j) { tds.push('<td class="v x">—</td>'); continue; } const [q, txt] = cell(i, j); s += q; tds.push('<td class="v">' + chip(q, txt) + '</td>'); }
       const av = s / (N - 1), avTxt = ui.mxv === 'exp' ? (av * R.nc).toFixed(1) : pct(av);
-      m += '<tr' + (i === R.me ? ' class="me"' : '') + '><td class="l">' + (i + 1) + '. ' + esc(name(i)) + '</td>' + tds.join('') + '<td class="' + heat(av) + '"><b>' + avTxt + '</b></td></tr>';
+      m += '<tr' + (i === R.me ? ' class="me"' : '') + '><td class="l">' + (i + 1) + '. ' + esc(name(i)) + '</td>' + tds.join('') + '<td>' + chip(av, avTxt, 1) + '</td></tr>';
     }
     $('mx').innerHTML = m + '</tbody>'; applySort('mx');
     // team stats
     document.querySelectorAll('#tsv button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.tsv));
     let s = '<thead><tr><th class="l">Team</th>' + R.cats.map(c => '<th' + (ui.tsv === 'rank' || (c === E.TO && (ui.tsv === 'raw' || ui.tsv === 'week')) ? ' data-low="1"' : '') + '>' + CATS[c].l + '</th>').join('') + '</tr></thead><tbody>';
-    for (let i = 0; i < N; i++) s += '<tr' + (i === R.me ? ' class="me"' : '') + '><td class="l">' + (i + 1) + '. ' + esc(name(i)) + '</td>' + R.cats.map(c => '<td class="v ' + heat(rankQ(R.rank[i][c])) + '">' + statCell(i, c) + '</td>').join('') + '</tr>';
+    for (let i = 0; i < N; i++) s += '<tr' + (i === R.me ? ' class="me"' : '') + '><td class="l">' + (i + 1) + '. ' + esc(name(i)) + '</td>' + R.cats.map(c => '<td class="v">' + chip(rankQ(R.rank[i][c]), statCell(i, c)) + '</td>').join('') + '</tr>';
     $('ts').innerHTML = s + '</tbody>'; applySort('ts');
   }
   // Sortable columns (2026-10-18): click a header; the first click puts the best first (most, or fewest where lower is
