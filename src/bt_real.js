@@ -87,11 +87,16 @@ const ARMS = [['Current board', {}], ['Win M + look-ahead (no slide)', { slideEn
   ['K2 + basis: value side Mix, fit Season', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, valueMissW: 0.5 }, puntMode: 'off' }],
   ['K2 + basis: value side Season, fit Mix', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, valueMissW: 1 }, puntMode: 'off', missW: 0.5 }],
   // Value blend follow-up (2026-10-18): 52 (30/70) was +0.9 ± 0.8 on seeds 145-152; run 31 re-runs 52 on 153-160 and adds 20/80
-  ['K2 + value blend 20% Zscore / 80% Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, wc: 0.8 }, puntMode: 'off' }]];
+  ['K2 + value blend 20% Zscore / 80% Win C', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2, wc: 0.8 }, puntMode: 'off' }],
+  // Draft field misspecification (2026-10-18): cost of telling the board Easy in an Average room (60 vs 23) against telling it
+  // Average in an Easy room (61 vs 62). Easy room = 10 ADP drafters, 2 sharp, 1 punter, no value drafters (engine FIELD_F easy 0.08)
+  ['K2 + board told Easy, room Average', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', field: 'easy' }],
+  ['EASY ROOM: board told Average', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'easy' }],
+  ['EASY ROOM: board told Easy', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', opp: 'easy', field: 'easy' }]];
 const [name, c] = ARMS[arm], rows = [], t0 = Date.now();
 for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
   const { fmt, opp: oppKind, ...cx } = c, old = fmt === 'old';
-  const ro = draft(season, slot, seed, Object.assign({}, base, cx), oppKind === 'sloppy' ? { trueSd: 'v2', mix: Object.assign({}, OPP.mix, { sloppy: 2 }) } : oppKind === 'stdField' ? Object.assign({}, OPP, { stdField: true }) : OPP);
+  const ro = draft(season, slot, seed, Object.assign({}, base, cx), oppKind === 'sloppy' ? { trueSd: 'v2', mix: Object.assign({}, OPP.mix, { sloppy: 2 }) } : oppKind === 'stdField' ? Object.assign({}, OPP, { stdField: true }) : oppKind === 'easy' ? { trueSd: 'v2', mix: { model: 0, punt: 1, sharp: 2, sharpW: 0.5 } } : OPP);
   const sc = scoreLeague(season, ro, { seed, target: true, il: old ? 2 : 3 });
   const t = titleScore(sc.weekTot, old ? {} : { rsMode: 'each', rsWeeks: 17, rounds: [[17, 18], [19, 20], [21, 22]] }), m = slot - 1;
   rows.push({ season, arm, slot, seed, me: sc.rates[m], made: t.made[m], poAll: t.poAll[m], rounds: t.roundsWon[m], title: t.title[m], roster: ro[m].slice().sort().join(',') });

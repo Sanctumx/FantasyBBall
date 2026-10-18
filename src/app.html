@@ -629,25 +629,41 @@ $('s-poboost').addEventListener('change', e => { cfg.poBoost = e.target.value; r
 // games, minutes and every per-game stat; FG% and FT% come from the averaged makes over the averaged attempts. Players
 // Hashtag doesn't project keep their BBM numbers.
 const PROJ_KEYS = ['g', 'm', 'pts', 'tpm', 'reb', 'ast', 'stl', 'blk', 'fga', 'fta', 'to'];
-function projOf(raw) {
+function projOf(raw, proj) {
   const h = raw.hs;
-  if (cfg.proj === 'bbm' || !h) return raw;
-  if (cfg.proj === 'hs') return h;
+  if (proj === 'bbm' || !h) return raw;
+  if (proj === 'hs') return h;
   const o = {}; PROJ_KEYS.forEach(k => { o[k] = (raw[k] + h[k]) / 2; });
   o.fgp = o.fga ? (raw.fgp * raw.fga + h.fgp * h.fga) / 2 / o.fga : raw.fgp;
   o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
   return o;
 }
-function applyProj() {
+function applyProj(Ps = P, proj = cfg.proj) {
   PLAYERS.forEach((raw, i) => {
-    const s = projOf(raw), p = P[i];
+    const s = projOf(raw, proj), p = Ps[i];
     PROJ_KEYS.concat(['fgp', 'ftp']).forEach(k => { p[k] = s[k]; });
     const g = p.g; p.fgm = p.fgp * p.fga * g; p.fgaT = p.fga * g; p.ftm = p.ftp * p.fta * g; p.ftaT = p.fta * g;
     p.tot = { tpm: p.tpm * g, pts: p.pts * g, reb: p.reb * g, ast: p.ast * g, stl: p.stl * g, blk: p.blk * g, to: p.to * g };
-    p.projSrc = cfg.proj !== 'bbm' && !raw.hs ? 'bbm' : null;
+    p.projSrc = proj !== 'bbm' && !raw.hs ? 'bbm' : null;
   });
 }
-function rebuild() { applyProj(); ctx = E.buildContext(P, cfg); recompute(); }
+// Model pick settings (2026-10-18, user rule): the Model pick always drafts with the settings that tested best for prize
+// equity, whatever the page shows. Basis Season, Average projections and Playoff boost Off are the only display settings
+// that reach it (weights, Zscore, Zscore type, Stats, # order by and Edge vs never do); league settings and Draft field
+// describe the league and stay as set. When the page differs, the Model pick runs on its own copy of the players (PM).
+const MODEL_CFG = { basis: 'total', proj: 'avg', poBoost: 'off' };
+const mcfg = () => Object.assign({}, cfg, MODEL_CFG);
+const modelSame = () => Object.keys(MODEL_CFG).every(k => cfg[k] === MODEL_CFG[k]);
+let PM = null, ctxM = null;
+function buildModel() {
+  if (modelSame()) { PM = null; ctxM = null; return; }
+  PM = E.prepPlayers(PLAYERS);
+  extra.forEach(raw => { const p = E.prepPlayers([raw])[0]; p.id = PM.length; p.unlisted = true; PM.push(p); });
+  applyProj(PM, MODEL_CFG.proj);
+  PM.forEach(p => { p.poMult = 1; p.poEdge = 0; });
+  ctxM = E.buildContext(PM, mcfg());
+}
+function rebuild() { applyProj(); ctx = E.buildContext(P, cfg); buildModel(); recompute(); }
 // Playoff boost: multiplier = 1 + strength × (his playoff games ÷ league average − 1), kept within ×0.5–×1.5
 function setPlayoffMult() {
   const lam = { light: 0.25, medium: 0.5, strong: 0.75, vstrong: 1 }[cfg.poBoost] || 0;
@@ -660,14 +676,18 @@ function setPlayoffMult() {
 // On your turn the Model pick weighs value early and Win M + look-ahead after (engine slidePick): run after the first render so the board stays quick.
 let look2Timer = null;
 function recompute() {
-  setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner }); render(); save();
+  setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner });
+  if (modelSame() !== !PM || (PM && PM.length !== P.length)) buildModel();   // e.g. Playoff boost changed (it doesn't rebuild)
+  if (PM) res.modelPick = E.evaluate(PM, ctxM, mcfg(), { picks, owner }).modelPick;
+  render(); save();
   clearTimeout(look2Timer);
   const cur = picks.indexOf(null);
   if (cur >= 0 && teamOf(cur) === cfg.slot - 1) look2Timer = setTimeout(() => {
     if (picks.indexOf(null) !== cur) return;
     // Value early, then Win M + look-ahead: value share 95% / 73% / 27% / 5% at your picks 1-4 (engine slidePick, logistic k = 2)
     let mine = 0; for (let i = 0; i < cur; i++) if (teamOf(i) === cfg.slot - 1) mine++;
-    res = E.slidePick(P, ctx, cfg, { picks, owner }, mine, res);
+    if (PM) { const r = E.slidePick(PM, ctxM, mcfg(), { picks, owner }, mine, E.evaluate(PM, ctxM, mcfg(), { picks, owner })); res.modelPick = r.modelPick; res.slide = r.slide; }
+    else res = E.slidePick(P, ctx, cfg, { picks, owner }, mine, res);
     render();
   }, 30);
 }
