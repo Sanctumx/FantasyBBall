@@ -1,0 +1,23 @@
+// League dashboard: name and How it works (same dialog as the Draft Kit, 2026-10-18). Needs playwright and the repo root on :8765.
+import { chromium } from 'playwright';
+const fails = []; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.push(m); };
+const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
+await ctx.route(/fonts\.g/, r => r.fulfill({ body: '', contentType: 'text/css' }));
+const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:8765/league.html'); await p.waitForTimeout(1500);
+ok(/^League dashboard/.test(await p.title()), 'title says League dashboard');
+ok((await p.textContent('header.top h1')).trim() === 'League dashboard', 'heading says League dashboard');
+ok(!(await p.isVisible('#how')), 'How it works closed at start');
+await p.click('#how-open'); await p.waitForTimeout(200);
+ok(await p.isVisible('#how'), 'How it works opens');
+const lg = await p.$$eval('#how h3', h => h.map(x => x.textContent));
+const k = await b.newPage(); await k.goto('http://localhost:8765/index.html'); await k.waitForTimeout(1500);
+const kit = await k.$$eval('#how h3', h => h.map(x => x.textContent));
+ok(lg.length > 0 && lg.join() === kit.join(), 'same sections as the Draft Kit: ' + lg.join(', '));
+ok(await k.$eval('.sitenav', n => n.textContent.includes('League dashboard')), 'Draft Kit toolbar links League dashboard');
+await p.click('#how-close'); await p.waitForTimeout(200);
+ok(!(await p.isVisible('#how')), 'Close closes it');
+ok(errs.length === 0, 'no page errors ' + errs.join('; '));
+await b.close();
+console.log(fails.length ? 'FAILED ' + fails.length : 'ALL PASS');
+process.exit(fails.length ? 1 : 0);
