@@ -25,7 +25,7 @@ const seed = { 'courtside-board-v1': JSON.stringify(boardState), 'courtside-save
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
   const opts = await p.$$eval('#src option', o => o.map(x => x.value));
   ok(opts.length === 2 && opts[0] === 'board' && opts[1] === 'saved:Mock 10', 'source list = board + saved (' + opts + ')');
-  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft Kit|League dashboard', 'toolbar Draft Kit | League dashboard');
+  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft Kit|League Dashboard', 'toolbar Draft Kit | League Dashboard');
   const mx = await p.$$eval('#mx tbody tr', rows => rows.map(r => [...r.querySelectorAll('td.v')].map(td => td.textContent)));
   ok(mx.length === 14 && mx.every(r => r.length === 14), 'matrix 14 × 14 (' + mx.length + ')');
   const h2h = await p.$$eval('#h2h tbody tr', rows => rows.map(r => [r.dataset.t, r.querySelector('td.m').textContent]));
