@@ -6,7 +6,8 @@ covers how changes get made.
 ## The user's working rules
 
 - Push, merge or deploy only when the user says "push" or types /release.
-- Ask before using the user's computer.
+- Using the user's computer (copying files there, staging results back) is allowed without asking each time (user,
+  2026-10-18) until the user withdraws it. The user still starts PC backtest runs themselves.
 
 ## How changes get made (feature branch → pull request → merge)
 
