@@ -48,6 +48,8 @@ details.panel[open]>summary::after{content:"–"}
 .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:10px 12px}
 #setup .grid2 label.f{grid-column:auto!important}
 #setup .grid2 #s-asb{min-width:0}
+/* roster size, IL and lineup slots share one row (wraps on narrow screens) */
+#setup .rosterrow{grid-template-columns:repeat(auto-fit,minmax(92px,1fr));margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 label.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 select,input[type=text],textarea{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:0;width:100%;text-transform:none;letter-spacing:0;font-size:.92rem}
 .seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
@@ -346,13 +348,15 @@ label.f select,label.f input{font-weight:400}
       <label class="f" for="s-teams">Teams<select id="s-teams"></select></label>
       <label class="f" for="s-slot">Your slot<select id="s-slot"></select></label>
       <label class="f" for="s-order">Draft order<select id="s-order"><option value="snake">Snake</option><option value="3rr">3RR (third-round reversal)</option></select></label>
-      <label class="f" for="s-roster">Roster size<select id="s-roster"></select></label>
       <label class="f" for="s-scoring">Scoring<select id="s-scoring"><option value="roto">Roto</option><option value="h2h">H2H: each category</option><option value="most">H2H: most categories</option></select></label>
       <label class="f" for="s-cats">Categories<select id="s-cats"><option value="9">9-cat</option><option value="8">8-cat (no TO)</option></select></label>
       <label class="f" for="s-asb" style="grid-column:1/-1" title="Merged counts Feb 15–28 as one week">All-Star break<select id="s-asb"><option value="merged" title="Feb 15–28 counts as one week">Merged</option><option value="separate">Separate</option></select></label>
       <label class="f" for="s-po">Playoffs start<select id="s-po"></select></label>
       <label class="f" for="s-pofmt" title="Weeks per playoff round, for three rounds">Playoff format<select id="s-pofmt"><option value="1-1-1">1-1-1</option><option value="1-1-2">1-1-2</option><option value="1-2-2">1-2-2</option><option value="2-2-2">2-2-2</option></select></label>
       <label class="f" for="s-field" title="How much opponents draft by value instead of ADP">Draft field<select id="s-field"><option value="easy" title="Mostly ADP drafters">Easy</option><option value="average" title="A mix of ADP, sharp and value drafters">Average</option><option value="strong" title="Mostly sharp drafters">Strong</option><option value="vstrong" title="Sharp and value drafters only">Very strong</option></select></label>
+    </div>
+    <div class="grid2 rosterrow" aria-label="Roster and lineup">
+      <label class="f" for="s-roster">Roster size<select id="s-roster"></select></label>
       <label class="f" for="s-il" title="Injured players' missed games count at replacement level, not zero">IL spots<select id="s-il"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
       <label class="f" for="s-lupos" title="Starting slots by position (PG, SG, SF, PF) or only G and F">Positions<select id="s-lupos"><option value="split">PG SG SF PF</option><option value="gf">G and F only</option></select></label>
       <label class="f" for="s-luc" title="Center slots">C slots<select id="s-luc"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
@@ -361,8 +365,8 @@ label.f select,label.f input{font-weight:400}
       <label class="f" for="s-lugc" title="Slots that take a guard or a center">G/C slots<select id="s-lugc"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
       <label class="f" for="s-lufc" title="Slots that take a forward or a center">F/C slots<select id="s-lufc"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
       <label class="f" for="s-luu" title="Util slots (any position); the rest of the roster is Reserve">UTIL slots<select id="s-luu"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select></label>
-      <p class="hint" id="lu-fx" style="flex-basis:100%;margin:2px 0 0" hidden></p>
     </div>
+    <p class="hint" id="lu-fx" style="margin:4px 0 0" hidden></p>
     <p class="hint" id="poHint"></p>
   </details>
 
