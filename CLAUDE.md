@@ -53,7 +53,8 @@ everywhere else.
 - Using the user's computer (copying files there, staging results back) is allowed without asking each time (user,
   2026-10-18) until the user withdraws it. The user still starts PC backtest runs themselves.
 - Every improvement to the workflow (CLAUDE.md, skills, subagents, settings, hooks) is also generalized for other
-  projects where possible: the template set and the shared skills get the general version (user, 2026-10-20).
+  projects where possible: the general version goes in `Sanctumx/Claude-Workflow` (templates under `template/`, rules
+  in `template/GUIDELINES.md`) and in the shared skills (user, 2026-10-20).
 
 ## How changes get made (feature branch → pull request → merge)
 
