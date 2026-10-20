@@ -72,3 +72,13 @@ test('curLine shrinks toward the projection', () => {
   assert.ok(near(Pl.curLine(mid).pts, 20, 1e-9));
   assert.deepStrictEqual(Pl.curLine(Object.assign({}, p, { actual: null })), p.line);
 });
+
+test('a projection or ESPN row goes to one Fantrax player only: the rostered one, not a same-name free agent', () => {
+  const fake = pool.byKey.get('067x0'), real = pool.byKey.get('05uiu');
+  assert.ok(real && real.src === 'proj' && real.owner);
+  assert.ok(!fake || fake.src !== 'proj');
+  const projNames = pool.players.filter(p => p.src === 'proj').map(p => p.n);
+  assert.strictEqual(new Set(projNames).size, projNames.length);
+  const actuals = pool.players.filter(p => p.actual).map(p => JSON.stringify(p.actual));
+  assert.strictEqual(new Set(actuals).size, actuals.length);
+});

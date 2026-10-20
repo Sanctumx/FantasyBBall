@@ -39,10 +39,21 @@
     Object.keys(rosters).forEach(t => rosters[t].forEach(x => { owner[x.fid] = t; slot[x.fid] = x.slot; }));
     const fids = Object.keys(owner).concat(Object.keys(L.fxStatus).filter(f => !(f in owner) && (L.fxStatus[f] === 'FA' || L.fxStatus[f] === 'WW')));
     const players = [], byKey = new Map(), noProj = [];
-    fids.forEach(fid => {
-      const info = (fxPlayers && fxPlayers[fid]) || { name: fid, team: '', position: '' };
-      const name = OVERRIDES.fx[fid] || info.name;
-      const pm = matchTo(projList, name, info.team), es = matchTo(espnList, name, info.team);
+    // each projection and each ESPN row goes to one Fantrax player: the rostered one, then the one whose team matches
+    const matches = fids.map(fid => {
+      const info = (fxPlayers && fxPlayers[fid]) || { name: fid, team: '', position: '' }, name = OVERRIDES.fx[fid] || info.name;
+      return { fid, info, pm: matchTo(projList, name, info.team), es: matchTo(espnList, name, info.team) };
+    });
+    ['pm', 'es'].forEach(f => {
+      const by = new Map();
+      matches.forEach(m => { if (m[f]) { if (!by.has(m[f])) by.set(m[f], []); by.get(m[f]).push(m); } });
+      by.forEach((ms, item) => {
+        const score = m => (m.fid in owner ? 2 : 0) + (m.info.team && InLeague.toProjTeam(m.info.team) === item.t ? 1 : 0);
+        const best = ms.reduce((a, b) => (score(b) > score(a) ? b : a));
+        ms.forEach(m => { if (m !== best) m[f] = null; });
+      });
+    });
+    matches.forEach(({ fid, info, pm, es }) => {
       const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row) } : null;
       let src, line, g, pos, n, t, adp;
       if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; }
