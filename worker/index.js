@@ -12,13 +12,14 @@ const ROUTES = {
 // how long browsers / Cloudflare's cache may reuse each answer (seconds)
 const CACHE = { draft: 5, league: 300, players: 86400, rosters: 60, standings: 300 };
 
-const json = (status, body, maxAge = 0) => new Response(JSON.stringify(body), {
+const json = (status, body, maxAge = 0, age = 0) => new Response(JSON.stringify(body), {
   status,
-  headers: {
+  headers: Object.assign({
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': '*',
+    'access-control-expose-headers': 'x-courtside-age',
     'cache-control': maxAge ? `public, max-age=${maxAge}` : 'no-store'
-  }
+  }, age ? { 'x-courtside-age': String(Math.round(age)) } : {})   // seconds old, only on a stale answer
 });
 
 // Last good answer per request, kept in this Worker instance's memory (2026-10-18): reused while fresh (CACHE seconds) so
@@ -29,8 +30,8 @@ const keyOf = (what, id) => what + ':' + (what === 'players' ? 'all' : id);
 const cacheReq = k => new Request('https://courtside-cache.internal/' + encodeURIComponent(k));
 async function remembered(what, id, fresh) {
   const k = keyOf(what, id), m = MEM.get(k), age = m ? (Date.now() - m.at) / 1000 : Infinity;
-  if (m && age <= (fresh ? CACHE[what] : STALE_MAX[what])) return m.body;
-  try { const r = await caches.default.match(cacheReq(k)); if (r) { const v = await r.json(); const a = (Date.now() - v.at) / 1000; if (a <= (fresh ? CACHE[what] : STALE_MAX[what])) { MEM.set(k, v); return v.body; } } } catch {}
+  if (m && age <= (fresh ? CACHE[what] : STALE_MAX[what])) return { body: m.body, age };
+  try { const r = await caches.default.match(cacheReq(k)); if (r) { const v = await r.json(); const a = (Date.now() - v.at) / 1000; if (a <= (fresh ? CACHE[what] : STALE_MAX[what])) { MEM.set(k, v); return { body: v.body, age: a }; } } } catch {}
   return null;
 }
 function remember(what, id, body, ctx) {
@@ -59,7 +60,7 @@ async function fantrax(req, ctx) {
   if (!ROUTES[what]) return json(400, { error: 'Unknown request. Use what=draft, league, players, rosters or standings.' });
   if (what !== 'players' && !/^[A-Za-z0-9]{4,40}$/.test(leagueId)) return json(400, { error: 'League ID should be letters and numbers, as in your league\'s URL after /league/.' });
   const fresh = await remembered(what, leagueId, true);
-  if (fresh) return json(200, fresh, CACHE[what]);
+  if (fresh) return json(200, fresh.body, CACHE[what]);
   try {
     const { status, body } = await fetchFantrax(ROUTES[what](encodeURIComponent(leagueId)));
     if (body == null) return json(502, { error: 'Fantrax sent something that isn\'t data. Try again in a minute.' });
@@ -67,7 +68,7 @@ async function fantrax(req, ctx) {
       const msg = String(body.error.message || body.error);
       if (/RATE_LIMITED/i.test(String(body.error.code || ''))) {
         const old = await remembered(what, leagueId, false);   // busy: the last good answer beats an error
-        if (old) return json(200, old, 0);
+        if (old) return json(200, old.body, 0, Math.max(1, old.age));
         return json(429, { error: 'Fantrax is busy (too many requests). The board will retry on its own.' });
       }
       return json(404, { error: /not found/i.test(msg) ? 'Fantrax doesn\'t know that league ID. Check it against your league URL.' : msg });
@@ -77,7 +78,7 @@ async function fantrax(req, ctx) {
     return json(200, body, CACHE[what]);
   } catch (e) {
     const old = await remembered(what, leagueId, false);
-    if (old) return json(200, old, 0);
+    if (old) return json(200, old.body, 0, Math.max(1, old.age));
     return json(502, { error: 'Couldn\'t reach Fantrax. The board will retry on its own.' });
   }
 }

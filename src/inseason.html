@@ -241,12 +241,14 @@ tr.click{cursor:pointer}
     $('src').value = ui.leagueId;
   }
 
+  let staleAge = 0;   // seconds old of the oldest answer the Worker served from memory because Fantrax was busy
   async function fxGet(what, id) {
     let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
     const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
     let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
     if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
     if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age);
     return body;
   }
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
@@ -255,7 +257,7 @@ tr.click{cursor:pointer}
     try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
   }
   async function load() {
-    const seq = ++loadSeq, id = ui.leagueId; clearTimeout(fxTimer);
+    const seq = ++loadSeq, id = ui.leagueId; clearTimeout(fxTimer); staleAge = 0;
     $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true;
     say('Loading the league from Fantrax…');
     try {
@@ -299,7 +301,8 @@ tr.click{cursor:pointer}
   }
   function freshness() {
     const want = L.season + '-' + String(L.season + 1).slice(2), parts = [];
-    parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
+    if (staleAge) parts.push('<span class="warn">Fantrax is busy: rosters are about ' + (staleAge >= 3600 ? Math.round(staleAge / 3600) + ' h' : Math.max(1, Math.round(staleAge / 60)) + ' min') + ' old</span>');
+    else parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
     if (!espn) parts.push('<span class="warn">No actual stats: perceived value uses projection and ADP only</span>');
     else parts.push('<span>Stats: ESPN ' + esc(espn.label) + ', fetched ' + esc(String(espn.fetchedAt).slice(0, 10)) + (espn.label !== want ? ' <span class="warn">last season</span>' : '') + '</span>');
     parts.push('<span>Projections: BBM + Hashtag average (players.json)</span>');

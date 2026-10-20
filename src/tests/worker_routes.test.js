@@ -35,3 +35,15 @@ test('unknown what lists the new values', async () => {
   assert.match(body.error, /rosters/);
   assert.match(body.error, /standings/);
 });
+
+test('a stale answer served because Fantrax failed carries x-courtside-age; a fresh one does not', async () => {
+  const fresh = await call('what=rosters&leagueId=staleleague1');
+  assert.strictEqual(fresh.headers.get('x-courtside-age'), null);
+  const nowReal = Date.now, f = globalThis.fetch;
+  Date.now = () => nowReal() + 300 * 1000; globalThis.fetch = async () => { throw new Error('down'); };
+  try {
+    const res = await call('what=rosters&leagueId=staleleague1');
+    assert.strictEqual(res.status, 200);
+    assert.ok(+res.headers.get('x-courtside-age') >= 299);
+  } finally { Date.now = nowReal; globalThis.fetch = f; }
+});
