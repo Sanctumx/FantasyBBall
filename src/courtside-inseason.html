@@ -20,7 +20,7 @@
   --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
-button,select{font:inherit;color:inherit}
+button,select,input{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
 header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0}
@@ -31,7 +31,7 @@ main{display:flex;flex-direction:column;gap:16px}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
 .ctl{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:flex-end}
 .f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
-.f select{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+.f select,.f input{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
 #src{min-width:15em}
 #fmt{margin:0 0 0 auto;color:var(--muted);font-size:.8rem;align-self:center}
 .msg{margin:0;font-size:.9rem;color:var(--muted)}
@@ -115,6 +115,7 @@ td.pos{color:var(--muted)}
 .pos-n{color:var(--good)}.neg-n{color:var(--bad)}
 .tabpanel[hidden]{display:none}
 .f[hidden]{display:none}
+.f input.bad{border-color:var(--bad,#c0392b);outline-color:var(--bad,#c0392b)}
 .tl{padding:6px 0;border-bottom:1px solid var(--line);font-size:.88rem}
 .tl:last-child{border-bottom:0}
 .tl ul{margin:4px 0 0;padding-left:18px;color:var(--muted)}
@@ -252,10 +253,10 @@ tr.click{cursor:pointer}
       <div class="grid2">
         <section class="panel">
           <h2>Trade finder <span class="meta">Offer one of your players; one-for-one, best first</span></h2>
-          <div class="ctl"><label class="f" for="give">Your player<select id="give"></select></label>
-            <label class="f" for="f-lik" title="Hide trades the other team is unlikely to accept">Likelihood at least<select id="f-lik"><option value="0">Any</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option></select></label>
-            <label class="f" for="f-da" title="Smallest gain in your rest-of-season Win M, percentage points">+Win M you at least<select id="f-da"><option value="0">Above 0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
-            <label class="f" for="f-db" title="Smallest change in their rest-of-season Win M, percentage points">+Win M them at least<select id="f-db"><option value="">Any</option><option value="0">0 (not hurt)</option><option value="1">1</option><option value="2">2</option></select></label></div>
+          <div class="ctl"><label class="f" for="give" title="Type a name, or leave blank / type Any to offer each of your players">Your player<input id="give" type="text" list="givelist" placeholder="Any" autocomplete="off"><datalist id="givelist"></datalist></label>
+            <label class="f" for="f-lik" title="Hide trades the other team is unlikely to accept: 50% or 0.5">Likelihood at least<input id="f-lik" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
+            <label class="f" for="f-da" title="Smallest gain in your rest-of-season Win M, percentage points (blank: any gain)">+Win M you at least<input id="f-da" type="text" inputmode="decimal" placeholder="Above 0" autocomplete="off"></label>
+            <label class="f" for="f-db" title="Smallest change in their rest-of-season Win M, percentage points (0: not hurt)">+Win M them at least<input id="f-db" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label></div>
           <div class="scroll"><table id="finder"></table></div>
           <p class="msg" id="finder-msg"></p>
         </section>
@@ -1640,6 +1641,17 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = 0, minDB = -Infinity } = {}) {
     return rows.filter(r => r.likelihood >= minLikelihood && r.dA >= minDA && r.dB >= minDB).sort(byValue).slice(0, limit);
   }
+  // Text box input. Likelihood: "50%", "0.5" or "50" (above 1 means percent; a bare 1 is 100%). Win M points: "2", "2%".
+  // Blank is no limit (null); anything else that is not a number is invalid (undefined).
+  function parseFilter(kind, text) {
+    const t = String(text == null ? '' : text).trim().toLowerCase();
+    if (t === '' || t === 'any') return null;
+    const m = /^(-?\d*\.?\d+)\s*(%|pts?|points?)?$/.exec(t);
+    if (!m) return undefined;
+    const v = parseFloat(m[1]);
+    if (kind === 'lik') { const f = m[2] === '%' || v > 1 ? v / 100 : v; return f >= 0 && f <= 1 ? f : undefined; }
+    return v;
+  }
   const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), opts);
   function sellHighBuyLow(ctx, { limit = 8, targets = 3 } = {}) {
     const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
@@ -1654,7 +1666,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
 
@@ -1666,7 +1678,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('inseason');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', DEFAULT_LEAGUE = 'mm5i19xxmv4hcbcy';
-  let ui = { leagueId: null, team: {}, tab: 'matchup', week: null, adds: {}, sort: {}, give: 'any', fl: { lik: '0', da: '0', db: '' } };
+  let ui = { leagueId: null, team: {}, tab: 'matchup', week: null, adds: {}, sort: {}, give: 'any', fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1813,7 +1825,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const run = ++finderRun, gives = ui.give === 'any' ? ctx.roster[ctx.me] : [ui.give], ck = g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + g;
     const todo = gives.filter(g => !tradeCache[ck(g)]);
     const draw = () => {
-      const opts = { limit: 25, minLikelihood: +ui.fl.lik, minDA: +ui.fl.da, minDB: ui.fl.db === '' ? -Infinity : +ui.fl.db };
+      const pf = (k, id) => { const v = Trade.parseFilter(k, ui.fl[id]); $('f-' + id).classList.toggle('bad', v === undefined); return v; };
+      const lik = pf('lik', 'lik'), da = pf('da', 'da'), db = pf('db', 'db');   // a box that cannot be read is ignored and marked
+      const opts = { limit: 25, minLikelihood: lik == null ? 0 : lik, minDA: da == null ? 0 : da, minDB: db == null ? -Infinity : db };
       const rows = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])), opts), busy = todo.length ? 'Searching ' + (gives.length - todo.length) + '/' + gives.length + '… ' : '';
       $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Worth more than the market thinks">Buy Low</th></tr></thead><tbody>' +
         rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.give.n) + '</td><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '<td>' + (r.buyLow ? '✓' : '') + '</td></tr>').join('') + '</tbody>' : '';
@@ -1831,7 +1845,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function renderTrades() {
     const mine = mineSorted();
     if (ui.give !== 'any' && !mine.some(p => p.key === ui.give)) ui.give = 'any';
-    $('give').innerHTML = '<option value="any">Any of my players</option>' + mine.map(p => '<option value="' + esc(p.key) + '">' + esc(p.n) + ' (' + esc(p.t) + ')</option>').join(''); $('give').value = ui.give;
+    $('givelist').innerHTML = mine.map(p => '<option value="' + esc(p.n) + '">' + esc(p.t) + '</option>').join('');
+    const gp = ui.give === 'any' ? null : pool.byKey.get(ui.give); $('give').value = gp ? gp.n : '';
     $('f-lik').value = ui.fl.lik; $('f-da').value = ui.fl.da; $('f-db').value = ui.fl.db;
     renderFinder();
     const key = ui.leagueId + ':' + ctx.me;
@@ -1893,8 +1908,15 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     if (hit) picked.push(hit.key);
     renderBuilder();
   }
-  $('give').addEventListener('change', e => { ui.give = e.target.value; save(); renderFinder(); });
-  [['f-lik', 'lik'], ['f-da', 'da'], ['f-db', 'db']].forEach(([id, k]) => $(id).addEventListener('change', e => { ui.fl[k] = e.target.value; save(); renderFinder(); }));
+  $('give').addEventListener('change', e => {
+    const t = e.target.value.trim().toLowerCase(), mine = mineSorted();
+    const hit = t === '' || t === 'any' ? 'any' : (mine.find(p => p.n.toLowerCase() === t) || (mine.filter(p => p.n.toLowerCase().includes(t)).length === 1 ? mine.filter(p => p.n.toLowerCase().includes(t))[0] : null));
+    $('give').classList.toggle('bad', !hit);
+    if (!hit) return;
+    ui.give = hit === 'any' ? 'any' : hit.key; save(); renderFinder();
+    if (hit !== 'any') e.target.value = hit.n;
+  });
+  [['f-lik', 'lik'], ['f-da', 'da'], ['f-db', 'db']].forEach(([id, k]) => $(id).addEventListener('input', e => { ui.fl[k] = e.target.value; save(); renderFinder(); }));
   $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr) loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team); });
   ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
   $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });

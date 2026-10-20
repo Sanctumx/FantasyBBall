@@ -74,6 +74,17 @@
   function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = 0, minDB = -Infinity } = {}) {
     return rows.filter(r => r.likelihood >= minLikelihood && r.dA >= minDA && r.dB >= minDB).sort(byValue).slice(0, limit);
   }
+  // Text box input. Likelihood: "50%", "0.5" or "50" (above 1 means percent; a bare 1 is 100%). Win M points: "2", "2%".
+  // Blank is no limit (null); anything else that is not a number is invalid (undefined).
+  function parseFilter(kind, text) {
+    const t = String(text == null ? '' : text).trim().toLowerCase();
+    if (t === '' || t === 'any') return null;
+    const m = /^(-?\d*\.?\d+)\s*(%|pts?|points?)?$/.exec(t);
+    if (!m) return undefined;
+    const v = parseFloat(m[1]);
+    if (kind === 'lik') { const f = m[2] === '%' || v > 1 ? v / 100 : v; return f >= 0 && f <= 1 ? f : undefined; }
+    return v;
+  }
   const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), opts);
   function sellHighBuyLow(ctx, { limit = 8, targets = 3 } = {}) {
     const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
@@ -88,6 +99,6 @@
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);

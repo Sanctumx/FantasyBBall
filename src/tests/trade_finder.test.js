@@ -61,3 +61,14 @@ test('"any" offers each of my players: rows carry every give, all mine, none dro
   const best = T.findTrades(ctx, one, { limit: 1 })[0];
   if (best) assert.ok(rows.length === 40 || rows.some(r => r.give.key === one && r.target.key === best.target.key) || best.likelihood < 0.2);
 });
+
+test('parseFilter reads 50%, 0.5 and 50 as the same likelihood; blank is no limit; junk is invalid', () => {
+  const lik = s => T.parseFilter('lik', s);
+  assert.strictEqual(lik('50%'), 0.5); assert.strictEqual(lik('0.5'), 0.5); assert.strictEqual(lik(' 50 '), 0.5);
+  assert.strictEqual(lik('1'), 1); assert.strictEqual(lik('1%'), 0.01); assert.strictEqual(lik('.25'), 0.25);
+  assert.strictEqual(lik(''), null); assert.strictEqual(lik('any'), null); assert.strictEqual(lik(null), null);
+  assert.strictEqual(lik('abc'), undefined); assert.strictEqual(lik('150%'), undefined); assert.strictEqual(lik('-5'), undefined);
+  const pts = s => T.parseFilter('da', s);
+  assert.strictEqual(pts('2'), 2); assert.strictEqual(pts('1.5%'), 1.5); assert.strictEqual(pts('-1'), -1); assert.strictEqual(pts('0'), 0);
+  assert.strictEqual(pts(''), null); assert.strictEqual(pts('x'), undefined);
+});
