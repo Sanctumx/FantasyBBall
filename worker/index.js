@@ -1,14 +1,16 @@
 // Cloudflare Worker for the Courtside Draft Kit: serves the board (static assets) and proxies Fantrax's public
 // "fxea" endpoints at /api/fantrax, so live draft sync works from the browser:
-// GET /api/fantrax?what=draft|league|players&leagueId=XXXX
+// GET /api/fantrax?what=draft|league|players|rosters|standings&leagueId=XXXX
 const BASE = 'https://www.fantrax.com/fxea/general/';
 const ROUTES = {
-  draft:   id => `getDraftResults?leagueId=${id}`,
-  league:  id => `getLeagueInfo?leagueId=${id}`,
-  players: () => 'getPlayerIds?sport=NBA'
+  draft:     id => `getDraftResults?leagueId=${id}`,
+  league:    id => `getLeagueInfo?leagueId=${id}`,
+  players:   () => 'getPlayerIds?sport=NBA',
+  rosters:   id => `getTeamRosters?leagueId=${id}`,
+  standings: id => `getStandings?leagueId=${id}`
 };
 // how long browsers / Cloudflare's cache may reuse each answer (seconds)
-const CACHE = { draft: 5, league: 300, players: 86400 };
+const CACHE = { draft: 5, league: 300, players: 86400, rosters: 60, standings: 300 };
 
 const json = (status, body, maxAge = 0) => new Response(JSON.stringify(body), {
   status,
@@ -22,7 +24,7 @@ const json = (status, body, maxAge = 0) => new Response(JSON.stringify(body), {
 // Last good answer per request, kept in this Worker instance's memory (2026-10-18): reused while fresh (CACHE seconds) so
 // many boards syncing the same league make one Fantrax call, and served (marked stale) when Fantrax rate-limits us, so a
 // busy spell doesn't break a draft. Also stored with the Cache API where the zone supports it.
-const MEM = new Map(), STALE_MAX = { draft: 600, league: 86400, players: 7 * 86400 };
+const MEM = new Map(), STALE_MAX = { draft: 600, league: 86400, players: 7 * 86400, rosters: 86400, standings: 86400 };
 const keyOf = (what, id) => what + ':' + (what === 'players' ? 'all' : id);
 const cacheReq = k => new Request('https://courtside-cache.internal/' + encodeURIComponent(k));
 async function remembered(what, id, fresh) {
@@ -54,7 +56,7 @@ async function fantrax(req, ctx) {
   const url = new URL(req.url);
   const what = url.searchParams.get('what') || 'draft';
   const leagueId = (url.searchParams.get('leagueId') || '').trim();
-  if (!ROUTES[what]) return json(400, { error: 'Unknown request. Use what=draft, league or players.' });
+  if (!ROUTES[what]) return json(400, { error: 'Unknown request. Use what=draft, league, players, rosters or standings.' });
   if (what !== 'players' && !/^[A-Za-z0-9]{4,40}$/.test(leagueId)) return json(400, { error: 'League ID should be letters and numbers, as in your league\'s URL after /league/.' });
   const fresh = await remembered(what, leagueId, true);
   if (fresh) return json(200, fresh, CACHE[what]);
