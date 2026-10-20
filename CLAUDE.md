@@ -26,6 +26,8 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
   opened.
 - **Hook** (`.claude/hooks/after-edit.mjs`): after an edit to tested code it runs the unit tests (~3 s) and reports
   failures; after an edit to the handoff it warns past 150 lines. Fix what it reports before moving on.
+- **Context warning** (`.claude/hooks/context-warn.mjs`): before each prompt it shows me a one-line warning once the
+  conversation passes about 115K tokens (stop past 265K). Works in the app's Claude Code tab, VS Code and the terminal.
 - **Status line** (`.claude/statusline.mjs`): model and effort, context %, 5-hour plan usage, cache state, branch,
   and a hint when it's time to `/handoff` and `/clear` (cues in `Sanctumx/Claude-Workflow` `template/GUIDELINES.md`).
   It shows only in the terminal. In the Claude app or VS Code panel, run `/context` and plan a break once **Messages**
