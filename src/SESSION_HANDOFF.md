@@ -89,10 +89,18 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 8. User side: on the PC run `cd ~/Documents/FantasyBBall; git restore netlify.toml; git pull`; edit or delete the stale
    claude.ai Project instructions.
 
-9. In-season tools: at release, republish `courtside-draft-board.html` to the board artifact (engine.js changed) and trigger the
+9. **To add to `Sanctumx/Claude-Workflow`** (user rule: workflow changes are generalized; not done yet, needs the user's "push"):
+   (a) `template/GUIDELINES.md` and the `template/CLAUDE.md` "user's working rules": keep running plan tasks back to back unless
+   something needs the user's input; once a task has taken the conversation past the context limit (Messages past ~115K in
+   `/context`, hard stop ~265K), finish that task, record it (ledger, handoff) and don't autorun the next; tell the user to
+   `/handoff` and `/clear` (user, 2026-10-20). (b) The same as a feedback memory for the shared skills/templates, if they carry memories.
+   (c) The 2026-10-20 break-cue change keyed to Messages in `/context` (item 7) is also still unpushed there. (d) Windows notes for
+   the template's hook: its quoted test glob fails on Windows (pass the directory or expand the glob in node), and bash heredocs with
+   apostrophes break in the Bash tool (use the Write tool for scripts).
+10. In-season tools: at release, republish `courtside-draft-board.html` to the board artifact (engine.js changed) and trigger the
    `collect-stats` workflow once by hand (`workflow_dispatch`; ESPN may block runner IPs, tested only from the PC). Open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit the shrink k with in-season data.
-10. Environment (this PC): `python3` is not installed, use `python`; the after-edit hook's quoted glob
+11. Environment (this PC): `python3` is not installed, use `python`; the after-edit hook's quoted glob
     (`src/tests/*.test.js`) fails on Windows with a false "unit tests FAIL"; the real check is `node --test src/tests/`
     (idea: fix the hook to pass the directory).
 
