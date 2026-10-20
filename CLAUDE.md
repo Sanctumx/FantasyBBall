@@ -31,23 +31,46 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 
 ## Model routing
 
-The project model is `opusplan` (`.claude/settings.json`): Opus at high effort in plan mode, Sonnet at medium effort
-everywhere else.
+The main session runs on **Sonnet at medium effort**: in Claude Code from `.claude/settings.json`, in the Claude app by
+keeping the model picker on Sonnet. Judgment work goes to subagents, each pinned to its own model and effort in
+`.claude/agents/`, so the right model and effort are picked automatically and the main session never switches model
+(its cache stays warm).
 
-- **Plan mode (Opus)** for anything bigger than a small fix and any change in a hard area. Plan at the start of a task:
-  each plan-mode toggle is a model switch and re-reads the whole conversation uncached.
-- **Outside plan mode (Sonnet):** UI, pages, Fantrax sync, Worker, collector, docs, builds, and carrying out plans.
-- **`/model opus`** for a long stretch of edits inside a hard area, or a bug Sonnet has failed to fix twice; tell the
-  user when that's needed, since only they can switch. `/model opusplan` afterwards.
-- **Searching and reading:** the `explorer` subagent (Haiku, low effort). `src/` has 800+ files, mostly backtest
-  results; don't read them in the main session.
-- **Backtests:** the `analyst` subagent (Opus, high effort) designs each test and judges its results; the main session
-  writes the arms, handles files and runs the scoring.
-- **Review:** the `reviewer` subagent (Sonnet, high effort). If the branch touches a hard area, run it on Opus.
-- **One hard question:** `ultrathink` in that prompt deepens one turn without changing settings.
+| Work | Who does it | Model · effort |
+| --- | --- | --- |
+| Building: UI, pages, Fantrax sync, Worker, collector, docs, builds, carrying out plans | Main session | Sonnet · medium |
+| Planning anything bigger than a small fix, and any change in a hard area | `planner` subagent | Opus · high |
+| Designing backtests and judging their results | `analyst` subagent | Opus · high |
+| Searching the repo, `IDEAS.md` and results (`src/` has 800+ files; don't read them in the main session) | `explorer` subagent | Haiku · low |
+| Reviewing a finished branch (dispatch it with model sonnet if the branch only changes docs, config or wording) | `reviewer` subagent | Opus · high |
+
+**How a planned task runs:** the main session (often with the explorer) gathers the task, the relevant files and any
+related `IDEAS.md` rows, briefs the planner with all of it (the planner doesn't see this conversation), shows the user the
+plan it returns, and builds it once approved. If the plan needs a decision, ask the user before building.
+
+**Escalation, only when needed:** a bug Sonnet has failed to fix twice, or a long stretch of edits inside a hard area,
+may need Opus in the main session. Tell the user, since only they can switch (`/model opus`, then `/model sonnet`
+after). For one hard question, `ultrathink` in that prompt deepens one turn without changing settings.
 
 **Hard areas** (mistakes are subtle and nothing crashes): `src/engine.js` (win chances, variances, Model pick, availability),
 `src/backtest.js` / `bt_real.js` / `stream_sim.js`, `prize_equity.py`, and anything that changes what the Model pick sees.
+
+## Superpowers skills
+
+They work alongside the routing above; this file takes precedence over them. Size the process to the task:
+
+| Task | Process |
+| --- | --- |
+| Small fix, UI tweak, copy or docs change | Just do it: test first where there's a test, and verify before saying done. No brainstorming, plan file or worktree. |
+| Medium task (a few files, clear goal) | The `planner` subagent's short plan in the chat, approved by the user; then test-first and verification. |
+| Big feature, or anything that changes what the Model pick sees | Full flow: brainstorming (main session, it needs the user), then the `planner` drafts the writing-plans document from that skill's format and the main session saves it, then executing-plans inline, then one review. |
+
+- **Planning:** writing-plans' thinking is done by the `planner` subagent (Opus); the main session only saves the file.
+- **Executing:** use executing-plans inline by default. Use subagent-driven-development only for tasks that are truly
+  independent of each other, and give every subagent an explicit model, as that skill requires.
+- **Reviewing:** one review per branch. When a skill asks for a code review, run the `reviewer` subagent with that
+  skill's template (Opus; Sonnet only for docs, config or wording-only branches).
+- **Worktrees:** fine to use; the after-edit hook tests the checkout being edited.
 
 ## The user's working rules
 
@@ -63,8 +86,9 @@ everywhere else.
 1. **Branch.** Start every change from an up-to-date main on its own branch:
    `git fetch origin && git checkout -b <short-name> origin/main`.
    Automated jobs commit to main on GitHub, so always start from (and rebase onto) `origin/main`.
-2. **Design first for anything bigger than a small fix.** Write a short design in
-   `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and get the user's approval, then a plan in `docs/superpowers/plans/`.
+2. **Design first for anything bigger than a small fix,** sized as in "Superpowers skills": a medium task gets the
+   planner's plan in the chat; a big feature gets a design in `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`,
+   approved by the user, then a plan in `docs/superpowers/plans/`.
 3. **Test first.** Write the failing test, watch it fail, then make it pass.
    - Unit tests: `node --test 'src/tests/*.test.js'` from the repo root.
    - Browser checks: `src/tests/browser/*.mjs`. They need Playwright, run from a folder where it is installed, with the

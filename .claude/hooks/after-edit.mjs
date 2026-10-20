@@ -21,10 +21,18 @@ const toRegex = glob => new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&
 
 let input = {};
 try { input = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { process.exit(0); }
-const root = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
 const file = input.tool_input && input.tool_input.file_path;
 if (!file) process.exit(0);
-const rel = path.relative(root, path.resolve(root, file)).split(path.sep).join('/');
+// The checkout being edited: the git root of the folder Claude is working in. In a git worktree this differs from
+// CLAUDE_PROJECT_DIR, which stays on the main checkout, so the tests must run where the edit happened.
+const cwd = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const abs = path.resolve(cwd, file);
+const gitRoot = dir => {
+  const r = spawnSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+  return r.status === 0 ? path.resolve(r.stdout.trim()) : null;
+};
+const root = gitRoot(path.dirname(abs)) || process.env.CLAUDE_PROJECT_DIR || cwd;
+const rel = path.relative(root, abs).split(path.sep).join('/');
 
 const problems = [];
 
