@@ -31,5 +31,7 @@ test('toolbar links Draft Kit and League and marks the current page', () => {
   assert.match(h, /Draft Kit/);
   assert.match(h, /href="league.html"[^>]*aria-current="page"/);
   assert.doesNotMatch(Shared.TOOLBAR_HTML('kit'), /href="league.html"[^>]*aria-current/);
+  assert.match(Shared.TOOLBAR_HTML('inseason'), /href="inseason.html"[^>]*aria-current="page"/);
+  assert.doesNotMatch(Shared.TOOLBAR_HTML('league'), /href="inseason.html"[^>]*aria-current/);
   assert.ok(typeof Shared.TOOLBAR_CSS === 'string' && Shared.TOOLBAR_CSS.length > 0);
 });

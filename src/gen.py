@@ -10,3 +10,10 @@ l=l.replace('/*__DATA__*/','const PLAYERS='+P+';').replace('/*__SCHED__*/','cons
 _a=open('app.html').read(); _i=_a.index('<dialog class="how"'); _e=_a.index('</dialog>',_i)+len('</dialog>')
 l=l.replace('<!--__HOW__-->',_a[_i:_e])   # How it works: one copy of the text, shown on both pages
 open('courtside-league.html','w').write(l)
+# In-Season page (2026-10-20): same data, engine and shared helpers, plus the in-season modules and the daily schedule
+D=json.dumps(json.load(open('sched_days.json')),separators=(',',':'))
+i=open('inseason.html').read()
+mods=''.join(open(f).read()+chr(10) for f in ['inseason_league.js','inseason_players.js','matchup_core.js','trade_core.js'])
+i=i.replace('/*__DATA__*/','const PLAYERS='+P+';').replace('/*__DAYS__*/','const SCHED_DAYS='+D+';').replace('/*__ENGINE__*/',open('engine.js').read()).replace('/*__SHARED__*/',open('shared.js').read()).replace('/*__INSEASON__*/',mods)
+i=i.replace('<!--__HOW__-->',_a[_i:_e])
+open('courtside-inseason.html','w').write(i)

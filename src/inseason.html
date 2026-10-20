@@ -1,0 +1,319 @@
+<title>In-Season · Courtside Draft Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: post-draft analysis. Team in focus on top (head-to-head | category profile), whole league below (matrix, stats). */
+:root{
+  --bg:#EFF1EE; --surface:#FFFFFF; --sunk:#F6F7F5; --ink:#15191B; --muted:#5D666B; --line:#D8DCD7;
+  --accent:#C24E1B; --mine:#1F5FA8; --mine-soft:#DFE9F6; --good:#1A7F45; --bad:#C2372F; --warn:#A85A0D; --r:6px;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+button,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
+header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0}
+header.top h1 .logo{width:.9em;height:.9em;flex:none}
+header.top .top-r{margin-right:24px}
+@media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}}
+main{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ctl{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:flex-end}
+.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
+.f select{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+#src{min-width:15em}
+#fmt{margin:0 0 0 auto;color:var(--muted);font-size:.8rem;align-self:center}
+.msg{margin:0;font-size:.9rem;color:var(--muted)}
+.msg:empty{display:none}
+.msg.err{color:var(--bad)}
+.msgrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.msgrow:has(.msg:empty):has(.retry[hidden]){display:none}
+.retry{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:5px 12px;cursor:pointer;font-weight:600}
+/* view switches: same look as the Draft Kit / League Dashboard toolbar */
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:6px;color:var(--muted);font-weight:600;font-size:.86rem;cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+h2{font:600 1.15rem/1.1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;margin:0;display:flex;gap:4px 12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+h2 .meta{font:400 .8rem var(--f-body);letter-spacing:0;text-transform:none;color:var(--muted)}
+.scroll{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;font:12.5px/1.3 var(--f-data);font-variant-numeric:tabular-nums;white-space:nowrap;width:100%}
+th,td{padding:3px 5px;text-align:center;border-bottom:1px solid var(--line)}
+th{font:600 .72rem/1.15 var(--f-body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-block:7px;border-bottom:1px solid var(--ink)}
+thead th:not([data-nosort]){cursor:pointer;user-select:none}
+thead th:not([data-nosort]):hover,th[aria-sort]{color:var(--ink)}
+th[aria-sort="descending"]::after{content:" ▼";font-size:.6rem}
+th[aria-sort="ascending"]::after{content:" ▲";font-size:.6rem}
+td.l,th.l{text-align:left}
+td.l{font:13px var(--f-body);padding-right:10px}
+tbody tr:hover td{background:var(--sunk)}
+tr.me td.l{font-weight:600;color:var(--mine)}   /* your team: blue name, as on the Draft Kit */
+td.x{color:var(--line)}
+/* heat chips, as on the Draft Kit's player list: deeper green or red the further from even */
+.chip{display:inline-block;min-width:3.4em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
+td b .chip,.chip.b{font-weight:700}
+.topgrid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px}
+@media (max-width:1000px){.topgrid{grid-template-columns:1fr}}
+.botgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+@media (min-width:1400px){.botgrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}.botgrid th,.botgrid td{padding-inline:3px}.botgrid .chip{min-width:3.1em}}   /* wide screens: league matrix and team stats side by side */
+.kpis{display:flex;gap:6px 22px;flex-wrap:wrap;align-items:baseline}
+.kpi b{font:700 1.7rem/1 var(--f-display)}
+.kpi span{color:var(--muted);font-size:.82rem;margin-left:6px}
+.kpi.big{flex-basis:100%}
+.kpi.big b{font-size:2.8rem}
+.kpi.big span{font:600 1.1rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin-left:8px}
+.kpi.hi b,.lvl.hi{color:var(--good)}.kpi.mid b,.lvl.mid{color:var(--warn)}.kpi.lo b,.lvl.lo{color:var(--bad)}
+#prof td.cat{font:600 .8rem var(--f-body);letter-spacing:.04em;text-align:left}
+.lvl{font-weight:600}
+.hint{color:var(--muted);font-size:.82rem;margin:0}
+.btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+header.top .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-radius:6px}
+@media (max-width:640px){header.top #how-open{padding:8px 14px}}
+/* How it works dialog: same markup and look as the Draft Kit (markup copied in by gen.py from app.html) */
+.how{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:0;width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+.how::backdrop{background:rgba(0,0,0,.45)}
+.how-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);padding:14px 20px 10px;border-bottom:1px solid var(--line)}
+.how h2{font:700 1.5rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin:0}
+.how .how-intro{margin:12px 20px 0;max-width:none;color:var(--muted);font-size:.9rem}
+.how-intro a{color:var(--mine);text-underline-offset:2px}
+.how-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;padding:12px 20px 20px;align-items:start}
+.how-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.how-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px 10px}
+.how h3{font:700 1.2rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.how h4{font:600 .82rem/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:12px 0 3px}
+.how p{margin:0 0 4px;max-width:70ch;color:var(--ink);font-size:.9rem;line-height:1.45}
+.how .swing{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.how .swing span{font:500 .78rem var(--f-data);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+/* In-season additions */
+.fresh{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:.8rem;color:var(--muted)}
+.fresh .warn{color:var(--warn);font-weight:600}
+.fresh button{border:0;background:none;padding:0;color:var(--mine);cursor:pointer;font:inherit;text-decoration:underline;text-underline-offset:2px}
+details.nomatch{font-size:.82rem;color:var(--muted)}
+details.nomatch summary{cursor:pointer}
+details.nomatch ul{margin:6px 0 0;padding-left:18px;columns:2 14em}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:16px}
+@media (max-width:1000px){.grid2{grid-template-columns:1fr}}
+.vs{font:600 1.05rem var(--f-display);letter-spacing:.04em;text-transform:uppercase}
+td.l small,.src{color:var(--muted);font-size:.72rem;margin-left:6px}
+td.pos{color:var(--muted)}
+.plan ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.plan li{font-size:.9rem}
+.plan input[type=number]{width:4.5em;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:.92rem;color:var(--ink)}
+.pos-n{color:var(--good)}.neg-n{color:var(--bad)}
+.tabpanel[hidden]{display:none}
+</style>
+
+<header class="top">
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>In-Season</h1>
+  <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
+</header>
+<!--__HOW__-->
+
+<main>
+  <section class="panel" aria-label="League, team and week">
+    <div class="ctl">
+      <label class="f" for="src">League<select id="src"></select></label>
+      <label class="f" for="team">Your team<select id="team"></select></label>
+      <label class="f" for="week" title="Win chances are projected for this matchup period">Week<select id="week"></select></label>
+      <span class="seg" id="tabs" role="group" aria-label="Tool"><button type="button" data-v="matchup">Matchup</button><button type="button" data-v="trades">Trades</button></span>
+    </div>
+    <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
+    <div class="fresh" id="fresh"></div>
+    <details class="nomatch" id="nomatch" hidden><summary id="nomatch-sum"></summary><ul id="nomatch-list"></ul></details>
+  </section>
+
+  <div id="body" hidden>
+    <div class="tabpanel" id="tab-matchup">
+      <div class="grid2">
+        <section class="panel">
+          <h2><span class="vs" id="vs">You vs opponent</span><span class="meta" id="vs-dates"></span></h2>
+          <div class="kpis" id="kpis"></div>
+          <div class="scroll"><table id="cats"></table></div>
+        </section>
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <section class="panel">
+            <h2>Best single adds <span class="meta">Simple: one add for your weakest player, from tomorrow</span></h2>
+            <div class="scroll"><table id="adds"></table></div>
+            <p class="msg" id="adds-msg"></p>
+          </section>
+          <section class="panel plan">
+            <h2>Waiver add plan <span class="meta">Greedy: the move that helps most, then the next</span></h2>
+            <div class="ctl"><label class="f" for="addsleft">Adds left<input type="number" id="addsleft" min="0" max="4" step="1"></label></div>
+            <p class="msg" id="plan-note"></p>
+            <ol id="plan-moves"></ol>
+            <p class="hint" id="plan-sum"></p>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div class="tabpanel" id="tab-trades" hidden>
+      <section class="panel"><p class="hint">Trade tools load here.</p></section>
+    </div>
+  </div>
+</main>
+
+<script>/*__DATA__*/
+/*__DAYS__*/</script>
+<script>/*__ENGINE__*/</script>
+<script>/*__SHARED__*/</script>
+<script>/*__INSEASON__*/</script>
+<script>
+(function () {
+  'use strict';
+  const E = Engine, CATS = E.CATS, $ = id => document.getElementById(id);
+  document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('inseason');
+  { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
+  const KEY = 'courtside-inseason-v1', DEFAULT_LEAGUE = 'mm5i19xxmv4hcbcy';
+  let ui = { leagueId: null, team: {}, tab: 'matchup', week: null, adds: {}, sort: {} };
+  try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
+  // q is a 0..1 'how good' value; 0.5 is even. Same chip as the League Dashboard.
+  const chip = (q, txt, b) => { const d = q - .5, t = Math.min(1, Math.abs(d) / .25);
+    const bg = Math.abs(d) < .015 ? 'transparent' : 'color-mix(in oklab, var(' + (d > 0 ? '--good' : '--bad') + ') ' + Math.round(12 + 58 * t) + '%, var(--surface))';
+    return '<span class="chip' + (b ? ' b' : '') + '" style="background:' + bg + '">' + txt + '</span>'; };
+  const pct = v => (v * 100).toFixed(1);
+  const signed = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+  const InL = InLeague, InP = InPlayers;
+  let sources = [], L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
+
+  function fillSources() {
+    let saved = []; try { saved = JSON.parse(localStorage.getItem('courtside-leagues-v1') || '[]'); } catch (e) {}
+    sources = (Array.isArray(saved) ? saved : []).filter(l => l && l.id).sort((a, b) => (b.used || 0) - (a.used || 0)).map(l => ({ id: l.id, label: l.name || 'League ' + l.id, myTeam: l.myTeam || null }));
+    if (!sources.some(s => s.id === DEFAULT_LEAGUE)) sources.push({ id: DEFAULT_LEAGUE, label: 'Fantrax league ' + DEFAULT_LEAGUE, myTeam: null });
+    $('src').innerHTML = sources.map(s => '<option value="' + esc(s.id) + '">' + esc(s.label) + '</option>').join('');
+    if (!sources.some(s => s.id === ui.leagueId)) ui.leagueId = sources[0].id;
+    $('src').value = ui.leagueId;
+  }
+
+  async function fxGet(what, id) {
+    let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    return body;
+  }
+  // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
+  const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
+  async function loadStats() {
+    try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
+  }
+  async function load() {
+    const seq = ++loadSeq, id = ui.leagueId; clearTimeout(fxTimer);
+    $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true;
+    say('Loading the league from Fantrax…');
+    try {
+      const league = await fxGet('league', id), ros = await fxGet('rosters', id), st = await fxGet('standings', id);
+      if (!fxPlayers) fxPlayers = await fxGet('players');
+      const stats = await loadStats();
+      if (seq !== loadSeq) return;
+      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; fetchedAt = new Date();
+      pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
+      fxWait = 0; say(''); start();
+    } catch (e) {
+      if (seq !== loadSeq) return;
+      $('retry').hidden = false;
+      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
+      if (transient(e)) {
+        fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
+        say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
+        fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
+      }
+      say(e.message, true);
+    }
+  }
+
+  function teamLabel(t) {
+    const x = L.teams.find(q => q.id === t), s = standings && standings[t];
+    return (x ? x.name : t) + (s && s.record ? ' (' + s.record + ')' : '');
+  }
+  function start() {
+    const cur = InL.currentPeriod(L, Date.now());
+    if (cur == null) { say('The regular season is over: there are no matchups left to project.'); return; }
+    $('team').innerHTML = L.teams.map(t => '<option value="' + esc(t.id) + '">' + esc(teamLabel(t.id)) + '</option>').join('');
+    const mine = sources.find(s => s.id === ui.leagueId).myTeam;
+    let t = ui.team[ui.leagueId]; if (!L.teams.some(x => x.id === t)) t = L.teams.some(x => x.id === mine) ? mine : L.teams[0].id;
+    ui.team[ui.leagueId] = t; $('team').value = t;
+    const weeks = InL.regularFrom(L, cur);
+    $('week').innerHTML = weeks.map(n => { const p = L.periods.find(q => q.n === n); return '<option value="' + n + '">Week ' + n + (p ? ' · ' + InL.localDay(p.start).slice(5) + ' to ' + InL.localDay(p.end - 1).slice(5) : '') + '</option>'; }).join('');
+    if (!weeks.includes(+ui.week)) ui.week = cur;
+    $('week').value = String(ui.week);
+    freshness(); save(); $('body').hidden = false; render();
+  }
+  function freshness() {
+    const want = L.season + '-' + String(L.season + 1).slice(2), parts = [];
+    parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
+    if (!espn) parts.push('<span class="warn">No actual stats: perceived value uses projection and ADP only</span>');
+    else parts.push('<span>Stats: ESPN ' + esc(espn.label) + ', fetched ' + esc(String(espn.fetchedAt).slice(0, 10)) + (espn.label !== want ? ' <span class="warn">last season</span>' : '') + '</span>');
+    parts.push('<span>Projections: BBM + Hashtag average (players.json)</span>');
+    $('fresh').innerHTML = parts.join('');
+    const nm = pool.unmatched.noProj;
+    $('nomatch').hidden = !nm.length;
+    $('nomatch-sum').textContent = nm.length + ' players without projections';
+    $('nomatch-list').innerHTML = nm.map(p => '<li>' + esc(p.n) + ' <span class="src">' + (p.src === 'actual' ? 'ESPN actual stats' : 'waiver level') + '</span></li>').join('');
+  }
+
+  const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
+  function render() {
+    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: ui.team[ui.leagueId], nowMs: Date.now() });
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.tab));
+    $('tab-matchup').hidden = ui.tab !== 'matchup'; $('tab-trades').hidden = ui.tab !== 'trades';
+    if (ui.tab === 'matchup') renderMatchup();
+  }
+
+  function renderMatchup() {
+    const n = +ui.week, pw = Matchup.projectWeek(ctx, ctx.me, n), per = L.periods.find(p => p.n === n);
+    $('vs-dates').textContent = per ? InL.localDay(per.start) + ' to ' + InL.localDay(per.end - 1) : '';
+    if (!pw.opp) { $('vs').textContent = 'No matchup this week'; $('kpis').innerHTML = ''; $('cats').innerHTML = ''; $('adds').innerHTML = ''; $('adds-msg').textContent = ''; $('plan-moves').innerHTML = ''; $('plan-note').textContent = ''; $('plan-sum').textContent = ''; return; }
+    const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
+    $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
+    const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
+    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M)</span></div>' +
+      '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
+    $('cats').innerHTML = '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
+      CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
+    // best single adds
+    const rows = Matchup.simpleAdds(ctx, n, { limit: 20 });
+    $('adds').innerHTML = rows.length ? '<thead><tr><th class="l">Add</th><th>Pos</th><th>Team</th><th>Games</th><th class="l">Drop</th><th>Win M</th><th>+Win M</th></tr></thead><tbody>' +
+      rows.map(r => '<tr><td class="l">' + esc(r.add.n) + (r.add.src !== 'proj' ? '<span class="src">' + (r.add.src === 'actual' ? 'ESPN stats' : 'waiver level') + '</span>' : '') + '</td><td class="pos">' + esc(r.add.pos) + '</td><td>' + esc(r.add.t) +
+        '</td><td>' + r.games.toFixed(1) + '</td><td class="l drop">' + (r.drop ? esc(r.drop.n) : 'open spot') + '</td><td>' + chip(r.match, pct(r.match)) + '</td><td><b class="' + (r.dMatch >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dMatch * 100) + '</b></td></tr>').join('') + '</tbody>' : '';
+    $('adds-msg').textContent = rows.length ? '' : 'No games left this week for any available player.';
+    renderPlan(n);
+  }
+  function renderPlan(n) {
+    const key = ui.leagueId + ':' + n, left = ui.adds[key] != null ? ui.adds[key] : 4;
+    $('addsleft').value = String(left);
+    const plan = n === ctx.cur ? Matchup.addPlan(ctx, { addsLeft: left }) : Matchup.addPlan(ctx, { periods: [n] });
+    $('plan-note').textContent = plan.note || '';
+    $('plan-moves').innerHTML = plan.moves.map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
+    $('plan-sum').textContent = plan.start == null ? '' : (plan.moves.length ? 'Win M ' + pct(plan.start) + '% → ' + pct(plan.end) + '%. ' : 'No move helps: Win M stays ' + pct(plan.start) + '%. ') +
+      'You can drop: ' + (plan.droppable.length ? plan.droppable.map(p => p.n).join(', ') : 'nobody') + '.';
+  }
+
+  $('retry').addEventListener('click', () => { fxWait = 0; load(); });
+  $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
+  $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
+  $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
+  $('src').addEventListener('change', e => { ui.leagueId = e.target.value; save(); load(); });
+  $('team').addEventListener('change', e => { ui.team[ui.leagueId] = e.target.value; save(); render(); });
+  $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
+  $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.tab = b.dataset.v; save(); render(); });
+  $('addsleft').addEventListener('change', e => { const v = Math.max(0, Math.min(4, Math.round(+e.target.value || 0))); ui.adds[ui.leagueId + ':' + ui.week] = v; save(); renderPlan(+ui.week); });
+  fillSources(); load();
+})();
+</script>

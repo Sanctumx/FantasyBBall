@@ -17,3 +17,6 @@ open('site/index.html','w').write(head+a+'\n</body>\n</html>\n')
 # League page: same head (its own <title> comes first in the body copy, as on the board)
 l=open('courtside-league.html').read()
 open('site/league.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','Post-draft league analysis: every team\'s projected stats and its win chances against every other team.')+l+'\n</body>\n</html>\n')
+# In-Season page
+n=open('courtside-inseason.html').read()
+open('site/inseason.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','In-season tools for a Fantrax league: weekly matchup win chances, waiver adds and trades.')+n+chr(10)+'</body>'+chr(10)+'</html>'+chr(10))

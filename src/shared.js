@@ -33,10 +33,11 @@
     o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
     return o;
   }
-  // Toolbar between the two pages; `active` is 'kit' or 'league'
+  // Toolbar between the pages; `active` is 'kit', 'league' or 'inseason'
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
     '<a href="./"' + (active === 'kit' ? ' aria-current="page"' : '') + '>Draft Kit</a>' +
-    '<a href="league.html"' + (active === 'league' ? ' aria-current="page"' : '') + '>League Dashboard</a></nav>';
+    '<a href="league.html"' + (active === 'league' ? ' aria-current="page"' : '') + '>League Dashboard</a>' +
+    '<a href="inseason.html"' + (active === 'inseason' ? ' aria-current="page"' : '') + '>In-Season</a></nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
     '.sitenav a:hover{color:var(--ink)}' +
