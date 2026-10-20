@@ -73,6 +73,59 @@
     return rows.sort((a, b) => b.dMatch - a.dMatch).slice(0, limit);
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, makeCtx, teamSegments, scoreSegments, projectWeek, addFrom, lowestValue, simpleAdds };
+  // ---- waiver add plan (current week) ----
+  // My segments after applying moves {day ms, add key, drop key|null} in list order.
+  function applyMoves(ctx, n, moves) {
+    const per = periodOf(ctx.L, n), segs = teamSegments(ctx, ctx.me, n);
+    moves.forEach(m => {
+      if (m.drop) { const s = segs.filter(x => x.key === m.drop && x.to > m.t).pop(); s.to = Math.max(s.from, m.t); }
+      segs.push({ key: m.add, from: m.t, to: per.end });
+    });
+    return segs;
+  }
+  // Is the move set legal? Drops come from the droppable set or earlier adds, a roster spot must be open for an add with no drop,
+  // and nobody is added twice.
+  function legalMoves(ctx, n, moves, droppable) {
+    const held = new Set(ctx.roster[ctx.me].filter(f => n !== ctx.cur || ctx.pool.byKey.get(f).slot !== 'IR')), addedAt = new Map();
+    for (const m of moves.slice().sort((a, b) => a.t - b.t)) {
+      if (addedAt.has(m.add) || held.has(m.add)) return false;
+      if (m.drop) {
+        if (!held.has(m.drop) || !(droppable.has(m.drop) || (addedAt.has(m.drop) && addedAt.get(m.drop) < m.t))) return false;
+        held.delete(m.drop);
+      } else if (held.size >= ctx.L.maxPlayers) return false;
+      held.add(m.add); addedAt.set(m.add, m.t);
+    }
+    return true;
+  }
+
+  function addPlan(ctx, { addsLeft = 4, candidates = 30, droppable, periods } = {}) {
+    const L = ctx.L, n = ctx.cur;
+    if (periods && !(periods.length === 1 && periods[0] === n)) return { start: null, end: null, moves: [], droppable: [], note: 'Plans cover the current week only' };
+    const per = periodOf(L, n), opp = InLeague.opponentOf(L, ctx.me, n);
+    const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : droppable), dropSet = new Set(drops.map(p => p.key));
+    const oppSegs = opp ? teamSegments(ctx, opp, n) : [], score = moves => scoreSegments(ctx, applyMoves(ctx, n, moves), oppSegs).match;
+    const start = opp ? score([]) : null, plan = { start, end: start, moves: [], droppable: drops, note: null };
+    if (!opp) return plan;
+    const days = []; for (let t = addFrom(ctx, n); t < per.end; t += 24 * 3600e3) days.push(t);
+    const cands = simpleAdds(ctx, n, { limit: candidates }).map(r => r.add), moves = [];
+    let cur = start;
+    for (let round = 0; round < addsLeft; round++) {
+      let best = null;
+      const dropKeys = Array.from(dropSet).concat(moves.map(m => m.add), [null]);
+      cands.forEach(add => days.forEach(t => dropKeys.forEach(d => {
+        const m = { t, add: add.key, drop: d }, trial = moves.concat([m]);
+        if (!legalMoves(ctx, n, trial, dropSet)) return;
+        const p = score(trial);
+        if (!best || p > best.p) best = { m, p };
+      })));
+      if (!best || best.p - cur <= 1e-4) break;
+      moves.push(best.m); cur = best.p;
+      plan.moves.push({ period: n, day: InLeague.localDay(best.m.t), add: ctx.pool.byKey.get(best.m.add), drop: best.m.drop ? ctx.pool.byKey.get(best.m.drop) : null, match: cur });
+    }
+    plan.end = cur;
+    return plan;
+  }
+
+  const api = { GVAR, K_MATCH, K_CAT, makeCtx, teamSegments, scoreSegments, projectWeek, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
