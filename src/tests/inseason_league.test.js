@@ -105,3 +105,9 @@ test('local day is UTC minus six hours', () => {
   assert.strictEqual(I.dayStart('2026-10-21'), Date.UTC(2026, 9, 21, 6));
   assert.strictEqual(I.nextDayStart(Date.UTC(2026, 9, 21, 12)), Date.UTC(2026, 9, 22, 6));
 });
+
+test('every ESPN team code maps to a sched.json team', () => {
+  const codes = new Set(require('./fixtures/espn_2025_26.json').players.map(p => p.t));
+  assert.ok(codes.size >= 30);
+  for (const c of codes) assert.ok(SCHED.games[I.toProjTeam(c)], 'ESPN code ' + c);
+});
