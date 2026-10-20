@@ -1,0 +1,47 @@
+// PostToolUse hook (Edit|Write): runs the unit tests after an edit to tested code, and warns when the handoff
+// grows past its budget. Silent when everything is fine; on a problem it prints to stderr and exits 2, which
+// Claude Code shows to Claude. Edit CONFIG for another project; nothing else needs changing.
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+const CONFIG = {
+  // Files (relative to the project root) whose edits trigger the tests. '*' matches within one folder.
+  testOn: ['src/engine.js', 'src/league_core.js', 'src/shared.js', 'src/backtest.js', 'src/tests/*.test.js'],
+  testCmd: ['node', ['--test', 'src/tests/*.test.js']],
+  testTimeoutMs: 120000,
+  handoff: 'src/SESSION_HANDOFF.md',
+  handoffMaxLines: 150,
+};
+
+const toRegex = glob => new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$');
+
+let input = {};
+try { input = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { process.exit(0); }
+const root = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+const file = input.tool_input && input.tool_input.file_path;
+if (!file) process.exit(0);
+const rel = path.relative(root, path.resolve(root, file)).split(path.sep).join('/');
+
+const problems = [];
+
+if (CONFIG.testOn.some(g => toRegex(g).test(rel))) {
+  const [cmd, args] = CONFIG.testCmd;
+  const r = spawnSync(cmd, args, { cwd: root, encoding: 'utf8', timeout: CONFIG.testTimeoutMs });
+  if (r.error) problems.push(`Unit tests could not run after editing ${rel}: ${r.error.message}`);
+  else if (r.status !== 0) {
+    const out = `${r.stdout || ''}${r.stderr || ''}`.trim().split('\n');
+    // Each failing test: its "not ok" line and the indented details under it.
+    const failing = [];
+    out.forEach((l, i) => { if (/^\s*not ok/.test(l)) failing.push(l, ...out.slice(i + 1, i + 9).filter(d => /^\s{2,}\S/.test(d) && !/^\s*(ok|not ok|#)/.test(d))); });
+    problems.push(`Unit tests FAIL after editing ${rel}:\n${(failing.length ? failing : out.slice(-25)).join('\n')}`);
+  }
+}
+
+if (rel === CONFIG.handoff) {
+  const lines = readFileSync(path.join(root, rel), 'utf8').split('\n').length;
+  if (lines > CONFIG.handoffMaxLines)
+    problems.push(`${rel} is ${lines} lines (budget ${CONFIG.handoffMaxLines}). Move finished detail to the archive.`);
+}
+
+if (problems.length) { process.stderr.write(problems.join('\n\n') + '\n'); process.exit(2); }

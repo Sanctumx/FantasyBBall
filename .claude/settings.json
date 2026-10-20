@@ -3,5 +3,32 @@
   "modelSettings": {
     "claude-opus-5-5": { "effortLevel": "high" },
     "claude-sonnet-5-5": { "effortLevel": "medium" }
+  },
+  "permissions": {
+    "deny": [
+      "Read(/src/logs*.csv)",
+      "Read(/src/bt_daily.json)",
+      "Read(/src/bt_data.json)",
+      "Read(/src/bt_*_*.json)",
+      "Read(/src/data/*.xlsx)",
+      "Read(/index.html)",
+      "Read(/league.html)",
+      "Read(/math.html)",
+      "Read(**/node_modules/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/after-edit.mjs\"",
+            "timeout": 150
+          }
+        ]
+      }
+    ]
   }
 }

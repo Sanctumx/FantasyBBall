@@ -12,10 +12,11 @@ title % points. Tests before item 50 ran in the old backtest world (prior-season
 overturned; re-test old-world results before relying on them.
 
 **Rules:** edit a row in place when its status changes; never delete a row; one line per row; put the deciding numbers in
-Result. New ideas take the next number (next: **93**).
+Result. New ideas take the next number (next: **94**).
 
 | # | Date | Area | Idea | Status | Result |
 |---|------|------|------|--------|--------|
+| 93 | 2026-10-20 | Infra | Move backtest result files (`bt_*_*.json`, ~225) from `src/` to `src/results/` | Open | needs `bt_real.js` output path, `prize_equity.py` / summary globs and the PC run folder updated together |
 | 92 | 2026-10-18 | UI | League Dashboard polish, favicon in `<head>`, saved-draft import/export | Adopted | |
 | 91 | 2026-10-18 | UI | League page renamed League Dashboard; How it works on both pages | Adopted | |
 | 90 | 2026-10-18 | Model | Light category-scarcity boost, confirmation of 87 | Rejected | PE +0.1 ± 0.7 over 640 drafts; scarcity stays info only |

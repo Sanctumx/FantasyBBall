@@ -16,13 +16,8 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 - Using the user's computer is allowed without asking each time until withdrawn (2026-10-18). The user starts PC runs.
 - Report test results in **prize equity**: `python3 prize_equity.py <arm>:<baseline> ...` (60/30/5 prizes, title-equivalents
   per 100 seasons). Older items quote title equity (`equity.py`).
-- The Model pick always runs on the settings that tested best (`MODEL_CFG`: Season, Average projections, Playoff boost Off);
-  display settings never change it (#75).
-- Defaults (DEF) apply only on a first visit; an update never changes a saved setting (#79).
-- Backtest before changing anything the Model pick uses: paired drafts, ± SE, split by season, honest about noise.
-- Hover tooltips: one short line; long explanations go in How it works.
-- Don't let category weights affect Win. Don't add settings that backtests show do nothing.
-- Don't trust old-world results (prior-season stats + synthetic ADP, items before #50); real projections overturned them.
+- Engine, backtest and page rules (Model pick on `MODEL_CFG`, backtest before changing it, weights never affect Win,
+  tooltips, defaults) live in `.claude/rules/` and load when those files are opened.
 
 ## Current state
 

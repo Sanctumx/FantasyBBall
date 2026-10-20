@@ -16,6 +16,17 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
   open items changed.
 - New ideas get the next number in `IDEAS.md` with status Open. Never delete rows.
 
+## Keeping context lean (`.claude/`)
+
+- **Blocked from reading** (`settings.json` deny rules): `src/logs*.csv`, `src/bt_daily.json`, `src/bt_data.json`,
+  backtest result files `src/bt_*_*.json`, `src/data/*.xlsx`, and the built pages `index.html`, `league.html`,
+  `math.html` (which also blocks editing them by hand). Scripts still read them; to inspect one, run a short node or
+  python snippet that prints only what you need.
+- **Path rules** (`.claude/rules/`): engine and backtest rules, and board/page rules, load only when matching files are
+  opened.
+- **Hook** (`.claude/hooks/after-edit.mjs`): after an edit to tested code it runs the unit tests (~3 s) and reports
+  failures; after an edit to the handoff it warns past 150 lines. Fix what it reports before moving on.
+
 ## Model routing
 
 The project model is `opusplan` (`.claude/settings.json`): Opus at high effort in plan mode, Sonnet at medium effort
