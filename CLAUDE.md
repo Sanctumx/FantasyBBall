@@ -76,7 +76,8 @@ everywhere else.
 7. **Pull request.** `git push -u origin <branch>`, then open a PR against main with a summary, the tests run and the
    decisions made. The PR is the record of what changed and why.
 8. **Merge = deploy.** Only when the user says push. Use a merge commit, which keeps the step-by-step history.
-   Cloudflare deploys main within a couple of minutes. Then `git checkout main && git pull` locally and delete the branch.
+   Cloudflare deploys main within a couple of minutes. Then `git checkout main && git pull` locally and delete the local
+   branch (GitHub deletes the remote one).
    A small fix the user asks to push right away may go straight to main, after the tests pass and
    `git fetch && git rebase origin/main`.
 9. **/release** updates the handoff (and mirrors it to the claude.ai project), then commits and pushes.
@@ -104,4 +105,5 @@ everywhere else.
 - `gh pr …` commands fail (GraphQL is blocked). Use the REST API:
   - open: `gh api repos/Sanctumx/FantasyBBall/pulls -f title=… -f head=<branch> -f base=main -F body=@pr.md`
   - merge: `gh api -X PUT repos/Sanctumx/FantasyBBall/pulls/<n>/merge -f merge_method=merge`
-- Remote branches can't be deleted from the session; the user presses "Delete branch" on the merged PR's page.
+- Remote branches can't be deleted from the session; GitHub deletes a PR's branch when it merges ("Automatically
+  delete head branches" is on). Don't try to delete them.
