@@ -121,8 +121,8 @@ They work alongside the routing above; this file takes precedence over them. Siz
 - **Build check** (only if `src/engine.js`, `src/app.html` or `src/league.html` changed since the last push): the build
   command above, the unit tests, a Playwright smoke test with no page errors, then publish
   `src/courtside-draft-board.html` to the board artifact if it isn't current. Never publish `app.html`.
-- **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`. Netlify never builds (`netlify.toml`
-  skips every push); don't re-enable it.
+- **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`, the only host (the Netlify site
+  was deleted, 2026-10-20).
 - **Never during /release or /handoff:** use the user's computer.
 
 ## In Claude Code cloud sessions

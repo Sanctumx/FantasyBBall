@@ -12,7 +12,7 @@ Live snake draft board for 9-cat and 8-cat fantasy basketball, on BBM 2026-27 pr
 ## Where it runs
 
 The Cloudflare Worker `courtside-basketball` is connected to this repository and deploys every push to `main` within a
-couple of minutes. Netlify is no longer used: `netlify.toml` only tells it to skip every push.
+couple of minutes. Netlify is no longer used (its site was deleted).
 
 ## Using it with friends
 
