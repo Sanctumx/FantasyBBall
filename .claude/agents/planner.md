@@ -13,7 +13,8 @@ You don't see the conversation that sent you here: work from the brief, and read
 you need. Read `CLAUDE.md` and `src/SESSION_HANDOFF.md` first. If the task touches an idea, check its row in
 `src/IDEAS.md`; if a similar idea was Rejected, say so and what would have to differ.
 
-Reply in under 40 lines:
+If the brief says the plan is for the superpowers writing-plans skill, read that skill's SKILL.md and write the plan
+in its format instead (it can be longer); otherwise reply in under 40 lines:
 
 **Goal:** one sentence.
 **Approach:** two or three sentences on how, and why this way over the obvious alternative.

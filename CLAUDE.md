@@ -55,6 +55,23 @@ after). For one hard question, `ultrathink` in that prompt deepens one turn with
 **Hard areas** (mistakes are subtle and nothing crashes): `src/engine.js` (win chances, variances, Model pick, availability),
 `src/backtest.js` / `bt_real.js` / `stream_sim.js`, `prize_equity.py`, and anything that changes what the Model pick sees.
 
+## Superpowers skills
+
+They work alongside the routing above; this file takes precedence over them. Size the process to the task:
+
+| Task | Process |
+| --- | --- |
+| Small fix, UI tweak, copy or docs change | Just do it: test first where there's a test, and verify before saying done. No brainstorming, plan file or worktree. |
+| Medium task (a few files, clear goal) | The `planner` subagent's short plan in the chat, approved by the user; then test-first and verification. |
+| Big feature, or anything that changes what the Model pick sees | Full flow: brainstorming (main session, it needs the user), then the `planner` drafts the writing-plans document from that skill's format and the main session saves it, then executing-plans inline, then one review. |
+
+- **Planning:** writing-plans' thinking is done by the `planner` subagent (Opus); the main session only saves the file.
+- **Executing:** use executing-plans inline by default. Use subagent-driven-development only for tasks that are truly
+  independent of each other, and give every subagent an explicit model, as that skill requires.
+- **Reviewing:** one review per branch. When a skill asks for a code review, run the `reviewer` subagent with that
+  skill's template; on Opus for hard areas or large branches, otherwise Sonnet.
+- **Worktrees:** fine to use; the after-edit hook tests the checkout being edited.
+
 ## The user's working rules
 
 - Push, merge or deploy only when the user says "push" or types /release.
@@ -69,8 +86,9 @@ after). For one hard question, `ultrathink` in that prompt deepens one turn with
 1. **Branch.** Start every change from an up-to-date main on its own branch:
    `git fetch origin && git checkout -b <short-name> origin/main`.
    Automated jobs commit to main on GitHub, so always start from (and rebase onto) `origin/main`.
-2. **Design first for anything bigger than a small fix.** Write a short design in
-   `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and get the user's approval, then a plan in `docs/superpowers/plans/`.
+2. **Design first for anything bigger than a small fix,** sized as in "Superpowers skills": a medium task gets the
+   planner's plan in the chat; a big feature gets a design in `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`,
+   approved by the user, then a plan in `docs/superpowers/plans/`.
 3. **Test first.** Write the failing test, watch it fail, then make it pass.
    - Unit tests: `node --test 'src/tests/*.test.js'` from the repo root.
    - Browser checks: `src/tests/browser/*.mjs`. They need Playwright, run from a folder where it is installed, with the
