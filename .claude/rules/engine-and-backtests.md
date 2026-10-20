@@ -21,5 +21,5 @@ This is a hard area: plan mode first, and the reviewer runs on Opus.
 - Results from the old backtest world (IDEAS items before 50) are not evidence for the current board.
 - When the engine changes something a backtest mirrors, check parity (identical drafts on a few seeds) and that arm 23
   still reproduces.
-- Large data and result files (`logs*.csv`, `bt_daily.json`, `bt_data.json`, `bt_*_*.json`, `data/*.xlsx`) are blocked
+- Large data and result files (`logs*.csv`, `bt_daily.json`, `bt_data.json`, `bt_*_*.json`, `data/*.xls*`) are blocked
   from reading. Inspect them with a short node or python snippet that prints only what you need.

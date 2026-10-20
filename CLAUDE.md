@@ -19,7 +19,7 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 ## Keeping context lean (`.claude/`)
 
 - **Blocked from reading** (`settings.json` deny rules): `src/logs*.csv`, `src/bt_daily.json`, `src/bt_data.json`,
-  backtest result files `src/bt_*_*.json`, `src/data/*.xlsx`, and the built pages `index.html`, `league.html`,
+  backtest result files `src/bt_*_*.json`, `src/data/*.xls*`, and the built pages `index.html`, `league.html`,
   `math.html` (which also blocks editing them by hand). Scripts still read them; to inspect one, run a short node or
   python snippet that prints only what you need.
 - **Path rules** (`.claude/rules/`): engine and backtest rules, and board/page rules, load only when matching files are
@@ -82,7 +82,7 @@ everywhere else.
    branch (GitHub deletes the remote one).
    A small fix the user asks to push right away may go straight to main, after the tests pass and
    `git fetch && git rebase origin/main`.
-9. **/release** updates the handoff (and mirrors it to the claude.ai project), then commits and pushes.
+9. **/release** updates the handoff, ledger and archive, then commits and pushes.
    **/handoff** does the same recording without pushing (commits locally on a feature branch, leaves main uncommitted);
    use it before `/clear` when the work isn't ready to ship.
 
@@ -91,8 +91,7 @@ everywhere else.
 - **Files:** `src/SESSION_HANDOFF.md`, `src/IDEAS.md`, `src/HANDOFF_ARCHIVE.md` (new write-ups at the top of "Entries
   after 2026-10-18").
 - **Results metric:** prize equity (`python3 src/prize_equity.py <arm>:<baseline> ...`).
-- **Mirror the handoff:** `Projects` `project_write`, path `claude/SESSION_HANDOFF.md`, `local_path` = the absolute path
-  of `src/SESSION_HANDOFF.md`. Don't touch the old top-level `SESSION_HANDOFF.md`.
+- **Mirror the handoff:** none. The repo copy is the only one (the claude.ai Project copy was dropped, 2026-10-20).
 - **Handoff also tracks:** board artifact version (claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz), math doc revision,
   deployment notes.
 - **Build check** (only if `src/engine.js`, `src/app.html` or `src/league.html` changed since the last push): the build
