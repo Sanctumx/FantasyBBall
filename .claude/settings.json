@@ -14,7 +14,7 @@
       "Read(/src/bt_daily.json)",
       "Read(/src/bt_data.json)",
       "Read(/src/bt_*_*.json)",
-      "Read(/src/data/*.xlsx)",
+      "Read(/src/data/*.xls*)",
       "Read(/index.html)",
       "Read(/league.html)",
       "Read(/math.html)",

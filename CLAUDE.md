@@ -19,7 +19,7 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 ## Keeping context lean (`.claude/`)
 
 - **Blocked from reading** (`settings.json` deny rules): `src/logs*.csv`, `src/bt_daily.json`, `src/bt_data.json`,
-  backtest result files `src/bt_*_*.json`, `src/data/*.xlsx`, and the built pages `index.html`, `league.html`,
+  backtest result files `src/bt_*_*.json`, `src/data/*.xls*`, and the built pages `index.html`, `league.html`,
   `math.html` (which also blocks editing them by hand). Scripts still read them; to inspect one, run a short node or
   python snippet that prints only what you need.
 - **Path rules** (`.claude/rules/`): engine and backtest rules, and board/page rules, load only when matching files are
