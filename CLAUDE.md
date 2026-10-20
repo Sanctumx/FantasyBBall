@@ -91,8 +91,7 @@ everywhere else.
 - **Files:** `src/SESSION_HANDOFF.md`, `src/IDEAS.md`, `src/HANDOFF_ARCHIVE.md` (new write-ups at the top of "Entries
   after 2026-10-18").
 - **Results metric:** prize equity (`python3 src/prize_equity.py <arm>:<baseline> ...`).
-- **Mirror the handoff:** `Projects` `project_write`, path `claude/SESSION_HANDOFF.md`, `local_path` = the absolute path
-  of `src/SESSION_HANDOFF.md`. Don't touch the old top-level `SESSION_HANDOFF.md`.
+- **Mirror the handoff:** none. The repo copy is the only one (the claude.ai Project copy was dropped, 2026-10-20).
 - **Handoff also tracks:** board artifact version (claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz), math doc revision,
   deployment notes.
 - **Build check** (only if `src/engine.js`, `src/app.html` or `src/league.html` changed since the last push): the build
