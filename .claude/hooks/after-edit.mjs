@@ -8,7 +8,7 @@ import path from 'node:path';
 const CONFIG = {
   // Files (relative to the project root) whose edits trigger the tests. '*' matches within one folder.
   testOn: ['src/engine.js', 'src/league_core.js', 'src/shared.js', 'src/backtest.js', 'src/tests/*.test.js'],
-  testCmd: ['node', ['--test', 'src/tests/*.test.js']],
+  testCmd: ['node', ['--test', 'src/tests/']],
   testTimeoutMs: 120000,
   handoff: 'src/SESSION_HANDOFF.md',
   handoffMaxLines: 150,
