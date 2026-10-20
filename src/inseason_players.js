@@ -2,7 +2,7 @@
 // rostered or available player's line, and the value scale the in-season tools share. Pure; browser and Node.
 (function (root) {
   'use strict';
-  const Shared = root.Shared || require('./shared.js'), InLeague = root.InLeague || require('./inseason_league.js');
+  const Eng = root.Engine || require('./engine.js'), Shared = root.Shared || require('./shared.js'), InLeague = root.InLeague || require('./inseason_league.js');
 
   const SHRINK_GAMES = 20;   // actual stats count as this many games of projection (Trade Analyzer's current-performance line)
   const WEIGHTS = [1, 1, 1, 1, 1, 1, 1, 1, 0.5];   // FG%, FT%, 3PM, PTS, REB, AST, STL, BLK, TO: the board's default weights
@@ -55,20 +55,38 @@
     });
     matches.forEach(({ fid, info, pm, es }) => {
       const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row) } : null;
-      let src, line, g, pos, n, t, adp;
-      if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; }
+      let src, line, g, pos, n, t, adp, pid = null;
+      if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; pid = pm.id; }
       else {
         src = actual ? 'actual' : 'waiver'; line = actual ? actual.line : wl.line; g = wl.g;
         pos = String(info.position || '').replace(/,/g, '/'); n = swapName(info.name); t = InLeague.toProjTeam(info.team); adp = null;
       }
       if (!(fid in owner) && src === 'waiver') return;   // available players with no line at all are not worth listing
-      const pp = { key: fid, n, t, pos, line, g, src, actual, adp, owner: owner[fid] || null, slot: slot[fid] || null, fxStatus: L.fxStatus[fid] || (fid in owner ? 'T' : null) };
+      const pp = { key: fid, n, t, pos, line, g, src, actual, adp, pid, owner: owner[fid] || null, slot: slot[fid] || null, fxStatus: L.fxStatus[fid] || (fid in owner ? 'T' : null) };
       players.push(pp); byKey.set(fid, pp);
       if (fid in owner && src !== 'proj') noProj.push(pp);
     });
     return { players, byKey, unmatched: { noProj, noEspn: players.filter(p => !p.actual).length },
       stats: espn ? { season: espn.season, label: espn.label, fetchedAt: espn.fetchedAt } : null };
   }
+
+  // ---- board Zscore (the draft board's Zscore column) for players with a projection: type 'classic' (Standard), 'adj'
+  // (ROTO-Adjusted) or 'h2h' (H2H-Adjusted); basis 'total' (Season), 'pergame' or 'mix'. Default league, Average projections, TO x0.5.
+  const Z_CFG = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 3, field: 'easy', fieldZ: 'std', puntMode: 'off',
+    puntLock: '', catW: WEIGHTS.slice(), adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0 };
+  const zCache = new WeakMap();
+  function zTable(PLAYERS, basis) {
+    let by = zCache.get(PLAYERS); if (!by) zCache.set(PLAYERS, by = {});
+    if (!by[basis]) {
+      const P = Eng.prepPlayers(PLAYERS.map(r => Object.assign({}, r, Shared.projOf(r, 'avg'))));
+      Eng.buildContext(P, Object.assign({}, Z_CFG, { basis }));
+      const o = { classic: [], adj: [], h2h: [] };
+      P.forEach((p, i) => { o.classic[i] = p.zCl.z[0]; o.adj[i] = p.z[0]; o.h2h[i] = p.zH ? p.zH.z[0] : p.z[0]; });
+      by[basis] = o;
+    }
+    return by[basis];
+  }
+  const zscoreOf = (PLAYERS, pp, type, basis) => (pp.pid == null ? null : zTable(PLAYERS, basis || 'total')[type || 'classic'][pp.pid]);
 
   // ---- value scale: season Standard Zscore over the top n by ADP, standardized to mean 0 / SD 1 over that pool ----
   const total = (l, g, ref) => [(l.fgp - ref.pFG) * l.fga * g, (l.ftp - ref.pFT) * l.fta * g, l.tpm * g, l.pts * g, l.reb * g, l.ast * g, l.stl * g, l.blk * g, l.to * g];
@@ -103,6 +121,6 @@
       ast: mix(a.ast, b.ast), stl: mix(a.stl, b.stl), blk: mix(a.blk, b.blk), to: mix(a.to, b.to) };
   }
 
-  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, projLines, matchTo, buildPool, makeValueRef, valueZ, catZ, curLine };
+  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, projLines, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InPlayers = api;
 })(this);

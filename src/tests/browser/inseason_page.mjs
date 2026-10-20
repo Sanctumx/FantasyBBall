@@ -64,7 +64,7 @@ async function open(opts = {}) {
   ok(!(await p.isVisible('#week')), 'Trades tab has no week dropdown');
   ok((await p.$$eval('#givelist option', o => o.length)) >= 10, 'finder suggests my players');
   const hdr = await p.$$eval('#finder thead th', t => t.map(x => x.textContent).join('|'));
-  ok(hdr === 'You give|Target|Team|Likelihood of trade|+Win M you|+Win M them|Total Win M|Buy Low', 'finder header (' + hdr + ')');
+  ok(hdr === 'You give|Target|Team|Likelihood of trade|+Win M you|+Win M them|Total Win M', 'finder header (' + hdr + ')');
   const rows = await p.$$eval('#finder tbody tr', r => r.length);
   ok(rows >= 1, 'finder has rows (' + rows + ')');
   const col = async i => (await p.$$eval('#finder tbody tr', (r, i) => r.map(x => parseFloat(x.children[i].textContent.replace('−', '-'))), i));
@@ -101,7 +101,15 @@ async function open(opts = {}) {
   ok(/Uneven trade/.test(await p.textContent('#multi')), 'two for one shows the multi-player caveat');
   const bt = await p.$$eval('#bt tbody tr', r => r.map(x => [x.className, x.children.length, [...x.querySelectorAll('.chip')].some(c => /color-mix/.test(c.getAttribute('style') || ''))]));
   ok(bt.some(r => r[0] === 'avg') && bt.some(r => r[0] === 'tot'), 'Average and Total rows');
-  ok(bt.filter(r => r[1] === 10).length >= 3 && bt.some(r => r[2]), 'per-player rows have 9 category cells with green/red chips');
+  ok(bt.filter(r => r[1] === 11).length >= 3 && bt.some(r => r[2]), 'per-player rows have 9 category cells with green/red chips');
+  const zTot = async () => parseFloat((await p.$eval('#bt tr.tot td:last-child', e => e.textContent)).replace('−', '-'));
+  ok(/Zscore/.test(await p.$eval('#bt thead th:last-child', e => e.textContent)) && Number.isFinite(await zTot()), 'builder table has a Zscore column with a total');
+  const z1 = await zTot(); await p.selectOption('#zt', 'adj'); await p.waitForTimeout(150); const z2 = await zTot();
+  ok(z1 !== z2, 'Zscore type changes the total (' + z1 + ' -> ' + z2 + ')');
+  await p.selectOption('#zt', 'classic'); await p.waitForTimeout(150);
+  await p.selectOption('#zb', 'total'); await p.waitForTimeout(150); const z3 = await zTot();
+  ok(z3 !== z1, 'Basis changes the total (' + z1 + ' -> ' + z3 + ')');
+  await p.selectOption('#zb', 'pergame');
   await p.click('#statv button[data-v="cur"]'); await p.waitForTimeout(100);
   ok((await p.$$eval('#bt tbody tr', r => r.length)) === bt.length, 'Projection | Current toggle keeps the rows');
   await p.click('#reset'); await p.waitForTimeout(100);

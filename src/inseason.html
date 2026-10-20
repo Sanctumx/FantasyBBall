@@ -194,6 +194,8 @@ tr.click{cursor:pointer}
         <div class="ctl">
           <label class="f" for="ta">Team A<select id="ta"></select></label>
           <label class="f" for="tb">Team B<select id="tb"></select></label>
+          <label class="f" for="zt" title="Which Zscore the table shows, as on the draft board">Zscore type<select id="zt"><option value="classic">Normal</option><option value="h2h">H2H-Adjusted</option><option value="adj">ROTO-Adjusted</option></select></label>
+          <label class="f" for="zb" title="How much projected missed games count in the Zscore">Basis<select id="zb"><option value="pergame">Per game</option><option value="total">Season</option><option value="mix">Mix</option></select></label>
           <span class="seg" id="statv" role="group" aria-label="Stat rows"><button type="button" data-v="proj">Projection</button><button type="button" data-v="cur">Current</button></span>
           <button class="btn" type="button" id="reset">Reset Trade</button>
         </div>
@@ -223,7 +225,7 @@ tr.click{cursor:pointer}
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', DEFAULT_LEAGUE = 'mm5i19xxmv4hcbcy';
-  let ui = { leagueId: null, team: {}, tab: sectionOf(), week: null, adds: {}, sort: {}, give: 'any', fl: { lik: '', da: '', db: '' } };
+  let ui = { leagueId: null, team: {}, tab: sectionOf(), week: null, adds: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.tab = sectionOf();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
@@ -235,6 +237,7 @@ tr.click{cursor:pointer}
     return '<span class="chip' + (b ? ' b' : '') + '" style="background:' + bg + '">' + txt + '</span>'; };
   const pct = v => (v * 100).toFixed(1);
   const signed = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+  const zsg = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
   const InL = InLeague, InP = InPlayers;
   let sources = [], L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
 
@@ -391,8 +394,8 @@ tr.click{cursor:pointer}
       const lik = pf('lik', 'lik'), da = pf('da', 'da'), db = pf('db', 'db');   // a box that cannot be read is ignored and marked
       const opts = { limit: 25, minLikelihood: lik == null ? 0 : lik, minDA: da == null ? 0 : da, minDB: db == null ? -Infinity : db };
       const rows = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])), opts), busy = todo.length ? 'Searching ' + (mineAll.length - todo.length) + '/' + mineAll.length + '… ' : '';
-      $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Worth more than the market thinks">Buy Low</th></tr></thead><tbody>' +
-        rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.give.n) + '</td><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '<td>' + (r.buyLow ? '✓' : '') + '</td></tr>').join('') + '</tbody>' : '';
+      $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th></tr></thead><tbody>' +
+        rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.give.n) + '</td><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '</tr>').join('') + '</tbody>' : '';
       const waiting = gives.some(g => !tradeCache[ck(g)]);
       $('finder-msg').textContent = busy + (rows.length ? 'Click a row to load it into the Trade Builder.' : waiting ? '' : 'No one-for-one trade matches these filters.');
       applySort('finder');
@@ -435,15 +438,16 @@ tr.click{cursor:pointer}
   const stats9 = l => [l.fgp, l.ftp, l.tpm, l.pts, l.reb, l.ast, l.stl, l.blk, l.to];
   function sideRows(label, keys, stat) {
     const pls = keys.map(k => pool.byKey.get(k)), lines = pls.map(p => lineFor(p, stat));
-    let h = '<tr><th class="grp" colspan="' + (CATS.length + 1) + '">' + esc(label) + '</th></tr>';
-    lines.forEach((l, i) => { const z = InP.catZ(l, ctx.ref); h += '<tr><td class="l">' + esc(pls[i].n) + '</td>' + stats9(l).map((v, c) => '<td>' + chip(.5 + z[c] / 4, statTxt(v, c)) + '</td>').join('') + '</tr>'; });
+    const zv = pls.map(p => InP.zscoreOf(PLAYERS, p, ui.zt, ui.zb)), zOk = zv.filter(v => v != null), zTxt = v => (v == null ? '—' : zsg(v));
+    let h = '<tr><th class="grp" colspan="' + (CATS.length + 2) + '">' + esc(label) + '</th></tr>';
+    lines.forEach((l, i) => { const z = InP.catZ(l, ctx.ref); h += '<tr><td class="l">' + esc(pls[i].n) + '</td>' + stats9(l).map((v, c) => '<td>' + chip(.5 + z[c] / 4, statTxt(v, c)) + '</td>').join('') + '<td>' + zTxt(zv[i]) + '</td></tr>'; });
     if (lines.length) {
       const n = lines.length, sum = f => lines.reduce((s, l) => s + f(l), 0), fga = sum(l => l.fga), fta = sum(l => l.fta);
       const tot = { fgp: fga ? sum(l => l.fgp * l.fga) / fga : 0, fga, ftp: fta ? sum(l => l.ftp * l.fta) / fta : 0, fta, tpm: sum(l => l.tpm), pts: sum(l => l.pts), reb: sum(l => l.reb), ast: sum(l => l.ast), stl: sum(l => l.stl), blk: sum(l => l.blk), to: sum(l => l.to) };
       const avg = Object.assign({}, tot, { fga: fga / n, fta: fta / n }); ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'].forEach(k => { avg[k] = tot[k] / n; });
       const z = InP.catZ(avg, ctx.ref);
-      h += '<tr class="avg"><td class="l">Average</td>' + stats9(avg).map((v, c) => '<td>' + chip(.5 + z[c] / 4, statTxt(v, c)) + '</td>').join('') + '</tr>';
-      h += '<tr class="tot"><td class="l">Total</td>' + stats9(tot).map((v, c) => '<td>' + statTxt(v, c) + '</td>').join('') + '</tr>';
+      h += '<tr class="avg"><td class="l">Average</td>' + stats9(avg).map((v, c) => '<td>' + chip(.5 + z[c] / 4, statTxt(v, c)) + '</td>').join('') + '<td>' + (zOk.length ? zsg(zOk.reduce((s2, v) => s2 + v, 0) / zOk.length) : '—') + '</td></tr>';
+      h += '<tr class="tot"><td class="l">Total</td>' + stats9(tot).map((v, c) => '<td>' + statTxt(v, c) + '</td>').join('') + '<td>' + (zOk.length ? zsg(zOk.reduce((s2, v) => s2 + v, 0)) : '—') + '</td></tr>';
     }
     return h;
   }
@@ -452,13 +456,14 @@ tr.click{cursor:pointer}
     $('ta').innerHTML = ids.map(t => '<option value="' + esc(t) + '">' + esc(nameOfTeam(t)) + (t === ctx.me ? ' (you)' : '') + '</option>').join(''); $('ta').value = S.a;
     $('tb').innerHTML = ids.filter(t => t !== S.a).map(t => '<option value="' + esc(t) + '">' + esc(nameOfTeam(t)) + '</option>').join(''); $('tb').value = S.b;
     document.querySelectorAll('#statv button').forEach(b => b.classList.toggle('on', b.dataset.v === S.stat));
+    $('zt').value = ui.zt; $('zb').value = ui.zb;
     $('lab-a').textContent = nameOfTeam(S.a) + ' receives'; $('lab-b').textContent = nameOfTeam(S.b) + ' receives';
     const opts = (team, picked) => ctx.roster[team].filter(f => !picked.includes(f)).map(f => pool.byKey.get(f)).map(p => '<option value="' + esc(p.n + ' · ' + p.t) + '"></option>').join('');
     $('dl-a').innerHTML = opts(S.b, S.aGets); $('dl-b').innerHTML = opts(S.a, S.bGets);
     const chips = (keys, side) => keys.map(k => '<li>' + esc(pool.byKey.get(k).n) + '<button type="button" data-side="' + side + '" data-rm="' + esc(k) + '" aria-label="Remove ' + esc(pool.byKey.get(k).n) + '">×</button></li>').join('');
     $('list-a').innerHTML = chips(S.aGets, 'a'); $('list-b').innerHTML = chips(S.bGets, 'b');
     $('multi').textContent = S.aGets.length !== S.bGets.length && S.aGets.length + S.bGets.length > 0 ? 'Uneven trade: each team keeps its whole roster here, so the team getting more players needs open spots or must drop someone. Win M counts every player involved.' : '';
-    $('bt').innerHTML = S.aGets.length + S.bGets.length ? '<thead><tr><th class="l">Player</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '</tr></thead><tbody>' + sideRows(nameOfTeam(S.a) + ' receives', S.aGets, S.stat) + sideRows(nameOfTeam(S.b) + ' receives', S.bGets, S.stat) + '</tbody>' : '';
+    $('bt').innerHTML = S.aGets.length + S.bGets.length ? '<thead><tr><th class="l">Player</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '<th title="Zscore of the chosen type and basis; players without a projection show a dash and are left out of the average and total">Zscore</th></tr></thead><tbody>' + sideRows(nameOfTeam(S.a) + ' receives', S.aGets, S.stat) + sideRows(nameOfTeam(S.b) + ' receives', S.bGets, S.stat) + '</tbody>' : '';
     $('sum').innerHTML = ''; $('sum-msg').textContent = '';
     if (!S.aGets.length || !S.bGets.length) { $('sum-msg').textContent = 'Add at least one player on each side to see the effect on rest-of-season Win M.'; return; }
     try {
@@ -488,6 +493,8 @@ tr.click{cursor:pointer}
   ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
   $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });
   $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('zt').addEventListener('change', e => { ui.zt = e.target.value; save(); renderBuilder(); });
+  $('zb').addEventListener('change', e => { ui.zb = e.target.value; save(); renderBuilder(); });
   $('statv').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { builderState().stat = b.dataset.v; renderBuilder(); } });
   $('reset').addEventListener('click', () => { const S = builderState(); S.aGets = []; S.bGets = []; renderBuilder(); });
   [['in-a', 'a'], ['in-b', 'b']].forEach(([id, side]) => { const el = $(id); el.addEventListener('change', () => { addPlayer(side, el.value); el.value = ''; }); });

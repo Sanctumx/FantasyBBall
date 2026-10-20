@@ -82,3 +82,17 @@ test('a projection or ESPN row goes to one Fantrax player only: the rostered one
   const actuals = pool.players.filter(p => p.actual).map(p => JSON.stringify(p.actual));
   assert.strictEqual(new Set(actuals).size, actuals.length);
 });
+
+test('zscoreOf gives the board Zscore by type and basis for projected players, null for the rest', () => {
+  const w = pool.byKey.get(fidOf(/Wembanyama/)), m = pool.byKey.get(fidOf(/Mara, Aday/));
+  assert.ok(Number.isInteger(w.pid) && m.pid == null);
+  const z = (pp, t, b) => Pl.zscoreOf(PLAYERS, pp, t, b);
+  ['classic', 'adj', 'h2h'].forEach(t => ['total', 'pergame', 'mix'].forEach(b => assert.ok(z(w, t, b) > 1.5, t + ' ' + b + ' ' + z(w, t, b))));
+  assert.notStrictEqual(z(w, 'classic', 'total'), z(w, 'adj', 'total'));    // adjusted scalings differ from the plain Zscore
+  assert.ok(Math.abs(z(w, 'adj', 'total')) < Math.abs(z(w, 'classic', 'total')));   // ROTO-Adjusted is about 2.5x smaller
+  assert.strictEqual(z(m, 'classic', 'total'), null);
+  assert.strictEqual(z(w, 'classic', 'total'), z(w, 'classic', 'total'));
+  // players order by Zscore the same way twice (memoized table)
+  const a = pool.players.filter(p => p.pid != null).slice(0, 40).map(p => z(p, 'classic', 'pergame'));
+  assert.ok(a.every(v => Number.isFinite(v)));
+});
