@@ -839,7 +839,57 @@
     res.modelPick = best; res.slide = { w, cands };
     return res;
   }
+  // ---------- two-roster matchup with known games (in-season tools, 2026-10-20) ----------
+  // pairMatchup(A, B, { cats: 9|8, projErr: true }): A, B are arrays of { p: StatLine, games, gVar? }. Percentages are
+  // linearized around each team's own percentage, so the sign of the gap always follows the projected percentages.
+  // gVar = variance of that entry's games (default VAR_GAMES * games / GPW); entries with games <= 0 are skipped.
+  function matchProbN(ps, nc) {
+    let dist = [1];
+    for (const q of ps) { const nd = new Array(dist.length + 1).fill(0); dist.forEach((v, i) => { nd[i] += v * (1 - q); nd[i + 1] += v * q; }); dist = nd; }
+    let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
+    return w;
+  }
+  function pairTeam(R, projErr) {
+    let fga = 0, fgm = 0, fta = 0, ftm = 0;
+    R.forEach(e => { if (!(e.games > 0)) return; fga += e.p.fga * e.games; fgm += e.p.fgp * e.p.fga * e.games; fta += e.p.fta * e.games; ftm += e.p.ftp * e.p.fta * e.games; });
+    const ref = { pFG: fga > 0 ? fgm / fga : 0, pFT: fta > 0 ? ftm / fta : 0 };
+    const s = new Array(NC).fill(1); s[0] = fga > 0 ? 1 / fga : 0; s[1] = fta > 0 ? 1 / fta : 0;
+    const mean = new Float64Array(NC), idio = new Float64Array(NC), lsum = new Float64Array(NC), q = new Float64Array(NC);
+    let S = 0;
+    R.forEach(e => {
+      if (!(e.games > 0)) return;
+      const m = vec(e.p, ref, 1), wv = weekVar(e.p, ref, 82), pv = projErr ? projVar(e.p, e.games) : null;
+      const gv = e.gVar != null ? e.gVar : VAR_GAMES * e.games / GPW; S += gv;
+      for (let c = 0; c < NC; c++) {
+        const pgv = (wv[c] - m[c] * m[c] * VAR_GAMES) / GPW, sm = s[c] * m[c];
+        if (c > 1) mean[c] += m[c] * e.games;
+        idio[c] += s[c] * s[c] * e.games * pgv + (pv ? s[c] * s[c] * pv[c] : 0);
+        lsum[c] += sm * gv; q[c] += sm * sm * gv;
+      }
+    });
+    mean[0] = ref.pFG; mean[1] = ref.pFT;
+    const lam = new Float64Array(NC);
+    for (let c = 0; c < NC; c++) { lam[c] = S > 0 ? lsum[c] / S : 0; idio[c] += Math.max(0, q[c] - lam[c] * lam[c] * S); }
+    return { mean, idio, lam, S };
+  }
+  function pairMatchup(A, B, opts) {
+    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false;
+    const a = pairTeam(A, pe), b = pairTeam(B, pe), cat = [];
+    for (let c = 0; c < NC; c++) {
+      if (c >= nc) { cat.push(null); continue; }
+      cat.push(Phi((a.mean[c] - b.mean[c]) / Math.sqrt(a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S + 1e-9)));
+    }
+    const sa = Math.sqrt(a.S), sb = Math.sqrt(b.S), ps = new Array(nc);
+    let match = 0;
+    for (let j = 0; j < GH_Z.length; j++) for (let k = 0; k < GH_Z.length; k++) {
+      for (let c = 0; c < nc; c++) ps[c] = Phi((a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k]) / Math.sqrt(a.idio[c] + b.idio[c] + 1e-9));
+      match += GH_W[j] * GH_W[k] * matchProbN(ps, nc);
+    }
+    const mu = t => Array.from(t.mean, (x, c) => c === TO ? -x : x);
+    return { cat, match, mu: [mu(a), mu(b)] };
+  }
   const E2 = (...a) => evaluate(...a);
   const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  api.pairMatchup = pairMatchup;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);
