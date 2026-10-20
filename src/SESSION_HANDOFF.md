@@ -29,7 +29,17 @@ Model pick; it never punts. Shared with friends via Cloudflare.
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
 - **Works:** board, Fantrax live sync (backoff + Worker cache), saved drafts/leagues (rename, import/export), League
   Dashboard, ADP/draft collector (GitHub Actions every 6 h).
-- **In progress:** nothing.
+- **In progress:** In-season tools (Weekly Matchup Analyzer + Trade Analyzer, ideas 95-103) on branch
+  `matchup-trade-analyzers` (not pushed). Spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
+  `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md` (13 tasks, executed inline). **Tasks 1-4 done**
+  (Worker `rosters`/`standings` routes, `inseason_league.js` + `sched_days.json`, ESPN collector + `stats/espn.json`,
+  `inseason_players.js`). **Task 5** (`Engine.pairMatchup`, hard area, additive only) has its golden test committed; its
+  `engine_pairmatchup.test.js` and the function are next. Per-task ledger and every ruling:
+  `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored; resume at the first task without a
+  "complete" line). Decisions in force: Win M = vs this week's opponent only in the Matchup Analyzer, vs remaining regular-season
+  matchups in the Trade Analyzer (projected playoffs later, #101); waiver adds = Simple (Win M vs opponent) + current-week plan;
+  players without projections use ESPN actuals until the user adds projections to `players.json`; the user approved the Task 13
+  workflow-config edits (CLAUDE.md build line, settings deny rule, pages.md paths, hook `testOn`).
 
 ## Current model (backtested in the user's format with real projections)
 
@@ -81,6 +91,16 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 8. User side: on the PC run `cd ~/Documents/FantasyBBall; git restore netlify.toml; git pull`; edit or delete the stale
    claude.ai Project instructions.
 
+9. In-season tools, after the merge, trigger the `collect-stats` workflow once by hand
+   (`workflow_dispatch`); ESPN may block runner IPs (tested only from the PC). Republish `courtside-draft-board.html` to the board
+   artifact at release (engine.js changes). Task 6 (calibration of `pairMatchup` vs 2025-26 weeks) gates the merge.
+10. Environment (this PC): `python3` is not installed, use `python`; the after-edit hook's quoted glob
+    (`src/tests/*.test.js`) fails on Windows with a false "unit tests FAIL"; the real check is `node --test src/tests/`
+    (idea: fix the hook to pass the directory).
+
 ## Next session starts with
 
-Nothing open for the draft kit; wait for the user's request. If they ask for workflow work, start with open item 7.
+Resume the in-season tools plan: read this file and the ledger, then Task 5 of the plan: write
+`src/tests/engine_pairmatchup.test.js` (RED; consistency test with gVar 1.87, pairs (0,5),(1,12),(6,7), tolerance 0.05 per
+category / 0.03 match; `projErr:false` more extreme; zero-games entry; 8-cat), implement `Engine.pairMatchup` in `src/engine.js`
+(additive only; check `git diff -U0 origin/main -- src/engine.js | grep -E '^-[^-]'` is empty), then Task 6, and so on.

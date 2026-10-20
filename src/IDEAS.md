@@ -12,10 +12,19 @@ title % points. Tests before item 50 ran in the old backtest world (prior-season
 overturned; re-test old-world results before relying on them.
 
 **Rules:** edit a row in place when its status changes; never delete a row; one line per row; put the deciding numbers in
-Result. New ideas take the next number (next: **95**).
+Result. New ideas take the next number (next: **104**).
 
 | # | Date | Area | Idea | Status | Result |
 |---|------|------|------|--------|--------|
+| 103 | 2026-10-20 | In-season | Week-to-date actuals in the Weekly Matchup Analyzer (daily stat snapshots) | Open | not started |
+| 102 | 2026-10-20 | In-season | Multi-week waiver add plan (today: current week only) | Open | plan structure keeps `periods` for it |
+| 101 | 2026-10-20 | In-season | Projected playoffs in the Trade Analyzer Win M (today: remaining regular season only) | Open | user plan; design leaves room |
+| 100 | 2026-10-20 | In-season | Daily ESPN actual-stats collector (`src/collect/espn_stats.mjs`, `stats/espn.json`) | Testing | built; needs `seasontype=2`; ESPN returns 2025-26 until 2026-27 games exist (guard refuses to overwrite); first GitHub runner run pending |
+| 99 | 2026-10-20 | In-season | `Engine.pairMatchup`: win chances for two rosters with known games (additive; draft engine pinned by a golden test) | Testing | golden pinned; analyst: consistency vs draft engine max 0.037 per category / 0.014 match with gVar 1.87; Task 6 calibration vs 2025-26 weeks gates the merge |
+| 98 | 2026-10-20 | In-season | Trade perceived-value weights (40% current / 30% projection / 30% ADP) and likelihood scale | Open | fixed guesses; tune against real accepted trades |
+| 97 | 2026-10-20 | In-season | Trade Analyzer: one-for-one finder, Sell High / Buy Low lists, Trade Builder | Testing | planned (Tasks 9, 10, 12), not built |
+| 96 | 2026-10-20 | In-season | Waiver add plan for the current week (4 adds/week) | Testing | planned (Task 8), not built |
+| 95 | 2026-10-20 | In-season | Weekly Matchup Analyzer + Simple adds (Win M vs this week opponent) on a new In-Season page | Testing | design and plan approved; data layer built (Tasks 1-4) |
 | 94 | 2026-10-20 | Infra | Netlify removed: site deleted, `netlify.toml` and the Netlify function removed | Adopted | user rule; Cloudflare only |
 | 93 | 2026-10-20 | Infra | Move backtest result files (`bt_*_*.json`, ~225) from `src/` to `src/results/` | Open | needs `bt_real.js` output path, `prize_equity.py` / summary globs and the PC run folder updated together |
 | 92 | 2026-10-18 | UI | League Dashboard polish, favicon in `<head>`, saved-draft import/export | Adopted | |

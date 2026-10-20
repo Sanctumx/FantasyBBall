@@ -8,7 +8,16 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
-_(none yet)_
+95. **In-season tools: Weekly Matchup Analyzer and Trade Analyzer (2026-10-20, in progress; items 95-103).** Design
+`docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`
+(13 tasks), branch `matchup-trade-analyzers`. Built so far: Worker routes `rosters` and `standings` (T1); `inseason_league.js` +
+`sched_days.json` (T2); ESPN stats collector, workflow and `stats/espn.json` (T3); `inseason_players.js` (T4); golden test pinning the
+draft engine (T5 step 1). Findings: Fantrax public API (league mm5i19xxmv4hcbcy) returns rosters, free-agent status and the matchup
+schedule with no login; matchups with team ids are periods 1-15 although Fantrax states lastRegularSeasonPeriod 17 (ruling: use the ids);
+ESPN `byathlete` needs `seasontype=2` (season=2026 alone returns playoffs) and answers 2025-26 for season=2027 until games exist.
+Analyst on `pairMatchup`: math sound; consistency test uses gVar 1.87, tolerance 0.05 per category / 0.03 match; calibration run (Task 6)
+gates the merge. Ledger with every ruling: `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored).
+
 
 ## Handoff as of 2026-10-18 (moved here unchanged)
 
