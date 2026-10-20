@@ -60,6 +60,7 @@ async function open(opts = {}) {
 { const { p, errs, ctx } = await open();
   await p.click('#tabs button[data-v="trades"]'); await p.waitForTimeout(800);
   ok(await p.isVisible('#tab-trades') && !(await p.isVisible('#tab-matchup')), 'Trades tab shows, Matchup hides');
+  ok(!(await p.isVisible('#week')), 'Trades tab has no week dropdown');
   ok((await p.$$eval('#give option', o => o.length)) >= 10, 'finder lists my players');
   const hdr = await p.$$eval('#finder thead th', t => t.map(x => x.textContent).join('|'));
   ok(hdr === 'Target|Team|Likelihood of trade|+Win M you|+Win M them|Total Win M|Buy Low', 'finder header (' + hdr + ')');

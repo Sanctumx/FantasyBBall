@@ -114,6 +114,7 @@ td.pos{color:var(--muted)}
 .plan input[type=number]{width:4.5em;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:.92rem;color:var(--ink)}
 .pos-n{color:var(--good)}.neg-n{color:var(--bad)}
 .tabpanel[hidden]{display:none}
+.f[hidden]{display:none}
 .tl{padding:6px 0;border-bottom:1px solid var(--line);font-size:.88rem}
 .tl:last-child{border-bottom:0}
 .tl ul{margin:4px 0 0;padding-left:18px;color:var(--muted)}
@@ -317,6 +318,7 @@ tr.click{cursor:pointer}
   function render() {
     ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: ui.team[ui.leagueId], nowMs: Date.now() });
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.tab));
+    $('week').closest('label').hidden = ui.tab === 'trades';   // trades measure the rest of the season, so no week to pick
     $('tab-matchup').hidden = ui.tab !== 'matchup'; $('tab-trades').hidden = ui.tab !== 'trades';
     if (ui.tab === 'matchup') renderMatchup(); else renderTrades();
   }
