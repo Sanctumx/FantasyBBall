@@ -252,7 +252,10 @@ tr.click{cursor:pointer}
       <div class="grid2">
         <section class="panel">
           <h2>Trade finder <span class="meta">Offer one of your players; one-for-one, best first</span></h2>
-          <div class="ctl"><label class="f" for="give">Your player<select id="give"></select></label></div>
+          <div class="ctl"><label class="f" for="give">Your player<select id="give"></select></label>
+            <label class="f" for="f-lik" title="Hide trades the other team is unlikely to accept">Likelihood at least<select id="f-lik"><option value="0">Any</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option></select></label>
+            <label class="f" for="f-da" title="Smallest gain in your rest-of-season Win M, percentage points">+Win M you at least<select id="f-da"><option value="0">Above 0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
+            <label class="f" for="f-db" title="Smallest change in their rest-of-season Win M, percentage points">+Win M them at least<select id="f-db"><option value="">Any</option><option value="0">0 (not hurt)</option><option value="1">1</option><option value="2">2</option></select></label></div>
           <div class="scroll"><table id="finder"></table></div>
           <p class="msg" id="finder-msg"></p>
         </section>
@@ -1621,14 +1624,23 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { give, target, team, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, buyLow: v.rv - v.pv >= TRADE_W.tagGap };
   };
   const byValue = (a, b) => b.dA * b.likelihood - a.dA * a.likelihood;
-  function findTrades(ctx, myKey, { limit = 25 } = {}) {
-    const give = ctx.pool.byKey.get(myKey), rows = [];
-    Object.keys(ctx.roster).forEach(t => {
-      if (t === ctx.me) return;
-      ctx.roster[t].forEach(f => { const r = oneForOne(ctx, give, ctx.pool.byKey.get(f), t); if (r.dA > 0) rows.push(r); });
+  // every one-for-one trade that helps me for one of my players (myKey), unfiltered; 'any' offers each of my players
+  function tradeCandidates(ctx, myKey) {
+    const gives = myKey === 'any' ? ctx.roster[ctx.me] : [myKey], rows = [];
+    gives.forEach(g => {
+      const give = ctx.pool.byKey.get(g);
+      Object.keys(ctx.roster).forEach(t => {
+        if (t === ctx.me) return;
+        ctx.roster[t].forEach(f => { const r = oneForOne(ctx, give, ctx.pool.byKey.get(f), t); if (r.dA > 0) rows.push(r); });
+      });
     });
-    return rows.sort(byValue).slice(0, limit);
+    return rows;
   }
+  // minLikelihood is 0-1; minDA and minDB are Win M points. The filters run before the limit.
+  function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = 0, minDB = -Infinity } = {}) {
+    return rows.filter(r => r.likelihood >= minLikelihood && r.dA >= minDA && r.dB >= minDB).sort(byValue).slice(0, limit);
+  }
+  const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), opts);
   function sellHighBuyLow(ctx, { limit = 8, targets = 3 } = {}) {
     const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
     const mine = ctx.roster[ctx.me].map(f => tag(ctx.pool.byKey.get(f), 1)).filter(x => x.gap >= TRADE_W.tagGap).sort((a, b) => b.gap - a.gap).slice(0, limit);
@@ -1642,7 +1654,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
 
@@ -1654,7 +1666,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('inseason');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', DEFAULT_LEAGUE = 'mm5i19xxmv4hcbcy';
-  let ui = { leagueId: null, team: {}, tab: 'matchup', week: null, adds: {}, sort: {} };
+  let ui = { leagueId: null, team: {}, tab: 'matchup', week: null, adds: {}, sort: {}, give: 'any', fl: { lik: '0', da: '0', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1795,15 +1807,33 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const mineSorted = () => ctx.roster[ctx.me].map(f => pool.byKey.get(f)).sort((a, b) => pvOf(b) - pvOf(a));
   const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b></td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td>';
 
+  // one player's candidate trades take about 0.7 s, so "Any" searches one player at a time and draws as it goes
+  let finderRun = 0;
+  function renderFinder() {
+    const run = ++finderRun, gives = ui.give === 'any' ? ctx.roster[ctx.me] : [ui.give], ck = g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + g;
+    const todo = gives.filter(g => !tradeCache[ck(g)]);
+    const draw = () => {
+      const opts = { limit: 25, minLikelihood: +ui.fl.lik, minDA: +ui.fl.da, minDB: ui.fl.db === '' ? -Infinity : +ui.fl.db };
+      const rows = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])), opts), busy = todo.length ? 'Searching ' + (gives.length - todo.length) + '/' + gives.length + '… ' : '';
+      $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Worth more than the market thinks">Buy Low</th></tr></thead><tbody>' +
+        rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.give.n) + '</td><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '<td>' + (r.buyLow ? '✓' : '') + '</td></tr>').join('') + '</tbody>' : '';
+      $('finder-msg').textContent = busy + (rows.length ? 'Click a row to load it into the Trade Builder.' : todo.length ? '' : 'No one-for-one trade matches these filters.');
+      applySort('finder');
+    };
+    draw();
+    const step = () => {
+      if (run !== finderRun || !todo.length) return;
+      const g = todo.shift(); tradeCache[ck(g)] = Trade.tradeCandidates(ctx, g); draw();
+      if (todo.length) setTimeout(step, 0);
+    };
+    if (todo.length) setTimeout(step, 0);
+  }
   function renderTrades() {
     const mine = mineSorted();
-    if (!mine.some(p => p.key === ui.give)) ui.give = mine[0] && mine[0].key;
-    $('give').innerHTML = mine.map(p => '<option value="' + esc(p.key) + '">' + esc(p.n) + ' (' + esc(p.t) + ')</option>').join(''); $('give').value = ui.give;
-    const fkey = 'f:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + ui.give, rows = tradeCache[fkey] || (tradeCache[fkey] = Trade.findTrades(ctx, ui.give, { limit: 25 }));
-    $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Worth more than the market thinks">Buy Low</th></tr></thead><tbody>' +
-      rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '<td>' + (r.buyLow ? '✓' : '') + '</td></tr>').join('') + '</tbody>' : '';
-    $('finder-msg').textContent = rows.length ? 'Click a row to load it into the Trade Builder.' : 'No one-for-one trade for this player helps you.';
-    applySort('finder');
+    if (ui.give !== 'any' && !mine.some(p => p.key === ui.give)) ui.give = 'any';
+    $('give').innerHTML = '<option value="any">Any of my players</option>' + mine.map(p => '<option value="' + esc(p.key) + '">' + esc(p.n) + ' (' + esc(p.t) + ')</option>').join(''); $('give').value = ui.give;
+    $('f-lik').value = ui.fl.lik; $('f-da').value = ui.fl.da; $('f-db').value = ui.fl.db;
+    renderFinder();
     const key = ui.leagueId + ':' + ctx.me;
     const sb = tradeCache[key] || (tradeCache[key] = Trade.sellHighBuyLow(ctx, { limit: 8, targets: 3 }));
     const list = (items, kind) => items.length ? items.map(x => '<div class="tl"><b>' + esc(x.player.n) + '</b><span class="src">' + (kind === 'sell' ? 'valued ' : 'worth ') + x.gap.toFixed(2) + (kind === 'sell' ? ' above real' : ' above what they are valued') + '</span>' +
@@ -1863,7 +1893,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     if (hit) picked.push(hit.key);
     renderBuilder();
   }
-  $('give').addEventListener('change', e => { ui.give = e.target.value; save(); renderTrades(); });
+  $('give').addEventListener('change', e => { ui.give = e.target.value; save(); renderFinder(); });
+  [['f-lik', 'lik'], ['f-da', 'da'], ['f-db', 'db']].forEach(([id, k]) => $(id).addEventListener('change', e => { ui.fl[k] = e.target.value; save(); renderFinder(); }));
   $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr) loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team); });
   ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
   $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });

@@ -58,14 +58,23 @@
     return { give, target, team, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, buyLow: v.rv - v.pv >= TRADE_W.tagGap };
   };
   const byValue = (a, b) => b.dA * b.likelihood - a.dA * a.likelihood;
-  function findTrades(ctx, myKey, { limit = 25 } = {}) {
-    const give = ctx.pool.byKey.get(myKey), rows = [];
-    Object.keys(ctx.roster).forEach(t => {
-      if (t === ctx.me) return;
-      ctx.roster[t].forEach(f => { const r = oneForOne(ctx, give, ctx.pool.byKey.get(f), t); if (r.dA > 0) rows.push(r); });
+  // every one-for-one trade that helps me for one of my players (myKey), unfiltered; 'any' offers each of my players
+  function tradeCandidates(ctx, myKey) {
+    const gives = myKey === 'any' ? ctx.roster[ctx.me] : [myKey], rows = [];
+    gives.forEach(g => {
+      const give = ctx.pool.byKey.get(g);
+      Object.keys(ctx.roster).forEach(t => {
+        if (t === ctx.me) return;
+        ctx.roster[t].forEach(f => { const r = oneForOne(ctx, give, ctx.pool.byKey.get(f), t); if (r.dA > 0) rows.push(r); });
+      });
     });
-    return rows.sort(byValue).slice(0, limit);
+    return rows;
   }
+  // minLikelihood is 0-1; minDA and minDB are Win M points. The filters run before the limit.
+  function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = 0, minDB = -Infinity } = {}) {
+    return rows.filter(r => r.likelihood >= minLikelihood && r.dA >= minDA && r.dB >= minDB).sort(byValue).slice(0, limit);
+  }
+  const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), opts);
   function sellHighBuyLow(ctx, { limit = 8, targets = 3 } = {}) {
     const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
     const mine = ctx.roster[ctx.me].map(f => tag(ctx.pool.byKey.get(f), 1)).filter(x => x.gap >= TRADE_W.tagGap).sort((a, b) => b.gap - a.gap).slice(0, limit);
@@ -79,6 +88,6 @@
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
