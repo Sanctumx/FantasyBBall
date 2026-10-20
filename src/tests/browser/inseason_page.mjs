@@ -75,6 +75,9 @@ async function open(opts = {}) {
   ok(await p.$eval('#give', s => s.value) === '', 'finder starts on Any of my players (blank box)');
   ok((await p.$$eval('#finder tbody tr', r => new Set(r.map(x => x.children[0].textContent)).size)) > 1, 'Any shows several of my players in the give column');
   ok((await p.$$eval('#finder tbody tr', r => r.some(x => /^−/.test(x.children[4].textContent)))) && /\d+ trades match/.test(await p.textContent('#finder-msg')), 'with no limits the finder lists every trade, including ones that hurt you');
+  { const m = await p.$eval('#finder', t => { const box = t.parentElement, r = box.getBoundingClientRect(), rows = [...t.tBodies[0].rows], th = t.tHead.getBoundingClientRect().height;
+      return { scrolls: box.scrollHeight > box.clientHeight + 5, vis: rows.filter(x => x.getBoundingClientRect().bottom <= r.bottom + 1).length, rows: rows.length }; });
+    ok(m.scrolls && m.vis >= 22 && m.vis <= 27, 'finder shows about 25 rows and scrolls for the rest (' + m.vis + ' of ' + m.rows + ' visible)'); }
   await p.fill('#f-da', '0'); await p.waitForTimeout(200);
   ok((await p.$$eval('#finder tbody tr', r => r.length > 0 && r.every(x => !/^−/.test(x.children[4].textContent)))), '+Win M you at least 0 keeps only trades that do not hurt you');
   await p.fill('#f-da', '');
