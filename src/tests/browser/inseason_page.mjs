@@ -74,6 +74,10 @@ async function open(opts = {}) {
   l1 = await col(3); ok(l1.every((v, i) => i === 0 || l1[i - 1] <= v), 'second click reverses');
   ok(await p.$eval('#give', s => s.value) === '', 'finder starts on Any of my players (blank box)');
   ok((await p.$$eval('#finder tbody tr', r => new Set(r.map(x => x.children[0].textContent)).size)) > 1, 'Any shows several of my players in the give column');
+  ok((await p.$$eval('#finder tbody tr', r => r.some(x => /^−/.test(x.children[4].textContent)))) && /\d+ trades match/.test(await p.textContent('#finder-msg')), 'with no limits the finder lists every trade, including ones that hurt you');
+  await p.fill('#f-da', '0'); await p.waitForTimeout(200);
+  ok((await p.$$eval('#finder tbody tr', r => r.length > 0 && r.every(x => !/^−/.test(x.children[4].textContent)))), '+Win M you at least 0 keeps only trades that do not hurt you');
+  await p.fill('#f-da', '');
   await p.fill('#f-lik', '50%'); await p.waitForTimeout(200);
   ok((await p.$$eval('#finder tbody tr', r => r.every(x => parseFloat(x.children[3].textContent) >= 50))), 'Likelihood filter keeps trades at 50% or more');
   await p.fill('#f-lik', '0.5'); await p.waitForTimeout(200);

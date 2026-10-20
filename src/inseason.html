@@ -179,7 +179,7 @@ tr.click{cursor:pointer}
           <h2>Trade finder <span class="meta">Offer one of your players; one-for-one, best first</span></h2>
           <div class="ctl"><label class="f" for="give" title="Type a name, or leave blank / type Any to offer each of your players">Your player<input id="give" type="text" list="givelist" placeholder="Any" autocomplete="off"><datalist id="givelist"></datalist></label>
             <label class="f" for="f-lik" title="Hide trades the other team is unlikely to accept: 50% or 0.5">Likelihood at least<input id="f-lik" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
-            <label class="f" for="f-da" title="Smallest gain in your rest-of-season Win M, percentage points (blank: any gain)">+Win M you at least<input id="f-da" type="text" inputmode="decimal" placeholder="Above 0" autocomplete="off"></label>
+            <label class="f" for="f-da" title="Smallest change in your rest-of-season Win M, percentage points (blank: every trade, even ones that hurt you; 0: no loss)">+Win M you at least<input id="f-da" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
             <label class="f" for="f-db" title="Smallest change in their rest-of-season Win M, percentage points (0: not hurt)">+Win M them at least<input id="f-db" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label></div>
           <div class="scroll"><table id="finder"></table></div>
           <p class="msg" id="finder-msg"></p>
@@ -371,7 +371,7 @@ tr.click{cursor:pointer}
 
   // One player's candidate trades take about 0.7 s, so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
-  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v1';
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v2';
   const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
   function candSave(sig, ck, gives) {
     try {
@@ -392,12 +392,12 @@ tr.click{cursor:pointer}
     const draw = () => {
       const pf = (k, id) => { const v = Trade.parseFilter(k, ui.fl[id]); $('f-' + id).classList.toggle('bad', v === undefined); return v; };
       const lik = pf('lik', 'lik'), da = pf('da', 'da'), db = pf('db', 'db');   // a box that cannot be read is ignored and marked
-      const opts = { limit: 25, minLikelihood: lik == null ? 0 : lik, minDA: da == null ? 0 : da, minDB: db == null ? -Infinity : db };
-      const rows = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])), opts), busy = todo.length ? 'Searching ' + (mineAll.length - todo.length) + '/' + mineAll.length + '… ' : '';
+      const SHOW = 3000, opts = { limit: Infinity, minLikelihood: lik == null ? 0 : lik, minDA: da == null ? -Infinity : da, minDB: db == null ? -Infinity : db };
+      const matched = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])), opts), rows = matched.slice(0, SHOW), busy = todo.length ? 'Searching ' + (mineAll.length - todo.length) + '/' + mineAll.length + '… ' : '';
       $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th></tr></thead><tbody>' +
         rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.give.n) + '</td><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '</tr>').join('') + '</tbody>' : '';
       const waiting = gives.some(g => !tradeCache[ck(g)]);
-      $('finder-msg').textContent = busy + (rows.length ? 'Click a row to load it into the Trade Builder.' : waiting ? '' : 'No one-for-one trade matches these filters.');
+      $('finder-msg').textContent = busy + (rows.length ? matched.length + ' trade' + (matched.length === 1 ? '' : 's') + ' match' + (matched.length > SHOW ? ' (best ' + SHOW + ' shown)' : '') + '. Click a row to load it into the Trade Builder.' : waiting ? '' : 'No one-for-one trade matches these filters.');
       applySort('finder');
     };
     draw(); drawSellBuy(ck);

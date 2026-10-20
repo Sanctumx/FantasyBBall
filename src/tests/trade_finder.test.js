@@ -42,24 +42,24 @@ test('the whole fixture league computes in under 3 seconds', () => {
 
 test('filterTrades applies likelihood, +Win M you and +Win M them before the limit', () => {
   const give = ctx.roster[me].find(f => pool.byKey.get(f).slot !== 'IR'), all = T.tradeCandidates(ctx, give);
-  assert.ok(all.length > 5 && all.every(r => r.dA > 0));
-  const opts = { minLikelihood: 0.3, minDA: 0.5, minDB: 0 }, got = T.filterTrades(all, opts);
-  const want = all.filter(r => r.likelihood >= 0.3 && r.dA >= 0.5 && r.dB >= 0);
+  assert.ok(all.length > 100 && all.some(r => r.dA < 0) && all.some(r => r.dA > 0));   // every one-for-one with every other team's player, not only the ones that help
+  const opts = { minLikelihood: 0.05, minDA: 0.5, minDB: 0 }, got = T.filterTrades(all, opts);
+  const want = all.filter(r => r.likelihood >= 0.05 && r.dA >= 0.5 && r.dB >= 0);
   assert.strictEqual(got.length, want.length);
-  got.forEach(r => assert.ok(r.likelihood >= 0.3 && r.dA >= 0.5 && r.dB >= 0));
+  got.forEach(r => assert.ok(r.likelihood >= 0.05 && r.dA >= 0.5 && r.dB >= 0));
   for (let i = 1; i < got.length; i++) assert.ok(got[i - 1].dA * got[i - 1].likelihood >= got[i].dA * got[i].likelihood);
   assert.strictEqual(T.filterTrades(all, { limit: 3 }).length, 3);
-  assert.deepStrictEqual(T.filterTrades(all, {}).map(r => r.target.key), T.findTrades(ctx, give, {}).map(r => r.target.key));
+  assert.deepStrictEqual(T.filterTrades(all, { minDA: 1e-9 }).map(r => r.target.key), T.findTrades(ctx, give, {}).map(r => r.target.key));
 });
 
 test('"any" offers each of my players: rows carry every give, all mine, none dropped by the limit order', () => {
-  const rows = T.findTrades(ctx, 'any', { limit: 40, minLikelihood: 0.2 });
+  const rows = T.findTrades(ctx, 'any', { limit: 40, minLikelihood: 0.05, minDA: 1e-9 });
   assert.ok(rows.length > 0 && rows.length <= 40);
-  rows.forEach(r => { assert.ok(mineKeys.has(r.give.key)); assert.ok(!mineKeys.has(r.target.key)); assert.ok(r.likelihood >= 0.2); });
+  rows.forEach(r => { assert.ok(mineKeys.has(r.give.key)); assert.ok(!mineKeys.has(r.target.key)); assert.ok(r.likelihood >= 0.05); });
   assert.ok(new Set(rows.map(r => r.give.key)).size > 1);
   const one = ctx.roster[me][0];
   const best = T.findTrades(ctx, one, { limit: 1 })[0];
-  if (best) assert.ok(rows.length === 40 || rows.some(r => r.give.key === one && r.target.key === best.target.key) || best.likelihood < 0.2);
+  if (best) assert.ok(rows.length === 40 || rows.some(r => r.give.key === one && r.target.key === best.target.key) || best.likelihood < 0.05);
 });
 
 test('parseFilter reads 50%, 0.5 and 50 as the same likelihood; blank is no limit; junk is invalid', () => {
@@ -101,4 +101,20 @@ test('candSig changes with rosters, day and period', () => {
   assert.notStrictEqual(s1, T.candSig(ctx, '2026-10-21', 'v2'));
   const moved = Object.assign({}, ctx, { roster: Object.assign({}, ctx.roster, { [me]: ctx.roster[me].slice(1) }) });
   assert.notStrictEqual(s1, T.candSig(moved, '2026-10-21', 'v1'));
+});
+
+test('candidates cover every other-team player and findTrades still defaults to trades that help me', () => {
+  const give = ctx.roster[me].find(f => pool.byKey.get(f).slot !== 'IR'), all = T.tradeCandidates(ctx, give);
+  const others = Object.keys(ctx.roster).filter(t => t !== me).reduce((n, t) => n + ctx.roster[t].length, 0);
+  assert.strictEqual(all.length, others);
+  assert.ok(T.findTrades(ctx, give, {}).every(r => r.dA > 0));
+  assert.ok(T.filterTrades(all, { limit: 5000 }).length === all.length);   // the page's blank "+Win M you" box means no floor
+});
+
+test('likelihood: the best-value offers are not near-certain (median under 30%, none over 60%)', () => {
+  assert.ok(T.TRADE_W.bias < 0);
+  const all = [].concat.apply([], ctx.roster[me].slice(0, 4).map(g => T.tradeCandidates(ctx, g)));
+  const top = T.filterTrades(all, { limit: 25, minDA: 1e-9 }).map(r => r.likelihood).sort((a, b) => a - b);
+  assert.strictEqual(top.length, 25);
+  assert.ok(top[12] < 0.3, 'median ' + top[12]); assert.ok(top[24] < 0.6, 'max ' + top[24]);
 });

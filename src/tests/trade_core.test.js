@@ -14,7 +14,7 @@ const near = (a, b, tol = 1e-9) => Math.abs(a - b) < tol;
 test('an empty trade changes nothing', () => {
   const r = T.evaluateTrade(ctx, { a: me, b: other, aGets: [], bGets: [] });
   assert.ok(near(r.dA, 0) && near(r.dB, 0) && near(r.total, 0));
-  assert.ok(near(r.likelihood, 0.5)); assert.strictEqual(r.multi, false);
+  assert.ok(near(r.likelihood, 1 / (1 + Math.exp(-T.TRADE_W.bias)))); assert.ok(r.likelihood < 0.5); assert.strictEqual(r.multi, false);   // nothing changes hands: not a coin flip
 });
 
 test('a trade and its reverse cancel', () => {
@@ -42,7 +42,7 @@ test('likelihood rises when B receives more perceived value', () => {
   const mine = keys(me).sort((a, b) => pvOf(b) - pvOf(a)), y = keys(other)[0];
   const hi = T.evaluateTrade(ctx, { a: me, b: other, aGets: [y], bGets: [mine[0]] }), lo = T.evaluateTrade(ctx, { a: me, b: other, aGets: [y], bGets: [mine[mine.length - 1]] });
   assert.ok(hi.gapB > lo.gapB);
-  [hi, lo].forEach(r => assert.ok(near(r.likelihood, 1 / (1 + Math.exp(-(T.TRADE_W.slope * r.gapB + T.TRADE_W.winM * r.dB))))));
+  [hi, lo].forEach(r => assert.ok(near(r.likelihood, 1 / (1 + Math.exp(-(T.TRADE_W.slope * r.gapB + T.TRADE_W.winM * r.dB + T.TRADE_W.bias))))));
 });
 
 test('multi flag on uneven trades', () => {
