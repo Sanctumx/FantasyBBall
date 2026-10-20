@@ -1,6 +1,6 @@
 [build]
   publish = "."
-  functions = "netlify/functions"
+  # Kept only so Netlify skips pushes; deleting this file would let Netlify build again.
   # Netlify never builds (user, 2026-10-20): the site deploys only on Cloudflare. The ignore command always exits 0, so
   # Netlify skips every push, whatever the commit message says. To stop Netlify even checking, stop builds in its UI.
   ignore = "exit 0"

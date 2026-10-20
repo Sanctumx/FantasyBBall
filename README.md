@@ -4,20 +4,15 @@ Live snake draft board for 9-cat and 8-cat fantasy basketball, on BBM 2026-27 pr
 
 ## What's in here
 
-- `index.html` – the whole board (projections included).
-- `netlify/functions/fantrax.mjs` – a small function that reads your league's draft from Fantrax. The board can't call Fantrax directly from the browser, so it goes through this.
-- `netlify.toml` – tells Netlify where the page and the function are.
+- `index.html` – the whole board (projections included); `league.html` – the League Dashboard.
+- `worker/index.js` – the Cloudflare Worker: serves the pages and relays Fantrax requests at `/api/fantrax`. The board
+  can't call Fantrax directly from the browser, so it goes through this.
+- `wrangler.jsonc` – the Worker's configuration. `src/` holds the engine, page templates, data and backtests.
 
-## Put it online (GitHub + Netlify, about 5 minutes)
+## Where it runs
 
-1. Create a free GitHub repository (for example `courtside-draft-board`) and upload these files, keeping the folder structure (`netlify/functions/fantrax.mjs` must stay in that folder).
-2. Sign in to Netlify (free), choose **Add new site → Import an existing project → GitHub**, and pick the repository.
-3. Leave the build settings as Netlify fills them in from `netlify.toml` (no build command, publish directory `.`) and press **Deploy**.
-4. Optional: under **Site configuration → Change site name**, pick something like `courtside-draft`, giving you `https://courtside-draft.netlify.app`.
-
-Any later change pushed to the repository goes live on its own.
-
-Note: Netlify's drag-and-drop deploy publishes the page but not the function, so sync won't work that way. Use the GitHub import above, or the Netlify CLI (`npm i -g netlify-cli`, then `netlify deploy --prod` in this folder).
+The Cloudflare Worker `courtside-basketball` is connected to this repository and deploys every push to `main` within a
+couple of minutes. Netlify is no longer used: `netlify.toml` only tells it to skip every push.
 
 ## Using it with friends
 

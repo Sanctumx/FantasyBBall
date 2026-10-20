@@ -1,4 +1,4 @@
-// Cloudflare Workers config for the Courtside Draft Kit (runs alongside Netlify until the switch).
+// Cloudflare Workers config for the Courtside Draft Kit (the only deploy target).
 // Connect the GitHub repo in Cloudflare: Workers & Pages → Create → Import a repository; no build command needed.
 {
   "name": "courtside-basketball",
