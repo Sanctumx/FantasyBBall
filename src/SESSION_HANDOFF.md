@@ -12,7 +12,7 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 
 ## Standing user rules
 
-- Push only when the user says "push" or types /release. Netlify never builds (2026-10-20); Cloudflare is the only deploy.
+- Push only when the user says "push" or types /release. Cloudflare is the only deploy; the Netlify site was deleted (2026-10-20).
 - Using the user's computer is allowed without asking each time until withdrawn (2026-10-18). The user starts PC runs.
 - Report test results in **prize equity**: `python3 prize_equity.py <arm>:<baseline> ...` (60/30/5 prizes, title-equivalents
   per 100 seasons). Older items quote title equity (`equity.py`).
@@ -22,7 +22,7 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 ## Current state
 
 - **Live:** Cloudflare Worker `courtside-basketball` deploys every push to main; serves the board, the League Dashboard and
-  `/api/fantrax`. Netlify (courtside-draft.netlify.app) no longer builds; it serves its last deploy until the site is deleted there.
+  `/api/fantrax`. The old Netlify site (courtside-draft.netlify.app) is deleted.
 - **Board artifact:** claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz (last noted v144; read it before republishing).
   Publish `courtside-draft-board.html`, **never `app.html`**.
 - **Math doc:** claude.ai/code/artifact/2d4059a8-f9ad-465d-bfa7-41ef6990e7a8 (rev 159). The board links to `math.html`:

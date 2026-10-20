@@ -5,7 +5,7 @@ Everything here runs from inside `src/` (scripts use relative paths).
 ## Build the board
 1. Edit `engine.js` (model) and `app.html` (page template with `/*__DATA__*/`, `/*__SCHED__*/`, `/*__ENGINE__*/` placeholders).
 2. `python3 gen.py` → `courtside-draft-board.html` (template + players.json + sched.json + engine.js).
-3. `python3 build_site.py` → `site/index.html` (full HTML document for Netlify). Copy it to the repo root `index.html` to deploy.
+3. `python3 build_site.py` → `site/index.html` (full HTML document). Copy it to the repo root `index.html` to deploy.
 
 ## Data
 | File | What | Made by |
