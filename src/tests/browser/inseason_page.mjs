@@ -99,7 +99,7 @@ async function open(opts = {}) {
   await p.fill('#in-a', dlA[0]); await p.dispatchEvent('#in-a', 'change');
   ok((await p.$$eval('#dl-a option', o => o.length)) === dlA.length - 1 && (await p.$$eval('#list-a li', l => l.length)) === 1, 'picked player leaves the type-ahead and shows as a chip');
   await p.fill('#in-b', dlB[0]); await p.dispatchEvent('#in-b', 'change');
-  ok(/./.test(await p.textContent('#sum')) && (await p.$$eval('#sum .kpi', k => k.length)) === 4, 'summary strip: +Win M each team, Total, Likelihood');
+  ok(/./.test(await p.textContent('#sum')) && (await p.$$eval('#sum .kpi', k => k.length)) === 7, 'summary strip: +Win M each team, Total, Likelihood, then Zscore for each team and received');
   ok(!(await p.textContent('#multi')).trim(), 'even trade has no caveat');
   await p.fill('#in-b', dlB[1]); await p.dispatchEvent('#in-b', 'change');
   ok(/Uneven trade/.test(await p.textContent('#multi')), 'two for one shows the multi-player caveat');
@@ -114,12 +114,13 @@ async function open(opts = {}) {
   await p.selectOption('#zb', 'total'); await p.waitForTimeout(150); const z3 = await zTot();
   ok(z3 !== z1, 'Basis changes the total (' + z1 + ' -> ' + z3 + ')');
   await p.selectOption('#zb', 'pergame');
+  ok((await p.$$eval('#sum .kpi', k => k.length)) === 7 && /Zscore/.test(await p.$eval('#sum .kpi:nth-child(5) span', e => e.textContent)), 'summary tiles add Zscore for each team and what each receives');
   await p.click('#statv button[data-v="cur"]'); await p.waitForTimeout(100);
   ok((await p.$$eval('#bt tbody tr', r => r.length)) === bt.length, 'Projection | Current toggle keeps the rows');
   await p.click('#reset'); await p.waitForTimeout(100);
   ok((await p.$$eval('#list-a li, #list-b li', l => l.length)) === 0 && !(await p.textContent('#sum')).trim(), 'Reset Trade empties both sides and the summary');
   await p.click('#finder tbody tr'); await p.waitForTimeout(300);
-  ok((await p.$$eval('#list-a li', l => l.length)) === 1 && (await p.$$eval('#list-b li', l => l.length)) === 1 && (await p.$$eval('#sum .kpi', k => k.length)) === 4, 'clicking a finder row loads that trade into the builder');
+  ok((await p.$$eval('#list-a li', l => l.length)) === 1 && (await p.$$eval('#list-b li', l => l.length)) === 1 && (await p.$$eval('#sum .kpi', k => k.length)) === 7, 'clicking a finder row loads that trade into the builder');
   await p.reload(); await p.waitForSelector('#body:not([hidden])');
   ok(await p.isVisible('#tab-trades'), 'the Trade Analyzer link stays on the trades section after a reload');
   { const t0 = Date.now(); await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });

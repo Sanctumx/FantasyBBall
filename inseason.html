@@ -1971,7 +1971,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     try {
       const r = Trade.evaluateTrade(ctx, { a: S.a, b: S.b, aGets: S.aGets, bGets: S.bGets });
       $('sum').innerHTML = '<div class="kpi"><b>' + signed(r.dA) + '</b><span>' + esc(nameOfTeam(S.a)) + ' Win M (points)</span></div><div class="kpi"><b>' + signed(r.dB) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Win M</span></div>' +
-        '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>';
+        '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>'
+      const zsum = ks => { const v = ks.map(k => InP.zscoreOf(PLAYERS, pool.byKey.get(k), ui.zt, ui.zb)).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
+      const zA = zsum(S.aGets), zB = zsum(S.bGets), noZ = S.aGets.concat(S.bGets).filter(k => InP.zscoreOf(PLAYERS, pool.byKey.get(k), ui.zt, ui.zb) == null).length;
+      const dz = zA == null && zB == null ? null : (zA || 0) - (zB || 0), zl = ' Zscore (' + $('zt').selectedOptions[0].textContent + ', ' + $('zb').selectedOptions[0].textContent.toLowerCase() + ')';
+      $('sum').innerHTML += '<div class="kpi"><b>' + (dz == null ? '—' : zsg(dz)) + '</b><span>' + esc(nameOfTeam(S.a)) + zl + '</span></div><div class="kpi"><b>' + (dz == null ? '—' : zsg(-dz)) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Zscore</span></div>' +
+        '<div class="kpi"><b>' + (zA == null ? '—' : zsg(zA)) + ' / ' + (zB == null ? '—' : zsg(zB)) + '</b><span>Zscore received: ' + esc(nameOfTeam(S.a)) + ' / ' + esc(nameOfTeam(S.b)) + (noZ ? ' (' + noZ + ' without a projection left out)' : '') + '</span></div>';
     } catch (e) { $('sum-msg').textContent = e.message; }
   }
   function loadTrade(give, target, team) { bd = { a: ctx.me, b: team, aGets: [target], bGets: [give], stat: builderState().stat }; renderBuilder(); $('builder').scrollIntoView({ block: 'nearest' }); }
