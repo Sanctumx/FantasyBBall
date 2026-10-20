@@ -10,7 +10,7 @@ Everything here runs from inside `src/` (scripts use relative paths).
 ## Data
 | File | What | Made by |
 |---|---|---|
-| `players.json` | 234 players: BBM 2026-27 projections, Fantrax ADP (`ftx`), back-to-back rest rate (`b2b`) | BBM_Projections.xls (project file), then `b2b.py` adds `b2b` (writes `players_b2b.json`; copy over `players.json`) |
+| `players.json` | 234 players: BBM 2026-27 projections, Fantrax ADP (`ftx`), back-to-back rest rate (`b2b`) | `data/BBM_Projections.xls`, then `b2b.py` adds `b2b` (writes `players_b2b.json`; copy over `players.json`) |
 | `sched.json` | 2026-27 fantasy weeks, games per team per week, back-to-backs per team per week | `sched_b2b.py <nba-2026-UTC.csv>` adds `b2b` |
 | `logs3.csv` | NBA player game logs 2023-24 to 2025-26 (one row per player-game) | `pq2csv.mjs` from the Hugging Face dataset `cbratkovics/nba-game-logs` (game_logs_2023-24/24-25/25-26 .parquet) |
 | `bt_data.json` | Backtest seasons 2024-25 and 2025-26: prior-season stats as projections, synthetic noisy ADP, weekly actuals | `bt_prep.py` (reads logs3.csv) |
