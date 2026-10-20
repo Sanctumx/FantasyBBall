@@ -29,7 +29,7 @@ Model pick; it never punts. Shared with friends via Cloudflare.
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
 - **Works:** board, Fantrax live sync (backoff + Worker cache), saved drafts/leagues (rename, import/export), League
   Dashboard, ADP/draft collector (GitHub Actions every 6 h).
-- **Built, not pushed:** In-season tools (In-Season page: Weekly Matchup Analyzer, waiver plan, Trade Analyzer; ideas 95-103)
+- **Built, not pushed:** In-season tools (Matchup Analyzer and Trade Analyzer sections of `inseason.html`, linked in the toolbar; ideas 95-107)
   on branch `matchup-trade-analyzers`. Spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
   `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`; Tasks 1-13 steps 1-4 done (modules `inseason_league.js`,
   `inseason_players.js`, `matchup_core.js`, `trade_core.js`, page `inseason.html`; `Engine.pairMatchup` is the only engine change,
@@ -106,15 +106,14 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 
 ## Next session starts with
 
-In-season tools are built on `matchup-trade-analyzers` and reviewed (Opus, 2026-10-20). Fixed test-first: same-name free agents
-no longer take a rostered player's projection; the page flags stale rosters (Worker header `x-courtside-age`); plan moves sort by
-day; Win M labelled "whole week projected, results so far not counted" (real fix is #103); `findTrades` cached; golden fixture
-now uses a frozen `golden_players.json`; clearer message when Fantrax lists later regular-season weeks without opponents.
-Left open from the review: a traded player's games still come from his preseason team in `players.json` (matters after the
-trade deadline). Last-season ESPN stats stay as is (no current-season stats exist yet; the banner says "last season").
-Next: wait for the user's "push" to open the PR and merge. Browser checks need Playwright (not installed in the repo;
-`npm i playwright@1.48.2` and `npx playwright install chromium` in a scratch folder; run `src/tests/browser/*.mjs` with
-`REPO=<repo root>`, repo root served by `python -m http.server 8765`; league_page.mjs and league_how.mjs still carry a
-`/root/FantasyBBall/` path to fix on Windows).
+In-season tools are built on `matchup-trade-analyzers`, reviewed (Opus) and extended this session (ideas 104-107: finder filters and
+Any, text boxes, every one-for-one with a scrollbar, saved trade search, Matchup Analyzer / Trade Analyzer as toolbar sections,
+Zscore column and tiles with type and basis, likelihood bias -0.75). Tests pass (95 unit, In-Season and League browser checks).
+Left open: a traded player's games still come from his preseason team in `players.json`; likelihood bias is a guess (#98); Win M
+ignores results so far (#103). Last-season ESPN stats stay as is (none exist for this season; the banner says "last season").
+Next: wait for the user's "push", then the release steps (build check, PR, merge, republish the board artifact, trigger `collect-stats`).
+Local look: `node dev.mjs <repo root>` style server (static files plus the real Worker for `/api/fantrax`) is the way to see Fantrax data
+locally (wrangler is not installed); Playwright lives in an earlier session's scratchpad `pw/` (or `npm i playwright@1.48.2` and
+`npx playwright install chromium` in a scratch folder; run `src/tests/browser/*.mjs` with `REPO=<repo root>`, repo root served on :8765).
 Standing rule (user, 2026-10-20): keep running plan tasks unless something needs the user; once past the context limit
 (Messages > ~115K), finish the task, record it and stop; don't autorun the next one.
