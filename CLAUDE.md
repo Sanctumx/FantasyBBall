@@ -31,30 +31,26 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 
 ## Model routing
 
-**Where you work decides how the main model is chosen.**
+The main session runs on **Sonnet at medium effort**: in Claude Code from `.claude/settings.json`, in the Claude app by
+keeping the model picker on Sonnet. Judgment work goes to subagents, each pinned to its own model and effort in
+`.claude/agents/`, so the right model and effort are picked automatically and the main session never switches model
+(its cache stays warm).
 
-- **Claude app** (including its cloud sessions): the main model comes from the app's model picker; `opusplan` and the
-  effort levels in `.claude/settings.json` don't apply. Use **Sonnet 5.5** by default and switch the picker to
-  **Opus 5.5** for plans, hard areas and a bug Sonnet has failed twice. When a switch is worth it, say so, since only the
-  user can change the picker.
-- **Claude Code** (terminal or IDE): the project model `opusplan` does this automatically, as below.
-- **Subagents** use the model and effort in their own files in both.
+| Work | Who does it | Model · effort |
+| --- | --- | --- |
+| Building: UI, pages, Fantrax sync, Worker, collector, docs, builds, carrying out plans | Main session | Sonnet · medium |
+| Planning anything bigger than a small fix, and any change in a hard area | `planner` subagent | Opus · high |
+| Designing backtests and judging their results | `analyst` subagent | Opus · high |
+| Searching the repo, `IDEAS.md` and results (`src/` has 800+ files; don't read them in the main session) | `explorer` subagent | Haiku · low |
+| Reviewing a finished branch (run it on Opus if the branch touches a hard area) | `reviewer` subagent | Sonnet · high |
 
-In Claude Code, the project model is `opusplan` (`.claude/settings.json`): Opus in plan mode, Sonnet everywhere else.
-Effort shows as one level for both (medium, Opus 5.5's default). For a hard plan, raise **Effort** to High in the model
-picker (or put `ultrathink` in that message) and lower it again after; on the 5.5 models this keeps the cache.
+**How a planned task runs:** the main session (often with the explorer) gathers the task, the relevant files and any
+related `IDEAS.md` rows, briefs the planner with all of it (the planner doesn't see this conversation), shows the user the
+plan it returns, and builds it once approved. If the plan needs a decision, ask the user before building.
 
-- **Plan mode (Opus)** for anything bigger than a small fix and any change in a hard area. Plan at the start of a task:
-  each plan-mode toggle is a model switch and re-reads the whole conversation uncached.
-- **Outside plan mode (Sonnet):** UI, pages, Fantrax sync, Worker, collector, docs, builds, and carrying out plans.
-- **`/model opus`** for a long stretch of edits inside a hard area, or a bug Sonnet has failed to fix twice; tell the
-  user when that's needed, since only they can switch. `/model opusplan` afterwards.
-- **Searching and reading:** the `explorer` subagent (Haiku, low effort). `src/` has 800+ files, mostly backtest
-  results; don't read them in the main session.
-- **Backtests:** the `analyst` subagent (Opus, high effort) designs each test and judges its results; the main session
-  writes the arms, handles files and runs the scoring.
-- **Review:** the `reviewer` subagent (Sonnet, high effort). If the branch touches a hard area, run it on Opus.
-- **One hard question:** `ultrathink` in that prompt deepens one turn without changing settings.
+**Escalation, only when needed:** a bug Sonnet has failed to fix twice, or a long stretch of edits inside a hard area,
+may need Opus in the main session. Tell the user, since only they can switch (`/model opus`, then `/model sonnet`
+after). For one hard question, `ultrathink` in that prompt deepens one turn without changing settings.
 
 **Hard areas** (mistakes are subtle and nothing crashes): `src/engine.js` (win chances, variances, Model pick, availability),
 `src/backtest.js` / `bt_real.js` / `stream_sim.js`, `prize_equity.py`, and anything that changes what the Model pick sees.

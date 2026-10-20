@@ -9,7 +9,7 @@ paths:
 
 # Engine and backtest rules
 
-This is a hard area: plan mode first, and the reviewer runs on Opus.
+This is a hard area: the `planner` subagent plans the change first, and the reviewer runs on Opus.
 
 - The Model pick always runs on `MODEL_CFG` (Season, Average projections, Playoff boost Off); display settings never
   change it (IDEAS #75).
