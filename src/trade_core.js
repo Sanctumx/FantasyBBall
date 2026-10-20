@@ -43,13 +43,42 @@
     const R = Object.assign({}, ctx.roster);
     R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets);
     R[b] = ctx.roster[b].filter(f => !aGets.includes(f)).concat(bGets);
-    const mean = t => rosWinM(ctx, R, t).mean;
+    // rest-of-season matchups are cached per (team, the two changed rosters)
+    const sig = t => R[t].slice().sort().join(','), cache = ctx._rosCache = ctx._rosCache || new Map(), sab = sig(a) + '|' + sig(b);
+    const mean = t => { const k = t + '#' + sab; if (!cache.has(k)) cache.set(k, rosWinM(ctx, R, t).mean); return cache.get(k); };
     const dA = 100 * (mean(a) - baseline(ctx, a)), dB = 100 * (mean(b) - baseline(ctx, b));
     const pvSum = fs => fs.reduce((s, f) => s + perceived(ctx, ctx.pool.byKey.get(f)).pv, 0);
     const gapB = pvSum(bGets) - pvSum(aGets);
     return { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB))), gapB, multi: aGets.length !== bGets.length };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade };
+  // ---- finder ----
+  const oneForOne = (ctx, give, target, team) => {
+    const r = evaluateTrade(ctx, { a: ctx.me, b: team, aGets: [target.key], bGets: [give.key] }), v = perceived(ctx, target);
+    return { give, target, team, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, buyLow: v.rv - v.pv >= TRADE_W.tagGap };
+  };
+  const byValue = (a, b) => b.dA * b.likelihood - a.dA * a.likelihood;
+  function findTrades(ctx, myKey, { limit = 25 } = {}) {
+    const give = ctx.pool.byKey.get(myKey), rows = [];
+    Object.keys(ctx.roster).forEach(t => {
+      if (t === ctx.me) return;
+      ctx.roster[t].forEach(f => { const r = oneForOne(ctx, give, ctx.pool.byKey.get(f), t); if (r.dA > 0) rows.push(r); });
+    });
+    return rows.sort(byValue).slice(0, limit);
+  }
+  function sellHighBuyLow(ctx, { limit = 8, targets = 3 } = {}) {
+    const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
+    const mine = ctx.roster[ctx.me].map(f => tag(ctx.pool.byKey.get(f), 1)).filter(x => x.gap >= TRADE_W.tagGap).sort((a, b) => b.gap - a.gap).slice(0, limit);
+    const sellHigh = mine.map(x => ({ player: x.player, gap: x.gap, trades: findTrades(ctx, x.player.key, { limit: targets }) }));
+    const theirs = [];
+    Object.keys(ctx.roster).forEach(t => { if (t !== ctx.me) ctx.roster[t].forEach(f => { const x = tag(ctx.pool.byKey.get(f), -1); if (x.gap >= TRADE_W.tagGap) theirs.push(Object.assign(x, { team: t })); }); });
+    const buyLow = theirs.sort((a, b) => b.gap - a.gap).slice(0, limit).map(x => ({
+      player: x.player, gap: x.gap,
+      trades: ctx.roster[ctx.me].map(f => oneForOne(ctx, ctx.pool.byKey.get(f), x.player, x.team)).filter(r => r.dA > 0).sort(byValue).slice(0, targets)
+    }));
+    return { sellHigh, buyLow };
+  }
+
+  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
