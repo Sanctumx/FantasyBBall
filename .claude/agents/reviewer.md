@@ -1,8 +1,8 @@
 ---
 name: reviewer
-description: Reviews a finished feature branch before merging. Use once per feature, after tests pass, not after every edit.
+description: Reviews a finished branch before merging (runs on Opus). Use once per branch, after tests pass, not after every edit. For a branch that only changes docs, config or wording, dispatch it with model sonnet.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: opus
 effort: high
 ---
 
