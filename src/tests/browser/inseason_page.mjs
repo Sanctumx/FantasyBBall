@@ -57,6 +57,48 @@ async function open(opts = {}) {
   ok(errs.length === 0, 'no page errors after interaction ' + errs.join('; '));
   await ctx.close(); }
 
+{ const { p, errs, ctx } = await open();
+  await p.click('#tabs button[data-v="trades"]'); await p.waitForTimeout(800);
+  ok(await p.isVisible('#tab-trades') && !(await p.isVisible('#tab-matchup')), 'Trades tab shows, Matchup hides');
+  ok((await p.$$eval('#give option', o => o.length)) >= 10, 'finder lists my players');
+  const hdr = await p.$$eval('#finder thead th', t => t.map(x => x.textContent).join('|'));
+  ok(hdr === 'Target|Team|Likelihood of trade|+Win M you|+Win M them|Total Win M|Buy Low', 'finder header (' + hdr + ')');
+  const rows = await p.$$eval('#finder tbody tr', r => r.length);
+  ok(rows >= 1, 'finder has rows (' + rows + ')');
+  const col = async i => (await p.$$eval('#finder tbody tr', (r, i) => r.map(x => parseFloat(x.children[i].textContent.replace('−', '-'))), i));
+  await p.click('#finder thead th:nth-child(3)'); await p.waitForTimeout(100);
+  let l1 = await col(2); ok(l1.every((v, i) => i === 0 || l1[i - 1] >= v), 'click Likelihood sorts best first');
+  await p.click('#finder thead th:nth-child(3)'); await p.waitForTimeout(100);
+  l1 = await col(2); ok(l1.every((v, i) => i === 0 || l1[i - 1] <= v), 'second click reverses');
+  ok((await p.$$eval('#sell .tl, #buy .tl', d => d.length)) >= 1, 'Sell High / Buy Low lists show items');
+  ok(/40% current \+ 30% projection \+ 30% ADP/.test(await p.textContent('#weights')), 'weights line');
+  ok((await p.$$eval('#ta option', o => o.length)) === 14 && (await p.$$eval('#tb option', o => o.length)) === 13, 'Team A 14 options, Team B 13 without Team A');
+  ok(await p.$eval('#ta', s => s.selectedOptions[0].textContent.includes('(you)')), 'Team A defaults to me');
+  ok((await p.$$eval('#bt tr', r => r.length)) === 0, 'builder table empty at start');
+  // type-ahead offers only the other team's roster
+  const dlA = await p.$$eval('#dl-a option', o => o.map(x => x.value)), dlB = await p.$$eval('#dl-b option', o => o.map(x => x.value));
+  ok(dlA.length >= 10 && dlB.length >= 10 && !dlA.some(v => dlB.includes(v)), 'type-ahead lists differ per side (' + dlA.length + ', ' + dlB.length + ')');
+  await p.fill('#in-a', dlA[0]); await p.dispatchEvent('#in-a', 'change');
+  ok((await p.$$eval('#dl-a option', o => o.length)) === dlA.length - 1 && (await p.$$eval('#list-a li', l => l.length)) === 1, 'picked player leaves the type-ahead and shows as a chip');
+  await p.fill('#in-b', dlB[0]); await p.dispatchEvent('#in-b', 'change');
+  ok(/./.test(await p.textContent('#sum')) && (await p.$$eval('#sum .kpi', k => k.length)) === 4, 'summary strip: +Win M each team, Total, Likelihood');
+  ok(!(await p.textContent('#multi')).trim(), 'even trade has no caveat');
+  await p.fill('#in-b', dlB[1]); await p.dispatchEvent('#in-b', 'change');
+  ok(/Uneven trade/.test(await p.textContent('#multi')), 'two for one shows the multi-player caveat');
+  const bt = await p.$$eval('#bt tbody tr', r => r.map(x => [x.className, x.children.length, [...x.querySelectorAll('.chip')].some(c => /color-mix/.test(c.getAttribute('style') || ''))]));
+  ok(bt.some(r => r[0] === 'avg') && bt.some(r => r[0] === 'tot'), 'Average and Total rows');
+  ok(bt.filter(r => r[1] === 10).length >= 3 && bt.some(r => r[2]), 'per-player rows have 9 category cells with green/red chips');
+  await p.click('#statv button[data-v="cur"]'); await p.waitForTimeout(100);
+  ok((await p.$$eval('#bt tbody tr', r => r.length)) === bt.length, 'Projection | Current toggle keeps the rows');
+  await p.click('#reset'); await p.waitForTimeout(100);
+  ok((await p.$$eval('#list-a li, #list-b li', l => l.length)) === 0 && !(await p.textContent('#sum')).trim(), 'Reset Trade empties both sides and the summary');
+  await p.click('#finder tbody tr'); await p.waitForTimeout(300);
+  ok((await p.$$eval('#list-a li', l => l.length)) === 1 && (await p.$$eval('#list-b li', l => l.length)) === 1 && (await p.$$eval('#sum .kpi', k => k.length)) === 4, 'clicking a finder row loads that trade into the builder');
+  await p.reload(); await p.waitForSelector('#body:not([hidden])');
+  ok(await p.isVisible('#tab-trades'), 'tab choice survives a reload');
+  ok(errs.length === 0, 'no page errors on the Trades tab ' + errs.join('; '));
+  await ctx.close(); }
+
 { const { p, errs, ctx } = await open({ noStats: true });
   ok(/No actual stats/.test(await p.textContent('#fresh')), 'missing stats file shows the no-actual-stats note');
   ok(errs.length === 0, 'no errors without stats ' + errs.join('; '));

@@ -114,6 +114,19 @@ td.pos{color:var(--muted)}
 .plan input[type=number]{width:4.5em;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:.92rem;color:var(--ink)}
 .pos-n{color:var(--good)}.neg-n{color:var(--bad)}
 .tabpanel[hidden]{display:none}
+.tl{padding:6px 0;border-bottom:1px solid var(--line);font-size:.88rem}
+.tl:last-child{border-bottom:0}
+.tl ul{margin:4px 0 0;padding-left:18px;color:var(--muted)}
+.lnk{border:0;background:none;padding:0;color:var(--mine);cursor:pointer;font:inherit;text-decoration:underline;text-underline-offset:2px;text-align:left}
+.chiplist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.chiplist li{display:inline-flex;align-items:center;gap:6px;background:var(--sunk);border:1px solid var(--line);border-radius:14px;padding:2px 4px 2px 10px;font-size:.86rem}
+.chiplist button{border:0;background:none;cursor:pointer;color:var(--muted);font-size:1rem;line-height:1}
+.f input{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:14em;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+#bt th.grp{text-align:left;background:var(--sunk);color:var(--ink)}
+#bt tr.avg td,#bt tr.tot td{font-weight:600}
+tr.click{cursor:pointer}
+#tab-trades>.grid2{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+@media (max-width:1000px){#tab-trades>.grid2{grid-template-columns:1fr}}
 </style>
 
 <header class="top">
@@ -160,7 +173,35 @@ td.pos{color:var(--muted)}
       </div>
     </div>
     <div class="tabpanel" id="tab-trades" hidden>
-      <section class="panel"><p class="hint">Trade tools load here.</p></section>
+      <div class="grid2">
+        <section class="panel">
+          <h2>Trade finder <span class="meta">Offer one of your players; one-for-one, best first</span></h2>
+          <div class="ctl"><label class="f" for="give">Your player<select id="give"></select></label></div>
+          <div class="scroll"><table id="finder"></table></div>
+          <p class="msg" id="finder-msg"></p>
+        </section>
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <section class="panel"><h2>Sell High <span class="meta">Your players valued above what they project</span></h2><div id="sell"></div></section>
+          <section class="panel"><h2>Buy Low <span class="meta">Other teams' players valued below what they project</span></h2><div id="buy"></div></section>
+        </div>
+      </div>
+      <section class="panel" id="builder">
+        <h2>Trade Builder <span class="meta" id="weights"></span></h2>
+        <div class="ctl">
+          <label class="f" for="ta">Team A<select id="ta"></select></label>
+          <label class="f" for="tb">Team B<select id="tb"></select></label>
+          <span class="seg" id="statv" role="group" aria-label="Stat rows"><button type="button" data-v="proj">Projection</button><button type="button" data-v="cur">Current</button></span>
+          <button class="btn" type="button" id="reset">Reset Trade</button>
+        </div>
+        <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+          <div><label class="f" for="in-a"><span id="lab-a">Team A receives</span><input id="in-a" list="dl-a" autocomplete="off" placeholder="Type a player"></label><datalist id="dl-a"></datalist><ul class="chiplist" id="list-a"></ul></div>
+          <div><label class="f" for="in-b"><span id="lab-b">Team B receives</span><input id="in-b" list="dl-b" autocomplete="off" placeholder="Type a player"></label><datalist id="dl-b"></datalist><ul class="chiplist" id="list-b"></ul></div>
+        </div>
+        <p class="msg" id="multi"></p>
+        <div class="scroll"><table id="bt"></table></div>
+        <div class="kpis" id="sum"></div>
+        <p class="msg" id="sum-msg"></p>
+      </section>
     </div>
   </div>
 </main>
@@ -224,6 +265,7 @@ td.pos{color:var(--muted)}
       if (seq !== loadSeq) return;
       L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; fetchedAt = new Date();
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
+      Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
       fxWait = 0; say(''); start();
     } catch (e) {
       if (seq !== loadSeq) return;
@@ -273,7 +315,7 @@ td.pos{color:var(--muted)}
     ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: ui.team[ui.leagueId], nowMs: Date.now() });
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.tab));
     $('tab-matchup').hidden = ui.tab !== 'matchup'; $('tab-trades').hidden = ui.tab !== 'trades';
-    if (ui.tab === 'matchup') renderMatchup();
+    if (ui.tab === 'matchup') renderMatchup(); else renderTrades();
   }
 
   function renderMatchup() {
@@ -305,12 +347,115 @@ td.pos{color:var(--muted)}
       'You can drop: ' + (plan.droppable.length ? plan.droppable.map(p => p.n).join(', ') : 'nobody') + '.';
   }
 
+  // ---------------------------------------------------------------- Trades tab
+  const tradeCache = {};
+  let bd = null;   // Trade Builder state { a, b, aGets, bGets, stat }
+  const nameOfTeam = t => (L.teams.find(x => x.id === t) || { name: t }).name;
+  const pvOf = pp => Trade.perceived(ctx, pp).pv;
+  const mineSorted = () => ctx.roster[ctx.me].map(f => pool.byKey.get(f)).sort((a, b) => pvOf(b) - pvOf(a));
+  const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b></td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td>';
+
+  function renderTrades() {
+    const mine = mineSorted();
+    if (!mine.some(p => p.key === ui.give)) ui.give = mine[0] && mine[0].key;
+    $('give').innerHTML = mine.map(p => '<option value="' + esc(p.key) + '">' + esc(p.n) + ' (' + esc(p.t) + ')</option>').join(''); $('give').value = ui.give;
+    const rows = Trade.findTrades(ctx, ui.give, { limit: 25 });
+    $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Worth more than the market thinks">Buy Low</th></tr></thead><tbody>' +
+      rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '<td>' + (r.buyLow ? '✓' : '') + '</td></tr>').join('') + '</tbody>' : '';
+    $('finder-msg').textContent = rows.length ? 'Click a row to load it into the Trade Builder.' : 'No one-for-one trade for this player helps you.';
+    applySort('finder');
+    const key = ui.leagueId + ':' + ctx.me;
+    const sb = tradeCache[key] || (tradeCache[key] = Trade.sellHighBuyLow(ctx, { limit: 8, targets: 3 }));
+    const list = (items, kind) => items.length ? items.map(x => '<div class="tl"><b>' + esc(x.player.n) + '</b><span class="src">' + (kind === 'sell' ? 'valued ' : 'worth ') + x.gap.toFixed(2) + (kind === 'sell' ? ' above real' : ' above what they are valued') + '</span>' +
+      (x.trades.length ? '<ul>' + x.trades.map(t => '<li><button type="button" class="lnk" data-give="' + esc(t.give.key) + '" data-target="' + esc(t.target.key) + '" data-team="' + esc(t.team) + '">' + esc(t.give.n) + ' for ' + esc(t.target.n) + '</button> · ' + esc(nameOfTeam(t.team)) + ' · ' + pct(t.likelihood) + '% likely · ' + signed(t.dA) + ' you</li>').join('') + '</ul>' : '<p class="hint">No one-for-one trade helps you.</p>') + '</div>').join('') : '<p class="hint">None right now.</p>';
+    $('sell').innerHTML = list(sb.sellHigh, 'sell');
+    $('buy').innerHTML = list(sb.buyLow, 'buy');
+    const w = Trade.TRADE_W; $('weights').textContent = 'Perceived value = ' + Math.round(w.cur * 100) + '% current + ' + Math.round(w.proj * 100) + '% projection + ' + Math.round(w.adp * 100) + '% ADP';
+    renderBuilder();
+  }
+  function builderState() {
+    const ids = L.teams.map(t => t.id);
+    if (!bd || !ids.includes(bd.a) || !ids.includes(bd.b) || bd.a === bd.b) { const a = ctx.me; bd = { a, b: ids.find(t => t !== a), aGets: [], bGets: [], stat: (bd && bd.stat) || 'proj' }; }
+    return bd;
+  }
+  const lineFor = (pp, stat) => stat === 'cur' ? InP.curLine(pp, Trade.TRADE_W.shrinkGames) : pp.line;
+  const statTxt = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : v.toFixed(1);
+  const stats9 = l => [l.fgp, l.ftp, l.tpm, l.pts, l.reb, l.ast, l.stl, l.blk, l.to];
+  function sideRows(label, keys, stat) {
+    const pls = keys.map(k => pool.byKey.get(k)), lines = pls.map(p => lineFor(p, stat));
+    let h = '<tr><th class="grp" colspan="' + (CATS.length + 1) + '">' + esc(label) + '</th></tr>';
+    lines.forEach((l, i) => { const z = InP.catZ(l, ctx.ref); h += '<tr><td class="l">' + esc(pls[i].n) + '</td>' + stats9(l).map((v, c) => '<td>' + chip(.5 + z[c] / 4, statTxt(v, c)) + '</td>').join('') + '</tr>'; });
+    if (lines.length) {
+      const n = lines.length, sum = f => lines.reduce((s, l) => s + f(l), 0), fga = sum(l => l.fga), fta = sum(l => l.fta);
+      const tot = { fgp: fga ? sum(l => l.fgp * l.fga) / fga : 0, fga, ftp: fta ? sum(l => l.ftp * l.fta) / fta : 0, fta, tpm: sum(l => l.tpm), pts: sum(l => l.pts), reb: sum(l => l.reb), ast: sum(l => l.ast), stl: sum(l => l.stl), blk: sum(l => l.blk), to: sum(l => l.to) };
+      const avg = Object.assign({}, tot, { fga: fga / n, fta: fta / n }); ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'].forEach(k => { avg[k] = tot[k] / n; });
+      const z = InP.catZ(avg, ctx.ref);
+      h += '<tr class="avg"><td class="l">Average</td>' + stats9(avg).map((v, c) => '<td>' + chip(.5 + z[c] / 4, statTxt(v, c)) + '</td>').join('') + '</tr>';
+      h += '<tr class="tot"><td class="l">Total</td>' + stats9(tot).map((v, c) => '<td>' + statTxt(v, c) + '</td>').join('') + '</tr>';
+    }
+    return h;
+  }
+  function renderBuilder() {
+    const S = builderState(), ids = L.teams.map(t => t.id);
+    $('ta').innerHTML = ids.map(t => '<option value="' + esc(t) + '">' + esc(nameOfTeam(t)) + (t === ctx.me ? ' (you)' : '') + '</option>').join(''); $('ta').value = S.a;
+    $('tb').innerHTML = ids.filter(t => t !== S.a).map(t => '<option value="' + esc(t) + '">' + esc(nameOfTeam(t)) + '</option>').join(''); $('tb').value = S.b;
+    document.querySelectorAll('#statv button').forEach(b => b.classList.toggle('on', b.dataset.v === S.stat));
+    $('lab-a').textContent = nameOfTeam(S.a) + ' receives'; $('lab-b').textContent = nameOfTeam(S.b) + ' receives';
+    const opts = (team, picked) => ctx.roster[team].filter(f => !picked.includes(f)).map(f => pool.byKey.get(f)).map(p => '<option value="' + esc(p.n + ' · ' + p.t) + '"></option>').join('');
+    $('dl-a').innerHTML = opts(S.b, S.aGets); $('dl-b').innerHTML = opts(S.a, S.bGets);
+    const chips = (keys, side) => keys.map(k => '<li>' + esc(pool.byKey.get(k).n) + '<button type="button" data-side="' + side + '" data-rm="' + esc(k) + '" aria-label="Remove ' + esc(pool.byKey.get(k).n) + '">×</button></li>').join('');
+    $('list-a').innerHTML = chips(S.aGets, 'a'); $('list-b').innerHTML = chips(S.bGets, 'b');
+    $('multi').textContent = S.aGets.length !== S.bGets.length && S.aGets.length + S.bGets.length > 0 ? 'Uneven trade: each team keeps its whole roster here, so the team getting more players needs open spots or must drop someone. Win M counts every player involved.' : '';
+    $('bt').innerHTML = S.aGets.length + S.bGets.length ? '<thead><tr><th class="l">Player</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '</tr></thead><tbody>' + sideRows(nameOfTeam(S.a) + ' receives', S.aGets, S.stat) + sideRows(nameOfTeam(S.b) + ' receives', S.bGets, S.stat) + '</tbody>' : '';
+    $('sum').innerHTML = ''; $('sum-msg').textContent = '';
+    if (!S.aGets.length || !S.bGets.length) { $('sum-msg').textContent = 'Add at least one player on each side to see the effect on rest-of-season Win M.'; return; }
+    try {
+      const r = Trade.evaluateTrade(ctx, { a: S.a, b: S.b, aGets: S.aGets, bGets: S.bGets });
+      $('sum').innerHTML = '<div class="kpi"><b>' + signed(r.dA) + '</b><span>' + esc(nameOfTeam(S.a)) + ' Win M (points)</span></div><div class="kpi"><b>' + signed(r.dB) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Win M</span></div>' +
+        '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>';
+    } catch (e) { $('sum-msg').textContent = e.message; }
+  }
+  function loadTrade(give, target, team) { bd = { a: ctx.me, b: team, aGets: [target], bGets: [give], stat: builderState().stat }; renderBuilder(); $('builder').scrollIntoView({ block: 'nearest' }); }
+  function addPlayer(side, text) {
+    const S = builderState(), from = side === 'a' ? S.b : S.a, picked = side === 'a' ? S.aGets : S.bGets, t = text.trim().toLowerCase();
+    const cands = ctx.roster[from].filter(f => !picked.includes(f)).map(f => pool.byKey.get(f));
+    const hit = cands.find(p => (p.n + ' · ' + p.t).toLowerCase() === t) || (cands.filter(p => p.n.toLowerCase() === t).length === 1 ? cands.find(p => p.n.toLowerCase() === t) : null);
+    if (hit) picked.push(hit.key);
+    renderBuilder();
+  }
+  $('give').addEventListener('change', e => { ui.give = e.target.value; save(); renderTrades(); });
+  $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr) loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team); });
+  ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
+  $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('statv').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { builderState().stat = b.dataset.v; renderBuilder(); } });
+  $('reset').addEventListener('click', () => { const S = builderState(); S.aGets = []; S.bGets = []; renderBuilder(); });
+  [['in-a', 'a'], ['in-b', 'b']].forEach(([id, side]) => { const el = $(id); el.addEventListener('change', () => { addPlayer(side, el.value); el.value = ''; }); });
+  ['list-a', 'list-b'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button[data-rm]'); if (!b) return; const S = builderState(), arr = b.dataset.side === 'a' ? S.aGets : S.bGets; arr.splice(arr.indexOf(b.dataset.rm), 1); renderBuilder(); }));
+
+  // Sortable columns, as on the League Dashboard: first click puts the best first, second reverses; names sort A to Z; kept in storage.
+  const cellKey = td => { const t = td.textContent.trim(); if (t === '—' || t === '') return null; const v = parseFloat(t.replace(/[,%+]/g, '').replace('−', '-')); return isNaN(v) ? t : v; };
+  function applySort(id) {
+    const st = (ui.sort || {})[id], tb = $(id).tBodies[0], ths = [...$(id).querySelectorAll('thead th')];
+    ths.forEach((th, i) => { th.tabIndex = 0; th.removeAttribute('aria-sort'); if (st && st.col === i) th.setAttribute('aria-sort', st.dir === 'asc' ? 'ascending' : 'descending'); });
+    if (!st || !tb || st.col >= ths.length) return;
+    const rows = [...tb.rows], k = r => r.children[st.col] ? cellKey(r.children[st.col]) : null, sgn = st.dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => { const x = k(a), y = k(b); if (x == null) return y == null ? 0 : 1; if (y == null) return -1;
+      return sgn * (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true })); });
+    rows.forEach(r => tb.appendChild(r));
+  }
+  ui.sort = ui.sort || {};
+  { const id = 'finder', go = th => { if (!th) return; const i = [...th.parentNode.children].indexOf(th), cur = ui.sort[id], best = th.classList.contains('l') ? 'asc' : 'desc';
+      ui.sort[id] = cur && cur.col === i ? { col: i, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { col: i, dir: best }; save(); applySort(id); };
+    $(id).addEventListener('click', e => go(e.target.closest('thead th')));
+    $(id).addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const th = e.target.closest('thead th'); if (th) { e.preventDefault(); go(th); } } }); }
+
   $('retry').addEventListener('click', () => { fxWait = 0; load(); });
   $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
   $('src').addEventListener('change', e => { ui.leagueId = e.target.value; save(); load(); });
-  $('team').addEventListener('change', e => { ui.team[ui.leagueId] = e.target.value; save(); render(); });
+  $('team').addEventListener('change', e => { ui.team[ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
   $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.tab = b.dataset.v; save(); render(); });
   $('addsleft').addEventListener('change', e => { const v = Math.max(0, Math.min(4, Math.round(+e.target.value || 0))); ui.adds[ui.leagueId + ':' + ui.week] = v; save(); renderPlan(+ui.week); });
