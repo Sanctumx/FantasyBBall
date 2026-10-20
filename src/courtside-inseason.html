@@ -1845,7 +1845,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function renderTrades() {
     const mine = mineSorted();
     if (ui.give !== 'any' && !mine.some(p => p.key === ui.give)) ui.give = 'any';
-    $('givelist').innerHTML = mine.map(p => '<option value="' + esc(p.n) + '">' + esc(p.t) + '</option>').join('');
+    $('givelist').innerHTML = mine.map(p => '<option value="' + esc(p.n) + '"></option>').join('');
     const gp = ui.give === 'any' ? null : pool.byKey.get(ui.give); $('give').value = gp ? gp.n : '';
     $('f-lik').value = ui.fl.lik; $('f-da').value = ui.fl.da; $('f-db').value = ui.fl.db;
     renderFinder();
