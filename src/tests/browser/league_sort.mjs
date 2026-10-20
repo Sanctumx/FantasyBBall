@@ -1,7 +1,7 @@
 // League page: sortable columns and one-decimal percentages (2026-10-18). Needs playwright and the repo root on :8765.
 import { chromium } from 'playwright';
 import fs from 'fs';
-const PLAYERS = JSON.parse(fs.readFileSync('/root/FantasyBBall/src/players.json', 'utf8'));
+const PLAYERS = JSON.parse(fs.readFileSync((process.env.REPO || '/root/FantasyBBall') + '/src/players.json', 'utf8'));
 const byAdp = PLAYERS.map((p, i) => [p.ftx || 999, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
 const cfg = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 3, field: 'easy', poStart: 18, asb: 'merged', proj: 'avg' };
 const fails = []; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.push(m); };

@@ -2,7 +2,7 @@
 // Needs playwright (run from a folder where it is installed) and the repo root served on :8765 (python3 -m http.server 8765).
 import { chromium } from 'playwright';
 import fs from 'fs';
-const PLAYERS = JSON.parse(fs.readFileSync('/root/FantasyBBall/src/players.json', 'utf8'));
+const PLAYERS = JSON.parse(fs.readFileSync((process.env.REPO || '/root/FantasyBBall') + '/src/players.json', 'utf8'));
 const byAdp = PLAYERS.map((p, i) => [p.ftx || 999, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
 const cfg = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 3, field: 'easy', poStart: 18, asb: 'merged', proj: 'avg', basis: 'pergame' };
 const boardState = { cfg, picks: byAdp.slice(0, 168), log: [], owner: [], fx: null, extra: [] };
@@ -25,7 +25,7 @@ const seed = { 'courtside-board-v1': JSON.stringify(boardState), 'courtside-save
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
   const opts = await p.$$eval('#src option', o => o.map(x => x.value));
   ok(opts.length === 2 && opts[0] === 'board' && opts[1] === 'saved:Mock 10', 'source list = board + saved (' + opts + ')');
-  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft Kit|League Dashboard|In-Season', 'toolbar Draft Kit | League Dashboard | In-Season');
+  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft Kit|League Dashboard|Matchup Analyzer|Trade Analyzer', 'toolbar Draft Kit | League Dashboard | Matchup Analyzer | Trade Analyzer');
   const mx = await p.$$eval('#mx tbody tr', rows => rows.map(r => [...r.querySelectorAll('td.v')].map(td => td.textContent)));
   ok(mx.length === 14 && mx.every(r => r.length === 14), 'matrix 14 × 14 (' + mx.length + ')');
   const h2h = await p.$$eval('#h2h tbody tr', rows => rows.map(r => [r.dataset.t, r.querySelector('td.m').textContent]));

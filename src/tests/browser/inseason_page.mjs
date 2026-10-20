@@ -28,8 +28,8 @@ async function open(opts = {}) {
 
 { const { p, errs, ctx } = await open();
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
-  ok(/^In-Season/.test(await p.title()), 'title says In-Season');
-  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft Kit|League Dashboard|In-Season', 'toolbar Draft Kit | League Dashboard | In-Season');
+  ok(/^Matchup Analyzer/.test(await p.title()), 'title says Matchup Analyzer');
+  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft Kit|League Dashboard|Matchup Analyzer|Trade Analyzer', 'toolbar Draft Kit | League Dashboard | Matchup Analyzer | Trade Analyzer');
   ok((await p.$$eval('#team option', o => o.length)) === 14, 'team select has 14 options');
   const wk = await p.$$eval('#week option', o => o.map(x => x.value));
   ok(wk[0] === '1' && wk.length === 15 && wk[14] === '15' && await p.$eval('#week', s => s.value) === '1', 'week select lists the regular periods 1-15 with 1 selected (' + wk.length + ')');
@@ -58,7 +58,7 @@ async function open(opts = {}) {
   await ctx.close(); }
 
 { const { p, errs, ctx } = await open();
-  await p.click('#tabs button[data-v="trades"]'); await p.waitForTimeout(800);
+  await p.click('.sitenav a[href="inseason.html#trades"]'); await p.waitForTimeout(800);
   await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
   ok(await p.isVisible('#tab-trades') && !(await p.isVisible('#tab-matchup')), 'Trades tab shows, Matchup hides');
   ok(!(await p.isVisible('#week')), 'Trades tab has no week dropdown');
@@ -109,7 +109,10 @@ async function open(opts = {}) {
   await p.click('#finder tbody tr'); await p.waitForTimeout(300);
   ok((await p.$$eval('#list-a li', l => l.length)) === 1 && (await p.$$eval('#list-b li', l => l.length)) === 1 && (await p.$$eval('#sum .kpi', k => k.length)) === 4, 'clicking a finder row loads that trade into the builder');
   await p.reload(); await p.waitForSelector('#body:not([hidden])');
-  ok(await p.isVisible('#tab-trades'), 'tab choice survives a reload');
+  ok(await p.isVisible('#tab-trades'), 'the Trade Analyzer link stays on the trades section after a reload');
+  { const t0 = Date.now(); await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
+    ok(Date.now() - t0 < 3000 && (await p.$$eval('#sell .tl, #buy .tl', d => d.length)) >= 1, 'a reload reuses the saved trade search (' + (Date.now() - t0) + ' ms)'); }
+  ok(/^Trade Analyzer/.test(await p.title()) && (await p.$eval('.sitenav a[aria-current]', a => a.textContent)) === 'Trade Analyzer', 'title and toolbar follow the section');
   ok(errs.length === 0, 'no page errors on the Trades tab ' + errs.join('; '));
   await ctx.close(); }
 

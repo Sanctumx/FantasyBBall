@@ -357,7 +357,7 @@ label.f select,label.f input{font-weight:400}
     <section class="how-card">
       <h3>In-season tools</h3>
       <h4>Weekly Matchup Analyzer</h4>
-      <p>In-Season (top right) reads your Fantrax league: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here).</p>
+      <p>Matchup Analyzer (top right) reads your Fantrax league: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here).</p>
       <h4>Adds and the plan</h4>
       <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. Plans cover the current week only.</p>
       <h4>Trade Analyzer</h4>
@@ -1449,11 +1449,10 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
     return o;
   }
-  // Toolbar between the pages; `active` is 'kit', 'league' or 'inseason'
+  // Toolbar between the pages; `active` is 'kit', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
-    '<a href="./"' + (active === 'kit' ? ' aria-current="page"' : '') + '>Draft Kit</a>' +
-    '<a href="league.html"' + (active === 'league' ? ' aria-current="page"' : '') + '>League Dashboard</a>' +
-    '<a href="inseason.html"' + (active === 'inseason' ? ' aria-current="page"' : '') + '>In-Season</a></nav>';
+    [['kit', './', 'Draft Kit'], ['league', 'league.html', 'League Dashboard'], ['matchup', 'inseason.html#matchup', 'Matchup Analyzer'], ['trades', 'inseason.html#trades', 'Trade Analyzer']]
+      .map(([k, href, label]) => '<a href="' + href + '"' + (active === k ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
     '.sitenav a:hover{color:var(--ink)}' +

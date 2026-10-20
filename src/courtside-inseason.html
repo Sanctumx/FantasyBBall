@@ -132,7 +132,7 @@ tr.click{cursor:pointer}
 </style>
 
 <header class="top">
-  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>In-Season</h1>
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg><span id="sect">Matchup Analyzer</span></h1>
   <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
 </header>
 <dialog class="how" id="how" aria-labelledby="how-title">
@@ -200,7 +200,7 @@ tr.click{cursor:pointer}
     <section class="how-card">
       <h3>In-season tools</h3>
       <h4>Weekly Matchup Analyzer</h4>
-      <p>In-Season (top right) reads your Fantrax league: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here).</p>
+      <p>Matchup Analyzer (top right) reads your Fantrax league: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here).</p>
       <h4>Adds and the plan</h4>
       <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. Plans cover the current week only.</p>
       <h4>Trade Analyzer</h4>
@@ -218,7 +218,6 @@ tr.click{cursor:pointer}
       <label class="f" for="src">League<select id="src"></select></label>
       <label class="f" for="team">Your team<select id="team"></select></label>
       <label class="f" for="week" title="Win chances are projected for this matchup period">Week<select id="week"></select></label>
-      <span class="seg" id="tabs" role="group" aria-label="Tool"><button type="button" data-v="matchup">Matchup</button><button type="button" data-v="trades">Trades</button></span>
     </div>
     <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
     <div class="fresh" id="fresh"></div>
@@ -1219,11 +1218,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
     return o;
   }
-  // Toolbar between the pages; `active` is 'kit', 'league' or 'inseason'
+  // Toolbar between the pages; `active` is 'kit', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
-    '<a href="./"' + (active === 'kit' ? ' aria-current="page"' : '') + '>Draft Kit</a>' +
-    '<a href="league.html"' + (active === 'league' ? ' aria-current="page"' : '') + '>League Dashboard</a>' +
-    '<a href="inseason.html"' + (active === 'inseason' ? ' aria-current="page"' : '') + '>In-Season</a></nav>';
+    [['kit', './', 'Draft Kit'], ['league', 'league.html', 'League Dashboard'], ['matchup', 'inseason.html#matchup', 'Matchup Analyzer'], ['trades', 'inseason.html#trades', 'Trade Analyzer']]
+      .map(([k, href, label]) => '<a href="' + href + '"' + (active === k ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
     '.sitenav a:hover{color:var(--ink)}' +
@@ -1652,21 +1650,38 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     if (kind === 'lik') { const f = (m[2] && /^(%|percent|pcts?)$/.test(m[2])) || v > 1 ? v / 100 : v; return f >= 0 && f <= 1 ? f : undefined; }
     return v;
   }
+  // Saved candidates (the page keeps them in the browser so a reload does not search again): compact rows, rebuilt from the pool
+  const packCandidates = rows => rows.map(r => [r.give.key, r.target.key, r.team, r.likelihood, r.dA, r.dB, r.total, r.buyLow ? 1 : 0]);
+  function unpackCandidates(packed, pool) {
+    const out = [];
+    packed.forEach(([g, t, team, likelihood, dA, dB, total, bl]) => {
+      const give = pool.byKey.get(g), target = pool.byKey.get(t);
+      if (give && target) out.push({ give, target, team, likelihood, dA, dB, total, buyLow: !!bl });
+    });
+    return out;
+  }
+  // What the candidates depend on: both sides' rosters, my team, the current period, the day, the weights and a model version
+  function candSig(ctx, day, version) {
+    const ros = Object.keys(ctx.roster).sort().map(t => t + ':' + ctx.roster[t].slice().sort().join(',')).join(';');
+    let h = 0; const str = [ros, ctx.me, ctx.cur, day, version, JSON.stringify(TRADE_W)].join('|');
+    for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
+    return day + ':' + ctx.me + ':' + ctx.cur + ':' + (h >>> 0).toString(36) + ':' + str.length;
+  }
   const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), opts);
-  function sellHighBuyLow(ctx, { limit = 8, targets = 3 } = {}) {
+  function sellHighBuyLow(ctx, { limit = 8, targets = 3, candidates = null } = {}) {
     const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
     const mine = ctx.roster[ctx.me].map(f => tag(ctx.pool.byKey.get(f), 1)).filter(x => x.gap >= TRADE_W.tagGap).sort((a, b) => b.gap - a.gap).slice(0, limit);
-    const sellHigh = mine.map(x => ({ player: x.player, gap: x.gap, trades: findTrades(ctx, x.player.key, { limit: targets }) }));
+    const sellHigh = mine.map(x => ({ player: x.player, gap: x.gap, trades: candidates ? filterTrades(candidates(x.player.key), { limit: targets }) : findTrades(ctx, x.player.key, { limit: targets }) }));
     const theirs = [];
     Object.keys(ctx.roster).forEach(t => { if (t !== ctx.me) ctx.roster[t].forEach(f => { const x = tag(ctx.pool.byKey.get(f), -1); if (x.gap >= TRADE_W.tagGap) theirs.push(Object.assign(x, { team: t })); }); });
     const buyLow = theirs.sort((a, b) => b.gap - a.gap).slice(0, limit).map(x => ({
       player: x.player, gap: x.gap,
-      trades: ctx.roster[ctx.me].map(f => oneForOne(ctx, ctx.pool.byKey.get(f), x.player, x.team)).filter(r => r.dA > 0).sort(byValue).slice(0, targets)
+      trades: (candidates ? [].concat.apply([], ctx.roster[ctx.me].map(f => candidates(f).filter(r => r.target.key === x.player.key))) : ctx.roster[ctx.me].map(f => oneForOne(ctx, ctx.pool.byKey.get(f), x.player, x.team)).filter(r => r.dA > 0)).sort(byValue).slice(0, targets)
     }));
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
 
@@ -1675,11 +1690,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 (function () {
   'use strict';
   const E = Engine, CATS = E.CATS, $ = id => document.getElementById(id);
-  document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('inseason');
+  const sectionOf = () => location.hash === '#trades' ? 'trades' : 'matchup';   // the toolbar's Matchup Analyzer / Trade Analyzer links
+  document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', DEFAULT_LEAGUE = 'mm5i19xxmv4hcbcy';
-  let ui = { leagueId: null, team: {}, tab: 'matchup', week: null, adds: {}, sort: {}, give: 'any', fl: { lik: '', da: '', db: '' } };
+  let ui = { leagueId: null, team: {}, tab: sectionOf(), week: null, adds: {}, sort: {}, give: 'any', fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  ui.tab = sectionOf();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
@@ -1776,7 +1793,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
   function render() {
     ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: ui.team[ui.leagueId], nowMs: Date.now() });
-    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.tab));
+    $('sect').textContent = ui.tab === 'trades' ? 'Trade Analyzer' : 'Matchup Analyzer'; document.title = $('sect').textContent + ' · Courtside Draft Kit';
+    document.querySelector('.sitenav').outerHTML = Shared.TOOLBAR_HTML(ui.tab);
     $('week').closest('label').hidden = ui.tab === 'trades';   // trades measure the rest of the season, so no week to pick
     $('tab-matchup').hidden = ui.tab !== 'matchup'; $('tab-trades').hidden = ui.tab !== 'trades';
     if (ui.tab === 'matchup') renderMatchup(); else renderTrades();
@@ -1819,28 +1837,54 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const mineSorted = () => ctx.roster[ctx.me].map(f => pool.byKey.get(f)).sort((a, b) => pvOf(b) - pvOf(a));
   const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b></td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td>';
 
-  // one player's candidate trades take about 0.7 s, so "Any" searches one player at a time and draws as it goes
+  // One player's candidate trades take about 0.7 s, so they are searched one player at a time and drawn as they come. Results are
+  // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v1';
+  const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
+  function candSave(sig, ck, gives) {
+    try {
+      const st = candStore(), mine = st.sigs[sig] = st.sigs[sig] || {};
+      gives.forEach(g => { if (tradeCache[ck(g)]) mine[g] = Trade.packCandidates(tradeCache[ck(g)]); });
+      st.order = st.order.filter(x => x !== sig).concat(sig);
+      while (st.order.length > 3) delete st.sigs[st.order.shift()];
+      localStorage.setItem(CAND_KEY, JSON.stringify(st));
+    } catch (e) {}
+  }
   let finderRun = 0;
   function renderFinder() {
-    const run = ++finderRun, gives = ui.give === 'any' ? ctx.roster[ctx.me] : [ui.give], ck = g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + g;
-    const todo = gives.filter(g => !tradeCache[ck(g)]);
+    const run = ++finderRun, mineAll = ctx.roster[ctx.me], gives = ui.give === 'any' ? mineAll : [ui.give];
+    const ck = g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + g, sig = Trade.candSig(ctx, InL.localDay(Date.now()), CAND_VER);
+    const saved = candStore().sigs[sig] || {};
+    mineAll.forEach(g => { if (!tradeCache[ck(g)] && saved[g]) tradeCache[ck(g)] = Trade.unpackCandidates(saved[g], pool); });
+    const todo = (ui.give === 'any' ? [] : [ui.give]).concat(mineAll.filter(g => g !== ui.give)).filter(g => !tradeCache[ck(g)]);
     const draw = () => {
       const pf = (k, id) => { const v = Trade.parseFilter(k, ui.fl[id]); $('f-' + id).classList.toggle('bad', v === undefined); return v; };
       const lik = pf('lik', 'lik'), da = pf('da', 'da'), db = pf('db', 'db');   // a box that cannot be read is ignored and marked
       const opts = { limit: 25, minLikelihood: lik == null ? 0 : lik, minDA: da == null ? 0 : da, minDB: db == null ? -Infinity : db };
-      const rows = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])), opts), busy = todo.length ? 'Searching ' + (gives.length - todo.length) + '/' + gives.length + '… ' : '';
+      const rows = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])), opts), busy = todo.length ? 'Searching ' + (mineAll.length - todo.length) + '/' + mineAll.length + '… ' : '';
       $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Worth more than the market thinks">Buy Low</th></tr></thead><tbody>' +
         rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.give.n) + '</td><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '<td>' + (r.buyLow ? '✓' : '') + '</td></tr>').join('') + '</tbody>' : '';
-      $('finder-msg').textContent = busy + (rows.length ? 'Click a row to load it into the Trade Builder.' : todo.length ? '' : 'No one-for-one trade matches these filters.');
+      const waiting = gives.some(g => !tradeCache[ck(g)]);
+      $('finder-msg').textContent = busy + (rows.length ? 'Click a row to load it into the Trade Builder.' : waiting ? '' : 'No one-for-one trade matches these filters.');
       applySort('finder');
     };
-    draw();
+    draw(); drawSellBuy(ck);
     const step = () => {
       if (run !== finderRun || !todo.length) return;
-      const g = todo.shift(); tradeCache[ck(g)] = Trade.tradeCandidates(ctx, g); draw();
-      if (todo.length) setTimeout(step, 0);
+      const g = todo.shift(); tradeCache[ck(g)] = Trade.tradeCandidates(ctx, g); candSave(sig, ck, [g]); draw();
+      if (todo.length) setTimeout(step, 0); else drawSellBuy(ck);
     };
     if (todo.length) setTimeout(step, 0);
+  }
+  // Sell High / Buy Low use the same candidates, so they appear once every one of my players has been searched
+  function drawSellBuy(ck) {
+    if (!ctx.roster[ctx.me].every(g => tradeCache[ck(g)])) { $('sell').innerHTML = $('buy').innerHTML = '<p class="hint">Searching…</p>'; return; }
+    const key = ui.leagueId + ':' + ctx.me + ':' + ctx.cur;
+    const sb = tradeCache[key] || (tradeCache[key] = Trade.sellHighBuyLow(ctx, { limit: 8, targets: 3, candidates: g => tradeCache[ck(g)] }));
+    const list = (items, kind) => items.length ? items.map(x => '<div class="tl"><b>' + esc(x.player.n) + '</b><span class="src">' + (kind === 'sell' ? 'valued ' : 'worth ') + x.gap.toFixed(2) + (kind === 'sell' ? ' above real' : ' above what they are valued') + '</span>' +
+      (x.trades.length ? '<ul>' + x.trades.map(t => '<li><button type="button" class="lnk" data-give="' + esc(t.give.key) + '" data-target="' + esc(t.target.key) + '" data-team="' + esc(t.team) + '">' + esc(t.give.n) + ' for ' + esc(t.target.n) + '</button> · ' + esc(nameOfTeam(t.team)) + ' · ' + pct(t.likelihood) + '% likely · ' + signed(t.dA) + ' you</li>').join('') + '</ul>' : '<p class="hint">No one-for-one trade helps you.</p>') + '</div>').join('') : '<p class="hint">None right now.</p>';
+    $('sell').innerHTML = list(sb.sellHigh, 'sell');
+    $('buy').innerHTML = list(sb.buyLow, 'buy');
   }
   function renderTrades() {
     const mine = mineSorted();
@@ -1849,12 +1893,6 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const gp = ui.give === 'any' ? null : pool.byKey.get(ui.give); $('give').value = gp ? gp.n : '';
     $('f-lik').value = ui.fl.lik; $('f-da').value = ui.fl.da; $('f-db').value = ui.fl.db;
     renderFinder();
-    const key = ui.leagueId + ':' + ctx.me;
-    const sb = tradeCache[key] || (tradeCache[key] = Trade.sellHighBuyLow(ctx, { limit: 8, targets: 3 }));
-    const list = (items, kind) => items.length ? items.map(x => '<div class="tl"><b>' + esc(x.player.n) + '</b><span class="src">' + (kind === 'sell' ? 'valued ' : 'worth ') + x.gap.toFixed(2) + (kind === 'sell' ? ' above real' : ' above what they are valued') + '</span>' +
-      (x.trades.length ? '<ul>' + x.trades.map(t => '<li><button type="button" class="lnk" data-give="' + esc(t.give.key) + '" data-target="' + esc(t.target.key) + '" data-team="' + esc(t.team) + '">' + esc(t.give.n) + ' for ' + esc(t.target.n) + '</button> · ' + esc(nameOfTeam(t.team)) + ' · ' + pct(t.likelihood) + '% likely · ' + signed(t.dA) + ' you</li>').join('') + '</ul>' : '<p class="hint">No one-for-one trade helps you.</p>') + '</div>').join('') : '<p class="hint">None right now.</p>';
-    $('sell').innerHTML = list(sb.sellHigh, 'sell');
-    $('buy').innerHTML = list(sb.buyLow, 'buy');
     const w = Trade.TRADE_W; $('weights').textContent = 'Perceived value = ' + Math.round(w.cur * 100) + '% current + ' + Math.round(w.proj * 100) + '% projection + ' + Math.round(w.adp * 100) + '% ADP';
     renderBuilder();
   }
@@ -1950,7 +1988,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   $('src').addEventListener('change', e => { ui.leagueId = e.target.value; save(); load(); });
   $('team').addEventListener('change', e => { ui.team[ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
-  $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.tab = b.dataset.v; save(); render(); });
+  window.addEventListener('hashchange', () => { ui.tab = sectionOf(); if (pool) render(); });
   $('addsleft').addEventListener('change', e => { const v = Math.max(0, Math.min(4, Math.round(+e.target.value || 0))); ui.adds[ui.leagueId + ':' + ui.week] = v; save(); renderPlan(+ui.week); });
   fillSources(); load();
 })();

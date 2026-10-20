@@ -2,7 +2,7 @@
 // League page show the same numbers for the same draft. Needs playwright and the repo root served on :8765.
 import { chromium } from 'playwright';
 import fs from 'fs';
-const PLAYERS = JSON.parse(fs.readFileSync('/root/FantasyBBall/src/players.json', 'utf8'));
+const PLAYERS = JSON.parse(fs.readFileSync((process.env.REPO || '/root/FantasyBBall') + '/src/players.json', 'utf8'));
 const byAdp = PLAYERS.map((p, i) => [p.ftx || 999, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
 const fails = []; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.push(m); };
 const b = await chromium.launch();

@@ -73,3 +73,32 @@ test('parseFilter reads 50%, 0.5 and 50 as the same likelihood; blank is no limi
   assert.strictEqual(pts('2'), 2); assert.strictEqual(pts('1.5%'), 1.5); assert.strictEqual(pts('-1'), -1); assert.strictEqual(pts('0'), 0);
   assert.strictEqual(pts(''), null); assert.strictEqual(pts('x'), undefined);
 });
+
+test('packed candidates round-trip through JSON and rebuild the same rows from the pool', () => {
+  const give = ctx.roster[me][0], rows = T.tradeCandidates(ctx, give);
+  const back = T.unpackCandidates(JSON.parse(JSON.stringify(T.packCandidates(rows))), pool);
+  assert.strictEqual(back.length, rows.length);
+  back.forEach((r, i) => {
+    assert.strictEqual(r.give, rows[i].give); assert.strictEqual(r.target, rows[i].target); assert.strictEqual(r.team, rows[i].team);
+    ['likelihood', 'dA', 'dB', 'total'].forEach(k => assert.ok(Math.abs(r[k] - rows[i][k]) < 1e-9)); assert.strictEqual(r.buyLow, rows[i].buyLow);
+  });
+  const gone = T.packCandidates(rows).concat([['nobody', rows[0].target.key, rows[0].team, 0.5, 1, 1, 2, 0]]);
+  assert.strictEqual(T.unpackCandidates(gone, pool).length, rows.length);   // a player no longer in the pool is dropped
+});
+
+test('sellHighBuyLow from saved candidates matches the direct computation', () => {
+  const cache = {};
+  const cands = g => cache[g] || (cache[g] = T.tradeCandidates(ctx, g));
+  const a = T.sellHighBuyLow(ctx, { limit: 8, targets: 3 }), b = T.sellHighBuyLow(ctx, { limit: 8, targets: 3, candidates: cands });
+  const sig = r => JSON.stringify({ s: r.sellHigh.map(x => [x.player.key, x.trades.map(t => t.target.key)]), b: r.buyLow.map(x => [x.player.key, x.trades.map(t => t.give.key)]) });
+  assert.strictEqual(sig(b), sig(a));
+});
+
+test('candSig changes with rosters, day and period', () => {
+  const s1 = T.candSig(ctx, '2026-10-21', 'v1'), same = T.candSig(ctx, '2026-10-21', 'v1');
+  assert.strictEqual(s1, same);
+  assert.notStrictEqual(s1, T.candSig(ctx, '2026-10-22', 'v1'));
+  assert.notStrictEqual(s1, T.candSig(ctx, '2026-10-21', 'v2'));
+  const moved = Object.assign({}, ctx, { roster: Object.assign({}, ctx.roster, { [me]: ctx.roster[me].slice(1) }) });
+  assert.notStrictEqual(s1, T.candSig(moved, '2026-10-21', 'v1'));
+});

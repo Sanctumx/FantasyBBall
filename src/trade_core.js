@@ -85,20 +85,37 @@
     if (kind === 'lik') { const f = (m[2] && /^(%|percent|pcts?)$/.test(m[2])) || v > 1 ? v / 100 : v; return f >= 0 && f <= 1 ? f : undefined; }
     return v;
   }
+  // Saved candidates (the page keeps them in the browser so a reload does not search again): compact rows, rebuilt from the pool
+  const packCandidates = rows => rows.map(r => [r.give.key, r.target.key, r.team, r.likelihood, r.dA, r.dB, r.total, r.buyLow ? 1 : 0]);
+  function unpackCandidates(packed, pool) {
+    const out = [];
+    packed.forEach(([g, t, team, likelihood, dA, dB, total, bl]) => {
+      const give = pool.byKey.get(g), target = pool.byKey.get(t);
+      if (give && target) out.push({ give, target, team, likelihood, dA, dB, total, buyLow: !!bl });
+    });
+    return out;
+  }
+  // What the candidates depend on: both sides' rosters, my team, the current period, the day, the weights and a model version
+  function candSig(ctx, day, version) {
+    const ros = Object.keys(ctx.roster).sort().map(t => t + ':' + ctx.roster[t].slice().sort().join(',')).join(';');
+    let h = 0; const str = [ros, ctx.me, ctx.cur, day, version, JSON.stringify(TRADE_W)].join('|');
+    for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
+    return day + ':' + ctx.me + ':' + ctx.cur + ':' + (h >>> 0).toString(36) + ':' + str.length;
+  }
   const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), opts);
-  function sellHighBuyLow(ctx, { limit = 8, targets = 3 } = {}) {
+  function sellHighBuyLow(ctx, { limit = 8, targets = 3, candidates = null } = {}) {
     const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
     const mine = ctx.roster[ctx.me].map(f => tag(ctx.pool.byKey.get(f), 1)).filter(x => x.gap >= TRADE_W.tagGap).sort((a, b) => b.gap - a.gap).slice(0, limit);
-    const sellHigh = mine.map(x => ({ player: x.player, gap: x.gap, trades: findTrades(ctx, x.player.key, { limit: targets }) }));
+    const sellHigh = mine.map(x => ({ player: x.player, gap: x.gap, trades: candidates ? filterTrades(candidates(x.player.key), { limit: targets }) : findTrades(ctx, x.player.key, { limit: targets }) }));
     const theirs = [];
     Object.keys(ctx.roster).forEach(t => { if (t !== ctx.me) ctx.roster[t].forEach(f => { const x = tag(ctx.pool.byKey.get(f), -1); if (x.gap >= TRADE_W.tagGap) theirs.push(Object.assign(x, { team: t })); }); });
     const buyLow = theirs.sort((a, b) => b.gap - a.gap).slice(0, limit).map(x => ({
       player: x.player, gap: x.gap,
-      trades: ctx.roster[ctx.me].map(f => oneForOne(ctx, ctx.pool.byKey.get(f), x.player, x.team)).filter(r => r.dA > 0).sort(byValue).slice(0, targets)
+      trades: (candidates ? [].concat.apply([], ctx.roster[ctx.me].map(f => candidates(f).filter(r => r.target.key === x.player.key))) : ctx.roster[ctx.me].map(f => oneForOne(ctx, ctx.pool.byKey.get(f), x.player, x.team)).filter(r => r.dA > 0)).sort(byValue).slice(0, targets)
     }));
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
