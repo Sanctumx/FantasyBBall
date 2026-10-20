@@ -195,6 +195,17 @@ tr.click{cursor:pointer}
       <h4>Limits</h4>
       <p>Games caps aren't modeled. Lineup slots (League settings: Positions and C, G, F, G/C, F/C and UTIL slots, read from Fantrax when you connect; the rest of the roster is Reserve) are shown as position coverage under Your team but don't change values or the Model pick: in backtests slot conflicts cost only 0.1–0.3% of player-games, because on a typical day 6–8 of 12 players play and most have 2–3 positions.</p>
     </section>
+    <section class="how-card">
+      <h3>In-season tools</h3>
+      <h4>Weekly Matchup Analyzer</h4>
+      <p>In-Season (top right) reads your Fantrax league: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here).</p>
+      <h4>Adds and the plan</h4>
+      <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. Plans cover the current week only.</p>
+      <h4>Trade Analyzer</h4>
+      <p>Trade Win M is your average chance over the remaining regular-season matchups against the real opponents, with both rosters changed; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
+      <h4>Shrinkage and missing projections</h4>
+      <p>Chances are pulled toward 50% (matchup by 0.72, each category by 0.82) because backtests on 2024-26 weeks showed projections alone are overconfident. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
+    </section>
    </div>
   </div>
 </dialog>

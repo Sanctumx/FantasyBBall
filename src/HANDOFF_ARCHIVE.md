@@ -8,6 +8,23 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
+95. **In-season tools shipped on the branch: Weekly Matchup Analyzer, waiver plan and Trade Analyzer (2026-10-20, items 95-103; supersedes the in-progress note below).**
+Branch `matchup-trade-analyzers` (not pushed); spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
+`docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`. New files: `inseason_league.js`, `inseason_players.js`, `matchup_core.js`,
+`trade_core.js`, `inseason.html` (built to `courtside-inseason.html` and the root `inseason.html`), `collect/espn_stats.mjs`, `calib_pair.js`;
+the Worker gained `rosters` and `standings`. `Engine.pairMatchup` is the only engine change (additions only, `engine_golden.test.js` pins the
+draft engine). **Calibration (Task 6, `calib_pair.js`, 20 seeds, rosters drafted by ADP from real preseason projections, real weekly
+actuals, all 91 pairs):** default games variance is overconfident (matchup slope 0.56 on 2025-26, 0.57 on 2024-25, Brier tied with the draft
+engine); gVar 1.87 on every entry is the best arm (Brier -0.0038 / -0.0077 matchup and -0.0041 / -0.0048 categories vs the draft engine, 2.5-4 SE) but
+still overconfident (matchup slope 0.72), as is the draft engine (0.75-0.77 on 2025-26); the analyst reads this as mostly the test world
+(preseason projections treated as true rates, no injuries or trades). Shipped caller-side in `matchup_core.js`: gVar 1.87 plus
+p' = 0.5 + k(p - 0.5) with k 0.72 (matchup) and 0.82 (categories; fit 0.77 on 2025-26, 0.87 on 2024-25, pooled). With it both seasons pass the
+bar except one thin bin (2025-26, predicted 0.90, observed 0.97, n 227); no held-out season remains, so refit k once in-season projections exist.
+**Rulings:** regular season = periods with team ids (1-15), not Fantrax's stated 17; Win M in the Matchup Analyzer is against this week's opponent
+only, in the Trade Analyzer over the remaining regular-season matchups; waiver adds start tomorrow (next local day); players without projections
+use ESPN actuals or a waiver-level line and are listed. Not built (open): projected playoffs in trade Win M (#101), multi-week plan (#102),
+week-to-date actuals (#103), tuning the perceived-value weights (#98).
+
 95. **In-season tools: Weekly Matchup Analyzer and Trade Analyzer (2026-10-20, in progress; items 95-103).** Design
 `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`
 (13 tasks), branch `matchup-trade-analyzers`. Built so far: Worker routes `rosters` and `standings` (T1); `inseason_league.js` +

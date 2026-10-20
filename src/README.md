@@ -5,13 +5,16 @@ Everything here runs from inside `src/` (scripts use relative paths).
 ## Build the board
 1. Edit `engine.js` (model) and `app.html` (page template with `/*__DATA__*/`, `/*__SCHED__*/`, `/*__ENGINE__*/` placeholders).
 2. `python3 gen.py` → `courtside-draft-board.html` (template + players.json + sched.json + engine.js).
-3. `python3 build_site.py` → `site/index.html` (full HTML document). Copy it to the repo root `index.html` to deploy.
+3. `python3 build_site.py` → `site/index.html`, `site/league.html`, `site/inseason.html` (full HTML documents). Copy them to the repo root to deploy.
+   `gen.py` also builds `courtside-league.html` and `courtside-inseason.html` (the latter adds `inseason_league.js`, `inseason_players.js`, `matchup_core.js`, `trade_core.js` and `sched_days.json`).
 
 ## Data
 | File | What | Made by |
 |---|---|---|
 | `players.json` | 234 players: BBM 2026-27 projections, Fantrax ADP (`ftx`), back-to-back rest rate (`b2b`) | `data/BBM_Projections.xls`, then `b2b.py` adds `b2b` (writes `players_b2b.json`; copy over `players.json`) |
 | `sched.json` | 2026-27 fantasy weeks, games per team per week, back-to-backs per team per week | `sched_b2b.py <nba-2026-UTC.csv>` adds `b2b` |
+| `sched_days.json` | 2026-27 daily tip-off times per team (UTC seconds), for the in-season tools' expected games | `sched_days.py` |
+| `stats/espn.json` (repo root) | ESPN per-game season stats for every player, for players without projections and current form | `collect/espn_stats.mjs`, daily by `.github/workflows/collect-stats.yml` |
 | `logs3.csv` | NBA player game logs 2023-24 to 2025-26 (one row per player-game) | `pq2csv.mjs` from the Hugging Face dataset `cbratkovics/nba-game-logs` (game_logs_2023-24/24-25/25-26 .parquet) |
 | `bt_data.json` | Backtest seasons 2024-25 and 2025-26: prior-season stats as projections, synthetic noisy ADP, weekly actuals | `bt_prep.py` (reads logs3.csv) |
 | `bt_daily.json` | Daily player stats for the realistic-league scoring sim | `mk_daily.py` (reads logs3.csv and bt_data.json) |

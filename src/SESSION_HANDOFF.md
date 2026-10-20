@@ -29,17 +29,15 @@ Model pick; it never punts. Shared with friends via Cloudflare.
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
 - **Works:** board, Fantrax live sync (backoff + Worker cache), saved drafts/leagues (rename, import/export), League
   Dashboard, ADP/draft collector (GitHub Actions every 6 h).
-- **In progress:** In-season tools (Weekly Matchup Analyzer + Trade Analyzer, ideas 95-103) on branch
-  `matchup-trade-analyzers` (not pushed). Spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
-  `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md` (13 tasks, executed inline). **Tasks 1-4 done**
-  (Worker `rosters`/`standings` routes, `inseason_league.js` + `sched_days.json`, ESPN collector + `stats/espn.json`,
-  `inseason_players.js`). **Task 5** (`Engine.pairMatchup`, hard area, additive only) has its golden test committed; its
-  `engine_pairmatchup.test.js` and the function are next. Per-task ledger and every ruling:
-  `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored; resume at the first task without a
-  "complete" line). Decisions in force: Win M = vs this week's opponent only in the Matchup Analyzer, vs remaining regular-season
-  matchups in the Trade Analyzer (projected playoffs later, #101); waiver adds = Simple (Win M vs opponent) + current-week plan;
-  players without projections use ESPN actuals until the user adds projections to `players.json`; the user approved the Task 13
-  workflow-config edits (CLAUDE.md build line, settings deny rule, pages.md paths, hook `testOn`).
+- **Built, not pushed:** In-season tools (In-Season page: Weekly Matchup Analyzer, waiver plan, Trade Analyzer; ideas 95-103)
+  on branch `matchup-trade-analyzers`. Spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
+  `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`; Tasks 1-13 steps 1-4 done (modules `inseason_league.js`,
+  `inseason_players.js`, `matchup_core.js`, `trade_core.js`, page `inseason.html`; `Engine.pairMatchup` is the only engine change,
+  additions only, pinned by `engine_golden.test.js`). Ledger with every ruling: `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md`
+  (git-ignored). Decisions in force: Win M = vs this week's opponent in the Matchup Analyzer, vs remaining regular-season
+  matchups (periods 1-15) in the Trade Analyzer (projected playoffs later, #101); chances use gVar 1.87 and shrink toward 0.5
+  (k 0.72 matchup, 0.82 categories, from the calibration: default gVar was overconfident, slope 0.56); players without projections
+  use ESPN actuals or a waiver-level line.
 
 ## Current model (backtested in the user's format with real projections)
 
@@ -91,16 +89,21 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 8. User side: on the PC run `cd ~/Documents/FantasyBBall; git restore netlify.toml; git pull`; edit or delete the stale
    claude.ai Project instructions.
 
-9. In-season tools, after the merge, trigger the `collect-stats` workflow once by hand
-   (`workflow_dispatch`); ESPN may block runner IPs (tested only from the PC). Republish `courtside-draft-board.html` to the board
-   artifact at release (engine.js changes). Task 6 (calibration of `pairMatchup` vs 2025-26 weeks) gates the merge.
+9. In-season tools: at release, republish `courtside-draft-board.html` to the board artifact (engine.js changed) and trigger the
+   `collect-stats` workflow once by hand (`workflow_dispatch`; ESPN may block runner IPs, tested only from the PC). Open: #98 tune
+   perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit the shrink k with in-season data.
 10. Environment (this PC): `python3` is not installed, use `python`; the after-edit hook's quoted glob
     (`src/tests/*.test.js`) fails on Windows with a false "unit tests FAIL"; the real check is `node --test src/tests/`
     (idea: fix the hook to pass the directory).
 
 ## Next session starts with
 
-Resume the in-season tools plan: read this file and the ledger, then Task 5 of the plan: write
-`src/tests/engine_pairmatchup.test.js` (RED; consistency test with gVar 1.87, pairs (0,5),(1,12),(6,7), tolerance 0.05 per
-category / 0.03 match; `projErr:false` more extreme; zero-games entry; 8-cat), implement `Engine.pairMatchup` in `src/engine.js`
-(additive only; check `git diff -U0 origin/main -- src/engine.js | grep -E '^-[^-]'` is empty), then Task 6, and so on.
+In-season tools are built on `matchup-trade-analyzers` (Task 13 steps 1-4 committed). Left: Task 13 step 5, run the `reviewer`
+(Opus) on the whole branch diff (special attention: `engine.js` additions only, the golden test, Review Focus 1-5 in the plan), fix
+each finding test-first, then wait for the user's "push" to open the PR and merge. Browser checks need Playwright, which is not
+installed in the repo: a copy lives in the previous session's scratchpad `pw/` folder (re-install with `npm i playwright@1.48.2`
+and `npx playwright install chromium` in a scratch folder; run the `src/tests/browser/*.mjs` files from there with
+`REPO=<repo root>`, repo root served by `python -m http.server 8765`; league_page.mjs and league_how.mjs still carry a
+`/root/FantasyBBall/` path to fix on Windows).
+Standing rule (user, 2026-10-20): keep running plan tasks unless something needs the user; once past the context limit
+(Messages > ~115K), finish the task, record it and stop; don't autorun the next one.
