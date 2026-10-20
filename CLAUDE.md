@@ -40,8 +40,9 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 - **Claude Code** (terminal or IDE): the project model `opusplan` does this automatically, as below.
 - **Subagents** use the model and effort in their own files in both.
 
-In Claude Code, the project model is `opusplan` (`.claude/settings.json`): Opus at high effort in plan mode, Sonnet at medium effort
-everywhere else.
+In Claude Code, the project model is `opusplan` (`.claude/settings.json`): Opus in plan mode, Sonnet everywhere else.
+Effort shows as one level for both (medium, Opus 5.5's default). For a hard plan, raise **Effort** to High in the model
+picker (or put `ultrathink` in that message) and lower it again after; on the 5.5 models this keeps the cache.
 
 - **Plan mode (Opus)** for anything bigger than a small fix and any change in a hard area. Plan at the start of a task:
   each plan-mode toggle is a model switch and re-reads the whole conversation uncached.
