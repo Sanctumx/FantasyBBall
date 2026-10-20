@@ -14,7 +14,10 @@ const CONFIG = {
   handoffMaxLines: 150,
 };
 
-const toRegex = glob => new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$');
+// Glob to regex: '**/' = any folders (or none), '**' = anything, '*' = anything within one folder.
+const toRegex = glob => new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  .replace(/\*\*\//g, '\u0000').replace(/\*\*/g, '\u0001').replace(/\*/g, '[^/]*')
+  .replace(/\u0000/g, '(?:.*/)?').replace(/\u0001/g, '.*') + '$');
 
 let input = {};
 try { input = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { process.exit(0); }
@@ -25,9 +28,9 @@ const rel = path.relative(root, path.resolve(root, file)).split(path.sep).join('
 
 const problems = [];
 
-if (CONFIG.testOn.some(g => toRegex(g).test(rel))) {
+if (CONFIG.testCmd && CONFIG.testOn.some(g => toRegex(g).test(rel))) {
   const [cmd, args] = CONFIG.testCmd;
-  const r = spawnSync(cmd, args, { cwd: root, encoding: 'utf8', timeout: CONFIG.testTimeoutMs });
+  const r = spawnSync(cmd, args, { cwd: root, encoding: 'utf8', timeout: CONFIG.testTimeoutMs, shell: process.platform === 'win32' });
   if (r.error) problems.push(`Unit tests could not run after editing ${rel}: ${r.error.message}`);
   else if (r.status !== 0) {
     const out = `${r.stdout || ''}${r.stderr || ''}`.trim().split('\n');
