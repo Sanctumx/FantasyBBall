@@ -1373,10 +1373,21 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     Object.keys(rosters).forEach(t => rosters[t].forEach(x => { owner[x.fid] = t; slot[x.fid] = x.slot; }));
     const fids = Object.keys(owner).concat(Object.keys(L.fxStatus).filter(f => !(f in owner) && (L.fxStatus[f] === 'FA' || L.fxStatus[f] === 'WW')));
     const players = [], byKey = new Map(), noProj = [];
-    fids.forEach(fid => {
-      const info = (fxPlayers && fxPlayers[fid]) || { name: fid, team: '', position: '' };
-      const name = OVERRIDES.fx[fid] || info.name;
-      const pm = matchTo(projList, name, info.team), es = matchTo(espnList, name, info.team);
+    // each projection and each ESPN row goes to one Fantrax player: the rostered one, then the one whose team matches
+    const matches = fids.map(fid => {
+      const info = (fxPlayers && fxPlayers[fid]) || { name: fid, team: '', position: '' }, name = OVERRIDES.fx[fid] || info.name;
+      return { fid, info, pm: matchTo(projList, name, info.team), es: matchTo(espnList, name, info.team) };
+    });
+    ['pm', 'es'].forEach(f => {
+      const by = new Map();
+      matches.forEach(m => { if (m[f]) { if (!by.has(m[f])) by.set(m[f], []); by.get(m[f]).push(m); } });
+      by.forEach((ms, item) => {
+        const score = m => (m.fid in owner ? 2 : 0) + (m.info.team && InLeague.toProjTeam(m.info.team) === item.t ? 1 : 0);
+        const best = ms.reduce((a, b) => (score(b) > score(a) ? b : a));
+        ms.forEach(m => { if (m !== best) m[f] = null; });
+      });
+    });
+    matches.forEach(({ fid, info, pm, es }) => {
       const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row) } : null;
       let src, line, g, pos, n, t, adp;
       if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; }
@@ -1678,12 +1689,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $('src').value = ui.leagueId;
   }
 
+  let staleAge = 0;   // seconds old of the oldest answer the Worker served from memory because Fantrax was busy
   async function fxGet(what, id) {
     let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
     const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
     let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
     if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
     if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age);
     return body;
   }
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
@@ -1692,7 +1705,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
   }
   async function load() {
-    const seq = ++loadSeq, id = ui.leagueId; clearTimeout(fxTimer);
+    const seq = ++loadSeq, id = ui.leagueId; clearTimeout(fxTimer); staleAge = 0;
     $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true;
     say('Loading the league from Fantrax…');
     try {
@@ -1723,7 +1736,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
   function start() {
     const cur = InL.currentPeriod(L, Date.now());
-    if (cur == null) { say('The regular season is over: there are no matchups left to project.'); return; }
+    if (cur == null) { say(L.statedLastRegular > L.lastRegular ? 'No matchups with known opponents are left: Fantrax lists the later regular-season weeks without opponents yet.' : 'The regular season is over: there are no matchups left to project.'); return; }
     $('team').innerHTML = L.teams.map(t => '<option value="' + esc(t.id) + '">' + esc(teamLabel(t.id)) + '</option>').join('');
     const mine = sources.find(s => s.id === ui.leagueId).myTeam;
     let t = ui.team[ui.leagueId]; if (!L.teams.some(x => x.id === t)) t = L.teams.some(x => x.id === mine) ? mine : L.teams[0].id;
@@ -1736,7 +1749,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
   function freshness() {
     const want = L.season + '-' + String(L.season + 1).slice(2), parts = [];
-    parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
+    if (staleAge) parts.push('<span class="warn">Fantrax is busy: rosters are about ' + (staleAge >= 3600 ? Math.round(staleAge / 3600) + ' h' : Math.max(1, Math.round(staleAge / 60)) + ' min') + ' old</span>');
+    else parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
     if (!espn) parts.push('<span class="warn">No actual stats: perceived value uses projection and ADP only</span>');
     else parts.push('<span>Stats: ESPN ' + esc(espn.label) + ', fetched ' + esc(String(espn.fetchedAt).slice(0, 10)) + (espn.label !== want ? ' <span class="warn">last season</span>' : '') + '</span>');
     parts.push('<span>Projections: BBM + Hashtag average (players.json)</span>');
@@ -1762,7 +1776,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
-    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M)</span></div>' +
+    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): whole week projected, results so far not counted</span></div>' +
       '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
     $('cats').innerHTML = '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
       CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
@@ -1779,7 +1793,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $('addsleft').value = String(left);
     const plan = n === ctx.cur ? Matchup.addPlan(ctx, { addsLeft: left }) : Matchup.addPlan(ctx, { periods: [n] });
     $('plan-note').textContent = plan.note || '';
-    $('plan-moves').innerHTML = plan.moves.map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
+    $('plan-moves').innerHTML = plan.moves.slice().sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : 0)).map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
     $('plan-sum').textContent = plan.start == null ? '' : (plan.moves.length ? 'Win M ' + pct(plan.start) + '% → ' + pct(plan.end) + '%. ' : 'No move helps: Win M stays ' + pct(plan.start) + '%. ') +
       'You can drop: ' + (plan.droppable.length ? plan.droppable.map(p => p.n).join(', ') : 'nobody') + '.';
   }
@@ -1796,7 +1810,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const mine = mineSorted();
     if (!mine.some(p => p.key === ui.give)) ui.give = mine[0] && mine[0].key;
     $('give').innerHTML = mine.map(p => '<option value="' + esc(p.key) + '">' + esc(p.n) + ' (' + esc(p.t) + ')</option>').join(''); $('give').value = ui.give;
-    const rows = Trade.findTrades(ctx, ui.give, { limit: 25 });
+    const fkey = 'f:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + ui.give, rows = tradeCache[fkey] || (tradeCache[fkey] = Trade.findTrades(ctx, ui.give, { limit: 25 }));
     $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Worth more than the market thinks">Buy Low</th></tr></thead><tbody>' +
       rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '<td>' + (r.buyLow ? '✓' : '') + '</td></tr>').join('') + '</tbody>' : '';
     $('finder-msg').textContent = rows.length ? 'Click a row to load it into the Trade Builder.' : 'No one-for-one trade for this player helps you.';

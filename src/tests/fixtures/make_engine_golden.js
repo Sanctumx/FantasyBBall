@@ -1,7 +1,7 @@
 // Pins what the draft engine returns today, so adding Engine.pairMatchup can be shown not to change the Model pick
 // (2026-10-20). `node src/tests/fixtures/make_engine_golden.js` rewrites engine_golden.json; engine_golden.test.js
 // recomputes it with compute() and compares. Only regenerate this file on purpose, when the draft engine itself changes.
-const E = require('../../engine.js'), Shared = require('../../shared.js'), L = require('../../league_core.js'), PLAYERS = require('../../players.json');
+const E = require('../../engine.js'), Shared = require('../../shared.js'), L = require('../../league_core.js'), PLAYERS = require('./golden_players.json');
 
 const CFG = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, basis: 'total', ilSpots: 3, field: 'average', fieldZ: 'std',
   puntMode: 'off', puntLock: '', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0 };

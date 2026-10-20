@@ -106,11 +106,14 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 
 ## Next session starts with
 
-In-season tools are built on `matchup-trade-analyzers` (Task 13 steps 1-4 committed). Left: Task 13 step 5, run the `reviewer`
-(Opus) on the whole branch diff (special attention: `engine.js` additions only, the golden test, Review Focus 1-5 in the plan), fix
-each finding test-first, then wait for the user's "push" to open the PR and merge. Browser checks need Playwright, which is not
-installed in the repo: a copy lives in the previous session's scratchpad `pw/` folder (re-install with `npm i playwright@1.48.2`
-and `npx playwright install chromium` in a scratch folder; run the `src/tests/browser/*.mjs` files from there with
+In-season tools are built on `matchup-trade-analyzers` and reviewed (Opus, 2026-10-20). Fixed test-first: same-name free agents
+no longer take a rostered player's projection; the page flags stale rosters (Worker header `x-courtside-age`); plan moves sort by
+day; Win M labelled "whole week projected, results so far not counted" (real fix is #103); `findTrades` cached; golden fixture
+now uses a frozen `golden_players.json`; clearer message when Fantrax lists later regular-season weeks without opponents.
+Left open from the review: a traded player's games still come from his preseason team in `players.json` (matters after the
+trade deadline). Last-season ESPN stats stay as is (no current-season stats exist yet; the banner says "last season").
+Next: wait for the user's "push" to open the PR and merge. Browser checks need Playwright (not installed in the repo;
+`npm i playwright@1.48.2` and `npx playwright install chromium` in a scratch folder; run `src/tests/browser/*.mjs` with
 `REPO=<repo root>`, repo root served by `python -m http.server 8765`; league_page.mjs and league_how.mjs still carry a
 `/root/FantasyBBall/` path to fix on Windows).
 Standing rule (user, 2026-10-20): keep running plan tasks unless something needs the user; once past the context limit

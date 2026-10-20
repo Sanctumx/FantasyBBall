@@ -288,7 +288,7 @@ tr.click{cursor:pointer}
   }
   function start() {
     const cur = InL.currentPeriod(L, Date.now());
-    if (cur == null) { say('The regular season is over: there are no matchups left to project.'); return; }
+    if (cur == null) { say(L.statedLastRegular > L.lastRegular ? 'No matchups with known opponents are left: Fantrax lists the later regular-season weeks without opponents yet.' : 'The regular season is over: there are no matchups left to project.'); return; }
     $('team').innerHTML = L.teams.map(t => '<option value="' + esc(t.id) + '">' + esc(teamLabel(t.id)) + '</option>').join('');
     const mine = sources.find(s => s.id === ui.leagueId).myTeam;
     let t = ui.team[ui.leagueId]; if (!L.teams.some(x => x.id === t)) t = L.teams.some(x => x.id === mine) ? mine : L.teams[0].id;
@@ -328,7 +328,7 @@ tr.click{cursor:pointer}
     const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
-    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M)</span></div>' +
+    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): whole week projected, results so far not counted</span></div>' +
       '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
     $('cats').innerHTML = '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
       CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
@@ -345,7 +345,7 @@ tr.click{cursor:pointer}
     $('addsleft').value = String(left);
     const plan = n === ctx.cur ? Matchup.addPlan(ctx, { addsLeft: left }) : Matchup.addPlan(ctx, { periods: [n] });
     $('plan-note').textContent = plan.note || '';
-    $('plan-moves').innerHTML = plan.moves.map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
+    $('plan-moves').innerHTML = plan.moves.slice().sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : 0)).map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
     $('plan-sum').textContent = plan.start == null ? '' : (plan.moves.length ? 'Win M ' + pct(plan.start) + '% → ' + pct(plan.end) + '%. ' : 'No move helps: Win M stays ' + pct(plan.start) + '%. ') +
       'You can drop: ' + (plan.droppable.length ? plan.droppable.map(p => p.n).join(', ') : 'nobody') + '.';
   }
@@ -362,7 +362,7 @@ tr.click{cursor:pointer}
     const mine = mineSorted();
     if (!mine.some(p => p.key === ui.give)) ui.give = mine[0] && mine[0].key;
     $('give').innerHTML = mine.map(p => '<option value="' + esc(p.key) + '">' + esc(p.n) + ' (' + esc(p.t) + ')</option>').join(''); $('give').value = ui.give;
-    const rows = Trade.findTrades(ctx, ui.give, { limit: 25 });
+    const fkey = 'f:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + ui.give, rows = tradeCache[fkey] || (tradeCache[fkey] = Trade.findTrades(ctx, ui.give, { limit: 25 }));
     $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Worth more than the market thinks">Buy Low</th></tr></thead><tbody>' +
       rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '<td>' + (r.buyLow ? '✓' : '') + '</td></tr>').join('') + '</tbody>' : '';
     $('finder-msg').textContent = rows.length ? 'Click a row to load it into the Trade Builder.' : 'No one-for-one trade for this player helps you.';
