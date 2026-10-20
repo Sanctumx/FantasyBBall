@@ -82,7 +82,7 @@ everywhere else.
    branch (GitHub deletes the remote one).
    A small fix the user asks to push right away may go straight to main, after the tests pass and
    `git fetch && git rebase origin/main`.
-9. **/release** updates the handoff (and mirrors it to the claude.ai project), then commits and pushes.
+9. **/release** updates the handoff, ledger and archive, then commits and pushes.
    **/handoff** does the same recording without pushing (commits locally on a feature branch, leaves main uncommitted);
    use it before `/clear` when the work isn't ready to ship.
 
