@@ -1,6 +1,6 @@
 # Session handoff — Courtside Draft Kit (Fantasy BBall)
 
-_Last updated: 2026-10-18_ · Current state only, about 150 lines max. Replace lines instead of appending.
+_Last updated: 2026-10-20_ · Current state only, about 150 lines max. Replace lines instead of appending.
 Every idea ever tried: `src/IDEAS.md` (one line each, search it). Full write-ups: `src/HANDOFF_ARCHIVE.md` (search `^N\.`).
 How work gets done (branch → PR → merge, model routing): the repo's `CLAUDE.md`.
 
@@ -75,7 +75,13 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 4. **48b** Title backtest with each projection source.
 5. **15a** Read opponents' punts from their rosters. **15c** Rookie upside (rookies not in the backtest pool).
 6. Parked: **62** in-season projection model (future tool), **33** stronger test punters, **15b** joint pick + strategy.
+7. Workflow: app sessions start with ~93K tokens of fixed overhead (connectors) vs ~35K in VS Code, so the 150K/300K
+   context cues are too late there; plan a break when Messages in `/context` passes ~115K. Add this to
+   `Sanctumx/Claude-Workflow` `template/GUIDELINES.md`, the status line cues and the workflow doc. Also idea #93 (move
+   backtest result files into `src/results/`).
+8. User side: on the PC run `cd ~/Documents/FantasyBBall; git restore netlify.toml; git pull`; edit or delete the stale
+   claude.ai Project instructions.
 
 ## Next session starts with
 
-Nothing open; wait for the user's request.
+Nothing open for the draft kit; wait for the user's request. If they ask for workflow work, start with open item 7.
