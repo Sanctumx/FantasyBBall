@@ -31,7 +31,16 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 
 ## Model routing
 
-The project model is `opusplan` (`.claude/settings.json`): Opus at high effort in plan mode, Sonnet at medium effort
+**Where you work decides how the main model is chosen.**
+
+- **Claude app** (including its cloud sessions): the main model comes from the app's model picker; `opusplan` and the
+  effort levels in `.claude/settings.json` don't apply. Use **Sonnet 5.5** by default and switch the picker to
+  **Opus 5.5** for plans, hard areas and a bug Sonnet has failed twice. When a switch is worth it, say so, since only the
+  user can change the picker.
+- **Claude Code** (terminal or IDE): the project model `opusplan` does this automatically, as below.
+- **Subagents** use the model and effort in their own files in both.
+
+In Claude Code, the project model is `opusplan` (`.claude/settings.json`): Opus at high effort in plan mode, Sonnet at medium effort
 everywhere else.
 
 - **Plan mode (Opus)** for anything bigger than a small fix and any change in a hard area. Plan at the start of a task:
