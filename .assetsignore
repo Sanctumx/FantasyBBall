@@ -10,3 +10,4 @@ node_modules/
 *.jsonc
 .gitignore
 .assetsignore
+.claude/
