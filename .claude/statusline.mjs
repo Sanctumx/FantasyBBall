@@ -4,8 +4,12 @@
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
-const CLEAR_AT = 50;      // context % at which to plan a break (GUIDELINES: "more than about half")
-const WARN_AT = 70;       // context % shown in red
+// Context thresholds in tokens, not %: on a 1M-token window, 50% is 500K tokens, far past the point where every
+// message re-sending the whole conversation gets expensive. A fresh session starts around 35K (system, tools, skills,
+// CLAUDE.md), so 150K is roughly 115K of actual work.
+const BREAK_AT = 150000;  // plan a break: /handoff, then /clear at the next stop
+const STOP_AT = 300000;   // stop at the next safe point
+const COLD_MIN = 60000;   // a cold cache only matters once there's this much to re-read
 const PLAN_WARN_AT = 80;  // 5-hour plan usage % shown in red
 
 let d = {};
@@ -21,8 +25,12 @@ const model = d.model && d.model.display_name;
 const effort = d.effort && d.effort.level;
 if (model) parts.push(effort ? `${model} · ${effort}` : model);
 
-const ctx = pct(d.context_window && d.context_window.used_percentage);
-if (ctx !== null) parts.push(c(ctx >= WARN_AT ? 'r' : ctx >= CLEAR_AT ? 'y' : 'g', `ctx ${ctx}%`));
+const cw = d.context_window || {};
+const ctx = typeof cw.used_percentage === 'number' && cw.context_window_size
+  ? Math.round(cw.used_percentage / 100 * cw.context_window_size)
+  : (typeof cw.total_input_tokens === 'number' ? cw.total_input_tokens : null);
+const k = n => (n >= 1000 ? Math.round(n / 1000) + 'K' : String(n));
+if (ctx !== null) parts.push(c(ctx >= STOP_AT ? 'r' : ctx >= BREAK_AT ? 'y' : 'g', `ctx ${k(ctx)}`));
 
 const plan = pct(d.rate_limits && d.rate_limits.five_hour && d.rate_limits.five_hour.used_percentage);
 if (plan !== null) parts.push(c(plan >= PLAN_WARN_AT ? 'r' : 'dim', `5h ${plan}%`));
@@ -40,8 +48,9 @@ try {
 } catch { /* not a git repo */ }
 
 // One hint at most, most urgent first.
-if (ctx !== null && ctx >= CLEAR_AT) parts.push(c('y', '→ /handoff, then /clear at the next stop'));
-else if (pc && pc.caching_observed && !pc.warm && ctx !== null && ctx >= 20) parts.push(c('y', '→ cache cold: /handoff, then /clear'));
+if (ctx !== null && ctx >= STOP_AT) parts.push(c('r', '→ stop at the next safe point: /handoff, then /clear'));
+else if (ctx !== null && ctx >= BREAK_AT) parts.push(c('y', '→ /handoff, then /clear at the next stop'));
+else if (pc && pc.caching_observed && !pc.warm && ctx !== null && ctx >= COLD_MIN) parts.push(c('y', '→ cache cold: /handoff, then /clear'));
 else if (plan !== null && plan >= PLAN_WARN_AT) parts.push(c('r', '→ near the 5-hour limit: /handoff before it runs out'));
 
 process.stdout.write(parts.join('  ·  ') + '\n');
