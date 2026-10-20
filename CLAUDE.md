@@ -26,6 +26,8 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
   opened.
 - **Hook** (`.claude/hooks/after-edit.mjs`): after an edit to tested code it runs the unit tests (~3 s) and reports
   failures; after an edit to the handoff it warns past 150 lines. Fix what it reports before moving on.
+- **Status line** (`.claude/statusline.mjs`): model and effort, context %, 5-hour plan usage, cache state, branch,
+  and a hint when it's time to `/handoff` and `/clear` (cues in `Sanctumx/Claude-Workflow` `template/GUIDELINES.md`).
 
 ## Model routing
 
@@ -96,8 +98,8 @@ everywhere else.
 - **Build check** (only if `src/engine.js`, `src/app.html` or `src/league.html` changed since the last push): the build
   command above, the unit tests, a Playwright smoke test with no page errors, then publish
   `src/courtside-draft-board.html` to the board artifact if it isn't current. Never publish `app.html`.
-- **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`. Never add `[netlify]` unless the user
-  asks for Netlify.
+- **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`. Netlify never builds (`netlify.toml`
+  skips every push); don't re-enable it.
 - **Never during /release or /handoff:** use the user's computer.
 
 ## In Claude Code cloud sessions

@@ -1,6 +1,5 @@
 # Only the board itself is published by the Cloudflare Worker; everything else in the repo stays private.
 src/
-netlify/
 worker/
 .github/
 .git/

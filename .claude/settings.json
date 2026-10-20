@@ -1,8 +1,12 @@
 {
   "model": "opusplan",
   "modelSettings": {
-    "claude-opus-5-5": { "effortLevel": "high" },
-    "claude-sonnet-5-5": { "effortLevel": "medium" }
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "medium"
+    }
   },
   "permissions": {
     "deny": [
@@ -30,5 +34,9 @@
         ]
       }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"$(git rev-parse --show-toplevel)/.claude/statusline.mjs\""
   }
 }

@@ -1,5 +1,5 @@
 // Cloudflare Worker for the Courtside Draft Kit: serves the board (static assets) and proxies Fantrax's public
-// "fxea" endpoints at /api/fantrax, so live draft sync works without Netlify. Same API as netlify/functions/fantrax.mjs:
+// "fxea" endpoints at /api/fantrax, so live draft sync works from the browser:
 // GET /api/fantrax?what=draft|league|players&leagueId=XXXX
 const BASE = 'https://www.fantrax.com/fxea/general/';
 const ROUTES = {
