@@ -68,6 +68,7 @@ test('parseFilter reads 50%, 0.5 and 50 as the same likelihood; blank is no limi
   assert.strictEqual(lik('1'), 1); assert.strictEqual(lik('1%'), 0.01); assert.strictEqual(lik('.25'), 0.25);
   assert.strictEqual(lik(''), null); assert.strictEqual(lik('any'), null); assert.strictEqual(lik(null), null);
   assert.strictEqual(lik('abc'), undefined); assert.strictEqual(lik('150%'), undefined); assert.strictEqual(lik('-5'), undefined);
+  assert.strictEqual(lik('50 %'), 0.5); assert.strictEqual(lik('50 percent'), 0.5); assert.strictEqual(lik('0,5'), 0.5); assert.strictEqual(lik('50％'), 0.5);
   const pts = s => T.parseFilter('da', s);
   assert.strictEqual(pts('2'), 2); assert.strictEqual(pts('1.5%'), 1.5); assert.strictEqual(pts('-1'), -1); assert.strictEqual(pts('0'), 0);
   assert.strictEqual(pts(''), null); assert.strictEqual(pts('x'), undefined);

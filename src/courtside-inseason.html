@@ -1644,12 +1644,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // Text box input. Likelihood: "50%", "0.5" or "50" (above 1 means percent; a bare 1 is 100%). Win M points: "2", "2%".
   // Blank is no limit (null); anything else that is not a number is invalid (undefined).
   function parseFilter(kind, text) {
-    const t = String(text == null ? '' : text).trim().toLowerCase();
+    const t = String(text == null ? '' : text).trim().toLowerCase().replace('％', '%').replace(/^(-?\d+),(\d+)/, '$1.$2');
     if (t === '' || t === 'any') return null;
-    const m = /^(-?\d*\.?\d+)\s*(%|pts?|points?)?$/.exec(t);
+    const m = /^(-?\d*\.?\d+)\s*(%|percent|pcts?|pts?|points?)?$/.exec(t);
     if (!m) return undefined;
     const v = parseFloat(m[1]);
-    if (kind === 'lik') { const f = m[2] === '%' || v > 1 ? v / 100 : v; return f >= 0 && f <= 1 ? f : undefined; }
+    if (kind === 'lik') { const f = (m[2] && /^(%|percent|pcts?)$/.test(m[2])) || v > 1 ? v / 100 : v; return f >= 0 && f <= 1 ? f : undefined; }
     return v;
   }
   const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), opts);
