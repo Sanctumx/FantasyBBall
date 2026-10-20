@@ -1,6 +1,6 @@
 [build]
   publish = "."
   functions = "netlify/functions"
-  # Netlify deploys only when asked (2026-10-17): the site now deploys on Cloudflare from every push. A push builds here only
-  # if its commit message contains [netlify]; otherwise the ignore command exits 0 and Netlify skips it (no credits used).
-  ignore = "git log -1 --pretty=%B | grep -qF '[netlify]' && exit 1 || exit 0"
+  # Netlify never builds (user, 2026-10-20): the site deploys only on Cloudflare. The ignore command always exits 0, so
+  # Netlify skips every push, whatever the commit message says. To stop Netlify even checking, stop builds in its UI.
+  ignore = "exit 0"

@@ -98,8 +98,8 @@ everywhere else.
 - **Build check** (only if `src/engine.js`, `src/app.html` or `src/league.html` changed since the last push): the build
   command above, the unit tests, a Playwright smoke test with no page errors, then publish
   `src/courtside-draft-board.html` to the board artifact if it isn't current. Never publish `app.html`.
-- **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`. Never add `[netlify]` unless the user
-  asks for Netlify.
+- **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`. Netlify never builds (`netlify.toml`
+  skips every push); don't re-enable it.
 - **Never during /release or /handoff:** use the user's computer.
 
 ## In Claude Code cloud sessions
