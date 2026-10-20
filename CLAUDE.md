@@ -52,6 +52,8 @@ everywhere else.
 - Push, merge or deploy only when the user says "push" or types /release.
 - Using the user's computer (copying files there, staging results back) is allowed without asking each time (user,
   2026-10-18) until the user withdraws it. The user still starts PC backtest runs themselves.
+- Every improvement to the workflow (CLAUDE.md, skills, subagents, settings, hooks) is also generalized for other
+  projects where possible: the template set and the shared skills get the general version (user, 2026-10-20).
 
 ## How changes get made (feature branch → pull request → merge)
 
@@ -79,6 +81,22 @@ everywhere else.
 9. **/release** updates the handoff (and mirrors it to the claude.ai project), then commits and pushes.
    **/handoff** does the same recording without pushing (commits locally on a feature branch, leaves main uncommitted);
    use it before `/clear` when the work isn't ready to ship.
+
+## Release and handoff specifics (read by /release and /handoff)
+
+- **Files:** `src/SESSION_HANDOFF.md`, `src/IDEAS.md`, `src/HANDOFF_ARCHIVE.md` (new write-ups at the top of "Entries
+  after 2026-10-18").
+- **Results metric:** prize equity (`python3 src/prize_equity.py <arm>:<baseline> ...`).
+- **Mirror the handoff:** `Projects` `project_write`, path `claude/SESSION_HANDOFF.md`, `local_path` = the absolute path
+  of `src/SESSION_HANDOFF.md`. Don't touch the old top-level `SESSION_HANDOFF.md`.
+- **Handoff also tracks:** board artifact version (claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz), math doc revision,
+  deployment notes.
+- **Build check** (only if `src/engine.js`, `src/app.html` or `src/league.html` changed since the last push): the build
+  command above, the unit tests, a Playwright smoke test with no page errors, then publish
+  `src/courtside-draft-board.html` to the board artifact if it isn't current. Never publish `app.html`.
+- **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`. Never add `[netlify]` unless the user
+  asks for Netlify.
+- **Never during /release or /handoff:** use the user's computer.
 
 ## In Claude Code cloud sessions
 
