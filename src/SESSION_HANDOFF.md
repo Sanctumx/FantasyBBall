@@ -75,9 +75,8 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 4. **48b** Title backtest with each projection source.
 5. **15a** Read opponents' punts from their rosters. **15c** Rookie upside (rookies not in the backtest pool).
 6. Parked: **62** in-season projection model (future tool), **33** stronger test punters, **15b** joint pick + strategy.
-7. Workflow: app sessions start with ~93K tokens of fixed overhead (connectors) vs ~35K in VS Code, so the 150K/300K
-   context cues are too late there; plan a break when Messages in `/context` passes ~115K. Add this to
-   `Sanctumx/Claude-Workflow` `template/GUIDELINES.md`, the status line cues and the workflow doc. Also idea #93 (move
+7. Workflow: break cues now keyed to Messages in `/context` (115K break, 265K stop) in CLAUDE.md, the status line
+   (`CTX_BASELINE`) and Claude-Workflow (2026-10-20, not pushed). Still open: idea #93 (move
    backtest result files into `src/results/`).
 8. User side: on the PC run `cd ~/Documents/FantasyBBall; git restore netlify.toml; git pull`; edit or delete the stale
    claude.ai Project instructions.

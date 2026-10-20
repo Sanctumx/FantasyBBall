@@ -28,6 +28,8 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
   failures; after an edit to the handoff it warns past 150 lines. Fix what it reports before moving on.
 - **Status line** (`.claude/statusline.mjs`): model and effort, context %, 5-hour plan usage, cache state, branch,
   and a hint when it's time to `/handoff` and `/clear` (cues in `Sanctumx/Claude-Workflow` `template/GUIDELINES.md`).
+  It shows only in the terminal. In the Claude app or VS Code panel, run `/context` and plan a break once **Messages**
+  passes about 115K (stop past about 265K), whatever the total says: the app starts around 95K before any work.
 
 ## Model routing
 
