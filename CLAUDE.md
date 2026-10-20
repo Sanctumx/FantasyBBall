@@ -18,11 +18,20 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 
 ## Model routing
 
-- **Main session: Sonnet** by default: UI, pages, Fantrax sync, Worker, collector, docs, builds.
-- **Switch to Opus** (`/model`) for the hard areas below, backtest design, and a bug Sonnet has failed to fix twice.
-- **Searching and reading:** the `explorer` subagent (Haiku). `src/` has 800+ files, mostly backtest results; don't read
-  them in the main session.
-- **Review:** the `reviewer` subagent (Sonnet). If the branch touches a hard area, ask for the review on Opus.
+The project model is `opusplan` (`.claude/settings.json`): Opus at high effort in plan mode, Sonnet at medium effort
+everywhere else.
+
+- **Plan mode (Opus)** for anything bigger than a small fix and any change in a hard area. Plan at the start of a task:
+  each plan-mode toggle is a model switch and re-reads the whole conversation uncached.
+- **Outside plan mode (Sonnet):** UI, pages, Fantrax sync, Worker, collector, docs, builds, and carrying out plans.
+- **`/model opus`** for a long stretch of edits inside a hard area, or a bug Sonnet has failed to fix twice; tell the
+  user when that's needed, since only they can switch. `/model opusplan` afterwards.
+- **Searching and reading:** the `explorer` subagent (Haiku, low effort). `src/` has 800+ files, mostly backtest
+  results; don't read them in the main session.
+- **Backtests:** the `analyst` subagent (Opus, high effort) designs each test and judges its results; the main session
+  writes the arms, handles files and runs the scoring.
+- **Review:** the `reviewer` subagent (Sonnet, high effort). If the branch touches a hard area, run it on Opus.
+- **One hard question:** `ultrathink` in that prompt deepens one turn without changing settings.
 
 **Hard areas** (mistakes are subtle and nothing crashes): `src/engine.js` (win chances, variances, Model pick, availability),
 `src/backtest.js` / `bt_real.js` / `stream_sim.js`, `prize_equity.py`, and anything that changes what the Model pick sees.
