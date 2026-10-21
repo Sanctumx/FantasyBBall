@@ -1479,6 +1479,9 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     return o;
   }
 
+  // same league settings: the lineup is compared as the slot list it produces, so a missing luFx equal to the dropdowns is no difference
+  const sameLeague = (a, b) => LEAGUE_KEYS.every(k => k === 'luFx' || JSON.stringify(a[k]) === JSON.stringify(b[k])) && JSON.stringify(lineupSlots(a)) === JSON.stringify(lineupSlots(b));
+
   const parse = (get, key) => { try { return JSON.parse(get(key) || 'null'); } catch (e) { return null; } };
   const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : null;
   const local = {
@@ -1599,7 +1602,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   }
 
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
-  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, normalize, load, save, local,
+  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
     fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
@@ -2103,7 +2106,7 @@ $('sv-list').addEventListener('click', e => {
   if (lb) {
     const d = list.find(x => x.name === lb.dataset.load); if (!d) return;
     const ds = LS.normalize(Object.assign({}, LS.LEAGUE_DEF, LS.LEAGUE_KEYS.reduce((o, k) => { if (d.cfg && k in d.cfg) o[k] = d.cfg[k]; return o; }, {})));
-    const other = LS.LEAGUE_KEYS.some(k => JSON.stringify(ds[k]) !== JSON.stringify(SS.settings[k]));
+    const other = !LS.sameLeague(ds, SS.settings);
     const replaces = picks.some(v => v != null) && curName !== d.name;
     if ((replaces || other) && !arm('load:' + d.name, lb, other ? 'Switch settings?' : 'Replace?')) {
       svSay(other ? 'This draft used other league settings (' + ds.teams + ' teams, roster ' + ds.roster + '). Press Switch settings? to load it and change Settings to match' + (replaces ? ', and replace the draft on the board' : '') + '.' : 'Loading replaces the draft on the board. Press Replace? to continue, or save this one first.'); return; }

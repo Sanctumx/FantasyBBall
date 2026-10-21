@@ -36,3 +36,9 @@ test('fxDraftPlan maps picks, skips past the board, refuses a different team cou
   assert.match(S.fxDraftPlan(d, 6, 8, null).error, /Settings say 6 teams; this league's draft has 4/);
   assert.match(S.fxDraftPlan({ draftPicks: [] }, 4, 8, { teamInfo: {} }).error, /no teams or draft order/);
 });
+test('sameLeague compares the effective lineup, so a missing luFx that matches the dropdowns is no difference', () => {
+  const base = S.normalize(S.LEAGUE_DEF), withFx = Object.assign({}, base, { luFx: S.lineupSlots(base) });
+  assert.strictEqual(S.sameLeague(base, withFx), true);
+  assert.strictEqual(S.sameLeague(base, Object.assign({}, base, { luFx: SLOTS })), false);
+  assert.strictEqual(S.sameLeague(base, Object.assign({}, base, { teams: 12 })), false);
+});

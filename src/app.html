@@ -980,7 +980,7 @@ $('sv-list').addEventListener('click', e => {
   if (lb) {
     const d = list.find(x => x.name === lb.dataset.load); if (!d) return;
     const ds = LS.normalize(Object.assign({}, LS.LEAGUE_DEF, LS.LEAGUE_KEYS.reduce((o, k) => { if (d.cfg && k in d.cfg) o[k] = d.cfg[k]; return o; }, {})));
-    const other = LS.LEAGUE_KEYS.some(k => JSON.stringify(ds[k]) !== JSON.stringify(SS.settings[k]));
+    const other = !LS.sameLeague(ds, SS.settings);
     const replaces = picks.some(v => v != null) && curName !== d.name;
     if ((replaces || other) && !arm('load:' + d.name, lb, other ? 'Switch settings?' : 'Replace?')) {
       svSay(other ? 'This draft used other league settings (' + ds.teams + ' teams, roster ' + ds.roster + '). Press Switch settings? to load it and change Settings to match' + (replaces ? ', and replace the draft on the board' : '') + '.' : 'Loading replaces the draft on the board. Press Replace? to continue, or save this one first.'); return; }

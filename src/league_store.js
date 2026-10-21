@@ -40,6 +40,9 @@
     return o;
   }
 
+  // same league settings: the lineup is compared as the slot list it produces, so a missing luFx equal to the dropdowns is no difference
+  const sameLeague = (a, b) => LEAGUE_KEYS.every(k => k === 'luFx' || JSON.stringify(a[k]) === JSON.stringify(b[k])) && JSON.stringify(lineupSlots(a)) === JSON.stringify(lineupSlots(b));
+
   const parse = (get, key) => { try { return JSON.parse(get(key) || 'null'); } catch (e) { return null; } };
   const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : null;
   const local = {
@@ -160,7 +163,7 @@
   }
 
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
-  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, normalize, load, save, local,
+  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
     fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;

@@ -29,15 +29,12 @@ Model pick; it never punts. Shared with friends via Cloudflare.
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
 - **Works:** board, Fantrax live sync (backoff + Worker cache), saved drafts/leagues (rename, import/export), League
   Dashboard, ADP/draft collector (GitHub Actions every 6 h).
-- **Built, not pushed:** In-season tools (Matchup Analyzer and Trade Analyzer sections of `inseason.html`, linked in the toolbar; ideas 95-107)
-  on branch `matchup-trade-analyzers` (the Settings tab, idea 108, is in progress on `settings-tab`). Spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
-  `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`; Tasks 1-13 steps 1-4 done (modules `inseason_league.js`,
-  `inseason_players.js`, `matchup_core.js`, `trade_core.js`, page `inseason.html`; `Engine.pairMatchup` is the only engine change,
-  additions only, pinned by `engine_golden.test.js`). Ledger with every ruling: `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md`
-  (git-ignored). Decisions in force: Win M = vs this week's opponent in the Matchup Analyzer, vs remaining regular-season
-  matchups (periods 1-15) in the Trade Analyzer (projected playoffs later, #101); chances use gVar 1.87 and shrink toward 0.5
-  (k 0.72 matchup, 0.82 categories, from the calibration: default gVar was overconfident, slope 0.56); players without projections
-  use ESPN actuals or a waiver-level line.
+- **In-season tools + Settings tab (ideas 95-109), released 2026-10-21:** Matchup and Trade Analyzers (`inseason.html`) and the Settings tab
+  (shared league store `league_store.js`). Specs/plans in `docs/superpowers/`; ledger with every ruling in
+  `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored). `Engine.pairMatchup` is the only engine change
+  (additions only, pinned by `engine_golden.test.js`). Decisions in force: Win M = vs this week's opponent in the Matchup Analyzer,
+  vs remaining regular-season matchups (periods 1-15) in the Trade Analyzer (projected playoffs later, #101); chances use gVar 1.87
+  and shrink toward 0.5 (k 0.72 matchup, 0.82 categories); players without projections use ESPN actuals or a waiver-level line.
 
 ## Current model (backtested in the user's format with real projections)
 
@@ -100,23 +97,19 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 10. In-season tools: at release, republish `courtside-draft-board.html` to the board artifact (engine.js changed) and trigger the
    `collect-stats` workflow once by hand (`workflow_dispatch`; ESPN may block runner IPs, tested only from the PC). Open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit the shrink k with in-season data.
-11. Environment (this PC): `python3` is not installed, use `python`; the after-edit hook's quoted glob
-    (`src/tests/*.test.js`) fails on Windows with a false "unit tests FAIL"; the real check is `node --test src/tests/`
-    (idea: fix the hook to pass the directory).
+11. Environment (this PC): `python3` is not installed, use `python`. (The after-edit hook's Windows glob problem is fixed, 2026-10-21.)
+12. **Queued next (after the Settings + In-season release): Rankings tab (idea 110).** User's brief (2026-10-21): a tab like
+    basketballmonster.com/playerrankings.aspx but in our layout: a Stats dropdown rather than multiple views; Zscore type, Playoff
+    boost etc. as on the board; on top of the different bases, the option to choose projections. Start with brainstorming.
 
 ## Next session starts with
 
-**Settings tab (idea 108) is built, reviewed and committed on `settings-tab`** (all 10 tasks; 109 unit tests; browser checks settings_page, draft_settings, draft_import, draft_resize, drafts_io, league_page/sort/how, inseason_page ALL PASS). Nothing left to build there; wait for the user's "push", then release: ship `matchup-trade-analyzers` and `settings-tab` together (Settings sits on top), build check, PR, merge, republish the board artifact, trigger `collect-stats`. Deferred minors: "Switch settings?" also fires when only `luFx` differs and does not touch the loaded league; first Load fetches twice. Rulings and review fixes: archive entry 108. Spec: `docs/superpowers/specs/2026-10-20-settings-tab-design.md`.
-Browser checks: Playwright is installed in this session's scratchpad `pw/` (may be gone; `npm i playwright@1.48.2` + `npx playwright install
-chromium` in a scratch folder); copy the .mjs there, `REPO=<repo root> node X.mjs`, repo root served on :8765 (`python -m http.server 8765`).
+Released 2026-10-21: In-season tools + Settings tab (merged to main). Still to do after the release: republish `courtside-draft-board.html` to the board
+artifact if not done, and trigger the `collect-stats` workflow once by hand (`workflow_dispatch`). Then **Rankings tab (idea 110, item 12)**: brainstorm first.
+Left open: a traded player's games still come from his preseason team; likelihood bias is a guess (#98); Win M ignores results so far (#103); IR on the
+League tab (#109).
+Browser checks: Playwright (`npm i playwright@1.48.2` + `npx playwright install chromium` in a scratch folder, or an earlier session's scratchpad `pw/`);
+copy `src/tests/browser/*.mjs` there, `REPO=<repo root> node X.mjs`, repo root served on :8765 (`python -m http.server 8765`).
 Build on this PC: `cd src && python gen.py && python build_site.py && cp site/{index,league,inseason,settings}.html ..` (CLAUDE.md has python3).
-The In-Season tools (ideas 95-107, plus toolbar labels Draft / League / Matchup / Trade and the Trade Builder Zscore row) are built, reviewed and
-committed on `matchup-trade-analyzers`; wait for the user's "push", then the release steps (build check, PR, merge, republish the board artifact,
-trigger `collect-stats`). The Settings branch sits on top of it, so ship them together or the Settings branch after.
-Left open: a traded player's games still come from his preseason team; likelihood bias is a guess (#98); Win M ignores results so far (#103); IR on
-the League tab (#109).
-Local look: `node dev.mjs <repo root>` style server (static files plus the real Worker for `/api/fantrax`); Playwright lives in an earlier session's
-scratchpad `pw/` (or `npm i playwright@1.48.2` and `npx playwright install chromium` in a scratch folder; run `src/tests/browser/*.mjs` with
-`REPO=<repo root>`, repo root served on :8765).
 Standing rule (user, 2026-10-20): keep running plan tasks unless something needs the user; once past the context limit (Messages > ~115K), finish
 the task, record it and stop; don't autorun the next one.
