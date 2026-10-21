@@ -128,7 +128,7 @@ They work alongside the routing above; this file takes precedence over them. Siz
    **/handoff** does the same recording without pushing (commits locally on a feature branch, leaves main uncommitted);
    use it before `/clear` when the work isn't ready to ship.
 
-## Release, handoff and cloud sessions
+## Release and handoff specifics
 
 The specifics /release and /handoff need (files, build check, deploy, what never to do) and the cloud-session
 `gh` workarounds are in `docs/release-handoff.md`. Read it when running either skill or working in a cloud session.
