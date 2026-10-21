@@ -45,7 +45,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   ok(/^\.\d{3}$/.test(await p.$eval('#tbl tbody tr:first-child td:nth-child(7)', e => e.textContent)), 'Raw shows FG% as .xxx');
   await p.selectOption('#type', 'h2h'); await p.waitForTimeout(500);
   // playoff games column and Playoff boost
-  const poCol = () => p.$$eval('#tbl tbody tr td:nth-last-child(2)', t => t.map(e => +e.textContent));
+  const poCol = () => p.$$eval('#tbl tbody tr td:last-child', t => t.map(e => +e.textContent));
   ok(await p.$('#tbl th[data-k="po"]') !== null && (await poCol()).every(n => n > 5 && n < 40), 'Playoff games column lists games for every player');
   const z0 = await p.$eval('#tbl tbody tr:first-child td:nth-child(6)', e => e.textContent), n0 = (await names(p)).join('|');
   await p.selectOption('#poboost', 'vstrong'); await p.waitForTimeout(300);
@@ -61,7 +61,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
 { const { p, errs, ctx } = await open({ 'courtside-settings-v1': store({ id: 'lg1', name: 'Mock', teams: [], loadedAt: 1 }) });
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(800);
   ok(!!(await p.$('#tbl th[data-k="own"]')), 'league: Owner column');
-  const all = await rows(p), owners = await p.$$eval('#tbl tbody tr td:nth-child(5)', t => t.map(e => e.textContent));
+  const all = await rows(p), owners = await p.$$eval('#tbl tbody tr td:nth-child(1)', t => t.map(e => e.textContent));
   const taken = owners.filter(o => o && o !== 'Free agent').length;
   ok(taken > 100 && taken < 180, 'owners shown for the rostered players: ' + taken);
   ok(owners.some(o => /\(IR\)/.test(o)), 'IR players show an owner');
