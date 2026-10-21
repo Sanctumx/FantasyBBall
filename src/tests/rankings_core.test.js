@@ -103,6 +103,13 @@ test('playoffGames: per-round and total games by team, plus the league average',
   assert.ok(Object.values(late.byTeam).every(x => x.per.length === 1), 'rounds past the season are dropped');
 });
 
+test('seasonSource rows use the schedule team codes, so every row has Playoff games', () => {
+  const s = R.seasonSource(ESPN, PLAYERS), pg = R.playoffGames(SCHED, S0), t = R.table(s, { teams: 14, roster: 12, type: 'classic', basis: 'pergame' });
+  const bad = s.filter(r => r.g > 0 && !pg.byTeam[r.t]);
+  assert.deepStrictEqual(bad.map(r => r.t), [], 'team codes not in the schedule');
+  assert.ok(R.withPlayoffs(t, s, pg, 'off').filter(x => x.z != null).every(x => x.po > 0));
+});
+
 test('withPlayoffs: Off keeps z, adds games; boost scales z and categories and re-ranks', () => {
   const tab = R.table(rows, { teams: 14, roster: 12, type: 'classic', basis: 'pergame' }), pg = R.playoffGames(SCHED, S0);
   const off = R.withPlayoffs(tab, rows, pg, 'off');

@@ -27,7 +27,7 @@
     const list = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i }));
     return played.map((r, i) => {
       const m = InPlayers.matchTo(list, InPlayers.OVERRIDES.espn[r.id] || r.n, r.t);
-      return { pid: i, espnId: r.id, n: r.n, t: r.t, pos: m ? PLAYERS[m.id].p : '', gp: r.gp, g: r.gp * 80 / maxGp, line: InPlayers.espnLine(r), adp: m ? InPlayers.projLines([PLAYERS[m.id]], 'avg')[0].adp : null };
+      return { pid: i, espnId: r.id, n: r.n, t: InLeague.toProjTeam(r.t) || r.t, pos: m ? PLAYERS[m.id].p : '', gp: r.gp, g: r.gp * 80 / maxGp, line: InPlayers.espnLine(r), adp: m ? InPlayers.projLines([PLAYERS[m.id]], 'avg')[0].adp : null };
     });
   }
 
@@ -107,7 +107,8 @@
   // ---- Win C / Win M: Engine.evaluate exactly as the Draft tab runs it (season-long, gain over a replacement-level slot) ----
   // Projection rows use the Fantrax ADP the board uses; season rows have none, so the table's value order stands in.
   // "Average player" view = gain minus the gain of an average Zscore-pool player (a made-up entry behind every real player,
-  // so it never enters the engine's replacement window) in the same run. With no league: all picks empty, slot 1 (the board
+  // so it stays out of the replacement window; early in the season, with few live rows, it can sit inside the engine's wider
+  // typical-player window and move real gains by under 0.01 points) in the same run. With no league: all picks empty, slot 1 (the board
   // at pick 1). With a league: o.lists = [my pids, then each other team's pids] (non-IR, best first, up to roster size) fill
   // their slots; my weakest player's slot is open, so a free agent is measured in place of him. My own players each get a run with
   // their slot open (step()), since a player already on the team has no gain in the main run.

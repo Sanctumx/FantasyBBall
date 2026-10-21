@@ -4,7 +4,7 @@ Spec: `docs/superpowers/specs/2026-10-21-rankings-tab-design.md`. Planner's full
 
 ## User rulings (2026-10-21)
 - D1 (replaced 2026-10-21 by the user): no ADP or roster pool. Every source's Zscore is calculated on the top X players by H2H-adjusted value within that source, X = teams x roster size (12 teams x 12 = 144; default league 14 x 12 = 168), re-ranked until the pool settles. The Settings league sets X. Consequence: Rankings Projections / Average Zscore differs from the board's by design, so the old test 'equals the board' becomes 'pool properties' (mean 0 / sd 1 over the pool for Standard; pool = top X by H2H).
-- D2 weights: fixed defaults (x1, TO x0.5), no weights control.
+- D2 weights: defaults (x1, TO x0.5); later (2026-10-21, user) a weights / punt control was added for Zscore only, the pool stays on default weights.
 - D3/D4: Rankings second in toolbar (Draft | Rankings | League | Matchup | Trade | Settings); default Source = Season to date (label ESPN season, e.g. 2025-26, until 2026-27 games exist).
 - D5: ship stage 1 alone once reviewed (on "push").
 - Approved 2026-10-21: add `Read(/rankings.html)` to the `.claude/settings.json` deny list.
