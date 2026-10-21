@@ -87,8 +87,81 @@
   }
   const save = (set, st) => set(KEYS.settings, JSON.stringify({ v: 1, settings: st.settings, league: st.league || null, note: st.note || '' }));
 
+  // ---- Fantrax league -> settings ----
+  // Fantrax rosterInfo.positionConstraints → slot list: G2 / G3 are extra G rows, Flx / Util = U, a count per row (maxActive)
+  function fxSlots(league) {
+    const pc = league && league.rosterInfo && league.rosterInfo.positionConstraints; if (!pc || typeof pc !== 'object') return null;
+    const out = [];
+    for (const [k, v] of Object.entries(pc)) {
+      const n = Math.max(0, Math.min(10, Math.round(+(v && v.maxActive) || 0)));
+      const parts = k.toUpperCase().replace(/[\s+&-]+/g, '/').split('/').map(x => x.replace(/\d+$/, '')).flatMap(x => /^(FLX|FLEX|UTIL|UT|U)$/.test(x) ? ['U'] : SLOT_OK[x] ? [x] : (x.match(/PG|SG|SF|PF|G|F|C/g) || [x]));
+      const sl = [...new Set(parts)].join('/');
+      if (!sl.split('/').every(x => SLOT_OK[x])) continue;
+      for (let i = 0; i < n; i++) out.push(sl);
+    }
+    const rank = sl => { const i = ['PG', 'SG', 'G', 'SF', 'PF', 'F', 'C'].indexOf(sl); return i >= 0 ? i : sl === 'U' ? 9 : 8; };
+    out.sort((x, y) => rank(x) - rank(y));
+    return out.length ? out.slice(0, 20) : null;
+  }
+  const LU_COUNT = [['luC', x => x === 'C'], ['luG', x => ['PG', 'SG', 'G'].includes(x)], ['luF', x => ['SF', 'PF', 'F'].includes(x)], ['luGC', x => x === 'G/C'], ['luFC', x => x === 'F/C'], ['luU', x => x === 'U']];
+  // What Load changes: team count, roster size and lineup slots (Fantrax's public league data has no scoring, categories, IL or
+  // playoff start). Everything else in the settings stays as the user set it.
+  function applyFantrax(settings, league) {
+    const s = Object.assign({}, settings), changes = [], was = lineupSlots(settings);
+    const n = Object.keys((league && league.teamInfo) || {}).length;
+    if (n) { const t = Math.min(20, Math.max(4, n)); if (t !== s.teams) changes.push('Teams ' + s.teams + ' → ' + t); s.teams = t; }
+    const ri = league && league.rosterInfo && +league.rosterInfo.maxTotalPlayers;
+    if (ri) { const r = Math.min(25, Math.max(8, Math.round(ri))); if (r !== s.roster) changes.push('Roster size ' + s.roster + ' → ' + r); s.roster = r; }
+    const sl = fxSlots(league);
+    if (sl) {
+      s.luFx = sl; s.luSplit = sl.some(x => ['PG', 'SG', 'SF', 'PF'].includes(x));
+      LU_COUNT.forEach(f => { s[f[0]] = Math.min(LU_MAX[f[0]], sl.filter(f[1]).length); });
+      if (was.join(' ') !== sl.join(' ')) changes.push('Lineup ' + sl.map(slotName).join(' '));
+    }
+    return { settings: s, changes, note: changes.length ? 'Updated from Fantrax: ' + changes.join(' · ') + '.' : 'Settings already match Fantrax.' };
+  }
+  // every team of the league with its record, by name
+  function teamsOf(league, standings) {
+    const rec = {}; (Array.isArray(standings) ? standings : []).forEach(r => { if (r && r.teamId) rec[r.teamId] = r.points; });
+    return Object.values((league && league.teamInfo) || {}).filter(t => t && t.id).map(t => ({ id: t.id, name: t.name || t.id, record: rec[t.id] }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
+  }
+
+  // ---- schedule (the season's weeks and the playoffs), as on the board ----
+  const ASB_WEEK = 18;
+  function weekPlan(SCHED, asb) {
+    const n = SCHED.weeks.length, starts = SCHED.weeks.slice(), idx = [];
+    for (let w = 0; w < n; w++) idx.push([w]);
+    if (asb === 'merged') { idx.splice(ASB_WEEK - 1, 2, [ASB_WEEK - 1, ASB_WEEK]); starts.splice(ASB_WEEK, 1); }
+    return { idx, starts, count: idx.length };
+  }
+  function playoffRounds(SCHED, s) {
+    const plan = weekPlan(SCHED, s.asb), lens = s.poFmt.split('-').map(Number), rounds = [];
+    let w = s.poStart;
+    for (const L of lens) { const ws = []; for (let i = 0; i < L; i++, w++) if (w <= plan.count) ws.push(w); rounds.push(ws); }
+    return { plan, rounds, fits: w - 1 <= plan.count };
+  }
+  const clampPoStart = (s, SCHED) => Object.assign({}, s, { poStart: Math.max(10, Math.min(weekPlan(SCHED, s.asb).count, s.poStart)) });
+  // switching the All-Star break shifts the playoff start by the merged week
+  const withAsb = (s, asb) => Object.assign({}, s, { asb, poStart: s.poStart + (asb === s.asb ? 0 : asb === 'merged' ? -1 : 1) });
+
+  // ---- a league's draft -> picks for the Draft board ----
+  function fxDraftPlan(draft, teams, roster, league) {
+    const d = draft || {}, order = d.draftOrder && d.draftOrder.length ? d.draftOrder : Object.keys((league && league.teamInfo) || {}), N = order.length;
+    if (!N) return { order, items: [], skipped: 0, error: 'This league has no teams or draft order yet.' };
+    if (N !== teams) return { order, items: [], skipped: 0, error: 'Settings say ' + teams + ' teams; this league\'s draft has ' + N + '. Load the league again in Settings.' };
+    const items = []; let skipped = 0;
+    for (const p of (d.draftPicks || []).filter(x => x && x.round)) {
+      const k = p.pickInRound ? (p.round - 1) * N + (p.pickInRound - 1) : p.pick - 1;
+      if (!(k >= 0 && k < teams * roster)) { skipped++; continue; }
+      items.push({ k, t: order.indexOf(p.teamId), fid: p.playerId || null });
+    }
+    return { order, items, skipped, error: null };
+  }
+
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
   const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, normalize, load, save, local,
-    savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML };
+    savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
+    fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
 })(this);
