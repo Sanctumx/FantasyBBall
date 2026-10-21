@@ -54,7 +54,7 @@ test('team stats count only the active slots (10 of 12), best-ranked players fir
   const top = R.rosters[0].slice().sort((a, b) => a.rk - b.rk).slice(0, 10);
   assert.ok(near(R.raw[0][3], L.rawTotals(top)[3], 1e-6));
   const G = L.computeLeague(PLAYERS, s, 'avg', 'pergame');
-  assert.ok(near(G.raw[0][3], top.reduce((a, p) => a + p.pts, 0), 1e-6));
+  assert.ok(near(G.raw[0][3], top.reduce((a, p) => a + p.pts, 0) / 10, 1e-6));
 });
 
 test('active slot count follows the lineup settings: lu* sum, or the Fantrax slot list when present', () => {
@@ -107,9 +107,9 @@ test('mid-draft team stats include a typical player at each open pick, as the wi
   assert.deepStrictEqual(full.raw[3], L.rawTotals(full.rosters[3].slice().sort((a, b) => a.rk - b.rk).slice(0, 10)));
 });
 
-test('per game adds up the roster per-game lines (missed games do not count)', () => {
+test('per game is the average of the active players per-game lines (missed games do not count)', () => {
   const R = L.computeLeague(PLAYERS, src(168), 'avg'), r = R.rosters[2].slice().sort((a, b) => a.rk - b.rk).slice(0, 10);
-  assert.ok(near(R.perGame[2][3], r.reduce((a, p) => a + p.pts, 0)));
+  assert.ok(near(R.perGame[2][3], r.reduce((a, p) => a + p.pts, 0) / 10));
   assert.ok(near(R.perGame[2][0], r.reduce((a, p) => a + p.fgp * p.fga, 0) / r.reduce((a, p) => a + p.fga, 0)));
   const R2 = L.computeLeague(PLAYERS, src(100), 'avg');
   assert.ok(R2.perGame.every(row => row.every(Number.isFinite)));

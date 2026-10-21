@@ -236,7 +236,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
       <h2>Team stats <span class="meta" id="ts-sub">Projected season totals for each current roster</span></h2>
       <div class="ctl"><span class="seg" id="tsv" role="group" aria-label="Stats view"><button type="button" data-v="raw">Raw</button><button type="button" data-v="week">Per week</button><button type="button" data-v="z">Zscore</button><button type="button" data-v="rank">Rank</button></span></div>
       <div class="scroll"><table id="ts"></table></div>
-      <p class="hint">Per game adds up each roster's per-game lines (FG% and FT% from makes and attempts). Zscore is against the league's teams; Rank 1 is best (fewest TO).</p>
+      <p class="hint">Per game is the average per-game line of the active players (FG% and FT% from makes and attempts). Zscore is against the league's teams; Rank 1 is best (fewest TO).</p>
     </section>
     </div>
   </div>
@@ -1454,8 +1454,8 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
       let ws = 0; for (let i = lo; i <= hi; i++) ws += Math.exp(-0.5 * Math.pow((i - c0) / w, 2));
       for (let i = lo; i <= hi; i++) { const wt = Math.exp(-0.5 * Math.pow((i - c0) / w, 2)) / ws; addTo(acc[t], line(av[i]), wt); addTo(accG[t], line(av[i], 1), wt); }
     });
-    // per game = the team's per-game line (active players), per week = season totals over the 24 NBA weeks (82 games / 3.42)
-    const perGame = accG.map(finish), weeks = 24;
+    // per game = the average per-game line of the active players (percentages already are averages), per week = season totals over the 24 NBA weeks (82 games / 3.42)
+    const perGame = accG.map(a => finish(a).map((v, c) => c < 2 ? v : v / active)), weeks = 24;
     const raw = basis === 'pergame' ? perGame : acc.map(finish);
     const perWeek = basis === 'pergame' ? null : raw.map(r => r.map((v, c) => c < 2 ? v : v / weeks));
     const z = raw.map(() => new Array(E.NC).fill(0)), rank = raw.map(() => new Array(E.NC).fill(0));

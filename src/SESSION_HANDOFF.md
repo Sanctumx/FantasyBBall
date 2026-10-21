@@ -15,7 +15,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 ## Current state
 
 - **Live:** Cloudflare Worker `courtside-basketball` deploys every push to main; serves the pages and `/api/fantrax`.
-- **Board artifact:** claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz (last noted v165, 2026-10-21; read it before republishing).
+- **Board artifact:** claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz (v166, republished 2026-10-21 after PR #24; read it first).
   Publish `courtside-draft-board.html`, **never `app.html`**.
 - **Math doc:** claude.ai/code/artifact/2d4059a8-f9ad-465d-bfa7-41ef6990e7a8 (rev 159). The board links to `math.html`:
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
@@ -43,26 +43,25 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
    weekly usage after a few days; if handoffs feel too frequent try 80K / 150K. Still to add to `Sanctumx/Claude-Workflow`:
    (a) the "keep running plan tasks; past the context limit finish, record, stop" rule in `template/CLAUDE.md`'s working
    rules; (d) the after-edit hook's Windows glob fix and the heredoc note.
-5. In-season: republish `courtside-draft-board.html` to the board artifact (engine.js changed). Open: #98 tune
+5. In-season open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit shrink k.
-6. **#112** League Dashboard "Projected": per game = team's average value, per week = week totals, per season = season totals.
-   `league_core.js` computeLeague + `league.html` profile.
+6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
 7. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 combine known
    game stats with projections; #116 dropdown capping team slots the waiver add plan uses.
 
 ## Next session starts with
 
-**Branch `waiver-adds-keep-list`** (unpushed, PR not opened; reviewed 2026-10-21, must-fix and should-fix done: saved extras now carry `base`, a save without one counts as 234 players): ideas 122-125 (Waiver adds panel, Team schedule, keep
-list, Hashtag refresh), **126** (68 Hashtag-only players, rank <= 300, now in players.json), **127** (waiver adds and plan
-scored from box scores like the Matchup headline) and **128** (period dates follow Fantrax: week 1 = Oct 20 - Oct 25). 190 unit
-tests and all browser checks pass. Next: PR, push when the user says. Idea 126 note: Hashtag-only rows carry Hashtag ADP while BBM rows keep BBM ADP (both feed makeValueRef). Then: refit
+**Merged to main (PR #24, 2026-10-21; Cloudflare deploys it):** ideas 122-129 (Waiver adds panel, Team schedule, keep list,
+Hashtag refresh, 68 Hashtag-only players, box-score scoring of adds, Fantrax period dates, review fixes: saved extras carry
+`base`, a save without one counts as 234 players). 192 unit tests pass. Board artifact republished (v166). First step:
+refit
 the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
-#112, #116, Best adds/plan on remaining games.
+#116, Best adds/plan on remaining games.
 Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
 Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess
 (#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against
 drops 2-5; `matchup_core` addPlan day list still runs to per.end (an extra empty day). Offered, unanswered: a "Team games left"
-column. 126 leftovers: `ftx` of the 234 BBM rows not refreshed from the Fantrax snapshot.
+column. 126 leftovers: `ftx` of the 234 BBM rows not refreshed from the Fantrax snapshot; Hashtag-only rows carry Hashtag ADP, BBM rows BBM ADP.
 Note: 6 context-hook tests fail when run inside a long session (not code).
 
 ## This PC

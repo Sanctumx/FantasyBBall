@@ -72,8 +72,8 @@
       let ws = 0; for (let i = lo; i <= hi; i++) ws += Math.exp(-0.5 * Math.pow((i - c0) / w, 2));
       for (let i = lo; i <= hi; i++) { const wt = Math.exp(-0.5 * Math.pow((i - c0) / w, 2)) / ws; addTo(acc[t], line(av[i]), wt); addTo(accG[t], line(av[i], 1), wt); }
     });
-    // per game = the team's per-game line (active players), per week = season totals over the 24 NBA weeks (82 games / 3.42)
-    const perGame = accG.map(finish), weeks = 24;
+    // per game = the average per-game line of the active players (percentages already are averages), per week = season totals over the 24 NBA weeks (82 games / 3.42)
+    const perGame = accG.map(a => finish(a).map((v, c) => c < 2 ? v : v / active)), weeks = 24;
     const raw = basis === 'pergame' ? perGame : acc.map(finish);
     const perWeek = basis === 'pergame' ? null : raw.map(r => r.map((v, c) => c < 2 ? v : v / weeks));
     const z = raw.map(() => new Array(E.NC).fill(0)), rank = raw.map(() => new Array(E.NC).fill(0));
