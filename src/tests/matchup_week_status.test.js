@@ -1,0 +1,75 @@
+// Matchup week status: box-score totals so far + projection of the games still to play (idea 118, 2026-10-21)
+const test = require('node:test'), assert = require('node:assert');
+const I = require('../inseason_league.js'), Pl = require('../inseason_players.js'), M = require('../matchup_core.js'), PLAYERS = require('../players.json');
+const fx = n => require('./fixtures/' + n), DAYS = require('../sched_days.json');
+const L = I.parseLeague(fx('fx_league.json')), ROS = I.parseRosters(fx('fx_rosters.json'));
+const pool = Pl.buildPool({ PLAYERS, fxPlayers: fx('fx_players.json'), espn: fx('espn_2025_26.json'), L, rosters: ROS });
+const me = L.teams[0].id, NOW = Date.UTC(2026, 9, 22, 12);
+const ctx = M.makeCtx({ L, pool, DAYS, rosters: ROS, me, nowMs: NOW }), opp = I.opponentOf(L, me, 1);
+const P1 = L.periods.find(x => x.n === 1);
+// New York date of the team's first game in period 1
+const firstDay = p => I.nyDay(DAYS.games[p.t].map(x => x * 1000).find(ms => ms >= P1.start && ms < P1.end));
+const COLS = ['min', 'fgm', 'fga', 'ftm', 'fta', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+
+const active = t => ctx.roster[t].map(f => pool.byKey.get(f)).filter(p => p.slot !== 'IR' && p.t);
+// one box file: a game on `d` for each given [player, line overrides]; ids are made from the pool key
+const box = (games) => {
+  const f = { season: 2027, cols: COLS, names: {}, games: {} };
+  games.forEach((g, i) => {
+    const teams = {};
+    g.lines.forEach(([p, o]) => {
+      f.names[p.key] = p.n;
+      (teams[p.t] || (teams[p.t] = [])).push([p.key].concat(COLS.map(c => (o && o[c] != null) ? o[c] : (c === 'min' ? 30 : 0))));
+    });
+    f.games['g' + i] = { d: g.d, teams };
+  });
+  return [f];
+};
+
+test('periodMonths and nyDay follow New York dates', () => {
+  assert.strictEqual(I.nyDay(Date.UTC(2026, 9, 21, 2, 0)), '2026-10-20');
+  assert.deepStrictEqual(I.periodMonths({ start: Date.UTC(2026, 9, 26, 19), end: Date.UTC(2026, 10, 2, 23) }), ['2026-10', '2026-11']);
+});
+
+test('no box games: the status is exactly the whole-week projection', () => {
+  const s = M.weekStatus(ctx, [], me, 1), w = M.projectWeek(ctx, me, 1);
+  assert.deepStrictEqual(s.cat, w.cat); assert.strictEqual(s.match, w.match); assert.deepStrictEqual(s.mu, w.mu);
+  assert.deepStrictEqual(s.games, w.games);
+  assert.ok(s.known[0].pts === 0 && s.known[1].pts === 0);
+});
+
+test('a played game is counted once: so far from the box, rest from games after tip-off', () => {
+  const p = active(me)[0], whole = M.projectWeek(ctx, me, 1);
+  const files = box([{ d: firstDay(p), lines: [[p, { fgm: 8, fga: 16, ftm: 4, fta: 5, pts: 20, reb: 6, to: 3 }]] }]);
+  const s = M.weekStatus(ctx, files, me, 1);
+  assert.strictEqual(s.known[0].pts, 20); assert.strictEqual(s.known[0].fga, 16); assert.strictEqual(s.known[0].to, 3);
+  assert.ok(s.games[0] < whole.games[0], 'games left shrink');
+  assert.ok(Math.abs(s.total[0][3] - (20 + s.rest[0][3])) < 1e-9, 'total = so far + rest (points)');
+  assert.deepStrictEqual(s.known[1], M.weekStatus(ctx, [], me, 1).known[1]);
+});
+
+test('FG% and FT% come from summed makes and attempts', () => {
+  const [a, b] = active(me), files = box([{ d: '2026-10-20', lines: [[a, { fgm: 6, fga: 10, ftm: 2, fta: 4 }], [b, { fgm: 2, fga: 10, ftm: 4, fta: 4 }]] }]);
+  const s = M.weekStatus(ctx, files, me, 1);
+  assert.strictEqual(s.known[0].fgm, 8); assert.strictEqual(s.known[0].fga, 20); assert.strictEqual(s.known[0].ftm, 6); assert.strictEqual(s.known[0].fta, 8);
+});
+
+test('IR players and other periods are ignored', () => {
+  const t = Object.keys(ROS).find(k => ROS[k].some(x => x.slot === 'IR')), irp = pool.byKey.get(ROS[t].find(x => x.slot === 'IR').fid), a = active(t)[0];
+  const files = box([{ d: '2026-10-20', lines: [[irp, { pts: 30 }]] }, { d: '2026-10-19', lines: [[a, { pts: 40 }]] }]);
+  const s = M.weekStatus(ctx, files, t, 1);
+  assert.strictEqual(s.known[0].pts, 0);
+});
+
+test('at most maxActive players count on one day', () => {
+  const ps = active(me).slice(0, 12), files = box([{ d: '2026-10-20', lines: ps.map(p => [p, { pts: 10 }]) }]);
+  const s = M.weekStatus(ctx, files, me, 1);
+  assert.strictEqual(ps.length, 12);
+  assert.strictEqual(s.known[0].pts, 10 * L.maxActive);
+});
+
+test('a decided category late in the week is more certain than the whole-week chance', () => {
+  const a = active(me)[0], files = box([{ d: firstDay(a), lines: [[a, { pts: 90 }]] }]);
+  const s = M.weekStatus(ctx, files, me, 1), w = M.projectWeek(ctx, me, 1);
+  assert.ok(s.cat[3] > w.cat[3] + 0.1);
+});

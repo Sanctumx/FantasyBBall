@@ -42,6 +42,65 @@
     return Object.assign({ opp }, scoreSegments(ctx, teamSegments(ctx, teamId, n), teamSegments(ctx, opp, n)));
   }
 
+  // ---- week status: box-score totals so far + the games still to play (idea 118, 2026-10-21) ----
+  const KCOLS = ['fgm', 'fga', 'ftm', 'fta', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+  const zeroK = () => { const k = {}; KCOLS.forEach(c => { k[c] = 0; }); return k; };
+  const kOf = (k0, r) => k0 + (1 - k0) * (1 - r);   // shrink eases to 1 as the week ends (r = share of the week's games still to play)
+
+  // monthly stats/box-YYYY-MM.json objects → the period's lines per player and each team's latest game date (ESPN abbreviations mapped)
+  function boxLines(files, per) {
+    const from = InLeague.nyDay(per.start), to = InLeague.nyDay(per.end - 1), players = new Map(), lastDay = {};
+    (files || []).filter(Boolean).forEach(f => Object.keys(f.games || {}).forEach(id => {
+      const g = f.games[id];
+      if (g.d < from || g.d > to) return;
+      Object.keys(g.teams).forEach(abbr => {
+        const t = InLeague.toProjTeam(abbr) || abbr;
+        if (!lastDay[t] || g.d > lastDay[t]) lastDay[t] = g.d;
+        g.teams[abbr].forEach(l => {
+          const v = {}; f.cols.forEach((c, i) => { v[c] = l[i + 1]; });
+          if (!(v.min > 0)) return;
+          const a = players.get(l[0]) || { id: l[0], n: InPlayers.OVERRIDES.espn[l[0]] || (f.names || {})[l[0]] || String(l[0]), t, d: '', lines: [] };
+          if (g.d >= a.d) { a.d = g.d; a.t = t; }
+          a.lines.push({ d: g.d, v }); players.set(l[0], a);
+        });
+      });
+    }));
+    return { players, lastDay };
+  }
+  // the instant after a team's latest boxed game tipped off (the period's start when it has none yet)
+  function cutoffOf(ctx, bx, team, per) {
+    const day = bx.lastDay[team];
+    if (!day) return per.start;
+    const tip = ((ctx.DAYS.games || ctx.DAYS)[team] || []).map(s => s * 1000).find(ms => InLeague.nyDay(ms) === day);
+    return Math.max(per.start, (tip != null ? tip : Date.parse(day + 'T00:00:00Z') + 28 * 3600e3) + 1);
+  }
+
+  // Both teams' status for period n: so-far totals (box lines of the current non-IR roster, at most maxActive players per day),
+  // the rest of the week projected from each team's own cutoff, and chances for the final result. FG% / FT% come from summed makes and
+  // attempts. Variance of the remaining games scales with the share of games left; the shrink eases from K to 1 with that share.
+  function weekStatus(ctx, files, teamId, n) {
+    const opp = InLeague.opponentOf(ctx.L, teamId, n);
+    if (!opp) return { opp: null };
+    const per = periodOf(ctx.L, n), bx = boxLines(files, per);
+    const list = Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id }));
+    const side = tid => {
+      const segs = teamSegments(ctx, tid, n), pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {};
+      pp.forEach(p => {
+        const m = InPlayers.matchTo(list, p.n, p.t), b = m && bx.players.get(m.id);
+        if (b) b.lines.forEach(l => (byDay[l.d] || (byDay[l.d] = [])).push({ p, v: l.v }));
+      });
+      Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => valueOf(ctx, b.p) - valueOf(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; })));
+      const rest = segs.map((s, i) => ({ key: s.key, from: Math.max(s.from, cutoffOf(ctx, bx, pp[i].t, per)), to: s.to }));
+      const whole = segGames(ctx, segs), left = segGames(ctx, rest);
+      return { known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
+        entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * (whole[i] > 0 ? left[i] / whole[i] : 0) })) };
+    };
+    const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
+    const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
+    return { opp, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
+      known: [A.known, B.known], games: [A.leftG, B.leftG], share };
+  }
+
   function addFrom(ctx, n) {
     const per = periodOf(ctx.L, n);
     return n === ctx.cur ? Math.max(per.start, InLeague.nextDayStart(ctx.nowMs)) : per.start;
@@ -126,6 +185,6 @@
     return plan;
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, makeCtx, teamSegments, scoreSegments, projectWeek, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { GVAR, K_MATCH, K_CAT, makeCtx, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
