@@ -8,7 +8,7 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
-108. **Settings tab (2026-10-20, in progress, tasks 1-2 of 10 done).** The user wants to set the league once and have every tab read it,
+108. **Settings tab (2026-10-20, in progress, tasks 1-5 of 10 done).** The user wants to set the league once and have every tab read it,
 instead of syncing per tab. Design `docs/superpowers/specs/2026-10-20-settings-tab-design.md`, plan `docs/superpowers/plans/2026-10-20-settings-tab.md`
 (branch `settings-tab`, cut from `matchup-trade-analyzers`). Rulings: League Dashboard analyzes the league's current Fantrax rosters (not a draft);
 Load overwrites the settings it fetches with a one-line note; Draft is separate from the league (Load never touches picks/log/slot; slot, order,
@@ -16,6 +16,13 @@ draft field and saved drafts stay on Draft; explicit "Import draft from league" 
 and league; IR players left out on League (counting them is #109, tabled). Fantrax public league data has no scoring, categories, IL or playoff
 start, so Load fills teams, roster size and lineup slots only. Done: `src/league_store.js` (`LeagueStore`: store, migration from the old keys, saved
 leagues, `pickTeam`, Fantrax mapping, playoff-week helpers, `fxDraftPlan`) with `league_store.test.js` and `league_store_fx.test.js`; 112 unit tests pass.
+Tasks 3-5 (same day): fifth toolbar link, `gen.py`/`build_site.py` write `settings.html` and inject the store into all pages (Settings also gets SCHED);
+`src/settings.html` has the Fantrax league panel (Load with backoff, saved leagues rename/remove, team picker, Unload, exact Load note) and the league settings
+form (playoff hint, Fantrax lineup note, warning when the board has picks beyond the new size); `browser/settings_page.mjs` ALL PASS. Draft: `DEF` takes
+`LeagueStore.LEAGUE_DEF`, the store overlays the saved cfg's league keys, `#setup` keeps slot/order/field + `#lg-sum`, a `storage` event re-reads the store
+live, loading a saved draft with other league settings asks "Switch settings?" and then writes them to the store. `browser/draft_settings.mjs` ALL PASS with
+Draft output (clock, Your team, top 10 with Model pick) identical to `draft_baseline.json` recorded before the change. Remaining: Tasks 6-10 (Draft's Fantrax
+draft panel, League core, League tab, Matchup/Trade, How it works + review).
 Same session also shipped (unpushed, on `matchup-trade-analyzers`): toolbar labels Draft / League / Matchup / Trade; Trade Builder table with a Zscore row
 per category, a Total column, no Average row, value colors only on the Zscore row, centered summary tiles, Zscore tiles without type or basis.
 
