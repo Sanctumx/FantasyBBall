@@ -73,6 +73,7 @@ td b .chip,.chip.b{font-weight:700}
 .kpi b{font:700 1.7rem/1 var(--f-display)}
 .kpi span{color:var(--muted);font-size:.82rem;margin-left:6px}
 .kpi.big{flex-basis:100%}
+#sum{justify-content:center}
 .kpi.big b{font-size:2.8rem}
 .kpi.big span{font:600 1.1rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin-left:8px}
 .kpi.hi b,.lvl.hi{color:var(--good)}.kpi.mid b,.lvl.mid{color:var(--warn)}.kpi.lo b,.lvl.lo{color:var(--bad)}
@@ -1224,7 +1225,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
   // Toolbar between the pages; `active` is 'kit', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
-    [['kit', './', 'Draft Kit'], ['league', 'league.html', 'League Dashboard'], ['matchup', 'inseason.html#matchup', 'Matchup Analyzer'], ['trades', 'inseason.html#trades', 'Trade Analyzer']]
+    [['kit', './', 'Draft'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade']]
       .map(([k, href, label]) => '<a href="' + href + '"' + (active === k ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
@@ -1931,14 +1932,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const pls = keys.map(k => pool.byKey.get(k)), lines = pls.map(p => lineFor(p, stat));
     const zv = pls.map(p => InP.zscoreOf(PLAYERS, p, ui.zt, ui.zb)), zOk = zv.filter(v => v != null), zTxt = v => (v == null ? '—' : zsg(v));
     let h = '<tr><th class="grp" colspan="' + (CATS.length + 2) + '">' + esc(label) + '</th></tr>';
-    lines.forEach((l, i) => { const z = InP.catZ(l, ctx.ref); h += '<tr><td class="l">' + esc(pls[i].n) + '</td>' + stats9(l).map((v, c) => '<td>' + chip(.5 + z[c] / 4, statTxt(v, c)) + '</td>').join('') + '<td>' + zTxt(zv[i]) + '</td></tr>'; });
+    lines.forEach((l, i) => { h += '<tr><td class="l">' + esc(pls[i].n) + '</td>' + stats9(l).map((v, c) => '<td>' + statTxt(v, c) + '</td>').join('') + '<td>' + zTxt(zv[i]) + '</td></tr>'; });
     if (lines.length) {
       const n = lines.length, sum = f => lines.reduce((s, l) => s + f(l), 0), fga = sum(l => l.fga), fta = sum(l => l.fta);
       const tot = { fgp: fga ? sum(l => l.fgp * l.fga) / fga : 0, fga, ftp: fta ? sum(l => l.ftp * l.fta) / fta : 0, fta, tpm: sum(l => l.tpm), pts: sum(l => l.pts), reb: sum(l => l.reb), ast: sum(l => l.ast), stl: sum(l => l.stl), blk: sum(l => l.blk), to: sum(l => l.to) };
-      const avg = Object.assign({}, tot, { fga: fga / n, fta: fta / n }); ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'].forEach(k => { avg[k] = tot[k] / n; });
-      const z = InP.catZ(avg, ctx.ref);
-      h += '<tr class="avg"><td class="l">Average</td>' + stats9(avg).map((v, c) => '<td>' + chip(.5 + z[c] / 4, statTxt(v, c)) + '</td>').join('') + '<td>' + (zOk.length ? zsg(zOk.reduce((s2, v) => s2 + v, 0) / zOk.length) : '—') + '</td></tr>';
-      h += '<tr class="tot"><td class="l">Total</td>' + stats9(tot).map((v, c) => '<td>' + statTxt(v, c) + '</td>').join('') + '<td>' + (zOk.length ? zsg(zOk.reduce((s2, v) => s2 + v, 0)) : '—') + '</td></tr>';
+      h += '<tr class="tot"><td class="l">Total</td>' + stats9(tot).map((v, c) => '<td>' + statTxt(v, c) + '</td>').join('') + '<td></td></tr>';
+      const zs = lines.map(l => InP.catZ(l, ctx.ref)), zc = c => zs.reduce((t, z) => t + z[c], 0);
+      h += '<tr class="tot"><td class="l">Zscore</td>' + CATS.map((_, c) => '<td>' + chip(.5 + zc(c) / 4, zsg(zc(c))) + '</td>').join('') + '<td>' + (zOk.length ? zsg(zOk.reduce((s2, v) => s2 + v, 0)) : '—') + '</td></tr>';
     }
     return h;
   }
@@ -1954,7 +1954,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const chips = (keys, side) => keys.map(k => '<li>' + esc(pool.byKey.get(k).n) + '<button type="button" data-side="' + side + '" data-rm="' + esc(k) + '" aria-label="Remove ' + esc(pool.byKey.get(k).n) + '">×</button></li>').join('');
     $('list-a').innerHTML = chips(S.aGets, 'a'); $('list-b').innerHTML = chips(S.bGets, 'b');
     $('multi').textContent = S.aGets.length !== S.bGets.length && S.aGets.length + S.bGets.length > 0 ? 'Uneven trade: each team keeps its whole roster here, so the team getting more players needs open spots or must drop someone. Win M counts every player involved.' : '';
-    $('bt').innerHTML = S.aGets.length + S.bGets.length ? '<thead><tr><th class="l">Player</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '<th title="Zscore of the chosen type and basis; players without a projection show a dash and are left out of the average and total">Zscore</th></tr></thead><tbody>' + sideRows(nameOfTeam(S.a) + ' receives', S.aGets, S.stat) + sideRows(nameOfTeam(S.b) + ' receives', S.bGets, S.stat) + '</tbody>' : '';
+    $('bt').innerHTML = S.aGets.length + S.bGets.length ? '<thead><tr><th class="l">Player</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '<th title="Zscore of the chosen type and basis; players without a projection show a dash and are left out of the average and total">Total</th></tr></thead><tbody>' + sideRows(nameOfTeam(S.a) + ' receives', S.aGets, S.stat) + sideRows(nameOfTeam(S.b) + ' receives', S.bGets, S.stat) + '</tbody>' : '';
     $('sum').innerHTML = ''; $('sum-msg').textContent = '';
     if (!S.aGets.length || !S.bGets.length) { $('sum-msg').textContent = 'Add at least one player on each side to see the effect on rest-of-season Win M.'; return; }
     try {
@@ -1962,10 +1962,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       $('sum').innerHTML = '<div class="kpi"><b>' + signed(r.dA) + '</b><span>' + esc(nameOfTeam(S.a)) + ' Win M (points)</span></div><div class="kpi"><b>' + signed(r.dB) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Win M</span></div>' +
         '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>'
       const zsum = ks => { const v = ks.map(k => InP.zscoreOf(PLAYERS, pool.byKey.get(k), ui.zt, ui.zb)).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
-      const zA = zsum(S.aGets), zB = zsum(S.bGets), noZ = S.aGets.concat(S.bGets).filter(k => InP.zscoreOf(PLAYERS, pool.byKey.get(k), ui.zt, ui.zb) == null).length;
-      const dz = zA == null && zB == null ? null : (zA || 0) - (zB || 0), zl = ' Zscore (' + $('zt').selectedOptions[0].textContent + ', ' + $('zb').selectedOptions[0].textContent.toLowerCase() + ')';
-      $('sum').innerHTML += '<div class="kpi"><b>' + (dz == null ? '—' : zsg(dz)) + '</b><span>' + esc(nameOfTeam(S.a)) + zl + '</span></div><div class="kpi"><b>' + (dz == null ? '—' : zsg(-dz)) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Zscore</span></div>' +
-        '<div class="kpi"><b>' + (zA == null ? '—' : zsg(zA)) + ' / ' + (zB == null ? '—' : zsg(zB)) + '</b><span>Zscore received: ' + esc(nameOfTeam(S.a)) + ' / ' + esc(nameOfTeam(S.b)) + (noZ ? ' (' + noZ + ' without a projection left out)' : '') + '</span></div>';
+      const zA = zsum(S.aGets), zB = zsum(S.bGets);
+      const dz = zA == null && zB == null ? null : (zA || 0) - (zB || 0), zl = ' Zscore';
+      $('sum').innerHTML += '<div class="kpi"><b>' + (dz == null ? '—' : zsg(dz)) + '</b><span>' + esc(nameOfTeam(S.a)) + zl + '</span></div><div class="kpi"><b>' + (dz == null ? '—' : zsg(-dz)) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Zscore</span></div>';
     } catch (e) { $('sum-msg').textContent = e.message; }
   }
   function loadTrade(give, target, team) { bd = { a: ctx.me, b: team, aGets: [target], bGets: [give], stat: builderState().stat }; renderBuilder(); $('builder').scrollIntoView({ block: 'nearest' }); }
