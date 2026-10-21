@@ -56,7 +56,7 @@ Hashtag refresh, 68 Hashtag-only players, box-score scoring of adds, Fantrax per
 `base`, a save without one counts as 234 players). 192 unit tests pass. Board artifact republished (v166). First step:
 refit
 the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
-**#130 Rankings tab like the Draft player list (MPG, Team, Position columns, Order by, highlight my players; user asked 2026-10-21) is next.** #116 done (May drop dropdown, branch drop-cap, pushed with the next release). Best adds/plan on remaining games.
+**#130 Rankings tab like the Draft player list (MPG, Team, Position columns, Order by, highlight my players; user asked 2026-10-21) is next.** #116 done on branch `drop-cap` (commit e32a49d, tests pass, browser check passes): NOT pushed or merged; user says "push" to release it (start #130 from that branch or after merging). #112 per game corrected and pushed (2afac82). Best adds/plan on remaining games.
 Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
 Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess
 (#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against
