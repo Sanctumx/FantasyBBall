@@ -98,11 +98,11 @@ Model pick; it never punts. Shared with friends via Cloudflare.
    `collect-stats` workflow once by hand (`workflow_dispatch`; ESPN may block runner IPs, tested only from the PC). Open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit the shrink k with in-season data.
 11. Environment (this PC): `python3` is not installed, use `python`. (The after-edit hook's Windows glob problem is fixed, 2026-10-21.)
-12. **Rankings tab (idea 110), brainstorm in progress, no code.** Decisions are in archive entry 110 (Source dropdown actuals windows or projections; Hide taken via Settings league rosters; no min-games hiding). Needs the box-score collector (#113) first. Next: write the design doc (`docs/superpowers/specs/2026-10-21-rankings-tab-design.md`), run the builder check, user approves, then planner and staged build.
+12. **Rankings tab (idea 110), design approved; plan `docs/superpowers/plans/2026-10-21-rankings-tab.md` (user rulings D1-D5 in it).** Stage 1 (box-score collector #113, `src/collect/espn_box.mjs`) is built and reviewed on branch `rankings-tab`, NOT pushed (ship alone on "push", then dispatch `collect-stats` once). Retry window is the last 3 New York days; a game stuck longer needs the workflow's `dates` input. Next: stage 2 on branch `rankings-page` from origin/main (confirm D1 first: Projections = board ADP base, actual sources = Settings league rosters as drafted pool, ADP fallback with no league).
 13. **League Dashboard "Projected" fix (#112):** user's spec: per game = team's average value, per week = week totals, per season = season totals (details in IDEAS 112). Small-to-medium task, `league_core.js` computeLeague + `league.html` profile; do before or after Rankings.
 14. This PC now has the GitHub CLI installed and logged in as Sanctumx (`gh` at `C:\Program Files\GitHub CLI`, add to PATH in the Bash tool): `gh pr create/merge` and `gh workflow run <id>` work; the workflow name lookup needs the id (`gh workflow list`).
 
-15. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 Matchup Analyzer combines known game stats (current matchup status) with projections (needs #113 box-score data / #103).
+15. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 Matchup Analyzer combines known game stats (current matchup status) with projections (needs #113 box-score data / #103). Also #116: dropdown capping team slots the waiver add plan uses.
 
 ## Next session starts with
 

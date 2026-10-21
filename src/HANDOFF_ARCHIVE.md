@@ -5,6 +5,8 @@ Find things with `src/IDEAS.md` (one line per idea, with its item number) or by 
 
 New entries go in "Entries after 2026-10-18" below, newest first, numbered one higher than the last item in `IDEAS.md`.
 Never edit old entries; add a new one that supersedes them.
+113.  [x] **Box-score collector (2026-10-21, `rankings-tab`).** `src/collect/espn_box.mjs`: per run it reads ESPN's scoreboard for today and the 2 days before (New York dates; the scoreboard files a game under its New York day), keeps completed games of competition type STD and season type 2 (the NBA Cup final CC and the All-Star games are type 2 too; play-in is type 5), fetches each unsaved game's summary and writes `stats/box-YYYY-MM.json` (`parseBox`: stats by key, did-not-play skipped, null unless both teams have at least 5 players). A saved game is never rewritten, no new game means no write, and a failed or incomplete summary is retried next run. `collect-stats.yml` runs it after the espn.json step and commits both in one commit; `dates` input backfills. Fixtures from live data (`make_espn_box.mjs`); 10 tests. Live check against 2025-26: 17 games saved, second run unchanged, about 1.7 MB per season.
+
 112.  [x] **League Dashboard projected stats (2026-10-21).** Only the active lineup counts (Fantrax slot list `luFx`, else the lu* sum, else roster−2), best preseason `rk` first; open picks fill leftover active slots; per week = season ÷ 24 NBA weeks (was ÷17 and all 12 players); per game = the active lineup's per-game line. Win chances unchanged; team-stat ranks and Z use the capped numbers. Review caught an unescaped apostrophe that broke the page script; fixed, browser checks league_page/league_sort pass. 126 unit tests.
 
 
