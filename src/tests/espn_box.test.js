@@ -33,7 +33,7 @@ test('parseBox team sums equal ESPN team totals', async () => {
 test('parseBox ignores key order and reads a non-number as 0', async () => {
   const { parseBox } = await load();
   const rev = clone(sum);
-  rev.boxscore.players.forEach(t => { const s = t.statistics[0]; s.keys.reverse(); s.athletes.forEach(a => a.stats.reverse()); });
+  rev.boxscore.players.forEach(t => { const s = t.statistics[0]; s.keys.reverse(); s.totals.reverse(); s.athletes.forEach(a => a.stats.reverse()); });
   assert.deepStrictEqual(parseBox(rev), parseBox(sum));
   const odd = clone(sum); odd.boxscore.players[1].statistics[0].athletes.find(a => a.athlete.id === '4870562').stats[0] = '--';
   assert.strictEqual(parseBox(odd).teams.PHI.find(r => r[0] === '4870562')[1], 0);
@@ -44,6 +44,15 @@ test('parseBox returns null for an incomplete box', async () => {
   const one = clone(sum); one.boxscore.players.pop();
   const thin = clone(sum); thin.boxscore.players[0].statistics[0].athletes = thin.boxscore.players[0].statistics[0].athletes.slice(0, 3);
   assert.deepStrictEqual([parseBox(one), parseBox(thin), parseBox({}), parseBox(null)], [null, null, null, null]);
+});
+
+test('parseBox returns null when a column is missing or the players do not add up to the team totals', async () => {
+  const { parseBox } = await load();
+  const renamed = clone(sum); renamed.boxscore.players[0].statistics[0].keys[0] = 'mins';
+  const stale = clone(sum); stale.boxscore.players[1].statistics[0].totals[1] = '140';
+  const noTotals = clone(sum); noTotals.boxscore.players.forEach(t => { delete t.statistics[0].totals; });
+  assert.deepStrictEqual([parseBox(renamed), parseBox(stale)], [null, null]);
+  assert.ok(parseBox(noTotals));
 });
 
 test('etDay and daysBack use New York dates across daylight saving', async () => {
@@ -102,4 +111,16 @@ test('a failed summary is left for the next run; one failed day is skipped; all 
   assert.ok(logs.some(m => /401810791/.test(m)));
   assert.strictEqual((await run(opts(tmp(), fake({ sbFail: u => /20260309/.test(u) }), { dates: ['20260310', '20260309'] }))).added, 1);
   await assert.rejects(run(opts(tmp(), fake({ sbFail: () => true }))), /scoreboard unreachable/);
+});
+
+test('run rejects a date range, warns on another season year, and files games by their own day across months', async () => {
+  const { run } = await load(); const logs = [];
+  await assert.rejects(run(opts(tmp(), fake(), { dates: ['20260310-20260315'] })), /YYYYMMDD/);
+  await run(opts(tmp(), fake(), { season: 2027, log: m => logs.push(m) }));
+  assert.ok(logs.some(m => /another season year/.test(m)));
+  const game = (id, date) => { const e = clone(sb.events[0]); e.id = id; e.date = date; return { events: [e] }; };
+  const get = async url => /scoreboard\?dates=20261031/.test(url) ? game('1', '2026-11-01T02:00Z') : /scoreboard/.test(url) ? game('2', '2026-11-01T23:00Z') : clone(sum);
+  const dir = tmp(), r = await run(opts(dir, { fetchJson: get }, { dates: ['20261031', '20261101'] }));
+  assert.deepStrictEqual(r.written.sort(), ['box-2026-10.json', 'box-2026-11.json']);
+  assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(path.join(dir, 'box-2026-10.json'), 'utf8')).games), ['1']);
 });

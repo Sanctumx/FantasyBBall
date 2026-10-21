@@ -22,9 +22,9 @@ const SPLIT = { 'fieldGoalsMade-fieldGoalsAttempted': ['fgm', 'fga'], 'freeThrow
 const num = x => { const n = Number(x); return Number.isFinite(n) ? n : 0; };
 const dashed = day => day.slice(0, 4) + '-' + day.slice(4, 6) + '-' + day.slice(6, 8);
 
-// Completed standard regular-season games of the season on a scoreboard day (YYYYMMDD)
+// Completed standard regular-season games of the season on a scoreboard day (YYYYMMDD); a null season means any year
 export function finalGames(scoreboard, season, day) {
-  return ((scoreboard && scoreboard.events) || []).filter(e => e.season && e.season.year === season && e.season.type === 2
+  return ((scoreboard && scoreboard.events) || []).filter(e => e.season && (season == null || e.season.year === season) && e.season.type === 2
     && e.competitions && e.competitions[0] && e.competitions[0].type && e.competitions[0].type.abbreviation === 'STD'
     && e.status && e.status.type && e.status.type.completed === true).map(e => ({ id: String(e.id), d: dashed(day) }));
 }
@@ -36,6 +36,9 @@ export function parseBox(summary) {
   for (const g of groups) {
     const st = g.statistics && g.statistics[0], abbr = g.team && g.team.abbreviation;
     if (!st || !abbr || !Array.isArray(st.keys)) return null;
+    // every column we read must be present, and the players must add up to ESPN's team totals (a renamed key or a box served
+    // before it is final would otherwise be saved with wrong numbers for good)
+    if (![...Object.keys(SIMPLE), ...Object.keys(SPLIT)].every(k => st.keys.includes(k))) return null;
     const rows = [];
     for (const a of st.athletes || []) {
       if (a.didNotPlay || !a.stats || !a.stats.length) continue;
@@ -48,10 +51,18 @@ export function parseBox(summary) {
       rows.push([id, ...COLS.map(c => v[c] || 0)]); names[id] = a.athlete.displayName;
     }
     if (rows.length < 5) return null;
+    if (Array.isArray(st.totals) && st.totals.length === st.keys.length) {
+      const sum = c => rows.reduce((t, r) => t + r[1 + COLS.indexOf(c)], 0), at = k => st.totals[st.keys.indexOf(k)];
+      const [fgm, fga] = String(at('fieldGoalsMade-fieldGoalsAttempted')).split('-');
+      if (sum('pts') !== num(at('points')) || sum('fgm') !== num(fgm) || sum('fga') !== num(fga)) return null;
+    }
     teams[abbr] = rows;
   }
   return Object.keys(teams).length === 2 ? { teams, names } : null;
 }
+
+// Completed standard regular-season games on a scoreboard day that belong to another season year (a stale ESPN_SEASON would save nothing)
+export const strayFinals = (scoreboard, season, day) => finalGames(scoreboard, null, day).length - finalGames(scoreboard, season, day).length;
 
 // New York date (YYYYMMDD) of an instant: the day ESPN's scoreboard files a game under
 export const etDay = now => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(now).replace(/-/g, '');
@@ -83,9 +94,14 @@ export async function fetchJson(url) {
 }
 
 export async function run({ season, dates, outDir, now = new Date(), fetchJson: get = fetchJson, log = console.log, pauseMs = 250 }) {
+  const bad = dates.filter(d => !/^\d{8}$/.test(d)); if (bad.length) throw new Error('Dates must be YYYYMMDD, got ' + bad.join(','));
   const events = [], seen = new Set(); let failed = 0;
   for (const day of dates) {
-    try { finalGames(await get(SCOREBOARD + day), season, day).forEach(e => { if (!seen.has(e.id)) { seen.add(e.id); events.push(e); } }); }
+    try {
+      const board = await get(SCOREBOARD + day);
+      finalGames(board, season, day).forEach(e => { if (!seen.has(e.id)) { seen.add(e.id); events.push(e); } });
+      if (strayFinals(board, season, day)) log(`::warning::${day} has completed games of another season year than ${season}; set ESPN_SEASON (or --season) if the season changed.`);
+    }
     catch (e) { failed++; log(`::warning::Scoreboard for ${day} failed (${e.message}); the next run retries.`); }
   }
   if (failed === dates.length) throw new Error('ESPN scoreboard unreachable for ' + dates.join(','));
