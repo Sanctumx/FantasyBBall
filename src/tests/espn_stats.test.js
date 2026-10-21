@@ -33,3 +33,26 @@ test('players without a team keep an empty team code', async () => {
   const x = JSON.parse(JSON.stringify(page)); delete x.athletes[1].athlete.teamShortName;
   assert.strictEqual(parseByAthlete(x)[1].t, '');
 });
+
+// hourly collection (2026-10-21): write only when the players' numbers changed
+test('sameStats ignores player order and fetchedAt, sees a changed number, a missing file or another season', async () => {
+  const { sameStats, parseByAthlete } = await load();
+  const players = parseByAthlete(page), prev = { season: 2026, fetchedAt: 'x', players };
+  assert.strictEqual(sameStats(prev, players.slice().reverse(), 2026), true);
+  const bumped = players.map((p, i) => i ? p : Object.assign({}, p, { gp: p.gp + 1 }));
+  assert.strictEqual(sameStats(prev, bumped, 2026), false);
+  assert.strictEqual(sameStats(prev, players.slice(1), 2026), false);
+  assert.strictEqual(sameStats(null, players, 2026), false);
+  assert.strictEqual(sameStats(prev, players, 2027), false);
+});
+
+test('nextFile returns the new file only when ESPN has the season and the numbers moved', async () => {
+  const { nextFile, parseByAthlete } = await load();
+  const players = parseByAthlete(page), now = new Date('2026-10-22T03:07:00Z');
+  const first = nextFile(null, page, players, 2026, now);
+  assert.deepStrictEqual([first.season, first.label, first.fetchedAt, first.players.length], [2026, page.requestedSeason.displayName, '2026-10-22T03:07:00.000Z', 3]);
+  assert.strictEqual(nextFile(first, page, players.slice().reverse(), 2026, now), null);   // nothing moved
+  assert.strictEqual(nextFile(null, page, players, 2027, now), null);                       // ESPN answered with last season
+  const moved = players.map((p, i) => i ? p : Object.assign({}, p, { pts: p.pts + 0.1 }));
+  assert.ok(nextFile(first, page, moved, 2026, now));
+});
