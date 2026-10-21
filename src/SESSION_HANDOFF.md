@@ -102,7 +102,7 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 13. **League Dashboard "Projected" fix (#112):** user's spec: per game = team's average value, per week = week totals, per season = season totals (details in IDEAS 112). Small-to-medium task, `league_core.js` computeLeague + `league.html` profile; do before or after Rankings.
 14. This PC now has the GitHub CLI installed and logged in as Sanctumx (`gh` at `C:\Program Files\GitHub CLI`, add to PATH in the Bash tool): `gh pr create/merge` and `gh workflow run <id>` work; the workflow name lookup needs the id (`gh workflow list`).
 
-15. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 Matchup Analyzer combines known game stats (current matchup status) with projections (needs #113 box-score data / #103).
+15. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 Matchup Analyzer combines known game stats (current matchup status) with projections (needs #113 box-score data / #103). Also #116: dropdown capping team slots the waiver add plan uses.
 
 ## Next session starts with
 
