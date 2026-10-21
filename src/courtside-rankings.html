@@ -203,6 +203,14 @@ tbody tr:hover td{background:var(--sunk)}
     ks.forEach((k, j) => { v[j + 2] = Math.pow(0.12 * p[k] * g, 2); });
     return v;
   }
+  // Per-game noise variance per player, in each category's own units (the games-played variance is separate, see pairTeam).
+  function perGameVar(p) {
+    const v = new Float64Array(NC);
+    v[0] = p.fga * p.fgp * (1 - p.fgp) * 0.932; v[1] = p.fta * p.ftp * (1 - p.ftp) * 1.115;
+    v[2] = 1.154 * p.tpm; v[3] = 5.38 * Math.pow(Math.max(p.pts, 0), 0.78); v[4] = 1.336 * p.reb; v[5] = 1.251 * p.ast;
+    v[6] = 1.066 * p.stl; v[7] = 1.109 * p.blk; v[8] = 1.022 * p.to;
+    return v;
+  }
   // Weekly noise variance per player (one week, per-week units).
   function weekVar(p, ctx, g) {
     const G = GPW * g / 82;
@@ -972,10 +980,10 @@ tbody tr:hover td{background:var(--sunk)}
     let S = 0;
     R.forEach(e => {
       if (!(e.games > 0)) return;
-      const m = vec(e.p, ref, 1), wv = weekVar(e.p, ref, 82), pv = projErr ? projVar(e.p, e.games) : null;
+      const m = vec(e.p, ref, 1), pg = perGameVar(e.p), pv = projErr ? projVar(e.p, e.games) : null;
       const gv = e.gVar != null ? e.gVar : VAR_GAMES * e.games / GPW; S += gv;
       for (let c = 0; c < NC; c++) {
-        const pgv = (wv[c] - m[c] * m[c] * VAR_GAMES) / GPW, sm = s[c] * m[c];
+        const pgv = pg[c], sm = s[c] * m[c];
         if (c > 1) mean[c] += m[c] * e.games;
         idio[c] += s[c] * s[c] * e.games * pgv + (pv ? s[c] * s[c] * pv[c] : 0);
         lsum[c] += sm * gv; q[c] += sm * sm * gv;
