@@ -59,16 +59,20 @@
     const rosters = T.map(t => t.roster.map(r => r.p));
     // open picks count a typical player at that pick in the raw stats too, the same window the engine uses for the win chances
     // (players by expected draft slot, Gaussian weights around the j-th upcoming pick)
-    const acc = rosters.map(r => { const a = new Array(11).fill(0); r.forEach(p => addTo(a, line(p), 1)); return a; }), open = new Array(N).fill(0);
-    const accG = rosters.map(r => { const a = new Array(11).fill(0); r.forEach(p => addTo(a, line(p, 1), 1)); return a; });
+    // only the active lineup scores: the best-ranked rostered players fill the active slots, open picks fill what is left
+    const active = ['luC', 'luG', 'luF', 'luGC', 'luFC', 'luU'].reduce((a, k) => a + (+cfg[k] || 0), 0) || Math.max(1, cfg.roster - 2);
+    const acc = rosters.map(() => new Array(11).fill(0)), accG = rosters.map(() => new Array(11).fill(0)), open = new Array(N).fill(0), left = new Array(N).fill(active);
+    rosters.forEach((r, t) => r.slice().sort((a, b) => a.rk - b.rk).slice(0, active).forEach(p => { addTo(acc[t], line(p), 1); addTo(accG[t], line(p, 1), 1); left[t]--; }));
     const av = res.avail, A = av.length, tAt = k => (state.owner && state.owner[k] != null) ? state.owner[k] : E.teamAt(k, N, cfg.order);
     res.unfilled.forEach((k, j) => {
-      const t = tAt(k); open[t]++; if (!A) return;
+      const t = tAt(k); open[t]++; if (!A || left[t] <= 0) return;
+      left[t]--;
       const c0 = Math.min(j, A - 1), w = 1.5 + 0.12 * j, lo = Math.max(0, Math.floor(c0 - 3 * w)), hi = Math.min(A - 1, Math.ceil(c0 + 3 * w));
       let ws = 0; for (let i = lo; i <= hi; i++) ws += Math.exp(-0.5 * Math.pow((i - c0) / w, 2));
       for (let i = lo; i <= hi; i++) { const wt = Math.exp(-0.5 * Math.pow((i - c0) / w, 2)) / ws; addTo(acc[t], line(av[i]), wt); addTo(accG[t], line(av[i], 1), wt); }
     });
-    const perGame = accG.map(finish), weeks = Math.max(1, (cfg.poStart || 18) - 1);
+    // per game = the team's per-game line (active players), per week = season totals over the 24 NBA weeks (82 games / 3.42)
+    const perGame = accG.map(finish), weeks = 24;
     const raw = basis === 'pergame' ? perGame : acc.map(finish);
     const perWeek = basis === 'pergame' ? null : raw.map(r => r.map((v, c) => c < 2 ? v : v / weeks));
     const z = raw.map(() => new Array(E.NC).fill(0)), rank = raw.map(() => new Array(E.NC).fill(0));

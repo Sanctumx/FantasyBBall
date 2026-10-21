@@ -233,7 +233,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     if (!src) return;
     R = League.computeLeague(PLAYERS, src, $('proj').value, ui.basis);
     if ($('swing')) $('swing').innerHTML = CATS.map((c, i) => '<span>' + c.l + ' ' + R.swing[i].toFixed(2) + '</span>').join('');
-    $('ts-sub').textContent = R.basis === 'pergame' ? 'Projected per game for each current roster (missed games don\'t count)' : 'Projected season totals for each current roster';
+    $('ts-sub').textContent = R.basis === 'pergame' ? 'Projected per game for each current roster (missed games don\'t count)' : 'Projected season totals for each team's active lineup';
     $('tsv').querySelector('[data-v="week"]').hidden = R.basis === 'pergame';
     if (R.basis === 'pergame' && ui.tsv === 'week') ui.tsv = 'raw';
     $('body').hidden = false;
@@ -261,7 +261,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     const third = st.rank <= Math.ceil(N / 3) ? 'hi' : st.rank > N - Math.ceil(N / 3) ? 'lo' : 'mid';
     $('kpis').innerHTML = '<div class="kpi big ' + third + '"><b>' + ord(st.rank) + '</b><span>of ' + N + ' teams</span></div><div class="kpi"><b>' + st.catsPerWeek.toFixed(1) + '</b><span>categories won per week</span></div><div class="kpi ' + band(st.matchAvg) + '"><b>' + pct(st.matchAvg) + '%</b><span>matchup wins vs the league</span></div>';
     $('prof').innerHTML = '<thead><tr><th class="l">Category</th><th>Win %</th><th data-nosort="1">Projected</th><th data-low="1">Rank</th></tr></thead><tbody>' + R.profile(t).map(p =>
-      '<tr><td class="cat">' + CATS[p.c].l + '</td><td class="lvl ' + band(p.win) + '">' + pct(p.win) + '%</td><td>' + fmtStat(p.raw, p.c, 'raw') + '</td><td>' + chip(rankQ(p.rank), p.rank) + '</td></tr>').join('') + '</tbody>'; applySort('prof');
+      '<tr><td class="cat">' + CATS[p.c].l + '</td><td class="lvl ' + band(p.win) + '">' + pct(p.win) + '%</td><td>' + fmtStat(ui.tsv === 'week' && R.perWeek ? R.perWeek[t][p.c] : p.raw, p.c, ui.tsv === 'week' && R.perWeek ? 'week' : 'raw') + '</td><td>' + chip(rankQ(p.rank), p.rank) + '</td></tr>').join('') + '</tbody>'; applySort('prof');
     // matrix
     document.querySelectorAll('#mxv button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.mxv));
     $('mxc-lab').hidden = ui.mxv !== 'cat';
