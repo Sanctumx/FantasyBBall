@@ -15,6 +15,7 @@ Everything here runs from inside `src/` (scripts use relative paths).
 | `sched.json` | 2026-27 fantasy weeks, games per team per week, back-to-backs per team per week | `sched_b2b.py <nba-2026-UTC.csv>` adds `b2b` |
 | `sched_days.json` | 2026-27 daily tip-off times per team (UTC seconds), for the in-season tools' expected games | `sched_days.py` |
 | `stats/espn.json` (repo root) | ESPN per-game season stats for every player, for players without projections and current form | `collect/espn_stats.mjs`, daily by `.github/workflows/collect-stats.yml` |
+| `stats/box-YYYY-MM.json` (repo root) | every player's box-score line per completed game (columns min fgm fga ftm fta tpm pts reb ast stl blk to; game date = New York date), for Rankings windows | `collect/espn_box.mjs`, hourly with the stats run in `collect-stats.yml` (`dates` input backfills) |
 | `logs3.csv` | NBA player game logs 2023-24 to 2025-26 (one row per player-game) | `pq2csv.mjs` from the Hugging Face dataset `cbratkovics/nba-game-logs` (game_logs_2023-24/24-25/25-26 .parquet) |
 | `bt_data.json` | Backtest seasons 2024-25 and 2025-26: prior-season stats as projections, synthetic noisy ADP, weekly actuals | `bt_prep.py` (reads logs3.csv) |
 | `bt_daily.json` | Daily player stats for the realistic-league scoring sim | `mk_daily.py` (reads logs3.csv and bt_data.json) |

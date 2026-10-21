@@ -3,12 +3,18 @@ name: Collect ESPN stats
 # Hourly through the evening and night in US game windows (UTC 17:00-07:59), plus a daily safety run: save ESPN's per-game
 # season stats to stats/espn.json for the in-season tools. The file is only rewritten when ESPN has stats for the current
 # season and the numbers changed since the saved file, so idle hours make no commit. The minute is 07 because GitHub
-# delays or drops runs scheduled on :00 and :30.
+# delays or drops runs scheduled on :00 and :30. Each run also saves every completed game's box score to
+# stats/box-YYYY-MM.json (today and the 2 days before, New York dates; saved games are skipped), committed together with
+# espn.json in one commit. To backfill days, run it by hand with the dates input.
 on:
   schedule:
     - cron: '41 10 * * *'
     - cron: '7 0-7,17-23 * * *'
   workflow_dispatch:
+    inputs:
+      dates:
+        description: 'Box-score days to (re)collect, YYYYMMDD comma-separated (default: today and the 2 days before, New York time)'
+        required: false
 
 permissions:
   contents: write
@@ -27,11 +33,17 @@ jobs:
           node-version: 20
       - name: Collect
         run: node src/collect/espn_stats.mjs
+      - name: Collect box scores
+        if: ${{ !cancelled() }}
+        env:
+          BOX_DATES: ${{ inputs.dates }}
+        run: node src/collect/espn_box.mjs
       - name: Commit new data
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "courtside-collector"
           git config user.email "actions@users.noreply.github.com"
-          git add stats/espn.json
+          git add stats/
           if git diff --cached --quiet; then echo "No new data."; exit 0; fi
           git commit -m "Collect ESPN stats $(date -u +'%F %H:%M') UTC"
           git pull --rebase --autostash
