@@ -1688,13 +1688,13 @@ tbody tr:hover td{background:var(--sunk)}
   }
 
   const settings = () => SS.settings;
-  function windowOf() {
-    const k = 'win:' + ui.src; if (!cache.has(k)) cache.set(k, R.windowSource(box, WINDAYS[ui.src], PLAYERS));
+  function windowOf(src) {
+    src = src || ui.src; const k = 'win:' + src; if (!cache.has(k)) cache.set(k, R.windowSource(box, WINDAYS[src], PLAYERS));
     return cache.get(k);
   }
-  function sourceRows() {
-    const k = 'rows:' + ui.src; if (cache.has(k)) return cache.get(k);
-    const rows = WINDAYS[ui.src] ? windowOf().rows : R.projSource(PLAYERS, ui.src);
+  function sourceRows(src) {
+    src = src || ui.src; const k = 'rows:' + src; if (cache.has(k)) return cache.get(k);
+    const rows = WINDAYS[src] ? windowOf(src).rows : R.projSource(PLAYERS, src);
     cache.set(k, rows); return rows;
   }
   // playoff games by team for the league's playoff weeks (Settings); recomputed only when those settings change
@@ -1723,7 +1723,7 @@ tbody tr:hover td{background:var(--sunk)}
   function winFor(rows, tab, own) {
     const s = settings(), lists = winLists(rows, tab, own, s);
     win.mine = !!lists;
-    const key = ['win', ui.src, ui.basis, ui.type, s.teams, s.roster, s.cats, s.ilSpots, lists ? lists.map(l => l.join(',')).join(';') : 'none'].join('|');
+    const key = ['win', ui.src, ui.basis, WINDAYS[ui.src] ? ui.type : '', s.teams, s.roster, s.cats, s.ilSpots, lists ? lists.map(l => l.join(',')).join(';') : 'none'].join('|');
     if (win.key === key) return win.w;
     win.key = key; const seq = ++win.seq;
     win.w = R.winStart(rows, tab, { teams: s.teams, roster: s.roster, cats: s.cats, ilSpots: s.ilSpots, basis: ui.basis, lists });
@@ -1731,10 +1731,22 @@ tbody tr:hover td{background:var(--sunk)}
     if (win.w.pending.length) setTimeout(tick, 0);
     return win.w;
   }
-  function tableFor(rows) {
-    const s = settings(), k = ['tab', ui.src, ui.type, ui.basis, s.teams, s.roster, s.cats].join('|');
-    if (!cache.has(k)) cache.set(k, R.table(rows, { teams: s.teams, roster: s.roster, cats: s.cats, type: ui.type, basis: ui.basis }));
+  function tableFor(rows, src, type, basis) {
+    src = src || ui.src; type = type || ui.type; basis = basis || ui.basis;
+    const s = settings(), k = ['tab', src, type, basis, s.teams, s.roster, s.cats].join('|');
+    if (!cache.has(k)) cache.set(k, R.table(rows, { teams: s.teams, roster: s.roster, cats: s.cats, type, basis }));
     return cache.get(k);
+  }
+  // after drawing, idle time builds the tables for the other Zscore types and bases of this source, then the other sources, so
+  // changing an option is a lookup; the keys carry every input, so a change in Settings never meets a stale table
+  let warmTimer = 0;
+  function prewarm() {
+    clearTimeout(warmTimer);
+    const todo = [], BASES = ['pergame', 'total', 'mix'];
+    R.TYPES.forEach(t => BASES.forEach(b => { if (t !== ui.type || b !== ui.basis) todo.push([ui.src, t, b]); }));
+    ['season', 'w7', 'w14', 'w30', 'avg', 'bbm', 'hs'].forEach(src => { if (src !== ui.src) todo.push([src, ui.type, ui.basis]); });
+    const next = () => { const j = todo.shift(); if (!j) return; try { const rows = sourceRows(j[0]); if (rows.length) tableFor(rows, j[0], j[1], j[2]); } catch (e) {} warmTimer = setTimeout(next, 30); };
+    warmTimer = setTimeout(next, 600);
   }
   const chip = (z, sc, txt) => { const d = Math.max(-1, Math.min(1, z / sc)) * .25, t = Math.abs(d) / .25;
     const bg = Math.abs(d) < .02 ? 'transparent' : 'color-mix(in oklab, var(' + (d > 0 ? '--good' : '--bad') + ') ' + Math.round(12 + 58 * t) + '%, var(--surface))';
@@ -1787,6 +1799,7 @@ tbody tr:hover td{background:var(--sunk)}
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
     n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + 'Win C / Win M are season-long, as on the Draft tab, against simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    prewarm();
   }
 
   const cwSel = [...document.querySelectorAll('#catw select')];

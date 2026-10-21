@@ -122,6 +122,18 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   ok(errs.length === 0, '3b: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
+// cache: other Zscore types, bases and sources are built while idle, so changing them is a lookup with the same numbers
+{ const { p, errs, ctx } = await open({});
+  const grab = () => p.$eval('#tbl', t => t.innerText.slice(0, 600));
+  const go = (id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); el.value = v; const t = performance.now(); el.dispatchEvent(new Event('change', { bubbles: true })); return performance.now() - t; }, [id, v]);
+  await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
+  const first = await grab(); await p.waitForTimeout(6000);
+  const t1 = await go('type', 'h2h'), mid = await grab(), t2 = await go('type', 'classic'), back = await grab();
+  ok(t1 < 30 && t2 < 30, 'after prewarm, Zscore type changes are quick: ' + [t1, t2].map(Math.round).join(' / ') + ' ms');
+  ok(mid !== first && back === first, 'cached table gives the same numbers as the first draw');
+  ok(errs.length === 0, 'cache: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+
 // 4. phone width: the page itself does not scroll sideways, the table scrolls inside its panel
 { const { p, ctx } = await open({}, 390);
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'phone: no page-wide horizontal scroll');
