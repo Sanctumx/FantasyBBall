@@ -150,3 +150,13 @@ test('a rostered player with no box line while his team has 3 boxed games is out
   assert.ok(M.makeCtx({ L, pool, DAYS, rosters: ROS, me: t, nowMs: NOW, box: b }).out.has(a.key));
   assert.ok(!M.makeCtx({ L, pool, DAYS, rosters: ROS, me: t, nowMs: NOW, box: box(b[0].games ? [] : []) }).out.has(a.key));
 });
+
+test('a crowded night goes to the better per-game player, not the one projected for more games', () => {
+  const ps = active(me), a0 = ps[0], b0 = ps.find(p => p !== a0 && p.t === a0.t);
+  if (!b0) return;
+  const hi = Object.assign({}, a0, { key: 'hi', g: 10 }), lo = Object.assign({}, b0, { key: 'lo', g: 82, line: Object.assign({}, a0.line, { pts: a0.line.pts * 0.8, reb: a0.line.reb * 0.8, ast: a0.line.ast * 0.8, tpm: a0.line.tpm * 0.8 }) });
+  const byKey = new Map(pool.byKey); byKey.set('hi', hi); byKey.set('lo', lo);
+  const c2 = Object.assign({}, ctx, { L: Object.assign({}, L, { maxActive: 1 }), pool: Object.assign({}, pool, { byKey }) });
+  const per = L.periods.find(x => x.n === 1), g = M.segGames(c2, [{ key: 'hi', from: per.start, to: per.end }, { key: 'lo', from: per.start, to: per.end }], null, true);
+  assert.ok(g[0] > 0 && g[1] === 0, 'games ' + g);
+});
