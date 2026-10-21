@@ -44,6 +44,16 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   await p.selectOption('#stats', 'raw'); await p.waitForTimeout(100);
   ok(/^\.\d{3}$/.test(await p.$eval('#tbl tbody tr:first-child td:nth-child(7)', e => e.textContent)), 'Raw shows FG% as .xxx');
   await p.selectOption('#type', 'h2h'); await p.waitForTimeout(500);
+  // playoff games column and Playoff boost
+  const poCol = () => p.$$eval('#tbl tbody tr td:nth-last-child(2)', t => t.map(e => +e.textContent));
+  ok(await p.$('#tbl th[data-k="po"]') !== null && (await poCol()).every(n => n > 5 && n < 40), 'Playoff games column lists games for every player');
+  const z0 = await p.$eval('#tbl tbody tr:first-child td:nth-child(6)', e => e.textContent), n0 = (await names(p)).join('|');
+  await p.selectOption('#poboost', 'vstrong'); await p.waitForTimeout(300);
+  ok((await names(p)).join('|') !== n0 || await p.$eval('#tbl tbody tr:first-child td:nth-child(6)', e => e.textContent) !== z0, 'Very strong boost changes the ranking');
+  ok(/Playoff boost scales/.test(await p.$eval('#note', e => e.textContent)), 'note explains the boost');
+  await p.click('#tbl th[data-k="po"]'); await p.waitForTimeout(100);
+  const pc = await poCol(); ok(pc[0] >= pc[pc.length - 1], 'Playoff games header sorts most first');
+  await p.selectOption('#poboost', 'off'); await p.waitForTimeout(200);
   ok(errs.length === 0, '2: no page errors ' + errs.join('; '));
   await ctx.close(); }
 

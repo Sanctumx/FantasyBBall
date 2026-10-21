@@ -89,3 +89,30 @@ test('ownersOf works on season-source rows too', () => {
   const s = R.seasonSource(ESPN, PLAYERS), o = R.ownersOf(s, FXP, ROS);
   assert.ok(o.size > 150);
 });
+
+// Playoff games and Playoff boost (same rule as the board: 1 + strength x (games / average - 1), kept within x0.5-x1.5)
+const SCHED = require('../sched.json'), LS = require('../league_store.js');
+const S0 = Object.assign({}, LS.LEAGUE_DEF);
+
+test('playoffGames: per-round and total games by team, plus the league average', () => {
+  const pg = R.playoffGames(SCHED, S0), tot = Object.values(pg.byTeam).map(x => x.total);
+  assert.strictEqual(Object.keys(pg.byTeam).length, Object.keys(SCHED.games).length);
+  assert.strictEqual(pg.byTeam[Object.keys(pg.byTeam)[0]].per.length, 3);
+  assert.ok(near(pg.avg, tot.reduce((a, b) => a + b, 0) / tot.length));
+  const late = R.playoffGames(SCHED, Object.assign({}, S0, { poStart: 24 }));
+  assert.ok(Object.values(late.byTeam).every(x => x.per.length === 1), 'rounds past the season are dropped');
+});
+
+test('withPlayoffs: Off keeps z, adds games; boost scales z and categories and re-ranks', () => {
+  const tab = R.table(rows, { teams: 14, roster: 12, type: 'classic', basis: 'pergame' }), pg = R.playoffGames(SCHED, S0);
+  const off = R.withPlayoffs(tab, rows, pg, 'off');
+  assert.deepStrictEqual(off.map(x => x.z), tab.map(x => x.z));
+  assert.ok(off.every((x, i) => x.mult === 1 && (tab[i].z == null || x.po > 0)));
+  const on = R.withPlayoffs(tab, rows, pg, 'vstrong'), byPid = new Map(rows.map(r => [r.pid, r]));
+  for (const x of on.filter(y => y.z != null)) {
+    const o = tab.find(t => t.pid === x.pid), edge = pg.byTeam[byPid.get(x.pid).t].total / pg.avg - 1;
+    assert.ok(near(x.mult, Math.max(0.5, Math.min(1.5, 1 + edge))));
+    assert.ok(near(x.z, o.z * x.mult) && near(x.cats[3], o.cats[3] * x.mult));
+  }
+  assert.ok(on.every((x, i) => i === 0 || x.z == null || on[i - 1].z != null && on[i - 1].z >= x.z), 'sorted best first, no-games last');
+});

@@ -4,7 +4,7 @@
 // last-week lines. The engine is only called, never changed (the Model pick and Win do not see any of this).
 (function (root) {
   'use strict';
-  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), InLeague = root.InLeague || require('./inseason_league.js');
+  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), InLeague = root.InLeague || require('./inseason_league.js'), LeagueStore = root.LeagueStore || require('./league_store.js');
 
   const WEIGHTS = InPlayers.WEIGHTS;   // fixed: every category x1, TO x0.5 (user ruling D2)
   const TYPES = ['classic', 'h2h', 'adj'];   // Standard, H2H-Adjusted, ROTO-Adjusted
@@ -82,6 +82,28 @@
     return out.concat(dead.map(r => ({ pid: r.pid, z: null, cats: null, inPool: false })));
   }
 
-  const api = { WEIGHTS, TYPES, cfgFor, projSource, seasonSource, ownersOf, table };
+  // ---- playoffs: his team's games in your playoff weeks, and the board's Playoff boost ----
+  const PO_LAMBDA = { off: 0, light: 0.25, medium: 0.5, strong: 0.75, vstrong: 1 };   // strength, as in app.html
+  // returns {byTeam: {ABBR: {per[], total}}, avg}; s = league settings {asb, poStart, poFmt}
+  function playoffGames(SCHED, s) {
+    const { plan, rounds } = LeagueStore.playoffRounds(SCHED, s), byTeam = {};
+    Object.keys(SCHED.games).forEach(t => {
+      const g = SCHED.games[t], per = rounds.filter(ws => ws.length).map(ws => ws.reduce((a, w) => a + plan.idx[w - 1].reduce((b, i) => b + g[i], 0), 0));
+      byTeam[t] = { per, total: per.reduce((a, b) => a + b, 0) };
+    });
+    const tot = Object.values(byTeam).map(x => x.total);
+    return { byTeam, avg: tot.reduce((a, b) => a + b, 0) / (tot.length || 1) };
+  }
+  // table rows + playoff games (po, per) and multiplier (mult); a boost scales z and every category, then re-ranks
+  function withPlayoffs(tab, rows, pg, level) {
+    const lam = PO_LAMBDA[level] || 0, team = new Map(rows.map(r => [r.pid, r.t]));
+    const out = tab.map(x => {
+      const g = pg.byTeam[team.get(x.pid)], mult = lam && g && pg.avg ? Math.max(0.5, Math.min(1.5, 1 + lam * (g.total / pg.avg - 1))) : 1;
+      return Object.assign({}, x, { po: g ? g.total : null, per: g ? g.per : null, mult, z: x.z == null ? null : x.z * mult, cats: x.cats && x.cats.map(v => v * mult) });
+    });
+    return lam ? out.filter(x => x.z != null).sort((a, b) => b.z - a.z).concat(out.filter(x => x.z == null)) : out;
+  }
+
+  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, ownersOf, table, playoffGames, withPlayoffs };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
 })(this);
