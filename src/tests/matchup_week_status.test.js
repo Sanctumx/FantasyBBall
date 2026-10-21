@@ -86,3 +86,27 @@ test('roster rows: current, projected and games left per player add up to the te
   assert.ok(Math.abs(ra.proj[0] - (6 + a.line.fgp * a.line.fga * ra.games) / (10 + a.line.fga * ra.games)) < 1e-9);
   assert.ok(Math.abs(rows.reduce((t, r) => t + r.proj[3], 0) - s.total[0][3]) < 1e-6, 'projected points sum to the team total');
 });
+
+test('rosterGames: a day cap can be lowered for players already counted', () => {
+  const G = { AAA: [Date.parse('2026-10-21T00:30:00Z') / 1000] };
+  const e = [1, 2, 3, 4].map(() => ({ t: 'AAA', a: 1, from: 0, to: Date.parse('2026-11-01T00:00:00Z') }));
+  assert.deepStrictEqual(I.rosterGames(e, { games: G }, 10), [1, 1, 1, 1]);
+  const day = I.localDay(G.AAA[0] * 1000), g = I.rosterGames(e, { games: G }, 10, { [day]: 8 });
+  assert.ok(Math.abs(g.reduce((a, x) => a + x, 0) - 2) < 1e-9, 'only 2 slots left: ' + g);
+});
+
+test('a night split between played and unplayed games never counts more than maxActive players', () => {
+  // a team with early (boxed) and later games the same day: players boxed + players still to play <= maxActive
+  const t = Object.keys(ROS).find(k => ROS[k].length >= 12), ps = active(t);
+  const day = I.nyDay(DAYS.games[ps[0].t].map(x => x * 1000).find(ms => ms >= P1.start && ms < P1.end));
+  const files = box([{ d: day, lines: ps.slice(0, 3).map(p => [p, { pts: 10 }]) }]);
+  const s = M.weekStatus(ctx, files, t, 1), whole = M.weekStatus(ctx, [], t, 1);
+  s.roster[0].forEach((r, i) => assert.ok(r.games <= whole.roster[0][i].games + 1e-9, r.n + ' keeps no more games than the whole week'));
+});
+
+test('status is only reported once something has been played', () => {
+  assert.strictEqual(M.weekStatus(ctx, [], me, 1).started, false);
+  assert.strictEqual(M.weekStatus(ctx, box([{ d: '2026-10-12', lines: [[active(me)[0], { pts: 9 }]] }]), me, 1).started, false, 'last week is ignored');
+  const a = active(me)[0];
+  assert.strictEqual(M.weekStatus(ctx, box([{ d: firstDay(a), lines: [[a, { pts: 9 }]] }]), me, 1).started, true);
+});

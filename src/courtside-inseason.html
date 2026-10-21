@@ -1503,7 +1503,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const dayStart = day => Date.parse(day + 'T00:00:00Z') + LOCAL;
   const nextDayStart = ms => dayStart(localDay(ms)) + DAY;
   // New York calendar date of an instant, the date ESPN files a game under; the months ('YYYY-MM') a period touches
-  const nyDay = ms => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const NY_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const nyDay = ms => { const o = {}; NY_FMT.formatToParts(new Date(ms)).forEach(p => { o[p.type] = p.value; }); return o.year + '-' + o.month + '-' + o.day; };
   function periodMonths(per) {
     const a = nyDay(per.start).slice(0, 7), b = nyDay(per.end - 1).slice(0, 7), out = [a];
     if (b !== a) out.push(b);
@@ -1513,12 +1514,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // Expected games for each roster entry {t: team code, a: availability 0-1, from, to (ms, [from, to))}: the team's tip-offs
   // in the window, each worth a. On a local day where the entries' combined value exceeds maxActive (only that many
   // players can start), that day's contributions are scaled down to maxActive.
-  function rosterGames(entries, DAYS, maxActive) {
+  // `used` {local day: players already counted that day} lowers the cap of a partly played day.
+  function rosterGames(entries, DAYS, maxActive, used) {
     const G = (DAYS && DAYS.games) || DAYS || {};
     const hits = entries.map(e => (G[e.t] || []).map(s => s * 1000).filter(ms => ms >= e.from && ms < e.to).map(ms => [localDay(ms), e.a]));
     const sum = {};
     hits.forEach(h => h.forEach(([d, a]) => { sum[d] = (sum[d] || 0) + a; }));
-    return hits.map(h => h.reduce((acc, [d, a]) => acc + a * (sum[d] > maxActive ? maxActive / sum[d] : 1), 0));
+    return hits.map(h => h.reduce((acc, [d, a]) => { const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); return acc + a * (sum[d] > cap ? cap / sum[d] : 1); }, 0));
   }
 
   const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodMonths, rosterGames };
@@ -1678,9 +1680,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // expected games per segment, capped per local day at the league's active-player limit
-  function segGames(ctx, segs) {
+  function segGames(ctx, segs, used) {
     const pp = segs.map(s => ctx.pool.byKey.get(s.key));
-    return InLeague.rosterGames(segs.map((s, i) => ({ t: pp[i].t, a: Math.min(1, pp[i].g / 82), from: s.from, to: s.to })), ctx.DAYS, ctx.L.maxActive);
+    return InLeague.rosterGames(segs.map((s, i) => ({ t: pp[i].t, a: Math.min(1, pp[i].g / 82), from: s.from, to: s.to })), ctx.DAYS, ctx.L.maxActive, used);
   }
   function scoreSegments(ctx, segsA, segsB) {
     const side = segs => {
@@ -1745,7 +1747,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       });
       Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => valueOf(ctx, b.p) - valueOf(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; (own[x.p.key] || (own[x.p.key] = zeroK()))[c] += x.v[c] || 0; })));
       const rest = segs.map((s, i) => ({ key: s.key, from: Math.max(s.from, cutoffOf(ctx, bx, pp[i].t, per)), to: s.to }));
-      const whole = segGames(ctx, segs), left = segGames(ctx, rest);
+      // a night partly played keeps its lineup limit: players already counted that day use up slots
+      const used = {}; Object.keys(byDay).forEach(d => { used[d] = Math.min(ctx.L.maxActive, byDay[d].length); });
+      const whole = segGames(ctx, segs), left = segGames(ctx, rest, used);
       const players = segs.map((sg, i) => {
         const p = pp[i], k = own[p.key] || zeroK(), g = left[i], l = p.line;
         const cur = [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to];
@@ -1758,7 +1762,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     };
     const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
     const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
-    return { opp, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
+    const started = share < 1 || A.known.pts + B.known.pts + A.known.fga + B.known.fga > 0;
+    return { opp, started, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
       known: [A.known, B.known], games: [A.leftG, B.leftG], share, roster: [A.players, B.players] };
   }
 
@@ -2095,7 +2100,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const addsLeft = n => { const v = ui.adds[ui.leagueId + ':' + n]; return v != null ? v : 4; };
   const hasBox = () => (box || []).some(f => f && Object.keys(f.games || {}).length);
   // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
-  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : Matchup.projectWeek(c, c.me, n));
+  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => { const ws = n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : null; return ws && ws.started ? ws : Matchup.projectWeek(c, c.me, n); });
   const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey()].join('|'), () => Matchup.simpleAdds(c, n, { limit: 20 }));
   const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey()].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left }) : Matchup.addPlan(c, { periods: [n] }));
   // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
@@ -2129,7 +2134,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
     $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): ' + (pw.known ? 'games played so far counted, the rest projected' : 'whole week projected, results so far not counted') + '</span></div>' +
-      '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
+      '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your ' + (pw.known ? 'games left' : 'expected games') + '</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their ' + (pw.known ? 'games left' : 'expected games') + '</span></div>';
     const sofar = k => k ? [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to] : null;
     const cur = pw.known ? [sofar(pw.known[0]), sofar(pw.known[1])] : null;
     $('cats').innerHTML = cur

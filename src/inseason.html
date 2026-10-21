@@ -346,7 +346,7 @@ tr.click{cursor:pointer}
   const addsLeft = n => { const v = ui.adds[ui.leagueId + ':' + n]; return v != null ? v : 4; };
   const hasBox = () => (box || []).some(f => f && Object.keys(f.games || {}).length);
   // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
-  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : Matchup.projectWeek(c, c.me, n));
+  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => { const ws = n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : null; return ws && ws.started ? ws : Matchup.projectWeek(c, c.me, n); });
   const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey()].join('|'), () => Matchup.simpleAdds(c, n, { limit: 20 }));
   const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey()].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left }) : Matchup.addPlan(c, { periods: [n] }));
   // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
@@ -380,7 +380,7 @@ tr.click{cursor:pointer}
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
     $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): ' + (pw.known ? 'games played so far counted, the rest projected' : 'whole week projected, results so far not counted') + '</span></div>' +
-      '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
+      '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your ' + (pw.known ? 'games left' : 'expected games') + '</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their ' + (pw.known ? 'games left' : 'expected games') + '</span></div>';
     const sofar = k => k ? [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to] : null;
     const cur = pw.known ? [sofar(pw.known[0]), sofar(pw.known[1])] : null;
     $('cats').innerHTML = cur

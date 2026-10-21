@@ -24,9 +24,9 @@
   }
 
   // expected games per segment, capped per local day at the league's active-player limit
-  function segGames(ctx, segs) {
+  function segGames(ctx, segs, used) {
     const pp = segs.map(s => ctx.pool.byKey.get(s.key));
-    return InLeague.rosterGames(segs.map((s, i) => ({ t: pp[i].t, a: Math.min(1, pp[i].g / 82), from: s.from, to: s.to })), ctx.DAYS, ctx.L.maxActive);
+    return InLeague.rosterGames(segs.map((s, i) => ({ t: pp[i].t, a: Math.min(1, pp[i].g / 82), from: s.from, to: s.to })), ctx.DAYS, ctx.L.maxActive, used);
   }
   function scoreSegments(ctx, segsA, segsB) {
     const side = segs => {
@@ -91,7 +91,9 @@
       });
       Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => valueOf(ctx, b.p) - valueOf(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; (own[x.p.key] || (own[x.p.key] = zeroK()))[c] += x.v[c] || 0; })));
       const rest = segs.map((s, i) => ({ key: s.key, from: Math.max(s.from, cutoffOf(ctx, bx, pp[i].t, per)), to: s.to }));
-      const whole = segGames(ctx, segs), left = segGames(ctx, rest);
+      // a night partly played keeps its lineup limit: players already counted that day use up slots
+      const used = {}; Object.keys(byDay).forEach(d => { used[d] = Math.min(ctx.L.maxActive, byDay[d].length); });
+      const whole = segGames(ctx, segs), left = segGames(ctx, rest, used);
       const players = segs.map((sg, i) => {
         const p = pp[i], k = own[p.key] || zeroK(), g = left[i], l = p.line;
         const cur = [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to];
@@ -104,7 +106,8 @@
     };
     const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
     const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
-    return { opp, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
+    const started = share < 1 || A.known.pts + B.known.pts + A.known.fga + B.known.fga > 0;
+    return { opp, started, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
       known: [A.known, B.known], games: [A.leftG, B.leftG], share, roster: [A.players, B.players] };
   }
 

@@ -161,11 +161,12 @@ async function open(opts = {}) {
   await ctx.close(); }
 
 // week status: box scores of the current week -> so-far and rest tables, Win M counts the played games
-{ const a = await open(); ok(await a.p.$eval('#status', e => e.hidden), 'no box files: no status tables'); ok(errs0(a), 'no box: no errors'); await a.ctx.close();
+{ const a = await open(); const g0 = +await a.p.textContent('#kpis .kpi:nth-child(2) b'); ok(await a.p.$eval('#status', e => e.hidden), 'no box files: no status tables'); ok(errs0(a), 'no box: no errors'); await a.ctx.close();
   const { p, errs, ctx } = await open({ box: true });
   ok(!(await p.$eval('#status', e => e.hidden)), 'box games: status tables shown');
   ok(await p.$$eval('#cats thead th', h => h.map(x => x.textContent).join('|')) === 'Category|You|Them|Win %|Current|Projected|Current|Projected', 'category table: Current and Projected for You and Them');
   ok(await p.$$eval('#st-team tbody tr', r => r.length) >= 10, 'team table lists the whole roster');
+  ok(+await p.textContent('#kpis .kpi:nth-child(2) b') < g0 - 0.5, 'games left drop below the whole-week games (' + g0 + ' -> ' + await p.textContent('#kpis .kpi:nth-child(2) b') + ')');
   ok(/so far counted/.test(await p.textContent('#kpis')), 'Win M label says played games are counted');
   ok(await p.$$eval('#cats tbody tr', r => +r[3].cells[1].textContent) > 0, 'current points shown');
   ok(errs.length === 0, 'box: no errors ' + errs.join('; '));
