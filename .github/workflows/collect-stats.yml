@@ -1,10 +1,13 @@
 name: Collect ESPN stats
 
-# Daily: save ESPN's per-game season stats to stats/espn.json for the in-season tools. The file is only rewritten when
-# ESPN has stats for the current season. Data commits carry [skip netlify] so they don't redeploy the site.
+# Hourly through the evening and night in US game windows (UTC 17:00-07:59), plus a daily safety run: save ESPN's per-game
+# season stats to stats/espn.json for the in-season tools. The file is only rewritten when ESPN has stats for the current
+# season and the numbers changed since the saved file, so idle hours make no commit. The minute is 07 because GitHub
+# delays or drops runs scheduled on :00 and :30.
 on:
   schedule:
     - cron: '41 10 * * *'
+    - cron: '7 0-7,17-23 * * *'
   workflow_dispatch:
 
 permissions:
@@ -30,6 +33,6 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add stats/espn.json
           if git diff --cached --quiet; then echo "No new data."; exit 0; fi
-          git commit -m "Collect ESPN stats $(date -u +%F) [skip netlify]"
+          git commit -m "Collect ESPN stats $(date -u +'%F %H:%M') UTC"
           git pull --rebase --autostash
           git push

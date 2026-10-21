@@ -32,7 +32,7 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 - **In-season tools + Settings tab (ideas 95-109), released 2026-10-21:** Matchup and Trade Analyzers (`inseason.html`) and the Settings tab
   (shared league store `league_store.js`). Specs/plans in `docs/superpowers/`; ledger with every ruling in
   `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored). `Engine.pairMatchup` is the only engine change
-  (additions only, pinned by `engine_golden.test.js`). Decisions in force: Win M = vs this week's opponent in the Matchup Analyzer,
+  (additions only, pinned by `engine_golden.test.js`). ESPN actuals refresh hourly in game windows (#111, on `stats-hourly`, not pushed). Decisions in force: Win M = vs this week's opponent in the Matchup Analyzer,
   vs remaining regular-season matchups (periods 1-15) in the Trade Analyzer (projected playoffs later, #101); chances use gVar 1.87
   and shrink toward 0.5 (k 0.72 matchup, 0.82 categories); players without projections use ESPN actuals or a waiver-level line.
 
