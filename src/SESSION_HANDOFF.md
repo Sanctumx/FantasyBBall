@@ -15,7 +15,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 ## Current state
 
 - **Live:** Cloudflare Worker `courtside-basketball` deploys every push to main; serves the pages and `/api/fantrax`.
-- **Board artifact:** claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz (last noted v144; read it before republishing).
+- **Board artifact:** claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz (last noted v165, 2026-10-21; read it before republishing).
   Publish `courtside-draft-board.html`, **never `app.html`**.
 - **Math doc:** claude.ai/code/artifact/2d4059a8-f9ad-465d-bfa7-41ef6990e7a8 (rev 159). The board links to `math.html`:
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
@@ -55,8 +55,8 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 **Branch `waiver-adds-keep-list`** (2 commits, unpushed, PR not opened): ideas 122-125 (Waiver adds panel, Team schedule, keep
 list, Hashtag refresh), **126** (68 Hashtag-only players, rank <= 300, now in players.json), **127** (waiver adds and plan
 scored from box scores like the Matchup headline) and **128** (period dates follow Fantrax: week 1 = Oct 20 - Oct 25). 190 unit
-tests and all browser checks pass. Next: reviewer on the branch diff, PR, push when the user says. Then: republish
-`courtside-draft-board.html` to the board artifact (engine.js changed; players.json has the Hashtag numbers and new rows); refit
+tests and all browser checks pass. Next: reviewer on the branch diff, PR, push when the user says. Then:
+(board artifact republished as v165); refit
 the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
 #112, #116, Best adds/plan on remaining games.
 Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
