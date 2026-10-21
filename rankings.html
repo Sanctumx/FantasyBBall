@@ -216,6 +216,14 @@ tbody tr:hover td{background:var(--sunk)}
     ks.forEach((k, j) => { v[j + 2] = Math.pow(0.12 * p[k] * g, 2); });
     return v;
   }
+  // Per-game noise variance per player, in each category's own units (the games-played variance is separate, see pairTeam).
+  function perGameVar(p) {
+    const v = new Float64Array(NC);
+    v[0] = p.fga * p.fgp * (1 - p.fgp) * 0.932; v[1] = p.fta * p.ftp * (1 - p.ftp) * 1.115;
+    v[2] = 1.154 * p.tpm; v[3] = 5.38 * Math.pow(Math.max(p.pts, 0), 0.78); v[4] = 1.336 * p.reb; v[5] = 1.251 * p.ast;
+    v[6] = 1.066 * p.stl; v[7] = 1.109 * p.blk; v[8] = 1.022 * p.to;
+    return v;
+  }
   // Weekly noise variance per player (one week, per-week units).
   function weekVar(p, ctx, g) {
     const G = GPW * g / 82;
@@ -975,8 +983,9 @@ tbody tr:hover td{background:var(--sunk)}
     let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
     return w;
   }
-  function pairTeam(R, projErr) {
+  function pairTeam(R, projErr, K) {
     let fga = 0, fgm = 0, fta = 0, ftm = 0;
+    if (K) { fga = K.fga; fgm = K.fgm; fta = K.fta; ftm = K.ftm; }
     R.forEach(e => { if (!(e.games > 0)) return; fga += e.p.fga * e.games; fgm += e.p.fgp * e.p.fga * e.games; fta += e.p.fta * e.games; ftm += e.p.ftp * e.p.fta * e.games; });
     const ref = { pFG: fga > 0 ? fgm / fga : 0, pFT: fta > 0 ? ftm / fta : 0 };
     const s = new Array(NC).fill(1); s[0] = fga > 0 ? 1 / fga : 0; s[1] = fta > 0 ? 1 / fta : 0;
@@ -984,32 +993,43 @@ tbody tr:hover td{background:var(--sunk)}
     let S = 0;
     R.forEach(e => {
       if (!(e.games > 0)) return;
-      const m = vec(e.p, ref, 1), wv = weekVar(e.p, ref, 82), pv = projErr ? projVar(e.p, e.games) : null;
+      const m = vec(e.p, ref, 1), pg = perGameVar(e.p), pv = projErr ? projVar(e.p, e.games) : null;
       const gv = e.gVar != null ? e.gVar : VAR_GAMES * e.games / GPW; S += gv;
       for (let c = 0; c < NC; c++) {
-        const pgv = (wv[c] - m[c] * m[c] * VAR_GAMES) / GPW, sm = s[c] * m[c];
+        const pgv = pg[c], sm = s[c] * m[c];
         if (c > 1) mean[c] += m[c] * e.games;
         idio[c] += s[c] * s[c] * e.games * pgv + (pv ? s[c] * s[c] * pv[c] : 0);
         lsum[c] += sm * gv; q[c] += sm * sm * gv;
       }
     });
     mean[0] = ref.pFG; mean[1] = ref.pFT;
+    if (K) { mean[2] += K.tpm; mean[3] += K.pts; mean[4] += K.reb; mean[5] += K.ast; mean[6] += K.stl; mean[7] += K.blk; mean[8] -= K.to; }
     const lam = new Float64Array(NC);
     for (let c = 0; c < NC; c++) { lam[c] = S > 0 ? lsum[c] / S : 0; idio[c] += Math.max(0, q[c] - lam[c] * lam[c] * S); }
     return { mean, idio, lam, S };
   }
+  // opts.known = [kA, kB]: each team's so-far totals { fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to }, counted with no variance;
+  // the entries are then the games still to play. With nothing known the result is unchanged. A category with no variance left
+  // is decided exactly (win 1, tie 0.5, loss 0).
   function pairMatchup(A, B, opts) {
-    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false;
-    const a = pairTeam(A, pe), b = pairTeam(B, pe), cat = [];
+    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false, kn = o.known || [null, null];
+    const a = pairTeam(A, pe, kn[0]), b = pairTeam(B, pe, kn[1]), cat = [];
+    const step = (d, v) => o.known && v < 1e-12 ? (d > 1e-12 ? 1 : d < -1e-12 ? 0 : 0.5) : null;
     for (let c = 0; c < NC; c++) {
       if (c >= nc) { cat.push(null); continue; }
-      cat.push(Phi((a.mean[c] - b.mean[c]) / Math.sqrt(a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S + 1e-9)));
+      const d = a.mean[c] - b.mean[c], v = a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S, st = step(d, v);
+      cat.push(st != null ? st : Phi(d / Math.sqrt(v + 1e-9)));
     }
     const sa = Math.sqrt(a.S), sb = Math.sqrt(b.S), ps = new Array(nc);
     let match = 0;
     for (let j = 0; j < GH_Z.length; j++) for (let k = 0; k < GH_Z.length; k++) {
-      for (let c = 0; c < nc; c++) ps[c] = Phi((a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k]) / Math.sqrt(a.idio[c] + b.idio[c] + 1e-9));
-      match += GH_W[j] * GH_W[k] * matchProbN(ps, nc);
+      let n = 0;   // categories tied exactly (known totals only) count for neither side
+      for (let c = 0; c < nc; c++) {
+        const d = a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k], v = a.idio[c] + b.idio[c], st = step(d, v + a.S + b.S);
+        if (st === 0.5) continue;
+        ps[n++] = st != null ? st : Phi(d / Math.sqrt(v + 1e-9));
+      }
+      match += GH_W[j] * GH_W[k] * matchProbN(n < nc ? ps.slice(0, n) : ps, n);
     }
     const mu = t => Array.from(t.mean, (x, c) => c === TO ? -x : x);
     return { cat, match, mu: [mu(a), mu(b)] };
@@ -1315,19 +1335,29 @@ tbody tr:hover td{background:var(--sunk)}
   const localDay = ms => new Date(ms - LOCAL).toISOString().slice(0, 10);
   const dayStart = day => Date.parse(day + 'T00:00:00Z') + LOCAL;
   const nextDayStart = ms => dayStart(localDay(ms)) + DAY;
+  // New York calendar date of an instant, the date ESPN files a game under; the months ('YYYY-MM') a period touches
+  const NY_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const nyDay = ms => { const o = {}; NY_FMT.formatToParts(new Date(ms)).forEach(p => { o[p.type] = p.value; }); return o.year + '-' + o.month + '-' + o.day; };
+  function periodMonths(per, back) {
+    const a = nyDay(per.start).slice(0, 7), b = nyDay(per.end - 1).slice(0, 7), out = [a];
+    if (b !== a) out.push(b);
+    if (back) out.unshift(new Date(Date.UTC(+a.slice(0, 4), +a.slice(5) - 2, 1)).toISOString().slice(0, 7));   // the month before, for the games just before the week
+    return out;
+  }
 
   // Expected games for each roster entry {t: team code, a: availability 0-1, from, to (ms, [from, to))}: the team's tip-offs
   // in the window, each worth a. On a local day where the entries' combined value exceeds maxActive (only that many
   // players can start), that day's contributions are scaled down to maxActive.
-  function rosterGames(entries, DAYS, maxActive) {
+  // `used` {local day: players already counted that day} lowers the cap of a partly played day.
+  function rosterGames(entries, DAYS, maxActive, used) {
     const G = (DAYS && DAYS.games) || DAYS || {};
     const hits = entries.map(e => (G[e.t] || []).map(s => s * 1000).filter(ms => ms >= e.from && ms < e.to).map(ms => [localDay(ms), e.a]));
     const sum = {};
     hits.forEach(h => h.forEach(([d, a]) => { sum[d] = (sum[d] || 0) + a; }));
-    return hits.map(h => h.reduce((acc, [d, a]) => acc + a * (sum[d] > maxActive ? maxActive / sum[d] : 1), 0));
+    return hits.map(h => h.reduce((acc, [d, a]) => { const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); return acc + a * (sum[d] > cap ? cap / sum[d] : 1); }, 0));
   }
 
-  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, rosterGames };
+  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodMonths, rosterGames };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InLeague = api;
 })(this);
 

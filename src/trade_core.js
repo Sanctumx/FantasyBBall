@@ -6,14 +6,15 @@
 
   const TRADE_W = { cur: 0.4, proj: 0.3, adp: 0.3, shrinkGames: 20, slope: 2.0, winM: 0.1, tagGap: 0.5, bias: -0.75 };   // bias: a manager wants to come out ahead, so an even-looking swap is not a coin flip
 
-  // mean Win M over the remaining regular-season matchups with the rosters as given (fids per team, IR rule as in the current week)
+  // mean Win M over the remaining regular-season matchups with the rosters as given (fids per team, IR rule as in the current week);
+  // the current week counts whole scheduled games, later weeks expected games (g/82)
   function rosWinM(ctx, roster, teamId) {
     if (ctx.cur == null) return { mean: null, periods: [] };
     const segs = (t, n) => Matchup.teamSegments(ctx, t, n, roster[t].filter(f => n !== ctx.cur || ctx.pool.byKey.get(f).slot !== 'IR'));
     const periods = [];
     InLeague.regularFrom(ctx.L, ctx.cur).forEach(n => {
       const opp = InLeague.opponentOf(ctx.L, teamId, n);
-      if (opp) periods.push({ n, opp, p: Matchup.scoreSegments(ctx, segs(teamId, n), segs(opp, n)).match });
+      if (opp) periods.push({ n, opp, p: Matchup.scoreSegments(ctx, segs(teamId, n), segs(opp, n), n === ctx.cur).match });
     });
     return { mean: periods.length ? periods.reduce((s, x) => s + x.p, 0) / periods.length : null, periods };
   }

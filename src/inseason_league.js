@@ -73,18 +73,28 @@
   const localDay = ms => new Date(ms - LOCAL).toISOString().slice(0, 10);
   const dayStart = day => Date.parse(day + 'T00:00:00Z') + LOCAL;
   const nextDayStart = ms => dayStart(localDay(ms)) + DAY;
+  // New York calendar date of an instant, the date ESPN files a game under; the months ('YYYY-MM') a period touches
+  const NY_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const nyDay = ms => { const o = {}; NY_FMT.formatToParts(new Date(ms)).forEach(p => { o[p.type] = p.value; }); return o.year + '-' + o.month + '-' + o.day; };
+  function periodMonths(per, back) {
+    const a = nyDay(per.start).slice(0, 7), b = nyDay(per.end - 1).slice(0, 7), out = [a];
+    if (b !== a) out.push(b);
+    if (back) out.unshift(new Date(Date.UTC(+a.slice(0, 4), +a.slice(5) - 2, 1)).toISOString().slice(0, 7));   // the month before, for the games just before the week
+    return out;
+  }
 
   // Expected games for each roster entry {t: team code, a: availability 0-1, from, to (ms, [from, to))}: the team's tip-offs
   // in the window, each worth a. On a local day where the entries' combined value exceeds maxActive (only that many
   // players can start), that day's contributions are scaled down to maxActive.
-  function rosterGames(entries, DAYS, maxActive) {
+  // `used` {local day: players already counted that day} lowers the cap of a partly played day.
+  function rosterGames(entries, DAYS, maxActive, used) {
     const G = (DAYS && DAYS.games) || DAYS || {};
     const hits = entries.map(e => (G[e.t] || []).map(s => s * 1000).filter(ms => ms >= e.from && ms < e.to).map(ms => [localDay(ms), e.a]));
     const sum = {};
     hits.forEach(h => h.forEach(([d, a]) => { sum[d] = (sum[d] || 0) + a; }));
-    return hits.map(h => h.reduce((acc, [d, a]) => acc + a * (sum[d] > maxActive ? maxActive / sum[d] : 1), 0));
+    return hits.map(h => h.reduce((acc, [d, a]) => { const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); return acc + a * (sum[d] > cap ? cap / sum[d] : 1); }, 0));
   }
 
-  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, rosterGames };
+  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodMonths, rosterGames };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InLeague = api;
 })(this);

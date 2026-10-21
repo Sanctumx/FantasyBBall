@@ -31,8 +31,8 @@ test('each move raises the match chance and end matches a recompute', () => {
   let prev = plan.start;
   plan.moves.forEach(m => { assert.ok(m.match > prev + 1e-4); prev = m.match; });
   assert.strictEqual(plan.end, prev);
-  assert.ok(Math.abs(M.scoreSegments(ctx, applied(plan), oppSegs).match - plan.end) < 1e-12);
-  assert.ok(Math.abs(plan.start - M.scoreSegments(ctx, M.teamSegments(ctx, me, 1), oppSegs).match) < 1e-12);
+  assert.ok(Math.abs(M.scoreSegments(ctx, applied(plan), oppSegs, true).match - plan.end) < 1e-12);
+  assert.ok(Math.abs(plan.start - M.scoreSegments(ctx, M.teamSegments(ctx, me, 1), oppSegs, true).match) < 1e-12);
 });
 
 test('drops come only from the droppable set or earlier adds', () => {

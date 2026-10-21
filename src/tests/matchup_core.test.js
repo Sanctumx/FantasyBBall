@@ -47,10 +47,10 @@ test('simple adds: same drop on every row, FA only, sorted', () => {
 
 test('a row equals a recomputed swap', () => {
   const rows = M.simpleAdds(ctx, 1, { limit: 5 }), r = rows[0], opp = I.opponentOf(L, me, 1);
-  const oppSegs = M.teamSegments(ctx, opp, 1), base = M.scoreSegments(ctx, M.teamSegments(ctx, me, 1), oppSegs).match;
+  const oppSegs = M.teamSegments(ctx, opp, 1), base = M.scoreSegments(ctx, M.teamSegments(ctx, me, 1), oppSegs, true).match;
   const from = M.addFrom(ctx, 1), per = L.periods.find(p => p.n === 1);
   const segs = M.teamSegments(ctx, me, 1).map(s => s.key === r.drop.key ? { key: s.key, from: s.from, to: from } : s).concat([{ key: r.add.key, from, to: per.end }]);
-  assert.ok(Math.abs(r.dMatch - (M.scoreSegments(ctx, segs, oppSegs).match - base)) < 1e-12);
+  assert.ok(Math.abs(r.dMatch - (M.scoreSegments(ctx, segs, oppSegs, true).match - base)) < 1e-12);
   assert.strictEqual(from, Date.UTC(2026, 9, 22, 6));   // next local day (UTC - 6 h) after Wed 12:00Z
 });
 

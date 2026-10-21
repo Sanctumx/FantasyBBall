@@ -356,7 +356,9 @@ label.f select,label.f input{font-weight:400}
     <section class="how-card">
       <h3>In-season tools</h3>
       <h4>Weekly Matchup Analyzer</h4>
-      <p>Matchup Analyzer (top right) reads the league loaded in Settings: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here).</p>
+      <p>Matchup Analyzer (top right) reads the league loaded in Settings: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here). Games left are whole games: every real game his team still has this week counts as one, and a player with no minutes in his team's last 3 games is counted out for the rest of the week (shown as out; a player who is playing now most likely plays his next 3-4 games). On a night with more players than active slots the lowest-value players sit.</p>
+      <h4>This week so far</h4>
+      <p>Once games of the current week are played (2026-27 box scores, updated hourly), Win M counts them: the so-far totals are known, and only the games still to play are projected, with their variance scaled by the share of games left and the shrink easing toward certainty as the week ends. FG% and FT% come from summed makes and attempts. The so-far totals are an estimate from your current non-IR roster (at most 10 players per day), since Fantrax gives no roster history. The Best single adds and the plan still score the whole week.</p>
       <h4>Adds and the plan</h4>
       <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. Plans cover the current week only.</p>
       <h4>Trade Analyzer</h4>
@@ -584,6 +586,14 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     v[0] = Math.pow(0.015 * p.fga * g, 2); v[1] = Math.pow(0.02 * p.fta * g, 2);
     const ks = ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
     ks.forEach((k, j) => { v[j + 2] = Math.pow(0.12 * p[k] * g, 2); });
+    return v;
+  }
+  // Per-game noise variance per player, in each category's own units (the games-played variance is separate, see pairTeam).
+  function perGameVar(p) {
+    const v = new Float64Array(NC);
+    v[0] = p.fga * p.fgp * (1 - p.fgp) * 0.932; v[1] = p.fta * p.ftp * (1 - p.ftp) * 1.115;
+    v[2] = 1.154 * p.tpm; v[3] = 5.38 * Math.pow(Math.max(p.pts, 0), 0.78); v[4] = 1.336 * p.reb; v[5] = 1.251 * p.ast;
+    v[6] = 1.066 * p.stl; v[7] = 1.109 * p.blk; v[8] = 1.022 * p.to;
     return v;
   }
   // Weekly noise variance per player (one week, per-week units).
@@ -1345,8 +1355,9 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
     return w;
   }
-  function pairTeam(R, projErr) {
+  function pairTeam(R, projErr, K) {
     let fga = 0, fgm = 0, fta = 0, ftm = 0;
+    if (K) { fga = K.fga; fgm = K.fgm; fta = K.fta; ftm = K.ftm; }
     R.forEach(e => { if (!(e.games > 0)) return; fga += e.p.fga * e.games; fgm += e.p.fgp * e.p.fga * e.games; fta += e.p.fta * e.games; ftm += e.p.ftp * e.p.fta * e.games; });
     const ref = { pFG: fga > 0 ? fgm / fga : 0, pFT: fta > 0 ? ftm / fta : 0 };
     const s = new Array(NC).fill(1); s[0] = fga > 0 ? 1 / fga : 0; s[1] = fta > 0 ? 1 / fta : 0;
@@ -1354,32 +1365,43 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     let S = 0;
     R.forEach(e => {
       if (!(e.games > 0)) return;
-      const m = vec(e.p, ref, 1), wv = weekVar(e.p, ref, 82), pv = projErr ? projVar(e.p, e.games) : null;
+      const m = vec(e.p, ref, 1), pg = perGameVar(e.p), pv = projErr ? projVar(e.p, e.games) : null;
       const gv = e.gVar != null ? e.gVar : VAR_GAMES * e.games / GPW; S += gv;
       for (let c = 0; c < NC; c++) {
-        const pgv = (wv[c] - m[c] * m[c] * VAR_GAMES) / GPW, sm = s[c] * m[c];
+        const pgv = pg[c], sm = s[c] * m[c];
         if (c > 1) mean[c] += m[c] * e.games;
         idio[c] += s[c] * s[c] * e.games * pgv + (pv ? s[c] * s[c] * pv[c] : 0);
         lsum[c] += sm * gv; q[c] += sm * sm * gv;
       }
     });
     mean[0] = ref.pFG; mean[1] = ref.pFT;
+    if (K) { mean[2] += K.tpm; mean[3] += K.pts; mean[4] += K.reb; mean[5] += K.ast; mean[6] += K.stl; mean[7] += K.blk; mean[8] -= K.to; }
     const lam = new Float64Array(NC);
     for (let c = 0; c < NC; c++) { lam[c] = S > 0 ? lsum[c] / S : 0; idio[c] += Math.max(0, q[c] - lam[c] * lam[c] * S); }
     return { mean, idio, lam, S };
   }
+  // opts.known = [kA, kB]: each team's so-far totals { fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to }, counted with no variance;
+  // the entries are then the games still to play. With nothing known the result is unchanged. A category with no variance left
+  // is decided exactly (win 1, tie 0.5, loss 0).
   function pairMatchup(A, B, opts) {
-    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false;
-    const a = pairTeam(A, pe), b = pairTeam(B, pe), cat = [];
+    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false, kn = o.known || [null, null];
+    const a = pairTeam(A, pe, kn[0]), b = pairTeam(B, pe, kn[1]), cat = [];
+    const step = (d, v) => o.known && v < 1e-12 ? (d > 1e-12 ? 1 : d < -1e-12 ? 0 : 0.5) : null;
     for (let c = 0; c < NC; c++) {
       if (c >= nc) { cat.push(null); continue; }
-      cat.push(Phi((a.mean[c] - b.mean[c]) / Math.sqrt(a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S + 1e-9)));
+      const d = a.mean[c] - b.mean[c], v = a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S, st = step(d, v);
+      cat.push(st != null ? st : Phi(d / Math.sqrt(v + 1e-9)));
     }
     const sa = Math.sqrt(a.S), sb = Math.sqrt(b.S), ps = new Array(nc);
     let match = 0;
     for (let j = 0; j < GH_Z.length; j++) for (let k = 0; k < GH_Z.length; k++) {
-      for (let c = 0; c < nc; c++) ps[c] = Phi((a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k]) / Math.sqrt(a.idio[c] + b.idio[c] + 1e-9));
-      match += GH_W[j] * GH_W[k] * matchProbN(ps, nc);
+      let n = 0;   // categories tied exactly (known totals only) count for neither side
+      for (let c = 0; c < nc; c++) {
+        const d = a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k], v = a.idio[c] + b.idio[c], st = step(d, v + a.S + b.S);
+        if (st === 0.5) continue;
+        ps[n++] = st != null ? st : Phi(d / Math.sqrt(v + 1e-9));
+      }
+      match += GH_W[j] * GH_W[k] * matchProbN(n < nc ? ps.slice(0, n) : ps, n);
     }
     const mu = t => Array.from(t.mean, (x, c) => c === TO ? -x : x);
     return { cat, match, mu: [mu(a), mu(b)] };

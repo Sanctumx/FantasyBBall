@@ -67,3 +67,12 @@ test('perceived value weights are 0.4 / 0.3 / 0.3', () => {
   const noAdp = T.perceived(ctx, Object.assign({}, pp, { adp: null }));
   assert.ok(Number.isFinite(noAdp.adp) && noAdp.adp < v.adp);
 });
+
+test('the current period counts whole games, later periods keep expected games (g/82)', () => {
+  const r = T.rosWinM(ctx, ctx.roster, me), per = n => r.periods.find(p => p.n === n).p;
+  const segs = (t, n) => M.teamSegments(ctx, t, n, ctx.roster[t].filter(f => n !== ctx.cur || pool.byKey.get(f).slot !== 'IR'));
+  const opp = n => I.opponentOf(L, me, n);
+  assert.ok(near(per(ctx.cur), M.scoreSegments(ctx, segs(me, ctx.cur), segs(opp(ctx.cur), ctx.cur), true).match));
+  const later = ctx.cur + 1;
+  assert.ok(near(per(later), M.scoreSegments(ctx, segs(me, later), segs(opp(later), later), false).match));
+});
