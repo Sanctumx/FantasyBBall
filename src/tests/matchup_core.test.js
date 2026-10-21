@@ -32,12 +32,14 @@ test('IR players sit out only the current period', () => {
   assert.strictEqual(s.from, per.start); assert.strictEqual(s.to, per.end);
 });
 
-test('simple adds: same drop on every row, FA only, sorted', () => {
+test('simple adds: drops come from the 5 lowest-value players, FA only, sorted; drops: 1 uses the lowest only', () => {
   const rows = M.simpleAdds(ctx, 1, { limit: 20 });
   assert.ok(rows.length > 5 && rows.length <= 20);
-  const drop = M.lowestValue(ctx, me, 1)[0];
+  const lows = new Set(M.lowestValue(ctx, me, 5).map(p => p.key));
+  M.simpleAdds(ctx, 1, { limit: 20, drops: 1 }).forEach(r => assert.strictEqual(r.drop.key, M.lowestValue(ctx, me, 1)[0].key));
+  assert.ok(new Set(rows.map(r => r.drop.key)).size > 1, 'more than one drop appears');
   rows.forEach(r => {
-    assert.strictEqual(r.drop.key, drop.key);
+    assert.ok(lows.has(r.drop.key));
     assert.ok(['FA', 'WW'].includes(r.add.fxStatus) && r.add.owner === null);
     assert.ok(r.games > 0);
     assert.strictEqual(r.dCat.length, 9);
@@ -76,4 +78,13 @@ test('chances are shrunk toward one half', () => {
   const a = M.projectWeek(ctx, me, 1);
   assert.ok(a.cat.every(p => p > 0.5 - 0.5 * M.K_CAT - 1e-9 && p < 0.5 + 0.5 * M.K_CAT + 1e-9));
   assert.ok(a.match > 0.5 - 0.5 * M.K_MATCH - 1e-9 && a.match < 0.5 + 0.5 * M.K_MATCH + 1e-9);
+});
+
+test('kept players on my team are never dropped, in the list or the plan', () => {
+  const low = M.lowestValue(ctx, me, 3).map(p => p.key);
+  assert.ok(M.lowestValue(ctx, me, 3, low).every(p => !low.includes(p.key)));
+  const rows = M.simpleAdds(ctx, 1, { limit: 40, keep: low });
+  assert.ok(rows.length > 0 && rows.every(r => !r.drop || !low.includes(r.drop.key)));
+  const plan = M.addPlan(ctx, { keep: low });
+  assert.ok(plan.droppable.every(p => !low.includes(p.key)) && plan.moves.every(m => !m.drop || !low.includes(m.drop.key)));
 });

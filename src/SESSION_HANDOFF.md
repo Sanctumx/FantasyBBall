@@ -52,14 +52,17 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 ## Next session starts with
 
-`main` has the Rankings tab and perf cache (PR #21 merged 2026-10-21). Branch `matchup-week-status` (unpushed, tests green:
-179 unit, Matchup/League/Rankings/Settings browser checks) holds the Matchup week status (idea 118, archive 118b): Current /
-Projected category table, whole-team table, Win M on remaining games. Also built there (idea 119, archive 119): Matchup games left are whole games per player; players with no box line or no minutes in their team's last 3 boxed games are out for the week ("out" in the team table); whole-games shrink k .83 matchup / .85 cats; Idea 120 (archive 120): Trade Analyzer uses whole games in the current week and g/82 later (calib says whole is worse with unknown availability; refit k for future weeks open, analyst PM-ros arm); crowded nights go to the better per-game player; pairTeam reads per-game variance directly (pinned). Win M-maximizing lineup tabled (#121). Check name matching on real box scores once games exist. Note: 6 context-hook tests fail when run inside a long session (not code). Next: on "push", PR and merge it (engine.js changed:
-republish `courtside-draft-board.html`). Then #112, #116, and Best adds/plan on remaining games. Left open: Playoff boost
-hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess (#98); IR on the
-League tab (#109); week-status leftovers in archive 118b. Awaiting the user: why Games left is not whole (expected games =
-projected games/82 per team game, capped by the 10-slot day limit); offered an extra "Team games left" column with the
-scheduled whole number.
+**Uncommitted on `main`** (ideas 122-125: Waiver adds panel, Team schedule, keep list (replaced the ignore list), Hashtag 2026-10-21 refresh, rebuilt pages;
+`pandas`/`openpyxl` now installed here): ask the user branch + PR or straight push. `main` also has the Matchup week status
+and ideas 118-121 (PR #23). Then: republish `courtside-draft-board.html` to the board artifact (engine.js changed, and
+players.json now has the new Hashtag numbers); refit the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm
+in `calib_pair.js`, the user runs it on the PC); #112, #116, Best adds/plan on remaining games.
+Added 2026-10-21 late: keep list (#125, built, browser check not re-run); open **#126** Hashtag-only players (plan in IDEAS, needs cut-off decision) and **#127** waiver adds Win M differs from the Matchup headline (adds ignore box scores). Tabled: #121. Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no
+dedicated test; Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is
+a guess (#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds
+against drops 2-5. Offered, unanswered: a "Team games left" column. Browser checks passed before the Hashtag rebuild only.
+First step next session: user picks the #126 cut-off (rank 300 recommended), then planner-approved build; then #127 (analyst not needed, tests first). Browser checks need re-running (keep list, Hashtag rebuild).
+Note: 6 context-hook tests fail when run inside a long session (not code).
 
 ## This PC
 

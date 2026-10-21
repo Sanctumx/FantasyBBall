@@ -1,8 +1,8 @@
-# Hashtag Basketball 2026-27 projections (per game, exported 2026-10-17, data/hashtag_2026-10-17.xlsx) → players.json 'hs'.
+# Hashtag Basketball 2026-27 projections (per game, exported 2026-10-21, data/hashtag_2026-10-21.xlsx) → players.json 'hs'.
 # Matched to BBM players by normalized name; FG%/FT% from the percentage, attempts from the "(made/att)" text.
 import json, re, unicodedata, pandas as pd
 norm = lambda s: re.sub(r'[^a-z ]', '', ''.join(ch for ch in unicodedata.normalize('NFKD', str(s)) if not unicodedata.combining(ch)).lower().replace(' jr', '').replace(' iii', '').replace(' ii', '').replace(' iv', '')).replace('  ', ' ').strip()
-X = pd.read_excel('data/hashtag_2026-10-17.xlsx')
+X = pd.read_excel('data/hashtag_2026-10-21.xlsx')
 X = X[X['PLAYER'].astype(str) != 'PLAYER']
 def shot(s):
     m = re.match(r'\s*([\d.]+)\s*\(([\d.]+)/([\d.]+)\)', str(s)); return (float(m.group(1)), float(m.group(3))) if m else (None, None)

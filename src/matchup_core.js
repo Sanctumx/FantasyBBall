@@ -162,28 +162,35 @@
   const valueOf = (ctx, pp) => InPlayers.valueZ(pp.line, pp.g, ctx.ref);
   // who plays on a crowded night: the better per-game player (a full 82-game season at his line), games played drop out
   const nightValue = (ctx, pp) => InPlayers.valueZ(pp.line, 82, ctx.ref);
-  function lowestValue(ctx, teamId, k) {
-    return ctx.roster[teamId].map(f => ctx.pool.byKey.get(f)).filter(p => p.slot !== 'IR').sort((a, b) => valueOf(ctx, a) - valueOf(ctx, b)).slice(0, k);
+  // keep: player keys on the team that are never dropped
+  function lowestValue(ctx, teamId, k, keep) {
+    const kept = new Set(keep || []);
+    return ctx.roster[teamId].map(f => ctx.pool.byKey.get(f)).filter(p => p.slot !== 'IR' && !kept.has(p.key)).sort((a, b) => valueOf(ctx, a) - valueOf(ctx, b)).slice(0, k);
   }
 
-  function simpleAdds(ctx, n, { limit = 20 } = {}) {
+  // keep: my player keys never offered as drops. Every add paired with each of the `drops` lowest-value players (or the open spot), best Win M switches first
+  function simpleAdds(ctx, n, { limit = 20, drops = 5, keep } = {}) {
     const per = periodOf(ctx.L, n), opp = InLeague.opponentOf(ctx.L, ctx.me, n);
     if (!opp) return [];
     const mine = teamSegments(ctx, ctx.me, n), oppSegs = teamSegments(ctx, opp, n), from = addFrom(ctx, n);
     const base = scoreSegments(ctx, mine, oppSegs, true), baseG = segGames(ctx, mine, null, true);
     const active = ctx.roster[ctx.me].filter(f => ctx.pool.byKey.get(f).slot !== 'IR').length;
-    const drop = active < ctx.L.maxPlayers ? null : lowestValue(ctx, ctx.me, 1)[0] || null;
-    const di = drop ? mine.findIndex(s => s.key === drop.key) : -1;
-    const kept = drop ? mine.map((s, i) => i === di ? { key: s.key, from: s.from, to: Math.max(s.from, Math.min(s.to, from)) } : s) : mine;
-    const lost = drop ? baseG[di] - segGames(ctx, kept, null, true)[di] : 0;
-    const rows = [];
-    ctx.pool.players.forEach(add => {
-      if (add.owner || (add.fxStatus !== 'FA' && add.fxStatus !== 'WW') || from >= per.end) return;
-      const segs = kept.concat([{ key: add.key, from, to: per.end }]), g = segGames(ctx, segs, null, true), games = g[g.length - 1];
-      if (!(games > 0)) return;
-      const r = scoreSegments(ctx, segs, oppSegs, true);
-      rows.push({ add, drop, games, lost, match: r.match, dMatch: r.match - base.match, dCat: r.cat.map((p, c) => p - base.cat[c]) });
+    const dropList = active < ctx.L.maxPlayers ? [null] : lowestValue(ctx, ctx.me, drops, keep);
+    const opts = dropList.map(drop => {
+      const di = drop ? mine.findIndex(s => s.key === drop.key) : -1;
+      const kept = drop ? mine.map((s, i) => i === di ? { key: s.key, from: s.from, to: Math.max(s.from, Math.min(s.to, from)) } : s) : mine;
+      return { drop, kept, lost: drop ? baseG[di] - segGames(ctx, kept, null, true)[di] : 0 };
     });
+    // every add against the lowest-value drop first; the best 20 adds are then tried against the other drops
+    const score = (add, { drop, kept, lost }) => {
+      const segs = kept.concat([{ key: add.key, from, to: per.end }]), g = segGames(ctx, segs, null, true), games = g[g.length - 1];
+      if (!(games > 0)) return null;
+      const r = scoreSegments(ctx, segs, oppSegs, true);
+      return { add, drop, games, lost, match: r.match, dMatch: r.match - base.match, dCat: r.cat.map((p, c) => p - base.cat[c]) };
+    };
+    const first = ctx.pool.players.filter(add => !add.owner && (add.fxStatus === 'FA' || add.fxStatus === 'WW') && from < per.end).map(add => score(add, opts[0])).filter(Boolean);
+    const rows = first.slice();
+    first.sort((a, b) => b.dMatch - a.dMatch).slice(0, 20).forEach(r => opts.slice(1).forEach(o => { const x = score(r.add, o); if (x) rows.push(x); }));
     return rows.sort((a, b) => b.dMatch - a.dMatch).slice(0, limit);
   }
 
@@ -212,16 +219,16 @@
     return true;
   }
 
-  function addPlan(ctx, { addsLeft = 4, candidates = 30, droppable, periods } = {}) {
+  function addPlan(ctx, { addsLeft = 4, candidates = 30, droppable, periods, keep } = {}) {
     const L = ctx.L, n = ctx.cur;
     if (periods && !(periods.length === 1 && periods[0] === n)) return { start: null, end: null, moves: [], droppable: [], note: 'Plans cover the current week only' };
     const per = periodOf(L, n), opp = InLeague.opponentOf(L, ctx.me, n);
-    const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : droppable), dropSet = new Set(drops.map(p => p.key));
+    const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : droppable, keep), dropSet = new Set(drops.map(p => p.key));
     const oppSegs = opp ? teamSegments(ctx, opp, n) : [], score = moves => scoreSegments(ctx, applyMoves(ctx, n, moves), oppSegs, true).match;
     const start = opp ? score([]) : null, plan = { start, end: start, moves: [], droppable: drops, note: null };
     if (!opp) return plan;
     const days = []; for (let t = addFrom(ctx, n); t < per.end; t += 24 * 3600e3) days.push(t);
-    const cands = simpleAdds(ctx, n, { limit: candidates }).map(r => r.add), moves = [];
+    const cands = simpleAdds(ctx, n, { limit: candidates, keep }).map(r => r.add), moves = [];
     let cur = start;
     for (let round = 0; round < addsLeft; round++) {
       let best = null;
