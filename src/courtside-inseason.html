@@ -224,9 +224,9 @@ tr.click{cursor:pointer}
       <h4>Weekly Matchup Analyzer</h4>
       <p>Matchup Analyzer (top right) reads the league loaded in Settings: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here). Games left are whole games: every real game his team still has this week counts as one, and a player with no minutes in his team's last 3 games is counted out for the rest of the week (shown as out; a player who is playing now most likely plays his next 3-4 games). On a night with more players than active slots the lowest-value players sit.</p>
       <h4>This week so far</h4>
-      <p>Once games of the current week are played (2026-27 box scores, updated hourly), Win M counts them: the so-far totals are known, and only the games still to play are projected, with their variance scaled by the share of games left and the shrink easing toward certainty as the week ends. FG% and FT% come from summed makes and attempts. The so-far totals are an estimate from your current non-IR roster (at most 10 players per day), since Fantrax gives no roster history. The Best single adds and the plan still score the whole week.</p>
+      <p>Once games of the current week are played (2026-27 box scores, updated hourly), Win M counts them: the so-far totals are known, and only the games still to play are projected, with their variance scaled by the share of games left and the shrink easing toward certainty as the week ends. FG% and FT% come from summed makes and attempts. The so-far totals are an estimate from your current non-IR roster (at most 10 players per day), since Fantrax gives no roster history. The Best single adds and the plan score the whole week from box scores like the headline.</p>
       <h4>Adds and the plan</h4>
-      <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. Plans cover the current week only.</p>
+      <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. May drop limits the drops to your 1 to 5 lowest-value players (players on the keep list are never dropped and don't count); All uses up to 5 for single adds and your bench size for the plan. Plans cover the current week only.</p>
       <h4>Trade Analyzer</h4>
       <p>Trade Win M is your average chance over the remaining regular-season matchups against the real opponents, with both rosters changed; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
       <h4>Rankings</h4>
@@ -265,7 +265,7 @@ tr.click{cursor:pointer}
         <div class="side">
           <section class="panel plan">
             <h2>Waiver adds <span class="meta">Plan: the move that helps most, then the next</span></h2>
-            <div class="ctl"><label class="f" for="addsleft">Adds left<input type="number" id="addsleft" min="0" max="4" step="1"></label></div>
+            <div class="ctl"><label class="f" for="addsleft">Adds left<input type="number" id="addsleft" min="0" max="4" step="1"></label> <label class="f" for="dropcap" title="Drop only your lowest-value players (keep list excluded)">May drop<select id="dropcap"><option value="all">All</option><option value="1">Worst 1</option><option value="2">Worst 2</option><option value="3">Worst 3</option><option value="4">Worst 4</option><option value="5">Worst 5</option></select></label></div>
             <p class="msg" id="plan-note"></p>
             <ol id="plan-moves"></ol>
             <p class="hint" id="plan-sum"></p>
@@ -1930,12 +1930,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const L = ctx.L, n = ctx.cur;
     if (periods && !(periods.length === 1 && periods[0] === n)) return { start: null, end: null, moves: [], droppable: [], note: 'Plans cover the current week only' };
     const per = periodOf(L, n), opp = InLeague.opponentOf(L, ctx.me, n);
-    const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : droppable, keep), dropSet = new Set(drops.map(p => p.key));
+    const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : Math.min(droppable, L.maxPlayers - L.maxActive), keep), dropSet = new Set(drops.map(p => p.key));
     const oppSegs = opp ? teamSegments(ctx, opp, n) : [], score = moves => scoreWeek(ctx, applyMoves(ctx, n, moves), oppSegs, n).match;
     const start = opp ? score([]) : null, plan = { start, end: start, moves: [], droppable: drops, note: null };
     if (!opp) return plan;
     const days = []; for (let t = addFrom(ctx, n); t < per.end; t += 24 * 3600e3) days.push(t);
-    const cands = simpleAdds(ctx, n, { limit: candidates, keep }).map(r => r.add), moves = [];
+    const cands = simpleAdds(ctx, n, { limit: candidates, keep, drops: Math.min(5, droppable == null ? Infinity : droppable) }).map(r => r.add), moves = [];
     let cur = start;
     for (let round = 0; round < addsLeft; round++) {
       let best = null;
@@ -2090,7 +2090,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', LS = LeagueStore;
-  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, keep: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
+  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, dropCap: {}, keep: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.tab = sectionOf();
   // one remembered team per tab and league id; the old single map seeds both, then goes
@@ -2206,8 +2206,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
   const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => { const ws = n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : null; return ws && ws.started ? ws : Matchup.projectWeek(c, c.me, n); });
   const kept = () => ui.keep[ui.leagueId] || [];
-  const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey(), kept().join(',')].join('|'), () => Matchup.simpleAdds(c, n, { limit: 40, keep: kept() }));
-  const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey(), kept().join(',')].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left, keep: kept() }) : Matchup.addPlan(c, { periods: [n], keep: kept() }));
+  const dropCap = () => { const v = ui.dropCap[ui.leagueId]; return v >= 1 && v <= 5 ? v : null; };
+  const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey(), kept().join(','), dropCap()].join('|'), () => Matchup.simpleAdds(c, n, dropCap() ? { limit: 40, keep: kept(), drops: dropCap() } : { limit: 40, keep: kept() }));
+  const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey(), kept().join(','), dropCap()].join('|'), () => { const cap = dropCap() ? { droppable: dropCap() } : {}; return n === c.cur ? Matchup.addPlan(c, Object.assign({ addsLeft: left, keep: kept() }, cap)) : Matchup.addPlan(c, Object.assign({ periods: [n], keep: kept() }, cap)); });
   // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
   let warmTimer = 0;
   function prewarm() {
@@ -2294,7 +2295,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
   function renderPlan(n) {
     const key = ui.leagueId + ':' + n, left = addsLeft(n);
-    $('addsleft').value = String(left);
+    $('addsleft').value = String(left); $('dropcap').value = dropCap() ? String(dropCap()) : 'all';
     const plan = mPlan(ctx, n, left);
     $('plan-note').textContent = plan.note || '';
     $('plan-moves').innerHTML = plan.moves.slice().sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : 0)).map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
@@ -2476,6 +2477,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   window.addEventListener('hashchange', () => { ui.tab = sectionOf(); if (pool) render(); });
   $('tab-matchup').addEventListener('click', e => { const a = e.target.closest('[data-keep],[data-unkeep]'); if (!a) return; const k = a.dataset.keep || a.dataset.unkeep, cur = kept().filter(x => x !== k); ui.keep[ui.leagueId] = a.dataset.keep ? cur.concat(k) : cur; save(); renderMatchup(); });
   $('addsleft').addEventListener('change', e => { const v = Math.max(0, Math.min(4, Math.round(+e.target.value || 0))); ui.adds[ui.leagueId + ':' + ui.week] = v; save(); renderPlan(+ui.week); });
+  $('dropcap').addEventListener('change', e => { ui.dropCap[ui.leagueId] = e.target.value === 'all' ? null : +e.target.value; save(); renderMatchup(); });
   load();
 })();
 </script>

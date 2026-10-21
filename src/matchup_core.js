@@ -239,12 +239,12 @@
     const L = ctx.L, n = ctx.cur;
     if (periods && !(periods.length === 1 && periods[0] === n)) return { start: null, end: null, moves: [], droppable: [], note: 'Plans cover the current week only' };
     const per = periodOf(L, n), opp = InLeague.opponentOf(L, ctx.me, n);
-    const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : droppable, keep), dropSet = new Set(drops.map(p => p.key));
+    const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : Math.min(droppable, L.maxPlayers - L.maxActive), keep), dropSet = new Set(drops.map(p => p.key));
     const oppSegs = opp ? teamSegments(ctx, opp, n) : [], score = moves => scoreWeek(ctx, applyMoves(ctx, n, moves), oppSegs, n).match;
     const start = opp ? score([]) : null, plan = { start, end: start, moves: [], droppable: drops, note: null };
     if (!opp) return plan;
     const days = []; for (let t = addFrom(ctx, n); t < per.end; t += 24 * 3600e3) days.push(t);
-    const cands = simpleAdds(ctx, n, { limit: candidates, keep }).map(r => r.add), moves = [];
+    const cands = simpleAdds(ctx, n, { limit: candidates, keep, drops: Math.min(5, droppable == null ? Infinity : droppable) }).map(r => r.add), moves = [];
     let cur = start;
     for (let round = 0; round < addsLeft; round++) {
       let best = null;

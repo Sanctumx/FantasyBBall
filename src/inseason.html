@@ -186,7 +186,7 @@ tr.click{cursor:pointer}
         <div class="side">
           <section class="panel plan">
             <h2>Waiver adds <span class="meta">Plan: the move that helps most, then the next</span></h2>
-            <div class="ctl"><label class="f" for="addsleft">Adds left<input type="number" id="addsleft" min="0" max="4" step="1"></label></div>
+            <div class="ctl"><label class="f" for="addsleft">Adds left<input type="number" id="addsleft" min="0" max="4" step="1"></label> <label class="f" for="dropcap" title="Drop only your lowest-value players (keep list excluded)">May drop<select id="dropcap"><option value="all">All</option><option value="1">Worst 1</option><option value="2">Worst 2</option><option value="3">Worst 3</option><option value="4">Worst 4</option><option value="5">Worst 5</option></select></label></div>
             <p class="msg" id="plan-note"></p>
             <ol id="plan-moves"></ol>
             <p class="hint" id="plan-sum"></p>
@@ -255,7 +255,7 @@ tr.click{cursor:pointer}
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', LS = LeagueStore;
-  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, keep: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
+  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, dropCap: {}, keep: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.tab = sectionOf();
   // one remembered team per tab and league id; the old single map seeds both, then goes
@@ -371,8 +371,9 @@ tr.click{cursor:pointer}
   // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
   const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => { const ws = n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : null; return ws && ws.started ? ws : Matchup.projectWeek(c, c.me, n); });
   const kept = () => ui.keep[ui.leagueId] || [];
-  const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey(), kept().join(',')].join('|'), () => Matchup.simpleAdds(c, n, { limit: 40, keep: kept() }));
-  const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey(), kept().join(',')].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left, keep: kept() }) : Matchup.addPlan(c, { periods: [n], keep: kept() }));
+  const dropCap = () => { const v = ui.dropCap[ui.leagueId]; return v >= 1 && v <= 5 ? v : null; };
+  const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey(), kept().join(','), dropCap()].join('|'), () => Matchup.simpleAdds(c, n, dropCap() ? { limit: 40, keep: kept(), drops: dropCap() } : { limit: 40, keep: kept() }));
+  const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey(), kept().join(','), dropCap()].join('|'), () => { const cap = dropCap() ? { droppable: dropCap() } : {}; return n === c.cur ? Matchup.addPlan(c, Object.assign({ addsLeft: left, keep: kept() }, cap)) : Matchup.addPlan(c, Object.assign({ periods: [n], keep: kept() }, cap)); });
   // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
   let warmTimer = 0;
   function prewarm() {
@@ -459,7 +460,7 @@ tr.click{cursor:pointer}
   }
   function renderPlan(n) {
     const key = ui.leagueId + ':' + n, left = addsLeft(n);
-    $('addsleft').value = String(left);
+    $('addsleft').value = String(left); $('dropcap').value = dropCap() ? String(dropCap()) : 'all';
     const plan = mPlan(ctx, n, left);
     $('plan-note').textContent = plan.note || '';
     $('plan-moves').innerHTML = plan.moves.slice().sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : 0)).map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
@@ -641,6 +642,7 @@ tr.click{cursor:pointer}
   window.addEventListener('hashchange', () => { ui.tab = sectionOf(); if (pool) render(); });
   $('tab-matchup').addEventListener('click', e => { const a = e.target.closest('[data-keep],[data-unkeep]'); if (!a) return; const k = a.dataset.keep || a.dataset.unkeep, cur = kept().filter(x => x !== k); ui.keep[ui.leagueId] = a.dataset.keep ? cur.concat(k) : cur; save(); renderMatchup(); });
   $('addsleft').addEventListener('change', e => { const v = Math.max(0, Math.min(4, Math.round(+e.target.value || 0))); ui.adds[ui.leagueId + ':' + ui.week] = v; save(); renderPlan(+ui.week); });
+  $('dropcap').addEventListener('change', e => { ui.dropCap[ui.leagueId] = e.target.value === 'all' ? null : +e.target.value; save(); renderMatchup(); });
   load();
 })();
 </script>

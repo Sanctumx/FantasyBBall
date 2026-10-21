@@ -93,3 +93,30 @@ test('kept players on my team are never dropped, in the list or the plan', () =>
   const plan = M.addPlan(ctx, { keep: low });
   assert.ok(plan.droppable.every(p => !low.includes(p.key)) && plan.moves.every(m => !m.drop || !low.includes(m.drop.key)));
 });
+
+test('a drop cap limits the drops in the list and the plan to the worst N, after the keep list', () => {
+  const worst = M.lowestValue(ctx, me, 1)[0].key;
+  const rows = M.simpleAdds(ctx, 1, { limit: 40, drops: 1 });
+  assert.ok(rows.length > 0 && rows.every(r => !r.drop || r.drop.key === worst));
+  const plan = M.addPlan(ctx, { droppable: 2 });
+  assert.strictEqual(plan.droppable.length, 2);
+  const added = new Set(), ok = plan.moves.every(m => { const good = !m.drop || plan.droppable.some(p => p.key === m.drop.key) || added.has(m.drop.key); added.add(m.add.key); return good; });
+  assert.ok(ok);
+  const kept = M.addPlan(ctx, { droppable: 1, keep: [worst] });
+  assert.deepStrictEqual(kept.droppable.map(p => p.key), M.lowestValue(ctx, me, 1, [worst]).map(p => p.key));
+  assert.ok(!kept.droppable.some(p => p.key === worst));
+  const all = M.addPlan(ctx, {}), same = M.addPlan(ctx, { droppable: undefined });
+  assert.deepStrictEqual(all.moves.map(m => m.add.key), same.moves.map(m => m.add.key));
+});
+
+test('a capped plan ranks its candidates only against allowed drops', () => {
+  const seen = M.simpleAdds(ctx, 1, { limit: 30, drops: 1 }).map(r => r.add.key);
+  const plan = M.addPlan(ctx, { droppable: 1, candidates: 30 });
+  assert.ok(plan.moves.every(m => seen.includes(m.add.key) || plan.moves.some(x => x !== m && x.add.key === m.add.key)));
+});
+
+test('a drop cap larger than the bench never lets the plan drop more than All does', () => {
+  const bench = ctx.L.maxPlayers - ctx.L.maxActive;
+  assert.strictEqual(M.addPlan(ctx, { droppable: 99 }).droppable.length, M.addPlan(ctx, {}).droppable.length);
+  assert.ok(M.addPlan(ctx, { droppable: 99 }).droppable.length <= bench);
+});
