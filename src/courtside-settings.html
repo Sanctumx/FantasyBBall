@@ -1,0 +1,339 @@
+<title>Settings · Courtside Draft Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: post-draft analysis. Team in focus on top (head-to-head | category profile), whole league below (matrix, stats). */
+:root{
+  --bg:#EFF1EE; --surface:#FFFFFF; --sunk:#F6F7F5; --ink:#15191B; --muted:#5D666B; --line:#D8DCD7;
+  --accent:#C24E1B; --mine:#1F5FA8; --mine-soft:#DFE9F6; --good:#1A7F45; --bad:#C2372F; --warn:#A85A0D; --r:6px;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+button,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
+header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0}
+header.top h1 .logo{width:.9em;height:.9em;flex:none}
+header.top .top-r{margin-right:24px}
+@media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}}
+main{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ctl{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:flex-end}
+.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
+.f select{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+#src{min-width:15em}
+#fmt{margin:0 0 0 auto;color:var(--muted);font-size:.8rem;align-self:center}
+.msg{margin:0;font-size:.9rem;color:var(--muted)}
+.msg:empty{display:none}
+.msg.err{color:var(--bad)}
+.msgrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.msgrow:has(.msg:empty):has(.retry[hidden]){display:none}
+.retry{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:5px 12px;cursor:pointer;font-weight:600}
+/* view switches: same look as the Draft Kit / League Dashboard toolbar */
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:6px;color:var(--muted);font-weight:600;font-size:.86rem;cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+h2{font:600 1.15rem/1.1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;margin:0;display:flex;gap:4px 12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+h2 .meta{font:400 .8rem var(--f-body);letter-spacing:0;text-transform:none;color:var(--muted)}
+.scroll{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;font:12.5px/1.3 var(--f-data);font-variant-numeric:tabular-nums;white-space:nowrap;width:100%}
+th,td{padding:3px 5px;text-align:center;border-bottom:1px solid var(--line)}
+th{font:600 .72rem/1.15 var(--f-body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-block:7px;border-bottom:1px solid var(--ink)}
+thead th:not([data-nosort]){cursor:pointer;user-select:none}
+thead th:not([data-nosort]):hover,th[aria-sort]{color:var(--ink)}
+th[aria-sort="descending"]::after{content:" ▼";font-size:.6rem}
+th[aria-sort="ascending"]::after{content:" ▲";font-size:.6rem}
+td.l,th.l{text-align:left}
+td.l{font:13px var(--f-body);padding-right:10px}
+tbody tr:hover td{background:var(--sunk)}
+tr.me td.l{font-weight:600;color:var(--mine)}   /* your team: blue name, as on the Draft Kit */
+td.x{color:var(--line)}
+/* heat chips, as on the Draft Kit's player list: deeper green or red the further from even */
+.chip{display:inline-block;min-width:3.4em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
+td b .chip,.chip.b{font-weight:700}
+.topgrid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px}
+@media (max-width:1000px){.topgrid{grid-template-columns:1fr}}
+.botgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+@media (min-width:1400px){.botgrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}.botgrid th,.botgrid td{padding-inline:3px}.botgrid .chip{min-width:3.1em}}   /* wide screens: league matrix and team stats side by side */
+.kpis{display:flex;gap:6px 22px;flex-wrap:wrap;align-items:baseline}
+.kpi b{font:700 1.7rem/1 var(--f-display)}
+.kpi span{color:var(--muted);font-size:.82rem;margin-left:6px}
+.kpi.big{flex-basis:100%}
+.kpi.big b{font-size:2.8rem}
+.kpi.big span{font:600 1.1rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin-left:8px}
+.kpi.hi b,.lvl.hi{color:var(--good)}.kpi.mid b,.lvl.mid{color:var(--warn)}.kpi.lo b,.lvl.lo{color:var(--bad)}
+#prof td.cat{font:600 .8rem var(--f-body);letter-spacing:.04em;text-align:left}
+.lvl{font-weight:600}
+.hint{color:var(--muted);font-size:.82rem;margin:0}
+.btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+header.top .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-radius:6px}
+@media (max-width:640px){header.top #how-open{padding:8px 14px}}
+/* How it works dialog: same markup and look as the Draft Kit (markup copied in by gen.py from app.html) */
+.how{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:0;width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+.how::backdrop{background:rgba(0,0,0,.45)}
+.how-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);padding:14px 20px 10px;border-bottom:1px solid var(--line)}
+.how h2{font:700 1.5rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin:0}
+.how .how-intro{margin:12px 20px 0;max-width:none;color:var(--muted);font-size:.9rem}
+.how-intro a{color:var(--mine);text-underline-offset:2px}
+.how-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;padding:12px 20px 20px;align-items:start}
+.how-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.how-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px 10px}
+.how h3{font:700 1.2rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.how h4{font:600 .82rem/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:12px 0 3px}
+.how p{margin:0 0 4px;max-width:70ch;color:var(--ink);font-size:.9rem;line-height:1.45}
+.how .swing{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.how .swing span{font:500 .78rem var(--f-data);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+</style>
+
+<header class="top">
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>Settings</h1>
+  <div class="top-r"><span id="sitenav"></span></div>
+</header>
+
+<main>
+  <section class="panel" aria-label="Fantrax league">
+    <h2>Fantrax league</h2>
+    <p class="hint">Load a league here and Draft, League, Matchup and Trade all use it.</p>
+  </section>
+  <section class="panel" aria-label="League settings">
+    <h2>League settings</h2>
+  </section>
+</main>
+
+<script>// The league every page shares (2026-10-20): league settings and the loaded Fantrax league live in one stored object that
+// Settings writes and Draft, League, Matchup and Trade read. Also the per-league memory (saved leagues, your team) and the
+// one-time migration from the keys the pages used before. Pure functions over get/set callbacks, so Node can test them.
+(function (root) {
+  'use strict';
+  const KEYS = { settings: 'courtside-settings-v1', board: 'courtside-board-v1', leagues: 'courtside-leagues-v1', inseason: 'courtside-inseason-v1' };
+  // league settings only; slot, order and draft field belong to a draft and stay on the Draft page
+  const LEAGUE_DEF = { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2 };
+  const LEAGUE_KEYS = Object.keys(LEAGUE_DEF).concat('luFx');
+  const LU_MAX = { luC: 4, luG: 6, luF: 6, luGC: 3, luFC: 3, luU: 10 };
+  // Lineup slots: which positions each starting slot takes (U = Util, anyone)
+  const SLOT_OK = { PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'], G: ['PG', 'SG'], F: ['SF', 'PF'], U: ['PG', 'SG', 'SF', 'PF', 'C'] };
+  // a slot may combine positions (Fantrax 'G/C', 'F/C'): eligible if any part is
+  const slotElig = sl => [...new Set(String(sl).split('/').flatMap(x => SLOT_OK[x] || []))];
+  const slotName = sl => sl === 'U' ? 'UTIL' : sl;
+  // Starting slots from the Lineup dropdowns: C, G, F and UTIL amounts; with PG SG SF PF on, G n = PG + SG + (n − 2) G and
+  // F n = SF + PF + (n − 2) F (one slot of a kind = plain G / F). A Fantrax list (luFx) wins.
+  function lineupSlots(c) {
+    if (Array.isArray(c.luFx) && c.luFx.length) return c.luFx.slice();
+    const sp = c.luSplit !== false, out = [];
+    const grp = (n, a, b, g) => { if (sp && n >= 2) { out.push(a, b); for (let k = 2; k < n; k++) out.push(g); } else for (let k = 0; k < n; k++) out.push(g); };
+    grp(c.luG, 'PG', 'SG', 'G'); grp(c.luF, 'SF', 'PF', 'F'); for (let k = 0; k < c.luC; k++) out.push('C');
+    for (let k = 0; k < (c.luGC || 0); k++) out.push('G/C'); for (let k = 0; k < (c.luFC || 0); k++) out.push('F/C'); for (let k = 0; k < c.luU; k++) out.push('U');
+    return out;
+  }
+
+  const intIn = (v, lo, hi, d) => Number.isInteger(v) && v >= lo && v <= hi ? v : d;
+  const oneOf = (v, list, d) => list.includes(v) ? v : d;
+  // league settings from anything saved: a valid value is kept, an invalid one becomes the default
+  function normalize(s) {
+    s = s || {};
+    const o = {
+      teams: intIn(s.teams, 4, 20, LEAGUE_DEF.teams), roster: intIn(s.roster, 8, 25, LEAGUE_DEF.roster),
+      scoring: oneOf(s.scoring, ['roto', 'h2h', 'most'], LEAGUE_DEF.scoring), cats: oneOf(s.cats, [8, 9], LEAGUE_DEF.cats),
+      asb: oneOf(s.asb, ['merged', 'separate'], LEAGUE_DEF.asb), poStart: intIn(s.poStart, 10, 25, LEAGUE_DEF.poStart),
+      poFmt: oneOf(s.poFmt, ['1-1-1', '1-1-2', '1-2-2', '2-2-2'], LEAGUE_DEF.poFmt), ilSpots: intIn(s.ilSpots, 0, 4, LEAGUE_DEF.ilSpots),
+      luSplit: typeof s.luSplit === 'boolean' ? s.luSplit : LEAGUE_DEF.luSplit };
+    Object.keys(LU_MAX).forEach(k => { o[k] = intIn(s[k], 0, LU_MAX[k], LEAGUE_DEF[k]); });
+    if (Array.isArray(s.luFx) && s.luFx.length && s.luFx.every(x => typeof x === 'string' && slotElig(x).length)) o.luFx = s.luFx.slice();
+    return o;
+  }
+
+  const parse = (get, key) => { try { return JSON.parse(get(key) || 'null'); } catch (e) { return null; } };
+  const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  const local = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+  // ---- saved leagues (the Fantrax leagues this browser has connected) ----
+  const readLeagues = get => { const l = parse(get, KEYS.leagues); return Array.isArray(l) ? l.filter(x => x && x.id) : []; };
+  const savedLeagues = get => readLeagues(get).sort((a, b) => (b.used || 0) - (a.used || 0));
+  function rememberLeague(get, set, id, name, myTeam) {
+    const l = readLeagues(get), i = l.findIndex(x => x.id === id);
+    // a name the user typed (custom) is kept when Fantrax sends its own on reconnect
+    const keep = i >= 0 && l[i].custom;
+    const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
+    if (i >= 0) l[i] = entry; else l.push(entry);
+    set(KEYS.leagues, JSON.stringify(l));
+  }
+  function renameLeague(get, set, id, name) {
+    const l = readLeagues(get), i = l.findIndex(x => x.id === id); if (i < 0 || !name) return;
+    l[i] = Object.assign({}, l[i], { name, custom: true }); set(KEYS.leagues, JSON.stringify(l));
+  }
+  const forgetLeague = (get, set, id) => set(KEYS.leagues, JSON.stringify(readLeagues(get).filter(x => x.id !== id)));
+  const defaultTeam = (get, id) => { const x = readLeagues(get).find(y => y.id === id); return x && x.myTeam != null ? x.myTeam : null; };
+  // the team a tab shows: its own remembered pick, else the Settings default, else the first team
+  const pickTeam = (remembered, ids, fallback) => ids.includes(remembered) ? remembered : ids.includes(fallback) ? fallback : ids[0];
+
+  // ---- the store ----
+  // First visit after this change: build the store from the keys the pages used before (never written here; pages save it).
+  function migrate(get) {
+    const board = obj(parse(get, KEYS.board)) || {}, ins = obj(parse(get, KEYS.inseason)) || {}, saved = savedLeagues(get), fx = obj(board.fx);
+    const settings = normalize(Object.assign({}, LEAGUE_DEF, obj(board.cfg) ? LEAGUE_KEYS.reduce((o, k) => { if (k in board.cfg) o[k] = board.cfg[k]; return o; }, {}) : {}));
+    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && ins.leagueId) || (saved[0] && saved[0].id) || null;
+    let league = null;
+    if (id) {
+      const rec = saved.find(x => x.id === id), same = fx && fx.leagueId === id && Array.isArray(fx.order);
+      league = { id, name: rec ? rec.name : 'League ' + id, teams: same ? fx.order.map(t => ({ id: t, name: (obj(fx.names) && fx.names[t]) || t })) : [], loadedAt: null };
+    }
+    return { settings, league, note: '', migrated: true };
+  }
+  function load(get) {
+    const st = obj(parse(get, KEYS.settings));
+    if (!st || !obj(st.settings)) return migrate(get);
+    const lg = obj(st.league);
+    return { settings: normalize(Object.assign({}, LEAGUE_DEF, st.settings)), league: lg && lg.id ? { id: lg.id, name: lg.name, teams: Array.isArray(lg.teams) ? lg.teams : [], loadedAt: lg.loadedAt == null ? null : lg.loadedAt } : null, note: typeof st.note === 'string' ? st.note : '', migrated: false };
+  }
+  const save = (set, st) => set(KEYS.settings, JSON.stringify({ v: 1, settings: st.settings, league: st.league || null, note: st.note || '' }));
+
+  // ---- Fantrax league -> settings ----
+  // Fantrax rosterInfo.positionConstraints → slot list: G2 / G3 are extra G rows, Flx / Util = U, a count per row (maxActive)
+  function fxSlots(league) {
+    const pc = league && league.rosterInfo && league.rosterInfo.positionConstraints; if (!pc || typeof pc !== 'object') return null;
+    const out = [];
+    for (const [k, v] of Object.entries(pc)) {
+      const n = Math.max(0, Math.min(10, Math.round(+(v && v.maxActive) || 0)));
+      const parts = k.toUpperCase().replace(/[\s+&-]+/g, '/').split('/').map(x => x.replace(/\d+$/, '')).flatMap(x => /^(FLX|FLEX|UTIL|UT|U)$/.test(x) ? ['U'] : SLOT_OK[x] ? [x] : (x.match(/PG|SG|SF|PF|G|F|C/g) || [x]));
+      const sl = [...new Set(parts)].join('/');
+      if (!sl.split('/').every(x => SLOT_OK[x])) continue;
+      for (let i = 0; i < n; i++) out.push(sl);
+    }
+    const rank = sl => { const i = ['PG', 'SG', 'G', 'SF', 'PF', 'F', 'C'].indexOf(sl); return i >= 0 ? i : sl === 'U' ? 9 : 8; };
+    out.sort((x, y) => rank(x) - rank(y));
+    return out.length ? out.slice(0, 20) : null;
+  }
+  const LU_COUNT = [['luC', x => x === 'C'], ['luG', x => ['PG', 'SG', 'G'].includes(x)], ['luF', x => ['SF', 'PF', 'F'].includes(x)], ['luGC', x => x === 'G/C'], ['luFC', x => x === 'F/C'], ['luU', x => x === 'U']];
+  // What Load changes: team count, roster size and lineup slots (Fantrax's public league data has no scoring, categories, IL or
+  // playoff start). Everything else in the settings stays as the user set it.
+  function applyFantrax(settings, league) {
+    const s = Object.assign({}, settings), changes = [], was = lineupSlots(settings);
+    const n = Object.keys((league && league.teamInfo) || {}).length;
+    if (n) { const t = Math.min(20, Math.max(4, n)); if (t !== s.teams) changes.push('Teams ' + s.teams + ' → ' + t); s.teams = t; }
+    const ri = league && league.rosterInfo && +league.rosterInfo.maxTotalPlayers;
+    if (ri) { const r = Math.min(25, Math.max(8, Math.round(ri))); if (r !== s.roster) changes.push('Roster size ' + s.roster + ' → ' + r); s.roster = r; }
+    const sl = fxSlots(league);
+    if (sl) {
+      s.luFx = sl; s.luSplit = sl.some(x => ['PG', 'SG', 'SF', 'PF'].includes(x));
+      LU_COUNT.forEach(f => { s[f[0]] = Math.min(LU_MAX[f[0]], sl.filter(f[1]).length); });
+      if (was.join(' ') !== sl.join(' ')) changes.push('Lineup ' + sl.map(slotName).join(' '));
+    }
+    return { settings: s, changes, note: changes.length ? 'Updated from Fantrax: ' + changes.join(' · ') + '.' : 'Settings already match Fantrax.' };
+  }
+  // every team of the league with its record, by name
+  function teamsOf(league, standings) {
+    const rec = {}; (Array.isArray(standings) ? standings : []).forEach(r => { if (r && r.teamId) rec[r.teamId] = r.points; });
+    return Object.values((league && league.teamInfo) || {}).filter(t => t && t.id).map(t => ({ id: t.id, name: t.name || t.id, record: rec[t.id] }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
+  }
+
+  // ---- schedule (the season's weeks and the playoffs), as on the board ----
+  const ASB_WEEK = 18;
+  function weekPlan(SCHED, asb) {
+    const n = SCHED.weeks.length, starts = SCHED.weeks.slice(), idx = [];
+    for (let w = 0; w < n; w++) idx.push([w]);
+    if (asb === 'merged') { idx.splice(ASB_WEEK - 1, 2, [ASB_WEEK - 1, ASB_WEEK]); starts.splice(ASB_WEEK, 1); }
+    return { idx, starts, count: idx.length };
+  }
+  function playoffRounds(SCHED, s) {
+    const plan = weekPlan(SCHED, s.asb), lens = s.poFmt.split('-').map(Number), rounds = [];
+    let w = s.poStart;
+    for (const L of lens) { const ws = []; for (let i = 0; i < L; i++, w++) if (w <= plan.count) ws.push(w); rounds.push(ws); }
+    return { plan, rounds, fits: w - 1 <= plan.count };
+  }
+  const clampPoStart = (s, SCHED) => Object.assign({}, s, { poStart: Math.max(10, Math.min(weekPlan(SCHED, s.asb).count, s.poStart)) });
+  // switching the All-Star break shifts the playoff start by the merged week
+  const withAsb = (s, asb) => Object.assign({}, s, { asb, poStart: s.poStart + (asb === s.asb ? 0 : asb === 'merged' ? -1 : 1) });
+
+  // ---- a league's draft -> picks for the Draft board ----
+  function fxDraftPlan(draft, teams, roster, league) {
+    const d = draft || {}, order = d.draftOrder && d.draftOrder.length ? d.draftOrder : Object.keys((league && league.teamInfo) || {}), N = order.length;
+    if (!N) return { order, items: [], skipped: 0, error: 'This league has no teams or draft order yet.' };
+    if (N !== teams) return { order, items: [], skipped: 0, error: 'Settings say ' + teams + ' teams; this league\'s draft has ' + N + '. Load the league again in Settings.' };
+    const items = []; let skipped = 0;
+    for (const p of (d.draftPicks || []).filter(x => x && x.round)) {
+      const k = p.pickInRound ? (p.round - 1) * N + (p.pickInRound - 1) : p.pick - 1;
+      if (!(k >= 0 && k < teams * roster)) { skipped++; continue; }
+      items.push({ k, t: order.indexOf(p.teamId), fid: p.playerId || null });
+    }
+    return { order, items, skipped, error: null };
+  }
+
+  const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
+  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, normalize, load, save, local,
+    savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
+    fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
+})(this);
+</script>
+<script>// Helpers shared by the Draft Kit (app.html) and the League page (league.html), 2026-10-18: name matching for players
+// whose spelling differs between Fantrax and the projections, projection blending, and the page toolbar.
+(function (root) {
+  'use strict';
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  const stripSfx = k => k.replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '').replace(/\s+/g, ' ').trim();
+  // Fantrax and the projections spell some players differently; both directions
+  const NAME_ALIAS = (() => { const m = {}, pairs = [['alex sarr', 'alexandre sarr'], ['cameron johnson', 'cam johnson'], ['herbert jones', 'herb jones'], ['luguentz dort', 'lu dort'],
+    ['nicolas claxton', 'nic claxton'], ['carlton carrington', 'bub carrington'], ['gregory jackson', 'gg jackson'], ['moritz wagner', 'moe wagner'], ['nahshon hyland', 'bones hyland'], ['kenyon martin', 'kj martin']];
+    pairs.forEach(([a, b]) => { m[a] = b; m[b] = a; }); return m; })();
+  // the projected player a name means: exact, without suffixes, a known alias, or the same last name with one first name a
+  // short form of the other (Cam / Cameron), using the team to break a tie
+  function findListed(P, name, team) {
+    const k2 = stripSfx(norm(name)), L = P.filter(q => !q.unlisted), key2 = q => stripSfx(q.key != null ? q.key : norm(q.n));
+    let p = L.find(q => key2(q) === k2) || (NAME_ALIAS[k2] && L.find(q => key2(q) === NAME_ALIAS[k2]));
+    if (p) return p;
+    const parts = k2.split(' '); if (parts.length < 2 || parts[0].length < 2) return null;
+    const first = parts[0], last = parts.slice(1).join(' ');
+    const c = L.filter(q => { const qp = key2(q).split(' '); return qp.length > 1 && qp.slice(1).join(' ') === last && qp[0].length >= 2 && (qp[0].startsWith(first) || first.startsWith(qp[0])); });
+    if (c.length === 1) return c[0];
+    if (c.length > 1 && team) { const t = c.filter(q => q.t === team); if (t.length === 1) return t[0]; }
+    return null;
+  }
+  // Projections: BBM, Hashtag (raw.hs, per game) or their average (games, minutes and per-game stats averaged; FG% and FT%
+  // from the averaged makes over the averaged attempts). Players Hashtag doesn't project keep their BBM numbers.
+  const PROJ_KEYS = ['g', 'm', 'pts', 'tpm', 'reb', 'ast', 'stl', 'blk', 'fga', 'fta', 'to'];
+  function projOf(raw, proj) {
+    const h = raw.hs;
+    if (proj === 'bbm' || !h) return raw;
+    if (proj === 'hs') return h;
+    const o = {}; PROJ_KEYS.forEach(k => { o[k] = (raw[k] + h[k]) / 2; });
+    o.fgp = o.fga ? (raw.fgp * raw.fga + h.fgp * h.fga) / 2 / o.fga : raw.fgp;
+    o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
+    return o;
+  }
+  // Toolbar between the pages; `active` is 'kit', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
+  const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
+    [['kit', './', 'Draft'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade'], ['settings', 'settings.html', 'Settings']]
+      .map(([k, href, label]) => '<a href="' + href + '"' + (active === k ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
+  const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
+    '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
+    '.sitenav a:hover{color:var(--ink)}' +
+    '.sitenav a[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}' +
+    '.sitenav a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}';
+  const api = { norm, stripSfx, NAME_ALIAS, findListed, PROJ_KEYS, projOf, TOOLBAR_HTML, TOOLBAR_CSS };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Shared = api;
+})(this);
+</script>
+<script>
+(function () {
+  'use strict';
+  document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('settings');
+  { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
+})();
+</script>

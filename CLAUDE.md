@@ -20,7 +20,7 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 
 - **Blocked from reading** (`settings.json` deny rules): `src/logs*.csv`, `src/bt_daily.json`, `src/bt_data.json`,
   backtest result files `src/bt_*_*.json`, `src/data/*.xls*`, and the built pages `index.html`, `league.html`,
-  `inseason.html`, `math.html` (which also blocks editing them by hand). Scripts still read them; to inspect one, run a short node or
+  `inseason.html`, `settings.html`, `math.html` (which also blocks editing them by hand). Scripts still read them; to inspect one, run a short node or
   python snippet that prints only what you need.
 - **Path rules** (`.claude/rules/`): engine and backtest rules, and board/page rules, load only when matching files are
   opened.
@@ -101,7 +101,7 @@ They work alongside the routing above; this file takes precedence over them. Siz
    - Browser checks: `src/tests/browser/*.mjs`. They need Playwright, run from a folder where it is installed, with the
      repo root served by `python3 -m http.server 8765`.
 4. **Build.** The site serves the repo root, so built pages are committed:
-   `cd src && python3 gen.py && python3 build_site.py && cp site/index.html ../index.html && cp site/league.html ../league.html && cp site/inseason.html ../inseason.html`.
+   `cd src && python3 gen.py && python3 build_site.py && cp site/index.html ../index.html && cp site/league.html ../league.html && cp site/inseason.html ../inseason.html && cp site/settings.html ../settings.html`.
 5. **Commit** in small steps with a type prefix: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Record ideas and results in
    `src/IDEAS.md` (and the archive), and current-state changes in `src/SESSION_HANDOFF.md` (keep it under ~150 lines).
 6. **Review.** Before merging a feature, the `reviewer` subagent reads the whole branch diff. Fix what matters, each fix with a

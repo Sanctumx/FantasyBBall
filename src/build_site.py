@@ -20,3 +20,6 @@ open('site/league.html','w').write(head.replace('Live snake draft board for 9-ca
 # In-Season page
 n=open('courtside-inseason.html').read()
 open('site/inseason.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','In-season tools for a Fantrax league: weekly matchup win chances, waiver adds and trades.')+n+chr(10)+'</body>'+chr(10)+'</html>'+chr(10))
+# Settings page
+t=open('courtside-settings.html').read()
+open('site/settings.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','League settings and the Fantrax league every page shares.')+t+chr(10)+'</body>'+chr(10)+'</html>'+chr(10))
