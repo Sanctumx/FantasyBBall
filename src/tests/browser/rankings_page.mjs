@@ -53,6 +53,29 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   ok(errs.length === 0, '2: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
+// 2b. list controls: position filter, find, Show, Zscore -1, punt weights
+{ const { p, errs, ctx } = await open({});
+  await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
+  const col = i => p.$$eval('#tbl tbody tr td:nth-child(' + i + ')', t => t.map(e => e.textContent));
+  const z = async () => parseFloat((await col(7))[0].replace('−', '-'));
+  const z0 = await z();
+  await p.check('#pf-C'); await p.waitForTimeout(200);
+  const pos = await col(4); ok(pos.length > 5 && pos.every(x => x.split('/').includes('C')), 'position filter C keeps only centers (' + pos.length + ')');
+  await p.uncheck('#pf-C');
+  await p.fill('#q', 'jokic'); await p.waitForTimeout(200);
+  ok(await rows(p) === 1 && /Jokic/.test((await names(p))[0]), 'Find player jokic gives one row'); await p.fill('#q', ''); await p.waitForTimeout(100);
+  await p.selectOption('#show', '50'); await p.waitForTimeout(200);
+  ok(await rows(p) === 50, 'Show Top 50 lists 50'); await p.selectOption('#show', '0');
+  await p.selectOption('#zdrop', '1,0'); await p.waitForTimeout(300);
+  ok(await z() >= z0 - 1e-9 && /−1 100% Zscore/.test(await p.$eval('#tbl th[data-k="z"]', e => e.textContent)), 'Zscore -1 100% raises the top Zscore and labels the header');
+  await p.selectOption('#zdrop', '0,0');
+  await p.selectOption('#cw-3', '0'); await p.waitForTimeout(300);
+  ok(await p.$eval('#tbl th[data-k="3"]', e => e.className) === 'punted' && Math.abs(await z() - z0) > 1e-6, 'punting PTS strikes the header and changes Zscore');
+  await p.click('#cw-reset'); await p.waitForTimeout(200);
+  ok(Math.abs(await z() - z0) < 1e-9, 'Reset restores the weights');
+  ok(errs.length === 0, '2b: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+
 // 3. league loaded: owners shown (IR marked), Hide taken removes owned players
 { const { p, errs, ctx } = await open({ 'courtside-settings-v1': store({ id: 'lg1', name: 'Mock', teams: [], loadedAt: 1 }) });
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(800);

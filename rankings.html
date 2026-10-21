@@ -46,6 +46,21 @@ main{display:flex;flex-direction:column;gap:16px}
 .f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
 .f select{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
 #src{min-width:15em}
+.f input[type=text]{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:11em;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+.row2{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:flex-end}
+.posf,.wts{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;border:0;margin:0;padding:0 0 2px}
+.posf legend,.wts legend{float:left;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;padding:0}
+.posf label{position:relative;cursor:pointer}
+.posf input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.posf span{display:inline-block;font:500 .8rem/1 var(--f-data);padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:var(--sunk);color:var(--muted)}
+.posf input:checked+span{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.posf input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.wts label{display:flex;align-items:center;gap:3px;font:500 .76rem var(--f-data)}
+.wts select{width:4.2rem;padding:3px 2px;font-size:.76rem;background:var(--sunk);border:1px solid var(--line);border-radius:4px}
+.wts select.off{color:var(--bad);border-color:var(--bad)}
+.wts select.chg{border-color:var(--accent)}
+th.punted{text-decoration:line-through;opacity:.6}
+td.punted{opacity:.35}
 .msg{margin:0;font-size:.9rem;color:var(--muted)}
 .msg:empty{display:none}
 .msg.err{color:var(--bad)}
@@ -79,14 +94,21 @@ tbody tr:hover td{background:var(--sunk)}
 <main>
   <section class="panel" aria-label="Rankings controls">
     <div class="ctl">
+      <label class="f" for="q">Find player<input type="text" id="q" placeholder="Name or team" autocomplete="off"></label>
       <label class="f" for="src">Source<select id="src" title="Season to date uses ESPN's averages; Projections use the board's projections.">
         <option value="season">Season to date</option>
         <optgroup label="Projections"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></optgroup></select></label>
       <label class="f" for="type">Zscore type<select id="type" title="Standard: plain z-scores. H2H-Adjusted: in units of a weekly head-to-head gap. ROTO-Adjusted: in units of the team spread."><option value="classic">Standard</option><option value="h2h">H2H-Adjusted</option><option value="adj">ROTO-Adjusted</option></select></label>
       <label class="f" for="basis" title="Season counts games played; Per game ignores games missed; Mix is halfway.">Basis<select id="basis"><option value="pergame">Per game</option><option value="total">Season</option><option value="mix">Mix</option></select></label>
+      <label class="f" for="zdrop" title="Discount each player's worst one (−1) or two (−2) categories"><span>Zscore</span><select id="zdrop"><option value="0,0">Normal</option><option value="1,50">−1 50%</option><option value="1,0">−1 100%</option><option value="2,50">−2 50%</option><option value="2,0">−2 100%</option></select></label>
+      <label class="f" for="show" title="How many players to list"><span>Show</span><select id="show"><option value="25">Top 25</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="0">All</option></select></label>
       <label class="f" for="stats">Stats<select id="stats"><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
       <label class="f" for="poboost" hidden title="Boost players whose teams play more games in your playoff weeks (Settings)">Playoff boost<select id="poboost"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
       <button type="button" class="btn" id="hide" aria-pressed="false" title="Needs a league loaded in Settings">Hide taken</button>
+    </div>
+    <div class="row2">
+      <fieldset class="posf" id="posf"><legend>Position</legend><label for="pf-PG"><input type="checkbox" id="pf-PG" value="PG"><span>PG</span></label><label for="pf-SG"><input type="checkbox" id="pf-SG" value="SG"><span>SG</span></label><label for="pf-SF"><input type="checkbox" id="pf-SF" value="SF"><span>SF</span></label><label for="pf-PF"><input type="checkbox" id="pf-PF" value="PF"><span>PF</span></label><label for="pf-C"><input type="checkbox" id="pf-C" value="C"><span>C</span></label></fieldset>
+      <fieldset class="wts" id="catw" title="Category weights in Zscore (×0 punts it)"><legend>Weights</legend><label for="cw-0"><span>FG%</span><select id="cw-0" data-c="0"></select></label><label for="cw-1"><span>FT%</span><select id="cw-1" data-c="1"></select></label><label for="cw-2"><span>3PM</span><select id="cw-2" data-c="2"></select></label><label for="cw-3"><span>PTS</span><select id="cw-3" data-c="3"></select></label><label for="cw-4"><span>REB</span><select id="cw-4" data-c="4"></select></label><label for="cw-5"><span>AST</span><select id="cw-5" data-c="5"></select></label><label for="cw-6"><span>STL</span><select id="cw-6" data-c="6"></select></label><label for="cw-7"><span>BLK</span><select id="cw-7" data-c="7"></select></label><label for="cw-8"><span>TO</span><select id="cw-8" data-c="8"></select></label><button type="button" class="btn" id="cw-reset" style="padding:3px 8px">Reset</button></fieldset>
     </div>
     <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
     <p class="hint" id="note"></p>
@@ -1551,11 +1573,14 @@ tbody tr:hover td{background:var(--sunk)}
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('rankings');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-rankings-v1', CATN = ['FG%', 'FT%', '3PM', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TO'], RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
-  let ui = { src: 'season', type: 'classic', basis: 'pergame', stats: 'z', poboost: 'off', hide: false, sort: 'z', dir: -1 };
+  const POS = ['PG', 'SG', 'SF', 'PF', 'C'], CWV = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+  let ui = { src: 'season', type: 'classic', basis: 'pergame', stats: 'z', poboost: 'off', zdrop: '0,0', show: 0, pos: [], cw: null, hide: false, sort: 'z', dir: -1 };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const oneOf = (v, l, d) => l.includes(v) ? v : d;
   ui.src = oneOf(ui.src, ['season', 'avg', 'bbm', 'hs'], 'season'); ui.type = oneOf(ui.type, R.TYPES, 'classic'); ui.basis = oneOf(ui.basis, ['pergame', 'total', 'mix'], 'pergame');
-  ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.poboost = 'off';   // control hidden for now (user, 2026-10-21); Win columns ignore it ui.hide = !!ui.hide; if (typeof ui.sort !== 'string') ui.sort = 'z';
+  ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.zdrop = oneOf(ui.zdrop, ['0,0', '1,50', '1,0', '2,50', '2,0'], '0,0'); ui.show = oneOf(+ui.show, [0, 25, 50, 100, 150, 200], 0); ui.pos = Array.isArray(ui.pos) ? ui.pos.filter(x => POS.includes(x)) : [];
+  ui.cw = Array.isArray(ui.cw) && ui.cw.length === 9 && ui.cw.every(v => CWV.includes(+v)) ? ui.cw.map(Number) : R.WEIGHTS.slice(); let query = '';
+  ui.poboost = 'off';   // control hidden for now (user, 2026-10-21); Win columns ignore it ui.hide = !!ui.hide; if (typeof ui.sort !== 'string') ui.sort = 'z';
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
@@ -1631,31 +1656,50 @@ tbody tr:hover td{background:var(--sunk)}
     const rows = sourceRows(), n = $('note');
     $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
     if (ui.src === 'season' && !espn) { $('tbl').innerHTML = ''; n.textContent = 'ESPN season stats are not available yet.'; return; }
-    const tab = R.withPlayoffs(tableFor(rows), rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = R.WEIGHTS.slice(), s = settings();
+    const tab = R.withPlayoffs(tableFor(rows), rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
     if (s.cats !== 9) W[8] = 0;
+    syncW();
+    // Zscore from the weighted categories; -1 / -2 take off the worst one or two (50% = half of it, 100% = all of it)
+    const [zd, zp] = ui.zdrop.split(',').map(Number), keep = zp / 100;
+    tab.forEach(t => { if (t.z == null) return;
+      const v = t.cats.map((q, c) => q * W[c]), act = v.map((q, c) => c).filter(c => W[c] > 0).sort((a, b) => v[a] - v[b]);
+      t.zw = v.reduce((a, q) => a + q, 0) - (1 - keep) * act.slice(0, zd).reduce((a, c) => a + v[c], 0); });
+    const ranked = tab.filter(t => t.z != null).sort((a, b) => b.zw - a.zw); ranked.forEach((t, i) => { t.rk = i + 1; });
     const hide = ui.hide && !!rosters;
-    let list = tab.map((t, i) => ({ t, r: byPid.get(t.pid), rank: t.z == null ? null : i + 1, own: own.get(t.pid) || null }));
+    let list = tab.map(t => ({ t, r: byPid.get(t.pid), rank: t.z == null ? null : t.rk, own: own.get(t.pid) || null }));
     if (hide) list = list.filter(x => !x.own);
+    const q = query.trim().toLowerCase();
+    if (ui.pos.length) list = list.filter(x => String(x.r.pos).split('/').some(p => ui.pos.includes(p)));
+    if (q) list = list.filter(x => String(x.r.n).toLowerCase().includes(q) || String(x.r.t).toLowerCase() === q);
     // colour scale per category: the 90th percentile of |weighted z| inside the pool
     const sc = CATN.map((_, c) => { const a = tab.filter(t => t.inPool).map(t => Math.abs(t.cats[c] * W[c])).sort((p, q) => p - q); return Math.max(.3, a[Math.floor(a.length * .9)] || 1); });
-    const val = (x, k) => k === 'z' ? x.t.z : k === 'n' ? x.r.n : k === 't' ? x.r.t : k === 'pos' ? x.r.pos : k === 'own' ? (x.own ? (teamName[x.own.owner] || x.own.owner) : '') : k === 'gp' ? (x.r.gp != null ? x.r.gp : x.r.g) : k === 'po' ? x.t.po
+    const val = (x, k) => k === 'z' ? x.t.zw : k === 'n' ? x.r.n : k === 't' ? x.r.t : k === 'pos' ? x.r.pos : k === 'own' ? (x.own ? (teamName[x.own.owner] || x.own.owner) : '') : k === 'gp' ? (x.r.gp != null ? x.r.gp : x.r.g) : k === 'po' ? x.t.po
       : x.t.z == null ? null : (ui.stats === 'raw' ? (k === 8 ? -x.r.line.to : x.r.line[RAWK[k]]) : x.t.cats[k] * W[k]);
     const k = ui.sort === 'z' || isNaN(+ui.sort) ? ui.sort : +ui.sort, str = typeof val(list[0] || { t: { z: 0 }, r: { n: '', t: '', pos: '', line: {} }, own: null }, k) === 'string';
     list.sort((a, b) => { const x = val(a, k), y = val(b, k); if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
       return (str ? String(x).localeCompare(String(y)) : x - y) * ui.dir || (a.rank || 1e9) - (b.rank || 1e9); });
+    const matched = list.length; if (ui.show) list = list.slice(0, ui.show);
     const th = (key, label, cls) => '<th data-k="' + key + '"' + (cls ? ' class="' + cls + '"' : '') + (String(ui.sort) === String(key) ? ' aria-sort="' + (ui.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '>' + label + '</th>';
-    const head = '<thead><tr><th data-nosort style="cursor:default">#</th>' + th('n', 'Player', 'l') + (rosters ? th('own', 'Owner', 'l') : '') + th('t', 'Team') + th('pos', 'Pos') + th('po', 'Playoff games') + th('gp', 'Games') + th('z', 'Zscore') + CATN.map((c, i) => th(i, c)).join('') + '</tr></thead>';
+    const head = '<thead><tr><th data-nosort style="cursor:default">#</th>' + th('n', 'Player', 'l') + (rosters ? th('own', 'Owner', 'l') : '') + th('t', 'Team') + th('pos', 'Pos') + th('po', 'Playoff games') + th('gp', 'Games') + th('z', zd ? '−' + zd + ' ' + (100 - zp) + '% Zscore' : 'Zscore') + CATN.map((c, i) => th(i, c, W[i] === 0 ? 'punted' : '')).join('') + '</tr></thead>';
     const body = '<tbody>' + list.map(x => {
-      const z = x.t.z, cells = CATN.map((_, c) => z == null ? '<td class="dim">—</td>' : '<td>' + (ui.stats === 'raw' ? rawTxt(x.r, c) : chip(x.t.cats[c] * W[c], sc[c], zTxt(x.t.cats[c] * W[c]))) + '</td>').join('');
+      const z = x.t.z, cells = CATN.map((_, c) => z == null ? '<td class="dim">—</td>' : '<td' + (W[c] === 0 ? ' class="punted"' : '') + '>' + (ui.stats === 'raw' ? rawTxt(x.r, c) : chip(x.t.cats[c] * W[c], sc[c], zTxt(x.t.cats[c] * W[c]))) + '</td>').join('');
       return '<tr><td class="dim">' + (x.rank == null ? '—' : x.rank) + '</td><td class="l">' + esc(x.r.n) + '</td>' + (rosters ? '<td class="l' + (x.own ? '' : ' dim') + '">' + (x.own ? esc(teamName[x.own.owner] || x.own.owner) + (x.own.slot === 'IR' ? ' (IR)' : '') : 'Free agent') + '</td>' : '') + '<td>' + esc(x.r.t) + '</td><td>' + esc(x.r.pos) + '</td><td title="' + (x.t.per ? 'Per round: ' + x.t.per.join(' / ') : '') + '">' + (x.t.po == null ? '—' : x.t.po) + '</td><td>' + (x.r.gp != null ? x.r.gp : Math.round(x.r.g)) + '</td>'
-        + '<td><b>' + (z == null ? '—' : zTxt(z)) + '</b></td>' + cells + '</tr>'; }).join('') + '</tbody>';
+        + '<td><b>' + (z == null ? '—' : zTxt(x.t.zw)) + '</b></td>' + cells + '</tr>'; }).join('') + '</tbody>';
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
-    n.textContent = (ui.src === 'season' ? 'ESPN season averages' + (espn.label ? ' (' + espn.label + ')' : '') + (espn.fetchedAt ? ', updated ' + new Date(espn.fetchedAt).toLocaleString() : '') : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + (ui.src === 'season' ? 'ESPN season averages' + (espn.label ? ' (' + espn.label + ')' : '') + (espn.fetchedAt ? ', updated ' + new Date(espn.fetchedAt).toLocaleString() : '') : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
   }
 
-  function sync() { $('src').value = ui.src; $('type').value = ui.type; $('basis').value = ui.basis; $('stats').value = ui.stats; $('poboost').value = ui.poboost; }
+  const cwSel = [...document.querySelectorAll('#catw select')];
+  cwSel.forEach(el => { el.innerHTML = CWV.map(v => '<option value="' + v + '"' + (v === 0 ? ' title="Punt"' : '') + '>×' + v + '</option>').join(''); });
+  function syncW() { cwSel.forEach(el => { const c = +el.dataset.c, v = ui.cw[c]; el.value = String(v); el.className = v === 0 ? 'off' : v !== R.WEIGHTS[c] ? 'chg' : ''; el.disabled = c === 8 && settings().cats === 8; }); }
+  function sync() { $('zdrop').value = ui.zdrop; $('show').value = String(ui.show); document.querySelectorAll('#posf input').forEach(i => { i.checked = ui.pos.includes(i.value); }); syncW(); $('src').value = ui.src; $('type').value = ui.type; $('basis').value = ui.basis; $('stats').value = ui.stats; $('poboost').value = ui.poboost; }
   [['src', 'src'], ['type', 'type'], ['basis', 'basis'], ['stats', 'stats'], ['poboost', 'poboost']].forEach(([id, k]) => $(id).addEventListener('change', () => { ui[k] = $(id).value; save(); draw(); }));
+  [['zdrop', v => v], ['show', Number]].forEach(([id, f]) => $(id).addEventListener('change', () => { ui[id] = f($(id).value); save(); draw(); }));
+  $('q').addEventListener('input', () => { query = $('q').value; draw(); });
+  $('posf').addEventListener('change', () => { ui.pos = [...document.querySelectorAll('#posf input:checked')].map(i => i.value); save(); draw(); });
+  $('catw').addEventListener('change', e => { const el = e.target.closest('select'); if (!el) return; ui.cw[+el.dataset.c] = +el.value; syncW(); save(); draw(); });
+  $('cw-reset').addEventListener('click', () => { ui.cw = R.WEIGHTS.slice(); syncW(); save(); draw(); });
   $('hide').addEventListener('click', () => { if (!rosters) return; ui.hide = !ui.hide; save(); draw(); });
   $('retry').addEventListener('click', () => { fxWait = 0; loadLeague(); });
   $('tbl').addEventListener('click', e => {
