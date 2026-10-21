@@ -207,6 +207,8 @@ tr.click{cursor:pointer}
       <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. Plans cover the current week only.</p>
       <h4>Trade Analyzer</h4>
       <p>Trade Win M is your average chance over the remaining regular-season matchups against the real opponents, with both rosters changed; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
+      <h4>Rankings</h4>
+      <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, as the gain over a replacement-level player (Win vs: Average player subtracts an average player on your roster instead, or an average pool player when no team is saved in Settings). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
       <h4>Shrinkage and missing projections</h4>
       <p>Chances are pulled toward 50% (matchup by 0.72, each category by 0.82) because backtests on 2024-26 weeks showed projections alone are overconfident. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
     </section>
@@ -1222,16 +1224,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
     return o;
   }
-  // Toolbar between the pages; `active` is 'kit', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
+  // Toolbar between the pages; `active` is 'kit', 'rankings', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
-    [['kit', './', 'Draft'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade'], ['settings', 'settings.html', 'Settings']]
+    [['kit', './', 'Draft'], ['rankings', 'rankings.html', 'Rankings'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade'], ['settings', 'settings.html', 'Settings']]
       .map(([k, href, label]) => '<a href="' + href + '"' + (active === k ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
     '.sitenav a:hover{color:var(--ink)}' +
     '.sitenav a[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}' +
     '.sitenav a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}' +
-    '@media (max-width:520px){.sitenav a{padding:6px 8px;font-size:.84rem}}';
+    '@media (max-width:520px){.sitenav{flex-wrap:wrap}.sitenav a{padding:6px 7px;font-size:.82rem}}';
   const api = { norm, stripSfx, NAME_ALIAS, findListed, PROJ_KEYS, projOf, TOOLBAR_HTML, TOOLBAR_CSS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Shared = api;
 })(this);
@@ -1621,7 +1623,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       ast: mix(a.ast, b.ast), stl: mix(a.stl, b.stl), blk: mix(a.blk, b.blk), to: mix(a.to, b.to) };
   }
 
-  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, projLines, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
+  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InPlayers = api;
 })(this);
 
@@ -1905,6 +1907,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const signed = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
   const zsg = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
   const InL = InLeague, InP = InPlayers;
+  // Results saved by their inputs (team, week, day, adds left) and cleared whenever Fantrax data is loaded again, so a repeat
+  // visit to a team or week is a lookup. After drawing, idle time fills in the other weeks and teams (prewarm).
+  const memo = new Map(); let memoGen = 0;
+  const memoed = (key, fn) => { if (!memo.has(key)) memo.set(key, fn()); return memo.get(key); };
+  const dayKey = () => InL.localDay(Date.now());
   let L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
 
   let SS = LS.load(LS.local.get);
@@ -1927,7 +1934,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
   async function load() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
-    $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
+    memo.clear(); memoGen++; $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
     if (!lg) { ui.leagueId = null; sayHtml(LS.NO_LEAGUE_HTML); return; }
     const id = ui.leagueId = lg.id;
@@ -1986,19 +1993,36 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
+  const ctxFor = team => memoed('ctx|' + team + '|' + dayKey(), () => Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now() }));
+  const addsLeft = n => { const v = ui.adds[ui.leagueId + ':' + n]; return v != null ? v : 4; };
+  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey()].join('|'), () => Matchup.projectWeek(c, c.me, n));
+  const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey()].join('|'), () => Matchup.simpleAdds(c, n, { limit: 20 }));
+  const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey()].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left }) : Matchup.addPlan(c, { periods: [n] }));
+  // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
+  let warmTimer = 0;
+  function prewarm() {
+    clearTimeout(warmTimer); const gen = memoGen;
+    if (ui.tab !== 'matchup' || !pool) return;
+    const weeks = [...$('week').options].map(o => +o.value).filter(n => n !== +ui.week), teams = L.teams.map(t => t.id).filter(t => t !== teamFor(ui.tab));
+    const todo = weeks.map(n => () => warm(ctxFor(teamFor(ui.tab)), n)).concat(teams.map(t => () => warm(ctxFor(t), +ui.week)));
+    const next = () => { if (gen !== memoGen || ui.tab !== 'matchup') return; const f = todo.shift(); if (!f) return; try { f(); } catch (e) {} warmTimer = setTimeout(next, 30); };
+    warmTimer = setTimeout(next, 400);
+  }
+  function warm(c, n) { const pw = mPW(c, n); if (pw.opp) { mAdds(c, n); mPlan(c, n, addsLeft(n)); } }
   function render() {
     $('team').value = teamFor(ui.tab);   // each tab keeps its own team
     const meNow = teamFor(ui.tab); if (ctx && ctx.me !== meNow) { bd = null; finderRun++; }   // a different team: the Trade Builder starts over and a running trade search stops
-    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: teamFor(ui.tab), nowMs: Date.now() });
+    ctx = ctxFor(teamFor(ui.tab));
     $('sect').textContent = ui.tab === 'trades' ? 'Trade Analyzer' : 'Matchup Analyzer'; document.title = $('sect').textContent + ' · Courtside Draft Kit';
     document.querySelector('.sitenav').outerHTML = Shared.TOOLBAR_HTML(ui.tab);
     $('week').closest('label').hidden = ui.tab === 'trades';   // trades measure the rest of the season, so no week to pick
     $('tab-matchup').hidden = ui.tab !== 'matchup'; $('tab-trades').hidden = ui.tab !== 'trades';
     if (ui.tab === 'matchup') renderMatchup(); else renderTrades();
+    prewarm();
   }
 
   function renderMatchup() {
-    const n = +ui.week, pw = Matchup.projectWeek(ctx, ctx.me, n), per = L.periods.find(p => p.n === n);
+    const n = +ui.week, pw = mPW(ctx, n), per = L.periods.find(p => p.n === n);
     $('vs-dates').textContent = per ? InL.localDay(per.start) + ' to ' + InL.localDay(per.end - 1) : '';
     if (!pw.opp) { $('vs').textContent = 'No matchup this week'; $('kpis').innerHTML = ''; $('cats').innerHTML = ''; $('adds').innerHTML = ''; $('adds-msg').textContent = ''; $('plan-moves').innerHTML = ''; $('plan-note').textContent = ''; $('plan-sum').textContent = ''; return; }
     const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
@@ -2009,7 +2033,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $('cats').innerHTML = '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
       CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
     // best single adds
-    const rows = Matchup.simpleAdds(ctx, n, { limit: 20 });
+    const rows = mAdds(ctx, n);
     $('adds').innerHTML = rows.length ? '<thead><tr><th class="l">Add</th><th>Pos</th><th>Team</th><th>Games</th><th class="l">Drop</th><th>Win M</th><th>+Win M</th></tr></thead><tbody>' +
       rows.map(r => '<tr><td class="l">' + esc(r.add.n) + (r.add.src !== 'proj' ? '<span class="src">' + (r.add.src === 'actual' ? 'ESPN stats' : 'waiver level') + '</span>' : '') + '</td><td class="pos">' + esc(r.add.pos) + '</td><td>' + esc(r.add.t) +
         '</td><td>' + r.games.toFixed(1) + '</td><td class="l drop">' + (r.drop ? esc(r.drop.n) : 'open spot') + '</td><td>' + chip(r.match, pct(r.match)) + '</td><td><b class="' + (r.dMatch >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dMatch * 100) + '</b></td></tr>').join('') + '</tbody>' : '';
@@ -2017,9 +2041,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     renderPlan(n);
   }
   function renderPlan(n) {
-    const key = ui.leagueId + ':' + n, left = ui.adds[key] != null ? ui.adds[key] : 4;
+    const key = ui.leagueId + ':' + n, left = addsLeft(n);
     $('addsleft').value = String(left);
-    const plan = n === ctx.cur ? Matchup.addPlan(ctx, { addsLeft: left }) : Matchup.addPlan(ctx, { periods: [n] });
+    const plan = mPlan(ctx, n, left);
     $('plan-note').textContent = plan.note || '';
     $('plan-moves').innerHTML = plan.moves.slice().sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : 0)).map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
     $('plan-sum').textContent = plan.start == null ? '' : (plan.moves.length ? 'Win M ' + pct(plan.start) + '% → ' + pct(plan.end) + '%. ' : 'No move helps: Win M stays ' + pct(plan.start) + '%. ') +

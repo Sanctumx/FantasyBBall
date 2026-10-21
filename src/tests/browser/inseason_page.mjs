@@ -37,7 +37,7 @@ async function open(opts = {}) {
 { const { p, errs, ctx } = await open();
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
   ok(/^Matchup Analyzer/.test(await p.title()), 'title says Matchup Analyzer');
-  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft|League|Matchup|Trade|Settings', 'toolbar Draft | League | Matchup | Trade | Settings');
+  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft|Rankings|League|Matchup|Trade|Settings', 'toolbar Draft | Rankings | League | Matchup | Trade | Settings');
   ok(!(await p.$('#src')) && (await p.textContent('#lgname')) === 'Home', 'no league picker; league name shown');
   ok(await p.$eval('#team', s => s.value) === TEAMS[0], 'team defaults to the saved league team');
   ok((await p.$$eval('#team option', o => o.length)) === 14, 'team select has 14 options');
@@ -168,6 +168,20 @@ async function open(opts = {}) {
   const cc = await p.evaluate(() => [getComputedStyle(document.querySelector('#cats td.l')).color, getComputedStyle(document.body).backgroundColor]);
   ok(cc[0] !== cc[1], 'dark: text readable (' + cc + ')');
   ok(errs.length === 0, 'phone/dark no errors');
+  await ctx.close(); }
+
+// cache: weeks and teams are filled in while idle, so switching is a lookup and gives the same numbers as a fresh draw
+{ const { p, errs, ctx } = await open();
+  const grab = () => p.evaluate(() => document.getElementById('kpis').textContent + '|' + document.getElementById('cats').textContent + '|' + document.getElementById('adds').textContent + '|' + document.getElementById('plan-sum').textContent);
+  const go = (id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); el.value = v; const t = performance.now(); el.dispatchEvent(new Event('change', { bubbles: true })); return performance.now() - t; }, [id, v]);
+  const weeks = await p.$$eval('#week option', o => o.map(x => x.value)), w0 = weeks[0], w1 = weeks[1], first = await grab();
+  await p.waitForTimeout(4000);   // idle prewarm
+  const tWeek = await go('week', w1), other = await grab(), tBack = await go('week', w0), again = await grab();
+  ok(tWeek < 40 && tBack < 40, 'switching weeks after prewarm is quick: ' + Math.round(tWeek) + ' / ' + Math.round(tBack) + ' ms');
+  ok(other !== first && again === first, 'cached week gives the same numbers as the first draw');
+  const teams = await p.$$eval('#team option', o => o.map(x => x.value)), tTeam = await go('team', teams[1]);
+  ok(tTeam < 40, 'switching teams after prewarm is quick: ' + Math.round(tTeam) + ' ms');
+  ok(errs.length === 0, 'cache: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
 await b.close();
