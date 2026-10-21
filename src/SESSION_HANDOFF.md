@@ -36,8 +36,13 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 2. **#93** move backtest result files into `src/results/`.
 3. User side: on the PC run `cd ~/Documents/FantasyBBall; git restore netlify.toml; git pull`; edit or delete the stale
    claude.ai Project instructions.
-4. Still to add to `Sanctumx/Claude-Workflow`: (a) the "keep running plan tasks; past the context limit finish, record,
-   stop" rule in `template/CLAUDE.md`'s working rules; (d) the after-edit hook's Windows glob fix and the heredoc note.
+4. Workflow, merged 2026-10-21 (FantasyBBall #22, Claude-Workflow #1; estimated ~20% less usage): context limits 60K / 120K
+   Messages, planner and reviewer at Opus medium (high for hard areas), skill budget rule and unused claude.ai skills and
+   connectors off in `settings.json`, handoff budget 8 KB checked by the hook, release/handoff details in
+   `docs/release-handoff.md`. Check `/skills` in a fresh session that `skillOverrides` hides the synced skills. Check the
+   weekly usage after a few days; if handoffs feel too frequent try 80K / 150K. Still to add to `Sanctumx/Claude-Workflow`:
+   (a) the "keep running plan tasks; past the context limit finish, record, stop" rule in `template/CLAUDE.md`'s working
+   rules; (d) the after-edit hook's Windows glob fix and the heredoc note.
 5. In-season: republish `courtside-draft-board.html` to the board artifact (engine.js changed). Open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit shrink k.
 6. **#112** League Dashboard "Projected": per game = team's average value, per week = week totals, per season = season totals.
