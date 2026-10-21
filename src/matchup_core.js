@@ -18,7 +18,7 @@
     const projected = pool.players.filter(p => p.src === 'proj');
     const ctx = { L, pool, DAYS, me, nowMs, cur: InLeague.currentPeriod(L, nowMs), ref: ref || InPlayers.makeValueRef(projected.map(p => ({ adp: p.adp, g: p.g, line: p.line }))), roster };
     const per = periodOf(L, ctx.cur);
-    ctx.curEnd = per ? per.end : 0; ctx.out = outSet(ctx, box);
+    ctx.curEnd = per ? per.end : 0; ctx.out = outSet(ctx, box); ctx.box = box;
     return ctx;
   }
 
@@ -124,12 +124,20 @@
   function weekStatus(ctx, files, teamId, n) {
     const opp = InLeague.opponentOf(ctx.L, teamId, n);
     if (!opp) return { opp: null };
-    const per = periodOf(ctx.L, n), bx = boxLines(files, per);
-    const list = Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id }));
-    const side = tid => {
-      const segs = teamSegments(ctx, tid, n), pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {}, own = {};
-      pp.forEach(p => {
-        const m = InPlayers.matchTo(list, p.n, p.t), b = m && bx.players.get(m.id);
+    return Object.assign({ opp }, statusCore(ctx, files, teamSegments(ctx, teamId, n), teamSegments(ctx, opp, n), n));
+  }
+  // the status of any two segment lists (a roster with moves applied, say): a player added after the period began carries no
+  // box lines (they were played for another team). Box lines and name matches are cached per context.
+  function statusCore(ctx, files, segsA, segsB, n) {
+    const per = periodOf(ctx.L, n), cache = ctx.statusCache || (ctx.statusCache = {});
+    const c = cache[n] && cache[n].files === files ? cache[n] : (cache[n] = { files, bx: boxLines(files, per), match: new Map() }), bx = c.bx;
+    const list = c.list || (c.list = Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id })));
+    const side = segs => {
+      const pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {}, own = {};
+      pp.forEach((p, i) => {
+        if (segs[i].from > per.start) return;
+        if (!c.match.has(p.key)) { const m = InPlayers.matchTo(list, p.n, p.t); c.match.set(p.key, m && bx.players.get(m.id)); }
+        const b = c.match.get(p.key);
         if (b) b.lines.forEach(l => (byDay[l.d] || (byDay[l.d] = [])).push({ p, v: l.v }));
       });
       Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => nightValue(ctx, b.p) - nightValue(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; (own[x.p.key] || (own[x.p.key] = zeroK()))[c] += x.v[c] || 0; })));
@@ -147,11 +155,18 @@
       return { players, known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
         entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * Math.min(1, whole[i] > 0 ? left[i] / whole[i] : 1) })) };
     };
-    const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
+    const A = side(segsA), B = side(segsB), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
     const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
     const started = share < 1 || A.known.pts + B.known.pts + A.known.fga + B.known.fga > 0;
-    return { opp, started, cat: r.cat.map(p => shrink(p, kOf(KW_CAT, share))), match: shrink(r.match, kOf(KW_MATCH, share)), mu: r.mu, total: r.mu, rest,
+    return { started, cat: r.cat.map(p => shrink(p, kOf(KW_CAT, share))), match: shrink(r.match, kOf(KW_MATCH, share)), mu: r.mu, total: r.mu, rest,
       known: [A.known, B.known], games: [A.leftG, B.leftG], share, roster: [A.players, B.players] };
+  }
+
+  // the add tools' scorer: the current week counts the box scores so far (as the headline does), any other week is the whole-week projection
+  function scoreWeek(ctx, segsA, segsB, n) {
+    if (n !== ctx.cur || !ctx.box) return scoreSegments(ctx, segsA, segsB, true);
+    const s = statusCore(ctx, ctx.box, segsA, segsB, n);
+    return { cat: s.cat, match: s.match, mu: s.mu, games: s.games };
   }
 
   function addFrom(ctx, n) {
@@ -173,7 +188,7 @@
     const per = periodOf(ctx.L, n), opp = InLeague.opponentOf(ctx.L, ctx.me, n);
     if (!opp) return [];
     const mine = teamSegments(ctx, ctx.me, n), oppSegs = teamSegments(ctx, opp, n), from = addFrom(ctx, n);
-    const base = scoreSegments(ctx, mine, oppSegs, true), baseG = segGames(ctx, mine, null, true);
+    const base = scoreWeek(ctx, mine, oppSegs, n), baseG = segGames(ctx, mine, null, true);
     const active = ctx.roster[ctx.me].filter(f => ctx.pool.byKey.get(f).slot !== 'IR').length;
     const dropList = active < ctx.L.maxPlayers ? [null] : lowestValue(ctx, ctx.me, drops, keep);
     const opts = dropList.map(drop => {
@@ -185,7 +200,7 @@
     const score = (add, { drop, kept, lost }) => {
       const segs = kept.concat([{ key: add.key, from, to: per.end }]), g = segGames(ctx, segs, null, true), games = g[g.length - 1];
       if (!(games > 0)) return null;
-      const r = scoreSegments(ctx, segs, oppSegs, true);
+      const r = scoreWeek(ctx, segs, oppSegs, n);
       return { add, drop, games, lost, match: r.match, dMatch: r.match - base.match, dCat: r.cat.map((p, c) => p - base.cat[c]) };
     };
     const first = ctx.pool.players.filter(add => !add.owner && (add.fxStatus === 'FA' || add.fxStatus === 'WW') && from < per.end).map(add => score(add, opts[0])).filter(Boolean);
@@ -224,7 +239,7 @@
     if (periods && !(periods.length === 1 && periods[0] === n)) return { start: null, end: null, moves: [], droppable: [], note: 'Plans cover the current week only' };
     const per = periodOf(L, n), opp = InLeague.opponentOf(L, ctx.me, n);
     const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : droppable, keep), dropSet = new Set(drops.map(p => p.key));
-    const oppSegs = opp ? teamSegments(ctx, opp, n) : [], score = moves => scoreSegments(ctx, applyMoves(ctx, n, moves), oppSegs, true).match;
+    const oppSegs = opp ? teamSegments(ctx, opp, n) : [], score = moves => scoreWeek(ctx, applyMoves(ctx, n, moves), oppSegs, n).match;
     const start = opp ? score([]) : null, plan = { start, end: start, moves: [], droppable: drops, note: null };
     if (!opp) return plan;
     const days = []; for (let t = addFrom(ctx, n); t < per.end; t += 24 * 3600e3) days.push(t);

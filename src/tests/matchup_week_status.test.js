@@ -173,3 +173,15 @@ test('a future week in the Matchup Analyzer keeps expected games like the Trade 
   const seg = t => M.teamSegments(ctx, t, n);
   assert.strictEqual(M.projectWeek(ctx, me, n).match, M.scoreSegments(ctx, seg(me), seg(opp2), false).match);
 });
+
+test('waiver adds and the add plan score the week from the box scores too (idea 127): their base is the headline', () => {
+  const mine = active(me).slice(0, 8);
+  const files = box(mine.map(p => ({ d: firstDay(p), lines: [[p, { pts: 45, fgm: 16, fga: 24, reb: 12, ast: 9 }]] })));
+  const c2 = M.makeCtx({ L, pool, DAYS, rosters: ROS, me, nowMs: NOW, box: files });
+  const ws = M.weekStatus(c2, files, me, 1), whole = M.projectWeek(c2, me, 1);
+  assert.ok(Math.abs(ws.match - whole.match) > 0.01, 'the box scores must move the headline');
+  const rows = M.simpleAdds(c2, 1, { limit: 5 });
+  assert.ok(rows.length > 0);
+  rows.forEach(r => assert.ok(Math.abs(r.match - r.dMatch - ws.match) < 1e-9, 'base ' + (r.match - r.dMatch) + ' vs headline ' + ws.match));
+  assert.ok(Math.abs(M.addPlan(c2, { addsLeft: 1 }).start - ws.match) < 1e-9);
+});

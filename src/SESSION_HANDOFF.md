@@ -52,16 +52,18 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 ## Next session starts with
 
-**Uncommitted on `main`** (ideas 122-125: Waiver adds panel, Team schedule, keep list (replaced the ignore list), Hashtag 2026-10-21 refresh, rebuilt pages;
-`pandas`/`openpyxl` now installed here): ask the user branch + PR or straight push. `main` also has the Matchup week status
-and ideas 118-121 (PR #23). Then: republish `courtside-draft-board.html` to the board artifact (engine.js changed, and
-players.json now has the new Hashtag numbers); refit the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm
-in `calib_pair.js`, the user runs it on the PC); #112, #116, Best adds/plan on remaining games.
-Added 2026-10-21 late: keep list (#125, built, browser check not re-run); open **#126** Hashtag-only players (plan in IDEAS, needs cut-off decision) and **#127** waiver adds Win M differs from the Matchup headline (adds ignore box scores). Tabled: #121. Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no
-dedicated test; Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is
-a guess (#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds
-against drops 2-5. Offered, unanswered: a "Team games left" column. Browser checks passed before the Hashtag rebuild only.
-First step next session: user picks the #126 cut-off (rank 300 recommended), then planner-approved build; then #127 (analyst not needed, tests first). Browser checks need re-running (keep list, Hashtag rebuild).
+**Branch `waiver-adds-keep-list`** (2 commits, unpushed, PR not opened): ideas 122-125 (Waiver adds panel, Team schedule, keep
+list, Hashtag refresh), **126** (68 Hashtag-only players, rank <= 300, now in players.json), **127** (waiver adds and plan
+scored from box scores like the Matchup headline) and **128** (period dates follow Fantrax: week 1 = Oct 20 - Oct 25). 190 unit
+tests and all browser checks pass. Next: reviewer on the branch diff, PR, push when the user says. Then: republish
+`courtside-draft-board.html` to the board artifact (engine.js changed; players.json has the Hashtag numbers and new rows); refit
+the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
+#112, #116, Best adds/plan on remaining games.
+Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
+Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess
+(#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against
+drops 2-5; `matchup_core` addPlan day list still runs to per.end (an extra empty day). Offered, unanswered: a "Team games left"
+column. 126 leftovers: `ftx` of the 234 BBM rows not refreshed from the Fantrax snapshot.
 Note: 6 context-hook tests fail when run inside a long session (not code).
 
 ## This PC
