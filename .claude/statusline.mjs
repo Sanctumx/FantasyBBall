@@ -6,12 +6,12 @@ import { execFileSync } from 'node:child_process';
 
 // Context thresholds in tokens, not %: on a 1M-token window, 50% is 500K tokens, far past the point where every
 // message re-sending the whole conversation gets expensive. The rule is about the conversation itself (the Messages
-// line in /context): plan a break past about 115K of it, stop past about 265K. The status line sees only the total,
+// line in /context): plan a break past about 60K of it, stop past about 120K. The status line sees only the total,
 // so it adds the fixed start-up cost (system, tools, skills, CLAUDE.md): about 35K in the terminal and VS Code, which
-// gives 150K / 300K. Many MCP servers raise it; set CTX_BASELINE to the total /context shows in a fresh session.
+// gives 95K / 155K. Many MCP servers raise it; set CTX_BASELINE to the total /context shows in a fresh session.
 const BASELINE = Number(process.env.CTX_BASELINE) || 35000;
-const BREAK_AT = BASELINE + 115000;  // plan a break: /handoff, then /clear at the next stop
-const STOP_AT = BASELINE + 265000;   // stop at the next safe point
+const BREAK_AT = BASELINE + 60000;   // plan a break: /handoff, then /clear at the next stop
+const STOP_AT = BASELINE + 120000;   // stop at the next safe point
 const COLD_MIN = 60000;   // a cold cache only matters once there's this much to re-read
 const PLAN_WARN_AT = 80;  // 5-hour plan usage % shown in red
 

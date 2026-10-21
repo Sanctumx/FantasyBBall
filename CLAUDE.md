@@ -26,9 +26,9 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
   opened.
 - **Hook** (`.claude/hooks/after-edit.mjs`): after an edit to tested code it runs the unit tests (~3 s) and reports
   failures; after an edit to the handoff it warns past 150 lines. Fix what it reports before moving on.
-- **Context hooks** (`.claude/hooks/context-warn.mjs`, `context-stop.mjs`): once the conversation passes about 115K
-  tokens (stop past 265K) I get a one-line warning and you get the same instruction: finish the current task, don't
-  start further plan tasks, run `/handoff`, then tell me to `/clear`. If a turn ends past 115K with no handoff
+- **Context hooks** (`.claude/hooks/context-warn.mjs`, `context-stop.mjs`): once the conversation passes about 60K
+  tokens (stop past 120K) I get a one-line warning and you get the same instruction: finish the current task, don't
+  start further plan tasks, run `/handoff`, then tell me to `/clear`. If a turn ends past 60K with no handoff
   recorded, the Stop hook makes you run it once. Works in the app's Claude Code tab, VS Code and the terminal, and
   measures the start-up cost from the session log (no need to run `/context`); `CTX_BASELINE` overrides it.
 - **Status line** (`.claude/statusline.mjs`): model and effort, context %, 5-hour plan usage, cache state, branch,
@@ -46,10 +46,10 @@ keeping the model picker on Sonnet. Judgment work goes to subagents, each pinned
 | Work | Who does it | Model · effort |
 | --- | --- | --- |
 | Building: UI, pages, Fantrax sync, Worker, collector, docs, builds, carrying out plans | Main session | Sonnet · medium |
-| Planning anything bigger than a small fix, and any change in a hard area | `planner` subagent | Opus · high |
+| Planning anything bigger than a small fix, and any change in a hard area | `planner` subagent | Opus · medium (dispatch with effort high for a hard area) |
 | Designing backtests and judging their results | `analyst` subagent | Opus · high |
 | Searching the repo, `IDEAS.md` and results (`src/` has 800+ files; don't read them in the main session) | `explorer` subagent | Haiku · low |
-| Reviewing a finished branch (dispatch it with model sonnet if the branch only changes docs, config or wording) | `reviewer` subagent | Opus · high |
+| Reviewing a finished branch (dispatch it with model sonnet if the branch only changes docs, config or wording) | `reviewer` subagent | Opus · medium (dispatch with effort high for a hard area) |
 
 **How a planned task runs:** the main session (often with the explorer) gathers the task, the relevant files and any
 related `IDEAS.md` rows, briefs the planner with all of it (the planner doesn't see this conversation), shows the user the
@@ -72,6 +72,14 @@ They work alongside the routing above; this file takes precedence over them. Siz
 | Medium task (a few files, clear goal) | The `planner` subagent's short plan in the chat, approved by the user; then test-first and verification. |
 | Big feature, or anything that changes what the Model pick sees | Full flow: brainstorming (main session, it needs the user), then the `planner` drafts the writing-plans document from that skill's format and the main session saves it, then executing-plans inline, then one review. |
 
+- **Skill budget** (overrides using-superpowers' "invoke at 1% chance"): for small and medium tasks don't load
+  test-driven-development or executing-plans; the test-first rule in this file is enough. Load them only for a big
+  feature. Never run writing-plans or executing-plans as subagents.
+- **Main model:** Sonnet unless the user chose otherwise. The VS Code panel's model picker overrides `settings.json`,
+  so if the session is on Opus and the user hasn't said it's deliberate, mention it once.
+- **Skills and connectors:** unused claude.ai skills are turned off in `settings.json` (`skillOverrides`) and claude.ai
+  connectors are off (`disableClaudeAiConnectors`; a `true` anywhere wins, so `/mcp` can't turn one back on). To use
+  one, edit those lines in `.claude/settings.json` (Claude Code reloads it mid-session).
 - **Planning:** writing-plans' thinking is done by the `planner` subagent (Opus); the main session only saves the file.
 - **Executing:** use executing-plans inline by default. Use subagent-driven-development only for tasks that are truly
   independent of each other, and give every subagent an explicit model, as that skill requires.
@@ -83,7 +91,7 @@ They work alongside the routing above; this file takes precedence over them. Siz
 
 - Push, merge or deploy only when the user says "push" or types /release.
 - Keep running plan tasks back to back unless something needs the user's input; but once a task has taken the conversation
-  past the context limit (Messages past about 115K in `/context`), finish that task, record it, and don't autorun further
+  past the context limit (Messages past about 60K in `/context`), finish that task, record it, and don't autorun further
   tasks: tell the user to `/handoff` and `/clear` (user, 2026-10-20).
 - Using the user's computer (copying files there, staging results back) is allowed without asking each time (user,
   2026-10-18) until the user withdraws it. The user still starts PC backtest runs themselves.
@@ -120,25 +128,7 @@ They work alongside the routing above; this file takes precedence over them. Siz
    **/handoff** does the same recording without pushing (commits locally on a feature branch, leaves main uncommitted);
    use it before `/clear` when the work isn't ready to ship.
 
-## Release and handoff specifics (read by /release and /handoff)
+## Release and handoff specifics
 
-- **Files:** `src/SESSION_HANDOFF.md`, `src/IDEAS.md`, `src/HANDOFF_ARCHIVE.md` (new write-ups at the top of "Entries
-  after 2026-10-18").
-- **Results metric:** prize equity (`python3 src/prize_equity.py <arm>:<baseline> ...`).
-- **Mirror the handoff:** none. The repo copy is the only one (the claude.ai Project copy was dropped, 2026-10-20).
-- **Handoff also tracks:** board artifact version (claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz), math doc revision,
-  deployment notes.
-- **Build check** (only if `src/engine.js`, `src/app.html` or `src/league.html` changed since the last push): the build
-  command above, the unit tests, a Playwright smoke test with no page errors, then publish
-  `src/courtside-draft-board.html` to the board artifact if it isn't current. Never publish `app.html`.
-- **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`, the only host (the Netlify site
-  was deleted, 2026-10-20).
-- **Never during /release or /handoff:** use the user's computer.
-
-## In Claude Code cloud sessions
-
-- `gh pr …` commands fail (GraphQL is blocked). Use the REST API:
-  - open: `gh api repos/Sanctumx/FantasyBBall/pulls -f title=… -f head=<branch> -f base=main -F body=@pr.md`
-  - merge: `gh api -X PUT repos/Sanctumx/FantasyBBall/pulls/<n>/merge -f merge_method=merge`
-- Remote branches can't be deleted from the session; GitHub deletes a PR's branch when it merges ("Automatically
-  delete head branches" is on). Don't try to delete them.
+The specifics /release and /handoff need (files, build check, deploy, what never to do) and the cloud-session
+`gh` workarounds are in `docs/release-handoff.md`. Read it when running either skill or working in a cloud session.

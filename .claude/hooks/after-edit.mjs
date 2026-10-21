@@ -12,6 +12,7 @@ const CONFIG = {
   testTimeoutMs: 120000,
   handoff: 'src/SESSION_HANDOFF.md',
   handoffMaxLines: 150,
+  handoffMaxBytes: 8000,  // long lines slip past a line count; bytes track what each session pays to read
 };
 
 // Glob to regex: '**/' = any folders (or none), '**' = anything, '*' = anything within one folder.
@@ -50,9 +51,11 @@ if (CONFIG.testCmd && CONFIG.testOn.some(g => toRegex(g).test(rel))) {
 }
 
 if (rel === CONFIG.handoff) {
-  const lines = readFileSync(path.join(root, rel), 'utf8').split('\n').length;
-  if (lines > CONFIG.handoffMaxLines)
-    problems.push(`${rel} is ${lines} lines (budget ${CONFIG.handoffMaxLines}). Move finished detail to the archive.`);
+  const text = readFileSync(path.join(root, rel), 'utf8');
+  const lines = text.split('\n').length, bytes = Buffer.byteLength(text);
+  if (lines > CONFIG.handoffMaxLines || bytes > CONFIG.handoffMaxBytes)
+    problems.push(`${rel} is ${lines} lines / ${bytes} bytes (budget ${CONFIG.handoffMaxLines} / ${CONFIG.handoffMaxBytes}). ` +
+      'Move stable reference to its own file and finished detail to the archive, unchanged.');
 }
 
 if (problems.length) { process.stderr.write(problems.join('\n\n') + '\n'); process.exit(2); }

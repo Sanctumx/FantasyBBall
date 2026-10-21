@@ -4,8 +4,8 @@
 // Set CTX_BASELINE to override it with the total /context shows in a fresh chat.
 import { readFileSync } from 'node:fs';
 
-export const BREAK_AT = 115000;  // Messages: finish the task, then /handoff and /clear
-export const STOP_AT = 265000;   // Messages: stop at the next safe point
+export const BREAK_AT = 60000;  // Messages: finish the task, then /handoff and /clear
+export const STOP_AT = 120000;   // Messages: stop at the next safe point
 export const k = n => Math.round(n / 1000) + 'K';
 
 export function readInput() {
