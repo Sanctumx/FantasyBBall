@@ -61,7 +61,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
 { const { p, errs, ctx } = await open({ 'courtside-settings-v1': store({ id: 'lg1', name: 'Mock', teams: [], loadedAt: 1 }) });
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(800);
   ok(!!(await p.$('#tbl th[data-k="own"]')), 'league: Owner column');
-  const all = await rows(p), owners = await p.$$eval('#tbl tbody tr td:nth-child(1)', t => t.map(e => e.textContent));
+  const all = await rows(p), owners = await p.$$eval('#tbl tbody tr td:nth-child(3)', t => t.map(e => e.textContent));
   const taken = owners.filter(o => o && o !== 'Free agent').length;
   ok(taken > 100 && taken < 180, 'owners shown for the rostered players: ' + taken);
   ok(owners.some(o => /\(IR\)/.test(o)), 'IR players show an owner');
