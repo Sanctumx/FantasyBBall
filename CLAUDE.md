@@ -78,7 +78,8 @@ They work alongside the routing above; this file takes precedence over them. Siz
 - **Main model:** Sonnet unless the user chose otherwise. The VS Code panel's model picker overrides `settings.json`,
   so if the session is on Opus and the user hasn't said it's deliberate, mention it once.
 - **Skills and connectors:** unused claude.ai skills are turned off in `settings.json` (`skillOverrides`) and claude.ai
-  connectors are off (`disableClaudeAiConnectors`). To use one, change that line in `.claude/settings.local.json`.
+  connectors are off (`disableClaudeAiConnectors`; a `true` anywhere wins, so `/mcp` can't turn one back on). To use
+  one, edit those lines in `.claude/settings.json` (Claude Code reloads it mid-session).
 - **Planning:** writing-plans' thinking is done by the `planner` subagent (Opus); the main session only saves the file.
 - **Executing:** use executing-plans inline by default. Use subagent-driven-development only for tasks that are truly
   independent of each other, and give every subagent an explicit model, as that skill requires.
