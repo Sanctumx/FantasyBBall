@@ -12,6 +12,7 @@
       "Read(/league.html)",
       "Read(/inseason.html)",
       "Read(/settings.html)",
+      "Read(/rankings.html)",
       "Read(/math.html)",
       "Read(**/node_modules/**)"
     ]
