@@ -8,7 +8,7 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
-108. **Settings tab (2026-10-20, in progress, tasks 1-5 of 10 done).** The user wants to set the league once and have every tab read it,
+108. **Settings tab (2026-10-20, in progress, tasks 1-8 of 10 done).** Tasks 6-8: Draft's "Fantrax draft" panel imports the Settings league's draft via `fxDraftPlan` (team-count mismatch shows an error, Settings untouched, draft team kept in board `fx.myTeam`); `League.sourceFromRosters` builds the League source from current non-IR rosters (rounds-major, open spots keep their team, parity with a full draft tested); League tab reads the store, team remembered per league id; shared toolbar CSS shrinks under 520 px. 109 unit tests pass. The user wants to set the league once and have every tab read it,
 instead of syncing per tab. Design `docs/superpowers/specs/2026-10-20-settings-tab-design.md`, plan `docs/superpowers/plans/2026-10-20-settings-tab.md`
 (branch `settings-tab`, cut from `matchup-trade-analyzers`). Rulings: League Dashboard analyzes the league's current Fantrax rosters (not a draft);
 Load overwrites the settings it fetches with a one-line note; Draft is separate from the league (Load never touches picks/log/slot; slot, order,
