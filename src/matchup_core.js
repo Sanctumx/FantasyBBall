@@ -23,14 +23,28 @@
     return list.map(key => ({ key, from: per.start, to: per.end }));
   }
 
-  // expected games per segment, capped per local day at the league's active-player limit
-  function segGames(ctx, segs, used) {
-    const pp = segs.map(s => ctx.pool.byKey.get(s.key));
-    return InLeague.rosterGames(segs.map((s, i) => ({ t: pp[i].t, a: Math.min(1, pp[i].g / 82), from: s.from, to: s.to })), ctx.DAYS, ctx.L.maxActive, used);
+  // games per segment. Default (Trade Analyzer): expected games, availability g/82 per team game, capped per local day at the
+  // league's active-player limit. whole (Matchup Analyzer): each real team game in the window counts 1, and on a night with more
+  // players than the limit (less the `used` slots) only the highest-value players play
+  function segGames(ctx, segs, used, whole) {
+    if (!whole) {
+      const pp = segs.map(s => ctx.pool.byKey.get(s.key));
+      return InLeague.rosterGames(segs.map((s, i) => ({ t: pp[i].t, a: Math.min(1, pp[i].g / 82), from: s.from, to: s.to })), ctx.DAYS, ctx.L.maxActive, used);
+    }
+    const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, pp = segs.map(s => ctx.pool.byKey.get(s.key)), byDay = {}, out = segs.map(() => 0);
+    segs.forEach((s, i) => (G[pp[i].t] || []).map(x => x * 1000).filter(ms => ms >= s.from && ms < s.to).forEach(ms => {
+      const d = InLeague.localDay(ms);
+      (byDay[d] || (byDay[d] = [])).push(i);
+    }));
+    Object.keys(byDay).forEach(d => {
+      const cap = Math.max(0, ctx.L.maxActive - ((used && used[d]) || 0));
+      byDay[d].map(i => ({ i, v: valueOf(ctx, pp[i]) })).sort((a, b) => b.v - a.v || a.i - b.i).slice(0, cap).forEach(x => { out[x.i] += 1; });
+    });
+    return out;
   }
-  function scoreSegments(ctx, segsA, segsB) {
+  function scoreSegments(ctx, segsA, segsB, whole) {
     const side = segs => {
-      const g = segGames(ctx, segs);
+      const g = segGames(ctx, segs, null, whole);
       return { games: g.reduce((s, x) => s + x, 0), entries: segs.map((s, i) => ({ p: ctx.pool.byKey.get(s.key).line, games: g[i], gVar: GVAR })) };
     };
     const A = side(segsA), B = side(segsB), r = Engine.pairMatchup(A.entries, B.entries);
@@ -39,7 +53,7 @@
   function projectWeek(ctx, teamId, n) {
     const opp = InLeague.opponentOf(ctx.L, teamId, n);
     if (!opp) return { opp: null };
-    return Object.assign({ opp }, scoreSegments(ctx, teamSegments(ctx, teamId, n), teamSegments(ctx, opp, n)));
+    return Object.assign({ opp }, scoreSegments(ctx, teamSegments(ctx, teamId, n), teamSegments(ctx, opp, n), true));
   }
 
   // ---- week status: box-score totals so far + the games still to play (idea 118, 2026-10-21) ----
@@ -93,7 +107,7 @@
       const rest = segs.map((s, i) => ({ key: s.key, from: Math.max(s.from, cutoffOf(ctx, bx, pp[i].t, per)), to: s.to }));
       // a night partly played keeps its lineup limit: players already counted that day use up slots
       const used = {}; Object.keys(byDay).forEach(d => { used[d] = Math.min(ctx.L.maxActive, byDay[d].length); });
-      const whole = segGames(ctx, segs), left = segGames(ctx, rest, used);
+      const whole = segGames(ctx, segs, null, true), left = segGames(ctx, rest, used, true);
       const players = segs.map((sg, i) => {
         const p = pp[i], k = own[p.key] || zeroK(), g = left[i], l = p.line;
         const cur = [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to];
@@ -125,18 +139,18 @@
     const per = periodOf(ctx.L, n), opp = InLeague.opponentOf(ctx.L, ctx.me, n);
     if (!opp) return [];
     const mine = teamSegments(ctx, ctx.me, n), oppSegs = teamSegments(ctx, opp, n), from = addFrom(ctx, n);
-    const base = scoreSegments(ctx, mine, oppSegs), baseG = segGames(ctx, mine);
+    const base = scoreSegments(ctx, mine, oppSegs, true), baseG = segGames(ctx, mine, null, true);
     const active = ctx.roster[ctx.me].filter(f => ctx.pool.byKey.get(f).slot !== 'IR').length;
     const drop = active < ctx.L.maxPlayers ? null : lowestValue(ctx, ctx.me, 1)[0] || null;
     const di = drop ? mine.findIndex(s => s.key === drop.key) : -1;
     const kept = drop ? mine.map((s, i) => i === di ? { key: s.key, from: s.from, to: Math.max(s.from, Math.min(s.to, from)) } : s) : mine;
-    const lost = drop ? baseG[di] - segGames(ctx, kept)[di] : 0;
+    const lost = drop ? baseG[di] - segGames(ctx, kept, null, true)[di] : 0;
     const rows = [];
     ctx.pool.players.forEach(add => {
       if (add.owner || (add.fxStatus !== 'FA' && add.fxStatus !== 'WW') || from >= per.end) return;
-      const segs = kept.concat([{ key: add.key, from, to: per.end }]), g = segGames(ctx, segs), games = g[g.length - 1];
+      const segs = kept.concat([{ key: add.key, from, to: per.end }]), g = segGames(ctx, segs, null, true), games = g[g.length - 1];
       if (!(games > 0)) return;
-      const r = scoreSegments(ctx, segs, oppSegs);
+      const r = scoreSegments(ctx, segs, oppSegs, true);
       rows.push({ add, drop, games, lost, match: r.match, dMatch: r.match - base.match, dCat: r.cat.map((p, c) => p - base.cat[c]) });
     });
     return rows.sort((a, b) => b.dMatch - a.dMatch).slice(0, limit);
@@ -172,7 +186,7 @@
     if (periods && !(periods.length === 1 && periods[0] === n)) return { start: null, end: null, moves: [], droppable: [], note: 'Plans cover the current week only' };
     const per = periodOf(L, n), opp = InLeague.opponentOf(L, ctx.me, n);
     const drops = lowestValue(ctx, ctx.me, droppable == null ? L.maxPlayers - L.maxActive : droppable), dropSet = new Set(drops.map(p => p.key));
-    const oppSegs = opp ? teamSegments(ctx, opp, n) : [], score = moves => scoreSegments(ctx, applyMoves(ctx, n, moves), oppSegs).match;
+    const oppSegs = opp ? teamSegments(ctx, opp, n) : [], score = moves => scoreSegments(ctx, applyMoves(ctx, n, moves), oppSegs, true).match;
     const start = opp ? score([]) : null, plan = { start, end: start, moves: [], droppable: drops, note: null };
     if (!opp) return plan;
     const days = []; for (let t = addFrom(ctx, n); t < per.end; t += 24 * 3600e3) days.push(t);

@@ -110,3 +110,16 @@ test('status is only reported once something has been played', () => {
   const a = active(me)[0];
   assert.strictEqual(M.weekStatus(ctx, box([{ d: firstDay(a), lines: [[a, { pts: 9 }]] }]), me, 1).started, true);
 });
+
+test('games left are whole numbers: real team games still to play, no availability fraction', () => {
+  const s = M.weekStatus(ctx, [], me, 1);
+  s.roster[0].forEach(r => {
+    assert.strictEqual(r.games, Math.round(r.games), r.n + ' whole');
+    const sched = DAYS.games[r.t].filter(x => x * 1000 >= P1.start && x * 1000 < P1.end).length;
+    assert.ok(r.games <= sched, r.n + ' has at most his team games');
+  });
+  assert.strictEqual(s.games[0], Math.round(s.games[0]));
+  const a = active(me)[0], n = s.roster[0].find(r => r.key === a.key).games;
+  const t = M.weekStatus(ctx, box([{ d: firstDay(a), lines: [[a, { pts: 9 }]] }]), me, 1).roster[0].find(r => r.key === a.key).games;
+  assert.strictEqual(t, n - 1, 'a played game comes off by exactly one');
+});

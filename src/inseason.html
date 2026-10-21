@@ -380,7 +380,7 @@ tr.click{cursor:pointer}
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
     $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): ' + (pw.known ? 'games played so far counted, the rest projected' : 'whole week projected, results so far not counted') + '</span></div>' +
-      '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your ' + (pw.known ? 'games left' : 'expected games') + '</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their ' + (pw.known ? 'games left' : 'expected games') + '</span></div>';
+      '<div class="kpi"><b>' + pw.games[0].toFixed(0) + '</b><span>your ' + (pw.known ? 'games left' : 'expected games') + '</span></div><div class="kpi"><b>' + pw.games[1].toFixed(0) + '</b><span>their ' + (pw.known ? 'games left' : 'expected games') + '</span></div>';
     const sofar = k => k ? [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to] : null;
     const cur = pw.known ? [sofar(pw.known[0]), sofar(pw.known[1])] : null;
     $('cats').innerHTML = cur
@@ -391,7 +391,7 @@ tr.click{cursor:pointer}
     $('status').hidden = !pw.roster;
     if (pw.roster) {
       $('st-team').innerHTML = '<thead><tr><th class="l">Player</th><th>Games left</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '</tr></thead><tbody>' +
-        pw.roster[0].map(r => '<tr><td class="l">' + esc(r.n) + ' <span class="src">' + esc(r.t) + '</span></td><td>' + r.games.toFixed(1) + '</td>' +
+        pw.roster[0].map(r => '<tr><td class="l">' + esc(r.n) + ' <span class="src">' + esc(r.t) + '</span></td><td>' + r.games.toFixed(0) + '</td>' +
           CATS.map((c, i) => '<td><b>' + fmtStat(r.proj[i], i) + '</b><span class="src"> ' + fmtStat(r.cur[i], i) + '</span></td>').join('') + '</tr>').join('') + '</tbody>';
       $('st-note').textContent = 'projected final, with what he has done so far in grey; estimate from your current roster (no roster history)';
     }
@@ -399,7 +399,7 @@ tr.click{cursor:pointer}
     const rows = mAdds(ctx, n);
     $('adds').innerHTML = rows.length ? '<thead><tr><th class="l">Add</th><th>Pos</th><th>Team</th><th>Games</th><th class="l">Drop</th><th>Win M</th><th>+Win M</th></tr></thead><tbody>' +
       rows.map(r => '<tr><td class="l">' + esc(r.add.n) + (r.add.src !== 'proj' ? '<span class="src">' + (r.add.src === 'actual' ? 'ESPN stats' : 'waiver level') + '</span>' : '') + '</td><td class="pos">' + esc(r.add.pos) + '</td><td>' + esc(r.add.t) +
-        '</td><td>' + r.games.toFixed(1) + '</td><td class="l drop">' + (r.drop ? esc(r.drop.n) : 'open spot') + '</td><td>' + chip(r.match, pct(r.match)) + '</td><td><b class="' + (r.dMatch >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dMatch * 100) + '</b></td></tr>').join('') + '</tbody>' : '';
+        '</td><td>' + r.games.toFixed(0) + '</td><td class="l drop">' + (r.drop ? esc(r.drop.n) : 'open spot') + '</td><td>' + chip(r.match, pct(r.match)) + '</td><td><b class="' + (r.dMatch >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dMatch * 100) + '</b></td></tr>').join('') + '</tbody>' : '';
     $('adds-msg').textContent = rows.length ? '' : 'No games left this week for any available player.';
     renderPlan(n);
   }
