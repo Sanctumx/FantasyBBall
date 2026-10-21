@@ -82,7 +82,7 @@ tbody tr:hover td{background:var(--sunk)}
   <section class="panel" aria-label="Rankings controls">
     <div class="ctl">
       <label class="f" for="q">Find player<input type="text" id="q" placeholder="Name or team" autocomplete="off"></label>
-      <label class="f" for="src">Source<select id="src" title="Season to date uses ESPN's averages; Projections use the board's projections.">
+      <label class="f" for="src">Source<select id="src" title="Season to date and the recent-games windows average the 2026-27 box scores; Projections use the board's projections.">
         <option value="season">Season to date</option>
         <optgroup label="Recent games"><option value="w7">Last week</option><option value="w14">Last 2 weeks</option><option value="w30">Last month</option></optgroup>
         <optgroup label="Projections"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></optgroup></select></label>
@@ -134,7 +134,7 @@ tbody tr:hover td{background:var(--sunk)}
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
   const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
-  let SS = LS.load(LS.local.get), espn = null, box = [], fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
+  let SS = LS.load(LS.local.get), box = [], fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
   const cache = new Map();   // source rows and tables, by key
 
   async function fxGet(what, id) {
@@ -146,9 +146,6 @@ tbody tr:hover td{background:var(--sunk)}
     return body;
   }
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
-  async function loadStats() {
-    try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
-  }
 
   // monthly box-score files (stats/box-YYYY-MM.json) from the season's first month to this month; missing months are skipped
   async function loadBox() {
@@ -159,7 +156,7 @@ tbody tr:hover td{background:var(--sunk)}
     }
     return out;
   }
-  const WINDAYS = { w7: 7, w14: 14, w30: 30 };
+  const WINDAYS = { season: 400, w7: 7, w14: 14, w30: 30 };
 
   // the league loaded in Settings: owners come from its current rosters; the table works without it
   async function loadLeague() {
@@ -189,7 +186,7 @@ tbody tr:hover td{background:var(--sunk)}
   }
   function sourceRows() {
     const k = 'rows:' + ui.src; if (cache.has(k)) return cache.get(k);
-    const rows = ui.src === 'season' ? (espn ? R.seasonSource(espn, PLAYERS) : []) : WINDAYS[ui.src] ? windowOf().rows : R.projSource(PLAYERS, ui.src);
+    const rows = WINDAYS[ui.src] ? windowOf().rows : R.projSource(PLAYERS, ui.src);
     cache.set(k, rows); return rows;
   }
   // playoff games by team for the league's playoff weeks (Settings); recomputed only when those settings change
@@ -239,8 +236,7 @@ tbody tr:hover td{background:var(--sunk)}
   function draw() {
     const rows = sourceRows(), n = $('note');
     $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
-    if (WINDAYS[ui.src] && !windowOf().rows.length) { $('tbl').innerHTML = ''; n.textContent = 'No games in the box-score files yet; this window fills in as the season is played.'; return; }
-    if (ui.src === 'season' && !espn) { $('tbl').innerHTML = ''; n.textContent = 'ESPN season stats are not available yet.'; return; }
+    if (WINDAYS[ui.src] && !windowOf().rows.length) { $('tbl').innerHTML = ''; n.textContent = 'No games in the box-score files yet; the table fills in as the season is played.'; return; }
     const tab0 = tableFor(rows), tab = R.withPlayoffs(tab0, rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
     if (s.cats !== 9) W[8] = 0;
     syncW();
@@ -275,7 +271,7 @@ tbody tr:hover td{background:var(--sunk)}
         + '<td><b>' + (z == null ? '—' : zTxt(x.t.zw)) + '</b></td>' + wTd(x.r.pid, 'c') + wTd(x.r.pid, 'm') + cells + '</tr>'; }).join('') + '</tbody>';
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
-    n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + 'Win C / Win M are season-long, as on the Draft tab, against simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? 'Games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : ui.src === 'season' ? 'ESPN season averages' + (espn.label ? ' (' + espn.label + ')' : '') + (espn.fetchedAt ? ', updated ' + new Date(espn.fetchedAt).toLocaleString() : '') : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + 'Win C / Win M are season-long, as on the Draft tab, against simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
   }
 
   const cwSel = [...document.querySelectorAll('#catw select')];
@@ -300,6 +296,6 @@ tbody tr:hover td{background:var(--sunk)}
     if ((SS.league && SS.league.id) !== was) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
   });
   sync();
-  Promise.all([loadStats(), loadBox()]).then(([j, b]) => { espn = j; box = b; draw(); loadLeague(); });
+  loadBox().then(b => { box = b; draw(); loadLeague(); });
 })();
 </script>

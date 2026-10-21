@@ -28,7 +28,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
 // 1. no league: season table, no Owner column, Hide taken disabled, pool size in the note
 { const { p, errs, ctx } = await open({});
   ok(await p.$eval('.sitenav a[aria-current="page"]', e => e.textContent) === 'Rankings', 'toolbar marks Rankings');
-  ok(await rows(p) > 100, 'season to date lists players');
+  ok(await rows(p) > 20, "season to date lists players from the 2026-27 box scores");
   ok(!(await p.$('#tbl th[data-k="own"]')), 'no league: no Owner column');
   ok(await p.$eval('#hide', e => e.disabled), 'no league: Hide taken disabled');
   ok(/top 168 players/.test(await p.$eval('#note', e => e.textContent)), 'note names the pool size 14 x 12');
@@ -37,7 +37,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
   ok(await rows(p) === 234, 'projections list all 234 players');
   await p.selectOption('#src', 'w7'); await p.waitForTimeout(800);
-  ok(await rows(p) > 20 && /Games 20\d\d-\d\d-\d\d to /.test(await p.$eval('#note', e => e.textContent)), 'Last week lists players from the box scores and names its dates');
+  ok(await rows(p) > 20 && /[Gg]ames 20\d\d-\d\d-\d\d to /.test(await p.$eval('#note', e => e.textContent)), 'Last week lists players from the box scores and names its dates');
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
   const top = (await names(p))[0];
   await p.click('#tbl th[data-k="n"]'); await p.waitForTimeout(100);
