@@ -84,21 +84,28 @@
     const per = periodOf(ctx.L, n), bx = boxLines(files, per);
     const list = Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id }));
     const side = tid => {
-      const segs = teamSegments(ctx, tid, n), pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {};
+      const segs = teamSegments(ctx, tid, n), pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {}, own = {};
       pp.forEach(p => {
         const m = InPlayers.matchTo(list, p.n, p.t), b = m && bx.players.get(m.id);
         if (b) b.lines.forEach(l => (byDay[l.d] || (byDay[l.d] = [])).push({ p, v: l.v }));
       });
-      Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => valueOf(ctx, b.p) - valueOf(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; })));
+      Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => valueOf(ctx, b.p) - valueOf(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; (own[x.p.key] || (own[x.p.key] = zeroK()))[c] += x.v[c] || 0; })));
       const rest = segs.map((s, i) => ({ key: s.key, from: Math.max(s.from, cutoffOf(ctx, bx, pp[i].t, per)), to: s.to }));
       const whole = segGames(ctx, segs), left = segGames(ctx, rest);
-      return { known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
+      const players = segs.map((sg, i) => {
+        const p = pp[i], k = own[p.key] || zeroK(), g = left[i], l = p.line;
+        const cur = [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to];
+        const fga = k.fga + l.fga * g, fta = k.fta + l.fta * g;
+        const proj = [fga ? (k.fgm + l.fgp * l.fga * g) / fga : 0, fta ? (k.ftm + l.ftp * l.fta * g) / fta : 0, k.tpm + l.tpm * g, k.pts + l.pts * g, k.reb + l.reb * g, k.ast + l.ast * g, k.stl + l.stl * g, k.blk + l.blk * g, k.to + l.to * g];
+        return { key: p.key, n: p.n, pos: p.pos, t: p.t, games: g, cur, proj };
+      });
+      return { players, known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
         entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * (whole[i] > 0 ? left[i] / whole[i] : 0) })) };
     };
     const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
     const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
     return { opp, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
-      known: [A.known, B.known], games: [A.leftG, B.leftG], share };
+      known: [A.known, B.known], games: [A.leftG, B.leftG], share, roster: [A.players, B.players] };
   }
 
   function addFrom(ctx, n) {

@@ -164,9 +164,10 @@ async function open(opts = {}) {
 { const a = await open(); ok(await a.p.$eval('#status', e => e.hidden), 'no box files: no status tables'); ok(errs0(a), 'no box: no errors'); await a.ctx.close();
   const { p, errs, ctx } = await open({ box: true });
   ok(!(await p.$eval('#status', e => e.hidden)), 'box games: status tables shown');
-  ok(await p.$$eval('#st-sofar tbody tr', r => r.length) === 9 && await p.$$eval('#st-rest tbody tr', r => r.length) === 9, 'both status tables list 9 categories');
+  ok(await p.$$eval('#cats thead th', h => h.map(x => x.textContent).join('|')) === 'Category|You|Them|Win %|Current|Projected|Current|Projected', 'category table: Current and Projected for You and Them');
+  ok(await p.$$eval('#st-team tbody tr', r => r.length) >= 10, 'team table lists the whole roster');
   ok(/so far counted/.test(await p.textContent('#kpis')), 'Win M label says played games are counted');
-  ok(await p.$$eval('#st-sofar tbody tr', r => +r[3].cells[1].textContent) > 0, 'so far table shows the played points (' + await p.$$eval('#st-sofar tbody tr', r => r[3].cells[1].textContent) + ')');
+  ok(await p.$$eval('#cats tbody tr', r => +r[3].cells[1].textContent) > 0, 'current points shown');
   ok(errs.length === 0, 'box: no errors ' + errs.join('; '));
   await ctx.close(); }
 

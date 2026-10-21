@@ -251,10 +251,8 @@ tr.click{cursor:pointer}
           <div class="kpis" id="kpis"></div>
           <div class="scroll"><table id="cats"></table></div>
           <div id="status" hidden>
-            <h3>So far this week <span class="meta" id="st-note"></span></h3>
-            <div class="scroll"><table id="st-sofar"></table></div>
-            <h3>Rest of the week, projected</h3>
-            <div class="scroll"><table id="st-rest"></table></div>
+            <h3>Your team: current and projected <span class="meta" id="st-note"></span></h3>
+            <div class="scroll"><table id="st-team"></table></div>
           </div>
         </section>
         <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
@@ -1753,21 +1751,28 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const per = periodOf(ctx.L, n), bx = boxLines(files, per);
     const list = Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id }));
     const side = tid => {
-      const segs = teamSegments(ctx, tid, n), pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {};
+      const segs = teamSegments(ctx, tid, n), pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {}, own = {};
       pp.forEach(p => {
         const m = InPlayers.matchTo(list, p.n, p.t), b = m && bx.players.get(m.id);
         if (b) b.lines.forEach(l => (byDay[l.d] || (byDay[l.d] = [])).push({ p, v: l.v }));
       });
-      Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => valueOf(ctx, b.p) - valueOf(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; })));
+      Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => valueOf(ctx, b.p) - valueOf(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; (own[x.p.key] || (own[x.p.key] = zeroK()))[c] += x.v[c] || 0; })));
       const rest = segs.map((s, i) => ({ key: s.key, from: Math.max(s.from, cutoffOf(ctx, bx, pp[i].t, per)), to: s.to }));
       const whole = segGames(ctx, segs), left = segGames(ctx, rest);
-      return { known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
+      const players = segs.map((sg, i) => {
+        const p = pp[i], k = own[p.key] || zeroK(), g = left[i], l = p.line;
+        const cur = [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to];
+        const fga = k.fga + l.fga * g, fta = k.fta + l.fta * g;
+        const proj = [fga ? (k.fgm + l.fgp * l.fga * g) / fga : 0, fta ? (k.ftm + l.ftp * l.fta * g) / fta : 0, k.tpm + l.tpm * g, k.pts + l.pts * g, k.reb + l.reb * g, k.ast + l.ast * g, k.stl + l.stl * g, k.blk + l.blk * g, k.to + l.to * g];
+        return { key: p.key, n: p.n, pos: p.pos, t: p.t, games: g, cur, proj };
+      });
+      return { players, known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
         entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * (whole[i] > 0 ? left[i] / whole[i] : 0) })) };
     };
     const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
     const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
     return { opp, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
-      known: [A.known, B.known], games: [A.leftG, B.leftG], share };
+      known: [A.known, B.known], games: [A.leftG, B.leftG], share, roster: [A.players, B.players] };
   }
 
   function addFrom(ctx, n) {
@@ -2138,16 +2143,19 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
     $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): ' + (pw.known ? 'games played so far counted, the rest projected' : 'whole week projected, results so far not counted') + '</span></div>' +
       '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
-    $('cats').innerHTML = '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
-      CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
-    const shown = !!pw.known; $('status').hidden = !shown;
-    if (shown) {
-      const sofar = k => CATS.map((c, i) => i === 0 ? (k.fga ? k.fgm / k.fga : 0) : i === 1 ? (k.fta ? k.ftm / k.fta : 0) : [k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to][i - 2]);
-      const tbl = (a, b) => '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th></tr></thead><tbody>' + CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(a[i], i) + '</td><td>' + fmtStat(b[i], i) + '</td></tr>').join('') + '</tbody>';
-      const sa = sofar(pw.known[0]), sb = sofar(pw.known[1]);
-      $('st-sofar').innerHTML = tbl(sa, sb);
-      $('st-rest').innerHTML = tbl(pw.rest[0], pw.rest[1]);
-      $('st-note').textContent = 'estimate from your current roster box scores (no roster history)';
+    const sofar = k => k ? [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to] : null;
+    const cur = pw.known ? [sofar(pw.known[0]), sofar(pw.known[1])] : null;
+    $('cats').innerHTML = cur
+      ? '<thead><tr><th class="l" rowspan="2">Category</th><th colspan="2">You</th><th colspan="2">Them</th><th rowspan="2">Win %</th></tr><tr><th>Current</th><th>Projected</th><th>Current</th><th>Projected</th></tr></thead><tbody>' +
+        CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(cur[0][i], i) + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(cur[1][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>'
+      : '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
+        CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
+    $('status').hidden = !pw.roster;
+    if (pw.roster) {
+      $('st-team').innerHTML = '<thead><tr><th class="l">Player</th><th>Games left</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '</tr></thead><tbody>' +
+        pw.roster[0].map(r => '<tr><td class="l">' + esc(r.n) + ' <span class="src">' + esc(r.t) + '</span></td><td>' + r.games.toFixed(1) + '</td>' +
+          CATS.map((c, i) => '<td><b>' + fmtStat(r.proj[i], i) + '</b><span class="src"> ' + fmtStat(r.cur[i], i) + '</span></td>').join('') + '</tr>').join('') + '</tbody>';
+      $('st-note').textContent = 'projected final, with what he has done so far in grey; estimate from your current roster (no roster history)';
     }
     // best single adds
     const rows = mAdds(ctx, n);

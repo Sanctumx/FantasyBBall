@@ -73,3 +73,16 @@ test('a decided category late in the week is more certain than the whole-week ch
   const s = M.weekStatus(ctx, files, me, 1), w = M.projectWeek(ctx, me, 1);
   assert.ok(s.cat[3] > w.cat[3] + 0.1);
 });
+
+test('roster rows: current, projected and games left per player add up to the team', () => {
+  const [a, b] = active(me), files = box([{ d: firstDay(a), lines: [[a, { fgm: 6, fga: 10, ftm: 2, fta: 4, pts: 15, to: 2 }], [b, { fgm: 2, fga: 8, pts: 5 }]] }]);
+  const s = M.weekStatus(ctx, files, me, 1), rows = s.roster[0];
+  assert.strictEqual(rows.length, active(me).length);
+  assert.ok(Math.abs(rows.reduce((t, r) => t + r.games, 0) - s.games[0]) < 1e-9, 'games left sum');
+  assert.strictEqual(rows.reduce((t, r) => t + r.cur[3], 0), s.known[0].pts);
+  const ra = rows.find(r => r.key === a.key);
+  assert.strictEqual(ra.cur[3], 15); assert.strictEqual(ra.cur[0], 0.6);
+  assert.ok(Math.abs(ra.proj[3] - (15 + a.line.pts * ra.games)) < 1e-9);
+  assert.ok(Math.abs(ra.proj[0] - (6 + a.line.fgp * a.line.fga * ra.games) / (10 + a.line.fga * ra.games)) < 1e-9);
+  assert.ok(Math.abs(rows.reduce((t, r) => t + r.proj[3], 0) - s.total[0][3]) < 1e-6, 'projected points sum to the team total');
+});
