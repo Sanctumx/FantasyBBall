@@ -12,10 +12,12 @@ title % points. Tests before item 50 ran in the old backtest world (prior-season
 overturned; re-test old-world results before relying on them.
 
 **Rules:** edit a row in place when its status changes; never delete a row; one line per row; put the deciding numbers in
-Result. New ideas take the next number (next: **104**).
+Result. New ideas take the next number (next: **110**).
 
 | # | Date | Area | Idea | Status | Result |
 |---|------|------|------|--------|--------|
+| 108 | 2026-10-20 | UI | Settings tab: league settings and the Fantrax league set once in a shared store; every tab reads it; per-tab team pickers; League Dashboard on current rosters; Import draft from league on Draft | Testing | design `docs/superpowers/specs/2026-10-20-settings-tab-design.md` |
+| 109 | 2026-10-20 | UI | League Dashboard counts IR players (some teams would have 15); tabled, IR left out for now | Open | from #108 |
 | 107 | 2026-10-20 | In-season | Trade Builder Zscore: column per player (Average, Total rows) and tiles for each team's change and Zscore received; dropdowns Zscore type (Normal / H2H-Adjusted / ROTO-Adjusted) and Basis (Per game / Season / Mix) | Adopted | board Zscore from `Engine.buildContext` (default league, Average projections), `InPlayers.zscoreOf`; players without a projection show a dash; the two teams' changes always cancel, so no Total Zscore tile |
 | 106 | 2026-10-20 | In-season | Matchup Analyzer and Trade Analyzer as their own toolbar entries (`inseason.html#matchup` / `#trades`); trade search saved in the browser | Adopted | no recalculation on reload (signature of rosters, team, period, day, weights); about 10 s on the first search of the day |
 | 105 | 2026-10-20 | In-season | Trade likelihood bias -0.75 in the logistic (a fair-looking swap is not a coin flip) | Adopted | fixture league: best-value 25 offers 11-33%, median 21% (was up to 78%); a guess, not fitted (see 98) |
