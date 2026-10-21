@@ -25,12 +25,14 @@ test('projected player uses the averaged projection', () => {
 });
 
 test('no projection falls back to ESPN actual, then waiver level, and is listed', () => {
-  const k = pool.byKey.get(fidOf(/Keldon/)), m = pool.byKey.get(fidOf(/Mara, Aday/));
+  // Mara has a Hashtag-only projection now; take him out to keep a player with neither projection nor box scores
+  const p0 = mk({ PLAYERS: PLAYERS.filter(r => r.n !== 'Aday Mara') });
+  const k = p0.byKey.get(fidOf(/Bryant, Carter/)), m = p0.byKey.get(fidOf(/Mara, Aday/));
   assert.strictEqual(k.src, 'actual'); assert.ok(k.actual && k.actual.gp > 0);
   assert.strictEqual(m.src, 'waiver'); assert.strictEqual(m.actual, null);
-  const names = pool.unmatched.noProj.map(p => p.n);
-  assert.ok(names.includes('Aday Mara') && names.includes('Keldon Johnson') && names.includes('Mikel Brown'));
-  assert.strictEqual(pool.unmatched.noProj.length, 6);
+  const names = p0.unmatched.noProj.map(p => p.n);
+  assert.ok(names.includes('Aday Mara') && names.includes('Carter Bryant'));
+  assert.strictEqual(p0.unmatched.noProj.length, 2);
   assert.ok(m.line.pts > 0 && m.g > 0 && m.g === k.g);   // waiver-level line and games, never zero
 });
 
@@ -84,7 +86,7 @@ test('a projection or ESPN row goes to one Fantrax player only: the rostered one
 });
 
 test('zscoreOf gives the board Zscore by type and basis for projected players, null for the rest', () => {
-  const w = pool.byKey.get(fidOf(/Wembanyama/)), m = pool.byKey.get(fidOf(/Mara, Aday/));
+  const w = pool.byKey.get(fidOf(/Wembanyama/)), m = pool.byKey.get(fidOf(/Bryant, Carter/));
   assert.ok(Number.isInteger(w.pid) && m.pid == null);
   const z = (pp, t, b) => Pl.zscoreOf(PLAYERS, pp, t, b);
   ['classic', 'adj', 'h2h'].forEach(t => ['total', 'pergame', 'mix'].forEach(b => assert.ok(z(w, t, b) > 1.5, t + ' ' + b + ' ' + z(w, t, b))));

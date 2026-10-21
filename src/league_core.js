@@ -6,17 +6,18 @@
   const E = root.Engine || require('./engine.js'), Shared = root.Shared || require('./shared.js');
 
   // Players for a projection choice, plus the source's extras (players missing from the projections, ids
-  // PLAYERS.length + i when saved). An extra that is really a projected player maps to him (old duplicate copies).
-  function playersFor(PLAYERS, proj, extra, picks) {
+  // base + i when saved, base = the list length at save time, 234 when a save has none). An extra that is really a projected player maps to him (old duplicate copies).
+  function playersFor(PLAYERS, proj, extra, picks, base) {
+    base = base == null ? 234 : base;
     const P = E.prepPlayers(PLAYERS.map(r => Object.assign({}, r, Shared.projOf(r, proj))));
     P.forEach(p => { p.key = Shared.norm(p.n); });
     const map = {};
     (extra || []).forEach((raw, i) => {
       const q = Shared.findListed(P, raw.n, raw.t);
-      if (q) { map[PLAYERS.length + i] = q.id; return; }
+      if (q) { map[base + i] = q.id; return; }
       let e = P.find(x => x.unlisted && x.n === raw.n);
       if (!e) { e = E.prepPlayers([raw])[0]; e.id = P.length; e.key = Shared.norm(raw.n); e.unlisted = true; P.push(e); }
-      map[PLAYERS.length + i] = e.id;
+      map[base + i] = e.id;
     });
     const pk = (picks || []).map(id => id != null && map[id] != null ? map[id] : (id != null && id < P.length ? id : null));
     return { P, picks: pk };
@@ -37,7 +38,7 @@
     const cfg = Object.assign({}, src.cfg, { basis, poBoost: 'off', proj });
     const N = cfg.teams, total = N * cfg.roster;
     cfg.slot = Math.min(Math.max(1, Math.round(+cfg.slot) || 1), N);   // a slot from another league can't point past this one
-    const { P, picks } = playersFor(PLAYERS, proj, src.extra, (src.picks || []).slice(0, total).concat(new Array(Math.max(0, total - (src.picks || []).length)).fill(null)));
+    const { P, picks } = playersFor(PLAYERS, proj, src.extra, (src.picks || []).slice(0, total).concat(new Array(Math.max(0, total - (src.picks || []).length)).fill(null)), src.base);
     P.forEach(p => { p.poMult = 1; });
     const ctx = E.buildContext(P, cfg), state = { picks, owner: src.owner || [] };
     const res = E.evaluate(P, ctx, cfg, state);
@@ -123,7 +124,7 @@
     const ids = tids.slice().sort((x, y) => ((rank[x] == null ? 1e9 : rank[x]) - (rank[y] == null ? 1e9 : rank[y])) || String(label(x)).localeCompare(String(label(y)), undefined, { numeric: true }));
     const N = ids.length, body = (rosters && rosters.rosters) || {};
     const P = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i, key: Shared.norm(r.n) }));
-    const tail = PLAYERS.slice().sort((a, b) => b.rk - a.rk).slice(0, 15), extra = [], byFid = {}, ir = [];
+    const tail = PLAYERS.filter(q => q.src !== 'hs').sort((a, b) => b.rk - a.rk).slice(0, 15), extra = [], byFid = {}, ir = [];
     const per = ids.map((tid, t) => {
       const out = [];
       ((body[tid] && body[tid].rosterItems) || []).forEach(x => {
@@ -137,7 +138,7 @@
     const mi = myTeam ? ids.indexOf(myTeam) : -1; cfg.slot = mi >= 0 ? mi + 1 : 1;
     const picks = new Array(N * R).fill(null), owner = new Array(N * R);
     for (let j = 0; j < R; j++) for (let t = 0; t < N; t++) { const k = j * N + t; owner[k] = t; if (j < per[t].length) picks[k] = per[t][j]; }
-    return { cfg, picks, owner, extra, names: ids.map(label), ids, ir };
+    return { cfg, picks, owner, extra, base: PLAYERS.length, names: ids.map(label), ids, ir };
   }
 
   const api = { computeLeague, rawTotals, playersFor, sourceFromRosters };

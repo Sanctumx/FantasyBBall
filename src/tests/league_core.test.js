@@ -81,10 +81,18 @@ test('an old duplicate extra counts as the projected player', () => {
   const sarr = PLAYERS.findIndex(p => p.n === 'Alexandre Sarr'), s = src(168);
   const k = s.picks.indexOf(sarr); assert.ok(k >= 0);
   const dup = Object.assign({}, PLAYERS[sarr], { n: 'Alex Sarr' }); delete dup.hs;
-  s.picks[k] = PLAYERS.length; s.extra = [dup];
+  s.picks[k] = PLAYERS.length; s.extra = [dup]; s.base = PLAYERS.length;
   const R = L.computeLeague(PLAYERS, s, 'avg'), t = E.teamAt(k, 14, '3rr');
   assert.ok(R.rosters[t].some(p => p.n === 'Alexandre Sarr'));
   assert.ok(!R.rosters[t].some(p => p.n === 'Alex Sarr'));
+});
+
+test('a save made with 234 players keeps its extra on the right player', () => {
+  const s = src(168), k = 5, extra = { n: 'Zzz Unlisted', t: 'XXX', p: 'G', g: 60, m: 20, fgp: 0.45, fga: 8, ftp: 0.8, fta: 2, tpm: 1, pts: 10, reb: 3, ast: 3, stl: 1, blk: 0.3, to: 1.5 };
+  s.picks[k] = 234; s.extra = [extra];   // no base: saved when the list had 234 players, so 234 is the extra, not Hashtag-only row 0
+  const R = L.computeLeague(PLAYERS, s, 'avg'), t = E.teamAt(k, 14, '3rr');
+  assert.ok(R.rosters[t].some(p => p.n === 'Zzz Unlisted'));
+  assert.ok(!R.rosters[t].some(p => p.n === PLAYERS[234].n));
 });
 
 test('mid-draft team stats include a typical player at each open pick, as the win chances do', () => {

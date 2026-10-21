@@ -15,7 +15,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 ## Current state
 
 - **Live:** Cloudflare Worker `courtside-basketball` deploys every push to main; serves the pages and `/api/fantrax`.
-- **Board artifact:** claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz (last noted v144; read it before republishing).
+- **Board artifact:** claude.ai/artifact/YK93XaPAdsvaxwQadmvUNz (last noted v165, 2026-10-21; read it before republishing).
   Publish `courtside-draft-board.html`, **never `app.html`**.
 - **Math doc:** claude.ai/code/artifact/2d4059a8-f9ad-465d-bfa7-41ef6990e7a8 (rev 159). The board links to `math.html`:
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
@@ -52,14 +52,18 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 ## Next session starts with
 
-`main` has the Rankings tab and perf cache (PR #21 merged 2026-10-21). Branch `matchup-week-status` (unpushed, tests green:
-179 unit, Matchup/League/Rankings/Settings browser checks) holds the Matchup week status (idea 118, archive 118b): Current /
-Projected category table, whole-team table, Win M on remaining games. Also built there (idea 119, archive 119): Matchup games left are whole games per player; players with no box line or no minutes in their team's last 3 boxed games are out for the week ("out" in the team table); whole-games shrink k .83 matchup / .85 cats; Idea 120 (archive 120): Trade Analyzer uses whole games in the current week and g/82 later (calib says whole is worse with unknown availability; refit k for future weeks open, analyst PM-ros arm); crowded nights go to the better per-game player; pairTeam reads per-game variance directly (pinned). Win M-maximizing lineup tabled (#121). Check name matching on real box scores once games exist. Note: 6 context-hook tests fail when run inside a long session (not code). Next: on "push", PR and merge it (engine.js changed:
-republish `courtside-draft-board.html`). Then #112, #116, and Best adds/plan on remaining games. Left open: Playoff boost
-hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess (#98); IR on the
-League tab (#109); week-status leftovers in archive 118b. Awaiting the user: why Games left is not whole (expected games =
-projected games/82 per team game, capped by the 10-slot day limit); offered an extra "Team games left" column with the
-scheduled whole number.
+**Branch `waiver-adds-keep-list`** (unpushed, PR not opened; reviewed 2026-10-21, must-fix and should-fix done: saved extras now carry `base`, a save without one counts as 234 players): ideas 122-125 (Waiver adds panel, Team schedule, keep
+list, Hashtag refresh), **126** (68 Hashtag-only players, rank <= 300, now in players.json), **127** (waiver adds and plan
+scored from box scores like the Matchup headline) and **128** (period dates follow Fantrax: week 1 = Oct 20 - Oct 25). 190 unit
+tests and all browser checks pass. Next: PR, push when the user says. Idea 126 note: Hashtag-only rows carry Hashtag ADP while BBM rows keep BBM ADP (both feed makeValueRef). Then: refit
+the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
+#112, #116, Best adds/plan on remaining games.
+Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
+Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess
+(#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against
+drops 2-5; `matchup_core` addPlan day list still runs to per.end (an extra empty day). Offered, unanswered: a "Team games left"
+column. 126 leftovers: `ftx` of the 234 BBM rows not refreshed from the Fantrax snapshot.
+Note: 6 context-hook tests fail when run inside a long session (not code).
 
 ## This PC
 

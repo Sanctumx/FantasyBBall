@@ -114,6 +114,26 @@ td.pos{color:var(--muted)}
 .plan ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 .plan li{font-size:.9rem}
 .plan input[type=number]{width:4.5em;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:.92rem;color:var(--ink)}
+#tab-matchup>.grid2{grid-template-columns:minmax(0,1.9fr) minmax(0,1fr)}
+.plan h2{margin-bottom:4px}.plan .ctl{margin:0 0 4px}.plan h3{margin:8px 0 3px;font-size:.8rem}
+.plan ol{gap:1px}.plan li{font-size:.76rem}.plan .hint,.plan .msg{font-size:.72rem;margin:2px 0}
+.plan .f input[type=number]{padding:2px 6px;font-size:.8rem}
+table.compact{font-size:.7rem}
+button.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:.9rem;line-height:1;padding:0 2px}
+button.x:hover{color:var(--bad)}
+table.compact th,table.compact td{padding:1px 4px;line-height:1.25}
+#tab-matchup .side{min-width:0}
+@media (min-width:1001px){
+  #tab-matchup .side{position:relative}
+  #tab-matchup .side>.plan{position:absolute;inset:0;overflow:auto;padding:10px 12px}
+}
+@media (max-width:1000px){#tab-matchup>.grid2{grid-template-columns:1fr}}
+#sched-panel{margin-top:16px}
+table.sched td.g{color:var(--mine);font-weight:700}
+table.sched td.past{opacity:.45}
+table.sched td.full{background:var(--sunk)}
+table.sched tr.tot td{font-weight:600}
+table.sched td.over{color:var(--warn)}
 .pos-n{color:var(--good)}.neg-n{color:var(--bad)}
 .tabpanel[hidden]{display:none}
 .f[hidden]{display:none}
@@ -163,21 +183,24 @@ tr.click{cursor:pointer}
             <div class="scroll"><table id="st-team"></table></div>
           </div>
         </section>
-        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
-          <section class="panel">
-            <h2>Best single adds <span class="meta">Simple: one add for your weakest player, from tomorrow</span></h2>
-            <div class="scroll"><table id="adds"></table></div>
-            <p class="msg" id="adds-msg"></p>
-          </section>
+        <div class="side">
           <section class="panel plan">
-            <h2>Waiver add plan <span class="meta">Greedy: the move that helps most, then the next</span></h2>
+            <h2>Waiver adds <span class="meta">Plan: the move that helps most, then the next</span></h2>
             <div class="ctl"><label class="f" for="addsleft">Adds left<input type="number" id="addsleft" min="0" max="4" step="1"></label></div>
             <p class="msg" id="plan-note"></p>
             <ol id="plan-moves"></ol>
             <p class="hint" id="plan-sum"></p>
+            <h3>Best single adds <span class="meta">one add for your weakest player, from tomorrow</span></h3>
+            <div class="scroll"><table id="adds" class="compact"></table></div>
+            <p class="msg" id="adds-msg"></p>
+            <p class="hint" id="ignored"></p>
           </section>
         </div>
       </div>
+      <section class="panel" id="sched-panel">
+        <h2>Team schedule <span class="meta" id="sched-note">Your players' games this week</span></h2>
+        <div class="scroll"><table id="sched" class="sched"></table></div>
+      </section>
     </div>
     <div class="tabpanel" id="tab-trades" hidden>
       <div class="grid2">
@@ -232,7 +255,7 @@ tr.click{cursor:pointer}
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', LS = LeagueStore;
-  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
+  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, keep: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.tab = sectionOf();
   // one remembered team per tab and league id; the old single map seeds both, then goes
@@ -322,7 +345,7 @@ tr.click{cursor:pointer}
     $('team').innerHTML = L.teams.map(t => '<option value="' + esc(t.id) + '">' + esc(teamLabel(t.id)) + '</option>').join('');
     const t = teamFor(ui.tab); ui.teamBy[ui.tab][ui.leagueId] = t; $('team').value = t;
     const weeks = InL.regularFrom(L, cur);
-    $('week').innerHTML = weeks.map(n => { const p = L.periods.find(q => q.n === n); return '<option value="' + n + '">Week ' + n + (p ? ' · ' + InL.localDay(p.start).slice(5) + ' to ' + InL.localDay(p.end - 1).slice(5) : '') + '</option>'; }).join('');
+    $('week').innerHTML = weeks.map(n => { const p = L.periods.find(q => q.n === n); return '<option value="' + n + '">Week ' + n + (p ? ' · ' + InL.localDay(p.start).slice(5) + ' to ' + InL.periodLast(p).slice(5) : '') + '</option>'; }).join('');
     if (!weeks.includes(+ui.week)) ui.week = cur;
     $('week').value = String(ui.week);
     freshness(); save(); $('body').hidden = false; render();
@@ -347,8 +370,9 @@ tr.click{cursor:pointer}
   const hasBox = () => (box || []).some(f => f && Object.keys(f.games || {}).length);
   // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
   const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => { const ws = n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : null; return ws && ws.started ? ws : Matchup.projectWeek(c, c.me, n); });
-  const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey()].join('|'), () => Matchup.simpleAdds(c, n, { limit: 20 }));
-  const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey()].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left }) : Matchup.addPlan(c, { periods: [n] }));
+  const kept = () => ui.keep[ui.leagueId] || [];
+  const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey(), kept().join(',')].join('|'), () => Matchup.simpleAdds(c, n, { limit: 40, keep: kept() }));
+  const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey(), kept().join(',')].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left, keep: kept() }) : Matchup.addPlan(c, { periods: [n], keep: kept() }));
   // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
   let warmTimer = 0;
   function prewarm() {
@@ -374,8 +398,8 @@ tr.click{cursor:pointer}
 
   function renderMatchup() {
     const n = +ui.week, pw = mPW(ctx, n), per = L.periods.find(p => p.n === n);
-    $('vs-dates').textContent = per ? InL.localDay(per.start) + ' to ' + InL.localDay(per.end - 1) : '';
-    if (!pw.opp) { $('vs').textContent = 'No matchup this week'; $('kpis').innerHTML = ''; $('cats').innerHTML = ''; $('adds').innerHTML = ''; $('adds-msg').textContent = ''; $('plan-moves').innerHTML = ''; $('plan-note').textContent = ''; $('plan-sum').textContent = ''; return; }
+    $('vs-dates').textContent = per ? InL.localDay(per.start) + ' to ' + InL.periodLast(per) : '';
+    if (!pw.opp) { $('vs').textContent = 'No matchup this week'; $('kpis').innerHTML = ''; $('cats').innerHTML = ''; $('adds').innerHTML = ''; $('adds-msg').textContent = ''; $('plan-moves').innerHTML = ''; $('plan-note').textContent = ''; $('plan-sum').textContent = ''; $('sched').innerHTML = ''; return; }
     const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
@@ -399,9 +423,39 @@ tr.click{cursor:pointer}
     const rows = mAdds(ctx, n);
     $('adds').innerHTML = rows.length ? '<thead><tr><th class="l">Add</th><th>Pos</th><th>Team</th><th>Games</th><th class="l">Drop</th><th>Win M</th><th>+Win M</th></tr></thead><tbody>' +
       rows.map(r => '<tr><td class="l">' + esc(r.add.n) + (r.add.src !== 'proj' ? '<span class="src">' + (r.add.src === 'actual' ? 'ESPN stats' : 'waiver level') + '</span>' : '') + '</td><td class="pos">' + esc(r.add.pos) + '</td><td>' + esc(r.add.t) +
-        '</td><td>' + r.games.toFixed(0) + '</td><td class="l drop">' + (r.drop ? esc(r.drop.n) : 'open spot') + '</td><td>' + chip(r.match, pct(r.match)) + '</td><td><b class="' + (r.dMatch >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dMatch * 100) + '</b></td></tr>').join('') + '</tbody>' : '';
+        '</td><td>' + r.games.toFixed(0) + '</td><td class="l drop">' + (r.drop ? esc(r.drop.n) + ' <button type="button" class="x" data-keep="' + esc(r.drop.key) + '" title="Keep ' + esc(r.drop.n) + ': never offered as a drop">&times;</button>' : 'open spot') + '</td><td>' + chip(r.match, pct(r.match)) + '</td><td><b class="' + (r.dMatch >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dMatch * 100) + '</b></td></tr>').join('') + '</tbody>' : '';
+    const kp = kept();
+    $('ignored').innerHTML = kp.length ? 'Keeping (never dropped): ' + kp.map(k => { const p = pool.byKey.get(k); return '<button type="button" class="lnk" data-unkeep="' + esc(k) + '" title="Allow as a drop again">' + esc(p ? p.n : k) + ' &times;</button>'; }).join(' ') : '';
     $('adds-msg').textContent = rows.length ? '' : 'No games left this week for any available player.';
     renderPlan(n);
+    renderSchedule(n, per);
+    fitAdds();
+  }
+  // wide screens: the waiver panel is as tall as the matchup panel, so show as many adds as fit; narrow screens show 10
+  function fitAdds() {
+    const pn = document.querySelector('#tab-matchup .side>.plan'), body = $('adds').tBodies[0];
+    if (!body || $('tab-matchup').hidden) return;
+    const wide = window.matchMedia('(min-width:1001px)').matches;
+    if (wide) while (body.rows.length > 1 && pn.scrollHeight > pn.clientHeight + 1) body.deleteRow(-1);
+    else while (body.rows.length > 10) body.deleteRow(-1);
+  }
+  window.addEventListener('resize', () => { clearTimeout(fitT); fitT = setTimeout(() => { if (ui.tab === 'matchup' && ctx && $('body') && !$('body').hidden) renderMatchup(); }, 150); });
+  let fitT = 0;
+  // your roster by day: a mark where the player's team tips off, days already played dimmed, nights over the active-player limit flagged
+  function renderSchedule(n, per) {
+    if (!per) { $('sched').innerHTML = ''; return; }
+    const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, days = [], today = InL.localDay(ctx.nowMs);
+    InL.periodDays(per).forEach(d => days.push(d));
+    const ps = ctx.roster[ctx.me].map(k => ctx.pool.byKey.get(k)).filter(Boolean);
+    const rows = ps.map(p => {
+      const off = (ctx.out && ctx.out.has(p.key) && n === ctx.cur) || (p.slot === 'IR' && n === ctx.cur), set = new Set((G[p.t] || []).map(s => InL.localDay(s * 1000)));
+      return { p, off, hit: days.map(d => !off && set.has(d)) };
+    });
+    const tot = days.map((d, i) => rows.filter(r => r.hit[i]).length), max = ctx.L.maxActive;
+    $('sched').innerHTML = '<thead><tr><th class="l">Player</th><th>Team</th>' + days.map(d => '<th>' + esc(d.slice(5)) + '</th>').join('') + '<th>Games</th></tr></thead><tbody>' +
+      rows.map(r => '<tr><td class="l">' + esc(r.p.n) + (r.off ? ' <span class="src">' + (r.p.slot === 'IR' ? 'IR' : 'out') + '</span>' : '') + '</td><td>' + esc(r.p.t) + '</td>' +
+        r.hit.map((h, i) => '<td class="' + (h ? 'g' : '') + (days[i] < today ? ' past' : '') + '">' + (h ? '&#9679;' : '') + '</td>').join('') + '<td><b>' + r.hit.filter(Boolean).length + '</b></td></tr>').join('') +
+      '<tr class="tot"><td class="l">Playing' + (max ? ' <span class="src">limit ' + max + '</span>' : '') + '</td><td></td>' + tot.map(c => '<td class="' + (max && c > max ? 'over' : '') + '">' + c + '</td>').join('') + '<td>' + tot.reduce((a, b) => a + b, 0) + '</td></tr></tbody>';
   }
   function renderPlan(n) {
     const key = ui.leagueId + ':' + n, left = addsLeft(n);
@@ -585,6 +639,7 @@ tr.click{cursor:pointer}
   $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
   window.addEventListener('hashchange', () => { ui.tab = sectionOf(); if (pool) render(); });
+  $('tab-matchup').addEventListener('click', e => { const a = e.target.closest('[data-keep],[data-unkeep]'); if (!a) return; const k = a.dataset.keep || a.dataset.unkeep, cur = kept().filter(x => x !== k); ui.keep[ui.leagueId] = a.dataset.keep ? cur.concat(k) : cur; save(); renderMatchup(); });
   $('addsleft').addEventListener('change', e => { const v = Math.max(0, Math.min(4, Math.round(+e.target.value || 0))); ui.adds[ui.leagueId + ':' + ui.week] = v; save(); renderPlan(+ui.week); });
   load();
 })();
