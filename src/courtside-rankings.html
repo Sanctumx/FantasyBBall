@@ -84,6 +84,7 @@ tbody tr:hover td{background:var(--sunk)}
       <label class="f" for="q">Find player<input type="text" id="q" placeholder="Name or team" autocomplete="off"></label>
       <label class="f" for="src">Source<select id="src" title="Season to date uses ESPN's averages; Projections use the board's projections.">
         <option value="season">Season to date</option>
+        <optgroup label="Recent games"><option value="w7">Last week</option><option value="w14">Last 2 weeks</option><option value="w30">Last month</option></optgroup>
         <optgroup label="Projections"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></optgroup></select></label>
       <label class="f" for="type">Zscore type<select id="type" title="Standard: plain z-scores. H2H-Adjusted: in units of a weekly head-to-head gap. ROTO-Adjusted: in units of the team spread."><option value="classic">Standard</option><option value="h2h">H2H-Adjusted</option><option value="adj">ROTO-Adjusted</option></select></label>
       <label class="f" for="basis" title="Season counts games played; Per game ignores games missed; Mix is halfway.">Basis<select id="basis"><option value="pergame">Per game</option><option value="total">Season</option><option value="mix">Mix</option></select></label>
@@ -1467,13 +1468,34 @@ tbody tr:hover td{background:var(--sunk)}
 
   // ESPN season-to-date averages → source rows. The engine gets gp × 80 / (most games played) games so a Season-basis
   // table counts games played; `gp` stays the real count for display. Percentages come from makes / attempts.
-  function seasonSource(espn, PLAYERS) {
-    const played = ((espn && espn.players) || []).filter(r => r.gp > 0), maxGp = Math.max(1, ...played.map(r => r.gp));
+  function seasonSource(espn, PLAYERS) { return fromAverages(((espn && espn.players) || []), PLAYERS); }
+  function fromAverages(recs, PLAYERS) {
+    const played = recs.filter(r => r.gp > 0), maxGp = Math.max(1, ...played.map(r => r.gp));
     const list = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i }));
     return played.map((r, i) => {
       const m = InPlayers.matchTo(list, InPlayers.OVERRIDES.espn[r.id] || r.n, r.t);
       return { pid: i, espnId: r.id, n: r.n, t: InLeague.toProjTeam(r.t) || r.t, pos: m ? PLAYERS[m.id].p : '', gp: r.gp, g: r.gp * 80 / maxGp, line: InPlayers.espnLine(r), adp: m ? InPlayers.projLines([PLAYERS[m.id]], 'avg')[0].adp : null };
     });
+  }
+
+  // the last `days` calendar days (New York dates, as the box files store them) of box-score games → source rows. `files` are the
+  // monthly stats/box-YYYY-MM.json objects. The window ends on the newest game date in the files. Per-game averages are sums of
+  // box lines over games played (minutes > 0), so FG% / FT% come from summed makes / attempts; team = his latest game's team.
+  // Returns {rows, from, to} (rows [] and from / to null when there are no games).
+  function windowSource(files, days, PLAYERS) {
+    const fs = (files || []).filter(Boolean), games = [];
+    fs.forEach(f => Object.keys(f.games || {}).forEach(id => games.push({ d: f.games[id].d, teams: f.games[id].teams, cols: f.cols, names: f.names })));
+    if (!games.length) return { rows: [], from: null, to: null };
+    const to = games.reduce((a, g) => g.d > a ? g.d : a, ''), start = new Date(to + 'T00:00:00Z'); start.setUTCDate(start.getUTCDate() - (days - 1));
+    const from = start.toISOString().slice(0, 10), acc = {};
+    games.filter(g => g.d >= from && g.d <= to).forEach(g => Object.keys(g.teams).forEach(t => g.teams[t].forEach(l => {
+      const min = l[1]; if (!(min > 0)) return;
+      const a = acc[l[0]] || (acc[l[0]] = { id: l[0], n: g.names[l[0]] || l[0], t, d: g.d, gp: 0, sum: {} });
+      if (g.d >= a.d) { a.d = g.d; a.t = t; }
+      a.gp++; g.cols.forEach((c, i) => { a.sum[c] = (a.sum[c] || 0) + l[i + 1]; });
+    })));
+    const recs = Object.values(acc).map(a => { const r = { id: a.id, n: a.n, t: a.t, gp: a.gp }; Object.keys(a.sum).forEach(c => { r[c] = a.sum[c] / a.gp; }); return r; });
+    return { rows: fromAverages(recs, PLAYERS), from, to };
   }
 
   // who owns each row: Map pid → {owner (Fantrax team id), slot}. Every rostered Fantrax player goes to the one row his name and
@@ -1593,7 +1615,7 @@ tbody tr:hover td{background:var(--sunk)}
     return { rep, avg, pending, hasAvg: ai >= 0, step() { const pid = pending.shift(); if (pid == null) return null; const b = build(pid); put(gains(b.picks, b.owner), pid); return pid; } };
   }
 
-  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, ownersOf, table, playoffGames, withPlayoffs, winStart };
+  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, windowSource, ownersOf, table, playoffGames, withPlayoffs, winStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
 })(this);
 
@@ -1609,7 +1631,7 @@ tbody tr:hover td{background:var(--sunk)}
   let ui = { src: 'season', type: 'classic', basis: 'pergame', stats: 'z', poboost: 'off', zdrop: '0,0', winvs: 'rep', show: 0, pos: [], cw: null, hide: false, sort: 'z', dir: -1 };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const oneOf = (v, l, d) => l.includes(v) ? v : d;
-  ui.src = oneOf(ui.src, ['season', 'avg', 'bbm', 'hs'], 'season'); ui.type = oneOf(ui.type, R.TYPES, 'classic'); ui.basis = oneOf(ui.basis, ['pergame', 'total', 'mix'], 'pergame');
+  ui.src = oneOf(ui.src, ['season', 'w7', 'w14', 'w30', 'avg', 'bbm', 'hs'], 'season'); ui.type = oneOf(ui.type, R.TYPES, 'classic'); ui.basis = oneOf(ui.basis, ['pergame', 'total', 'mix'], 'pergame');
   ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.winvs = oneOf(ui.winvs, ['rep', 'avg'], 'rep'); ui.zdrop = oneOf(ui.zdrop, ['0,0', '1,50', '1,0', '2,50', '2,0'], '0,0'); ui.show = oneOf(+ui.show, [0, 25, 50, 100, 150, 200], 0); ui.pos = Array.isArray(ui.pos) ? ui.pos.filter(x => POS.includes(x)) : [];
   ui.cw = Array.isArray(ui.cw) && ui.cw.length === 9 && ui.cw.every(v => CWV.includes(+v)) ? ui.cw.map(Number) : R.WEIGHTS.slice(); let query = '';
   ui.poboost = 'off';   // control hidden for now (user, 2026-10-21); Win columns ignore it
@@ -1618,7 +1640,7 @@ tbody tr:hover td{background:var(--sunk)}
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
   const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
-  let SS = LS.load(LS.local.get), espn = null, fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
+  let SS = LS.load(LS.local.get), espn = null, box = [], fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
   const cache = new Map();   // source rows and tables, by key
 
   async function fxGet(what, id) {
@@ -1633,6 +1655,17 @@ tbody tr:hover td{background:var(--sunk)}
   async function loadStats() {
     try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
   }
+
+  // monthly box-score files (stats/box-YYYY-MM.json) from the season's first month to this month; missing months are skipped
+  async function loadBox() {
+    const out = [], now = new Date(); let y = 2026, m = 10;
+    while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
+      try { const r = await fetch('stats/box-' + y + '-' + String(m).padStart(2, '0') + '.json', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); if (j && j.games) out.push(j); } } catch (e) {}
+      if (++m > 12) { m = 1; y++; }
+    }
+    return out;
+  }
+  const WINDAYS = { w7: 7, w14: 14, w30: 30 };
 
   // the league loaded in Settings: owners come from its current rosters; the table works without it
   async function loadLeague() {
@@ -1656,9 +1689,13 @@ tbody tr:hover td{background:var(--sunk)}
   }
 
   const settings = () => SS.settings;
+  function windowOf() {
+    const k = 'win:' + ui.src; if (!cache.has(k)) cache.set(k, R.windowSource(box, WINDAYS[ui.src], PLAYERS));
+    return cache.get(k);
+  }
   function sourceRows() {
     const k = 'rows:' + ui.src; if (cache.has(k)) return cache.get(k);
-    const rows = ui.src === 'season' ? (espn ? R.seasonSource(espn, PLAYERS) : []) : R.projSource(PLAYERS, ui.src);
+    const rows = ui.src === 'season' ? (espn ? R.seasonSource(espn, PLAYERS) : []) : WINDAYS[ui.src] ? windowOf().rows : R.projSource(PLAYERS, ui.src);
     cache.set(k, rows); return rows;
   }
   // playoff games by team for the league's playoff weeks (Settings); recomputed only when those settings change
@@ -1708,6 +1745,7 @@ tbody tr:hover td{background:var(--sunk)}
   function draw() {
     const rows = sourceRows(), n = $('note');
     $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
+    if (WINDAYS[ui.src] && !windowOf().rows.length) { $('tbl').innerHTML = ''; n.textContent = 'No games in the box-score files yet; this window fills in as the season is played.'; return; }
     if (ui.src === 'season' && !espn) { $('tbl').innerHTML = ''; n.textContent = 'ESPN season stats are not available yet.'; return; }
     const tab0 = tableFor(rows), tab = R.withPlayoffs(tab0, rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
     if (s.cats !== 9) W[8] = 0;
@@ -1743,7 +1781,7 @@ tbody tr:hover td{background:var(--sunk)}
         + '<td><b>' + (z == null ? '—' : zTxt(x.t.zw)) + '</b></td>' + wTd(x.r.pid, 'c') + wTd(x.r.pid, 'm') + cells + '</tr>'; }).join('') + '</tbody>';
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
-    n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + 'Win C / Win M are season-long, as on the Draft tab, against simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (ui.src === 'season' ? 'ESPN season averages' + (espn.label ? ' (' + espn.label + ')' : '') + (espn.fetchedAt ? ', updated ' + new Date(espn.fetchedAt).toLocaleString() : '') : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + 'Win C / Win M are season-long, as on the Draft tab, against simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? 'Games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : ui.src === 'season' ? 'ESPN season averages' + (espn.label ? ' (' + espn.label + ')' : '') + (espn.fetchedAt ? ', updated ' + new Date(espn.fetchedAt).toLocaleString() : '') : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
   }
 
   const cwSel = [...document.querySelectorAll('#catw select')];
@@ -1768,6 +1806,6 @@ tbody tr:hover td{background:var(--sunk)}
     if ((SS.league && SS.league.id) !== was) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
   });
   sync();
-  loadStats().then(j => { espn = j; draw(); loadLeague(); });
+  Promise.all([loadStats(), loadBox()]).then(([j, b]) => { espn = j; box = b; draw(); loadLeague(); });
 })();
 </script>

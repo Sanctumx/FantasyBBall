@@ -190,3 +190,17 @@ test('winStart (league): a short roster needs no extra runs for its open slot', 
   assert.strictEqual(w.pending.length, 6); while (w.pending.length) w.step();
   assert.ok([...w.rep.values()].every(v => isFinite(v.m)));
 });
+
+// Windows: the last N calendar days of box-score games, ending on the newest game date
+const BOX = { cols: ['min', 'fgm', 'fga', 'ftm', 'fta', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'], names: { 1: 'LeBron James', 2: 'Stephen Curry' },
+  games: { a: { d: '2026-10-10', teams: { LAL: [['1', 30, 10, 20, 2, 4, 1, 25, 5, 5, 1, 0, 2]] } },
+    b: { d: '2026-10-20', teams: { LAL: [['1', 30, 5, 10, 4, 4, 1, 15, 7, 3, 0, 0, 4]], GS: [['2', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]] } } } };
+test('windowSource: window ends on the newest game, sums makes and attempts, skips zero-minute lines', () => {
+  const w7 = R.windowSource([BOX, null], 7, PLAYERS), w14 = R.windowSource([BOX], 14, PLAYERS);
+  assert.strictEqual(w7.to, '2026-10-20'); assert.strictEqual(w7.from, '2026-10-14');
+  assert.deepStrictEqual(w7.rows.map(r => [r.n, r.gp]), [['LeBron James', 1]]);
+  assert.strictEqual(w14.rows.length, 1); assert.strictEqual(w14.rows[0].gp, 2);
+  assert.ok(near(w14.rows[0].line.fgp, 15 / 30) && near(w14.rows[0].line.pts, 20) && near(w14.rows[0].line.fga, 15));
+  assert.strictEqual(w14.rows[0].g, 80);
+  assert.deepStrictEqual(R.windowSource([], 7, PLAYERS), { rows: [], from: null, to: null });
+});

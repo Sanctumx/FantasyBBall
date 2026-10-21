@@ -36,6 +36,9 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   // 2. projections and sorting
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
   ok(await rows(p) === 234, 'projections list all 234 players');
+  await p.selectOption('#src', 'w7'); await p.waitForTimeout(800);
+  ok(await rows(p) > 20 && /Games 20\d\d-\d\d-\d\d to /.test(await p.$eval('#note', e => e.textContent)), 'Last week lists players from the box scores and names its dates');
+  await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
   const top = (await names(p))[0];
   await p.click('#tbl th[data-k="n"]'); await p.waitForTimeout(100);
   const asc = await names(p); ok(asc[0].localeCompare(asc[asc.length - 1]) <= 0, 'Player header sorts A to Z (' + asc[0] + ')');

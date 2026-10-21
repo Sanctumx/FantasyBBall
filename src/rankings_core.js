@@ -22,13 +22,34 @@
 
   // ESPN season-to-date averages → source rows. The engine gets gp × 80 / (most games played) games so a Season-basis
   // table counts games played; `gp` stays the real count for display. Percentages come from makes / attempts.
-  function seasonSource(espn, PLAYERS) {
-    const played = ((espn && espn.players) || []).filter(r => r.gp > 0), maxGp = Math.max(1, ...played.map(r => r.gp));
+  function seasonSource(espn, PLAYERS) { return fromAverages(((espn && espn.players) || []), PLAYERS); }
+  function fromAverages(recs, PLAYERS) {
+    const played = recs.filter(r => r.gp > 0), maxGp = Math.max(1, ...played.map(r => r.gp));
     const list = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i }));
     return played.map((r, i) => {
       const m = InPlayers.matchTo(list, InPlayers.OVERRIDES.espn[r.id] || r.n, r.t);
       return { pid: i, espnId: r.id, n: r.n, t: InLeague.toProjTeam(r.t) || r.t, pos: m ? PLAYERS[m.id].p : '', gp: r.gp, g: r.gp * 80 / maxGp, line: InPlayers.espnLine(r), adp: m ? InPlayers.projLines([PLAYERS[m.id]], 'avg')[0].adp : null };
     });
+  }
+
+  // the last `days` calendar days (New York dates, as the box files store them) of box-score games → source rows. `files` are the
+  // monthly stats/box-YYYY-MM.json objects. The window ends on the newest game date in the files. Per-game averages are sums of
+  // box lines over games played (minutes > 0), so FG% / FT% come from summed makes / attempts; team = his latest game's team.
+  // Returns {rows, from, to} (rows [] and from / to null when there are no games).
+  function windowSource(files, days, PLAYERS) {
+    const fs = (files || []).filter(Boolean), games = [];
+    fs.forEach(f => Object.keys(f.games || {}).forEach(id => games.push({ d: f.games[id].d, teams: f.games[id].teams, cols: f.cols, names: f.names })));
+    if (!games.length) return { rows: [], from: null, to: null };
+    const to = games.reduce((a, g) => g.d > a ? g.d : a, ''), start = new Date(to + 'T00:00:00Z'); start.setUTCDate(start.getUTCDate() - (days - 1));
+    const from = start.toISOString().slice(0, 10), acc = {};
+    games.filter(g => g.d >= from && g.d <= to).forEach(g => Object.keys(g.teams).forEach(t => g.teams[t].forEach(l => {
+      const min = l[1]; if (!(min > 0)) return;
+      const a = acc[l[0]] || (acc[l[0]] = { id: l[0], n: g.names[l[0]] || l[0], t, d: g.d, gp: 0, sum: {} });
+      if (g.d >= a.d) { a.d = g.d; a.t = t; }
+      a.gp++; g.cols.forEach((c, i) => { a.sum[c] = (a.sum[c] || 0) + l[i + 1]; });
+    })));
+    const recs = Object.values(acc).map(a => { const r = { id: a.id, n: a.n, t: a.t, gp: a.gp }; Object.keys(a.sum).forEach(c => { r[c] = a.sum[c] / a.gp; }); return r; });
+    return { rows: fromAverages(recs, PLAYERS), from, to };
   }
 
   // who owns each row: Map pid → {owner (Fantrax team id), slot}. Every rostered Fantrax player goes to the one row his name and
@@ -148,6 +169,6 @@
     return { rep, avg, pending, hasAvg: ai >= 0, step() { const pid = pending.shift(); if (pid == null) return null; const b = build(pid); put(gains(b.picks, b.owner), pid); return pid; } };
   }
 
-  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, ownersOf, table, playoffGames, withPlayoffs, winStart };
+  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, windowSource, ownersOf, table, playoffGames, withPlayoffs, winStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
 })(this);
