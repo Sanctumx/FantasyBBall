@@ -1,0 +1,544 @@
+<title>In-Season · Courtside Draft Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: post-draft analysis. Team in focus on top (head-to-head | category profile), whole league below (matrix, stats). */
+:root{
+  --bg:#EFF1EE; --surface:#FFFFFF; --sunk:#F6F7F5; --ink:#15191B; --muted:#5D666B; --line:#D8DCD7;
+  --accent:#C24E1B; --mine:#1F5FA8; --mine-soft:#DFE9F6; --good:#1A7F45; --bad:#C2372F; --warn:#A85A0D; --r:6px;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
+header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0}
+header.top h1 .logo{width:.9em;height:.9em;flex:none}
+header.top .top-r{margin-right:24px}
+@media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}}
+main{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ctl{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:flex-end}
+.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
+.f select,.f input{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+#fmt{margin:0 0 0 auto;color:var(--muted);font-size:.8rem;align-self:center}
+.msg{margin:0;font-size:.9rem;color:var(--muted)}
+.msg:empty{display:none}
+.msg.err{color:var(--bad)}
+.msgrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.msgrow:has(.msg:empty):has(.retry[hidden]){display:none}
+.retry{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:5px 12px;cursor:pointer;font-weight:600}
+/* view switches: same look as the Draft Kit / League Dashboard toolbar */
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:6px;color:var(--muted);font-weight:600;font-size:.86rem;cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+h2{font:600 1.15rem/1.1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;margin:0;display:flex;gap:4px 12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+h2 .meta{font:400 .8rem var(--f-body);letter-spacing:0;text-transform:none;color:var(--muted)}
+.scroll{overflow-x:auto;min-width:0}
+.scroll.rows25{max-height:calc(25 * 1.52rem + 2.3rem);overflow-y:auto}   /* about 25 rows, then a scrollbar */
+.scroll.rows25 thead th{position:sticky;top:0;background:var(--surface);z-index:1}
+table{border-collapse:collapse;font:12.5px/1.3 var(--f-data);font-variant-numeric:tabular-nums;white-space:nowrap;width:100%}
+th,td{padding:3px 5px;text-align:center;border-bottom:1px solid var(--line)}
+th{font:600 .72rem/1.15 var(--f-body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-block:7px;border-bottom:1px solid var(--ink)}
+thead th:not([data-nosort]){cursor:pointer;user-select:none}
+thead th:not([data-nosort]):hover,th[aria-sort]{color:var(--ink)}
+th[aria-sort="descending"]::after{content:" ▼";font-size:.6rem}
+th[aria-sort="ascending"]::after{content:" ▲";font-size:.6rem}
+td.l,th.l{text-align:left}
+td.l{font:13px var(--f-body);padding-right:10px}
+tbody tr:hover td{background:var(--sunk)}
+tr.me td.l{font-weight:600;color:var(--mine)}   /* your team: blue name, as on the Draft Kit */
+td.x{color:var(--line)}
+/* heat chips, as on the Draft Kit's player list: deeper green or red the further from even */
+.chip{display:inline-block;min-width:3.4em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
+td b .chip,.chip.b{font-weight:700}
+.topgrid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px}
+@media (max-width:1000px){.topgrid{grid-template-columns:1fr}}
+.botgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+@media (min-width:1400px){.botgrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}.botgrid th,.botgrid td{padding-inline:3px}.botgrid .chip{min-width:3.1em}}   /* wide screens: league matrix and team stats side by side */
+.kpis{display:flex;gap:6px 22px;flex-wrap:wrap;align-items:baseline}
+.kpi b{font:700 1.7rem/1 var(--f-display)}
+.kpi span{color:var(--muted);font-size:.82rem;margin-left:6px}
+.kpi.big{flex-basis:100%}
+#sum{justify-content:center}
+.kpi.big b{font-size:2.8rem}
+.kpi.big span{font:600 1.1rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin-left:8px}
+.kpi.hi b,.lvl.hi{color:var(--good)}.kpi.mid b,.lvl.mid{color:var(--warn)}.kpi.lo b,.lvl.lo{color:var(--bad)}
+#prof td.cat{font:600 .8rem var(--f-body);letter-spacing:.04em;text-align:left}
+.lvl{font-weight:600}
+.hint{color:var(--muted);font-size:.82rem;margin:0}
+.btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+header.top .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-radius:6px}
+@media (max-width:640px){header.top #how-open{padding:8px 14px}}
+/* How it works dialog: same markup and look as the Draft Kit (markup copied in by gen.py from app.html) */
+.how{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:0;width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+.how::backdrop{background:rgba(0,0,0,.45)}
+.how-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);padding:14px 20px 10px;border-bottom:1px solid var(--line)}
+.how h2{font:700 1.5rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin:0}
+.how .how-intro{margin:12px 20px 0;max-width:none;color:var(--muted);font-size:.9rem}
+.how-intro a{color:var(--mine);text-underline-offset:2px}
+.how-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;padding:12px 20px 20px;align-items:start}
+.how-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.how-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px 10px}
+.how h3{font:700 1.2rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.how h4{font:600 .82rem/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:12px 0 3px}
+.how p{margin:0 0 4px;max-width:70ch;color:var(--ink);font-size:.9rem;line-height:1.45}
+.how .swing{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.how .swing span{font:500 .78rem var(--f-data);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+/* In-season additions */
+.fresh{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:.8rem;color:var(--muted)}
+.fresh .warn{color:var(--warn);font-weight:600}
+.fresh button{border:0;background:none;padding:0;color:var(--mine);cursor:pointer;font:inherit;text-decoration:underline;text-underline-offset:2px}
+details.nomatch{font-size:.82rem;color:var(--muted)}
+details.nomatch summary{cursor:pointer}
+details.nomatch ul{margin:6px 0 0;padding-left:18px;columns:2 14em}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:16px}
+@media (max-width:1000px){.grid2{grid-template-columns:1fr}}
+.vs{font:600 1.05rem var(--f-display);letter-spacing:.04em;text-transform:uppercase}
+td.l small,.src{color:var(--muted);font-size:.72rem;margin-left:6px}
+td.pos{color:var(--muted)}
+.plan ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.plan li{font-size:.9rem}
+.plan input[type=number]{width:4.5em;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:.92rem;color:var(--ink)}
+.pos-n{color:var(--good)}.neg-n{color:var(--bad)}
+.tabpanel[hidden]{display:none}
+.f[hidden]{display:none}
+.f input.bad{border-color:var(--bad,#c0392b);outline-color:var(--bad,#c0392b)}
+.tl{padding:6px 0;border-bottom:1px solid var(--line);font-size:.88rem}
+.tl:last-child{border-bottom:0}
+.tl ul{margin:4px 0 0;padding-left:18px;color:var(--muted)}
+.lnk{border:0;background:none;padding:0;color:var(--mine);cursor:pointer;font:inherit;text-decoration:underline;text-underline-offset:2px;text-align:left}
+.chiplist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.chiplist li{display:inline-flex;align-items:center;gap:6px;background:var(--sunk);border:1px solid var(--line);border-radius:14px;padding:2px 4px 2px 10px;font-size:.86rem}
+.chiplist button{border:0;background:none;cursor:pointer;color:var(--muted);font-size:1rem;line-height:1}
+.f input{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:14em;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+#bt th.grp{text-align:left;background:var(--sunk);color:var(--ink)}
+#bt tr.avg td,#bt tr.tot td{font-weight:600}
+tr.click{cursor:pointer}
+#tab-trades>.grid2{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+@media (max-width:1000px){#tab-trades>.grid2{grid-template-columns:1fr}}
+</style>
+
+<header class="top">
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg><span id="sect">Matchup Analyzer</span></h1>
+  <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
+</header>
+<!--__HOW__-->
+
+<main>
+  <section class="panel" aria-label="League, team and week">
+    <div class="ctl">
+      <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
+      <label class="f" for="team">Your team<select id="team"></select></label>
+      <label class="f" for="week" title="Win chances are projected for this matchup period">Week<select id="week"></select></label>
+    </div>
+    <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
+    <div class="fresh" id="fresh"></div>
+    <details class="nomatch" id="nomatch" hidden><summary id="nomatch-sum"></summary><ul id="nomatch-list"></ul></details>
+  </section>
+
+  <div id="body" hidden>
+    <div class="tabpanel" id="tab-matchup">
+      <div class="grid2">
+        <section class="panel">
+          <h2><span class="vs" id="vs">You vs opponent</span><span class="meta" id="vs-dates"></span></h2>
+          <div class="kpis" id="kpis"></div>
+          <div class="scroll"><table id="cats"></table></div>
+        </section>
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <section class="panel">
+            <h2>Best single adds <span class="meta">Simple: one add for your weakest player, from tomorrow</span></h2>
+            <div class="scroll"><table id="adds"></table></div>
+            <p class="msg" id="adds-msg"></p>
+          </section>
+          <section class="panel plan">
+            <h2>Waiver add plan <span class="meta">Greedy: the move that helps most, then the next</span></h2>
+            <div class="ctl"><label class="f" for="addsleft">Adds left<input type="number" id="addsleft" min="0" max="4" step="1"></label></div>
+            <p class="msg" id="plan-note"></p>
+            <ol id="plan-moves"></ol>
+            <p class="hint" id="plan-sum"></p>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div class="tabpanel" id="tab-trades" hidden>
+      <div class="grid2">
+        <section class="panel">
+          <h2>Trade finder <span class="meta">Offer one of your players; one-for-one, best first</span></h2>
+          <div class="ctl"><label class="f" for="give" title="Type a name, or leave blank / type Any to offer each of your players">Your player<input id="give" type="text" list="givelist" placeholder="Any" autocomplete="off"><datalist id="givelist"></datalist></label>
+            <label class="f" for="f-lik" title="Hide trades the other team is unlikely to accept: 50% or 0.5">Likelihood at least<input id="f-lik" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
+            <label class="f" for="f-da" title="Smallest change in your rest-of-season Win M, percentage points (blank: every trade, even ones that hurt you; 0: no loss)">+Win M you at least<input id="f-da" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
+            <label class="f" for="f-db" title="Smallest change in their rest-of-season Win M, percentage points (0: not hurt)">+Win M them at least<input id="f-db" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label></div>
+          <div class="scroll rows25"><table id="finder"></table></div>
+          <p class="msg" id="finder-msg"></p>
+        </section>
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <section class="panel"><h2>Sell High <span class="meta">Your players valued above what they project</span></h2><div id="sell"></div></section>
+          <section class="panel"><h2>Buy Low <span class="meta">Other teams' players valued below what they project</span></h2><div id="buy"></div></section>
+        </div>
+      </div>
+      <section class="panel" id="builder">
+        <h2>Trade Builder <span class="meta" id="weights"></span></h2>
+        <div class="ctl">
+          <label class="f" for="ta">Team A<select id="ta"></select></label>
+          <label class="f" for="tb">Team B<select id="tb"></select></label>
+          <label class="f" for="zt" title="Which Zscore the table shows, as on the draft board">Zscore type<select id="zt"><option value="classic">Normal</option><option value="h2h">H2H-Adjusted</option><option value="adj">ROTO-Adjusted</option></select></label>
+          <label class="f" for="zb" title="How much projected missed games count in the Zscore">Basis<select id="zb"><option value="pergame">Per game</option><option value="total">Season</option><option value="mix">Mix</option></select></label>
+          <span class="seg" id="statv" role="group" aria-label="Stat rows"><button type="button" data-v="proj">Projection</button><button type="button" data-v="cur">Current</button></span>
+          <button class="btn" type="button" id="reset">Reset Trade</button>
+        </div>
+        <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+          <div><label class="f" for="in-a"><span id="lab-a">Team A receives</span><input id="in-a" list="dl-a" autocomplete="off" placeholder="Type a player"></label><datalist id="dl-a"></datalist><ul class="chiplist" id="list-a"></ul></div>
+          <div><label class="f" for="in-b"><span id="lab-b">Team B receives</span><input id="in-b" list="dl-b" autocomplete="off" placeholder="Type a player"></label><datalist id="dl-b"></datalist><ul class="chiplist" id="list-b"></ul></div>
+        </div>
+        <p class="msg" id="multi"></p>
+        <div class="scroll"><table id="bt"></table></div>
+        <div class="kpis" id="sum"></div>
+        <p class="msg" id="sum-msg"></p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>/*__DATA__*/
+/*__DAYS__*/</script>
+<script>/*__ENGINE__*/</script>
+<script>/*__SHARED__*/</script>
+<script>/*__STORE__*/</script>
+<script>/*__INSEASON__*/</script>
+<script>
+(function () {
+  'use strict';
+  const E = Engine, CATS = E.CATS, $ = id => document.getElementById(id);
+  const sectionOf = () => location.hash === '#trades' ? 'trades' : 'matchup';   // the toolbar's Matchup Analyzer / Trade Analyzer links
+  document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
+  { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
+  const KEY = 'courtside-inseason-v1', LS = LeagueStore;
+  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
+  try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  ui.tab = sectionOf();
+  // one remembered team per tab and league id; the old single map seeds both, then goes
+  if (!ui.teamBy || typeof ui.teamBy !== 'object') ui.teamBy = { matchup: Object.assign({}, ui.team), trades: Object.assign({}, ui.team) };
+  delete ui.team; ['matchup', 'trades'].forEach(k => { if (!ui.teamBy[k] || typeof ui.teamBy[k] !== 'object') ui.teamBy[k] = {}; });
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
+  // q is a 0..1 'how good' value; 0.5 is even. Same chip as the League Dashboard.
+  const chip = (q, txt, b) => { const d = q - .5, t = Math.min(1, Math.abs(d) / .25);
+    const bg = Math.abs(d) < .015 ? 'transparent' : 'color-mix(in oklab, var(' + (d > 0 ? '--good' : '--bad') + ') ' + Math.round(12 + 58 * t) + '%, var(--surface))';
+    return '<span class="chip' + (b ? ' b' : '') + '" style="background:' + bg + '">' + txt + '</span>'; };
+  const pct = v => (v * 100).toFixed(1);
+  const signed = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+  const zsg = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+  const InL = InLeague, InP = InPlayers;
+  let L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
+
+  let SS = LS.load(LS.local.get);
+  const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
+
+  let staleAge = 0;   // seconds old of the oldest answer the Worker served from memory because Fantrax was busy
+  async function fxGet(what, id) {
+    let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age);
+    return body;
+  }
+  // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
+  const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
+  async function loadStats() {
+    try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
+  }
+  async function load() {
+    const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
+    $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
+    $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (!lg) { ui.leagueId = null; sayHtml(LS.NO_LEAGUE_HTML); return; }
+    const id = ui.leagueId = lg.id;
+    say('Loading the league from Fantrax…');
+    try {
+      const league = await fxGet('league', id), ros = await fxGet('rosters', id), st = await fxGet('standings', id);
+      if (!fxPlayers) fxPlayers = await fxGet('players');
+      const stats = await loadStats();
+      if (seq !== loadSeq) return;
+      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; fetchedAt = new Date();
+      pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
+      Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
+      fxWait = 0; say(''); start();
+    } catch (e) {
+      if (seq !== loadSeq) return;
+      $('retry').hidden = false;
+      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
+      if (transient(e)) {
+        fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
+        say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
+        fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
+      }
+      say(e.message, true);
+    }
+  }
+
+  function teamLabel(t) {
+    const x = L.teams.find(q => q.id === t), s = standings && standings[t];
+    return (x ? x.name : t) + (s && s.record ? ' (' + s.record + ')' : '');
+  }
+  // the team in focus on a tab: remembered per tab and league, else the saved league's team, else the first
+  const teamFor = tab => LS.pickTeam(ui.teamBy[tab][ui.leagueId], L.teams.map(x => x.id), LS.defaultTeam(LS.local.get, ui.leagueId));
+  function start() {
+    const cur = InL.currentPeriod(L, Date.now());
+    if (cur == null) { say(L.statedLastRegular > L.lastRegular ? 'No matchups with known opponents are left: Fantrax lists the later regular-season weeks without opponents yet.' : 'The regular season is over: there are no matchups left to project.'); return; }
+    $('team').innerHTML = L.teams.map(t => '<option value="' + esc(t.id) + '">' + esc(teamLabel(t.id)) + '</option>').join('');
+    const t = teamFor(ui.tab); ui.teamBy[ui.tab][ui.leagueId] = t; $('team').value = t;
+    const weeks = InL.regularFrom(L, cur);
+    $('week').innerHTML = weeks.map(n => { const p = L.periods.find(q => q.n === n); return '<option value="' + n + '">Week ' + n + (p ? ' · ' + InL.localDay(p.start).slice(5) + ' to ' + InL.localDay(p.end - 1).slice(5) : '') + '</option>'; }).join('');
+    if (!weeks.includes(+ui.week)) ui.week = cur;
+    $('week').value = String(ui.week);
+    freshness(); save(); $('body').hidden = false; render();
+  }
+  function freshness() {
+    const want = L.season + '-' + String(L.season + 1).slice(2), parts = [];
+    if (staleAge) parts.push('<span class="warn">Fantrax is busy: rosters are about ' + (staleAge >= 3600 ? Math.round(staleAge / 3600) + ' h' : Math.max(1, Math.round(staleAge / 60)) + ' min') + ' old</span>');
+    else parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
+    if (!espn) parts.push('<span class="warn">No actual stats: perceived value uses projection and ADP only</span>');
+    else parts.push('<span>Stats: ESPN ' + esc(espn.label) + ', fetched ' + esc(String(espn.fetchedAt).slice(0, 10)) + (espn.label !== want ? ' <span class="warn">last season</span>' : '') + '</span>');
+    parts.push('<span>Projections: BBM + Hashtag average (players.json)</span>');
+    $('fresh').innerHTML = parts.join('');
+    const nm = pool.unmatched.noProj;
+    $('nomatch').hidden = !nm.length;
+    $('nomatch-sum').textContent = nm.length + ' players without projections';
+    $('nomatch-list').innerHTML = nm.map(p => '<li>' + esc(p.n) + ' <span class="src">' + (p.src === 'actual' ? 'ESPN actual stats' : 'waiver level') + '</span></li>').join('');
+  }
+
+  const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
+  function render() {
+    $('team').value = teamFor(ui.tab);   // each tab keeps its own team
+    const meNow = teamFor(ui.tab); if (ctx && ctx.me !== meNow) { bd = null; finderRun++; }   // a different team: the Trade Builder starts over and a running trade search stops
+    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: teamFor(ui.tab), nowMs: Date.now() });
+    $('sect').textContent = ui.tab === 'trades' ? 'Trade Analyzer' : 'Matchup Analyzer'; document.title = $('sect').textContent + ' · Courtside Draft Kit';
+    document.querySelector('.sitenav').outerHTML = Shared.TOOLBAR_HTML(ui.tab);
+    $('week').closest('label').hidden = ui.tab === 'trades';   // trades measure the rest of the season, so no week to pick
+    $('tab-matchup').hidden = ui.tab !== 'matchup'; $('tab-trades').hidden = ui.tab !== 'trades';
+    if (ui.tab === 'matchup') renderMatchup(); else renderTrades();
+  }
+
+  function renderMatchup() {
+    const n = +ui.week, pw = Matchup.projectWeek(ctx, ctx.me, n), per = L.periods.find(p => p.n === n);
+    $('vs-dates').textContent = per ? InL.localDay(per.start) + ' to ' + InL.localDay(per.end - 1) : '';
+    if (!pw.opp) { $('vs').textContent = 'No matchup this week'; $('kpis').innerHTML = ''; $('cats').innerHTML = ''; $('adds').innerHTML = ''; $('adds-msg').textContent = ''; $('plan-moves').innerHTML = ''; $('plan-note').textContent = ''; $('plan-sum').textContent = ''; return; }
+    const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
+    $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
+    const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
+    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): whole week projected, results so far not counted</span></div>' +
+      '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
+    $('cats').innerHTML = '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
+      CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
+    // best single adds
+    const rows = Matchup.simpleAdds(ctx, n, { limit: 20 });
+    $('adds').innerHTML = rows.length ? '<thead><tr><th class="l">Add</th><th>Pos</th><th>Team</th><th>Games</th><th class="l">Drop</th><th>Win M</th><th>+Win M</th></tr></thead><tbody>' +
+      rows.map(r => '<tr><td class="l">' + esc(r.add.n) + (r.add.src !== 'proj' ? '<span class="src">' + (r.add.src === 'actual' ? 'ESPN stats' : 'waiver level') + '</span>' : '') + '</td><td class="pos">' + esc(r.add.pos) + '</td><td>' + esc(r.add.t) +
+        '</td><td>' + r.games.toFixed(1) + '</td><td class="l drop">' + (r.drop ? esc(r.drop.n) : 'open spot') + '</td><td>' + chip(r.match, pct(r.match)) + '</td><td><b class="' + (r.dMatch >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dMatch * 100) + '</b></td></tr>').join('') + '</tbody>' : '';
+    $('adds-msg').textContent = rows.length ? '' : 'No games left this week for any available player.';
+    renderPlan(n);
+  }
+  function renderPlan(n) {
+    const key = ui.leagueId + ':' + n, left = ui.adds[key] != null ? ui.adds[key] : 4;
+    $('addsleft').value = String(left);
+    const plan = n === ctx.cur ? Matchup.addPlan(ctx, { addsLeft: left }) : Matchup.addPlan(ctx, { periods: [n] });
+    $('plan-note').textContent = plan.note || '';
+    $('plan-moves').innerHTML = plan.moves.slice().sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : 0)).map(m => '<li><b>' + esc(m.day.slice(5)) + '</b>: add ' + esc(m.add.n) + (m.drop ? ', drop ' + esc(m.drop.n) : ' (open spot)') + ' → ' + pct(m.match) + '%</li>').join('');
+    $('plan-sum').textContent = plan.start == null ? '' : (plan.moves.length ? 'Win M ' + pct(plan.start) + '% → ' + pct(plan.end) + '%. ' : 'No move helps: Win M stays ' + pct(plan.start) + '%. ') +
+      'You can drop: ' + (plan.droppable.length ? plan.droppable.map(p => p.n).join(', ') : 'nobody') + '.';
+  }
+
+  // ---------------------------------------------------------------- Trades tab
+  const tradeCache = {};
+  let bd = null;   // Trade Builder state { a, b, aGets, bGets, stat }
+  const nameOfTeam = t => (L.teams.find(x => x.id === t) || { name: t }).name;
+  const pvOf = pp => Trade.perceived(ctx, pp).pv;
+  const mineSorted = () => ctx.roster[ctx.me].map(f => pool.byKey.get(f)).sort((a, b) => pvOf(b) - pvOf(a));
+  const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b></td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td>';
+
+  // One player's candidate trades take about 0.7 s, so they are searched one player at a time and drawn as they come. Results are
+  // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v2';
+  const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
+  function candSave(sig, ck, gives) {
+    try {
+      const st = candStore(), mine = st.sigs[sig] = st.sigs[sig] || {};
+      gives.forEach(g => { if (tradeCache[ck(g)]) mine[g] = Trade.packCandidates(tradeCache[ck(g)]); });
+      st.order = st.order.filter(x => x !== sig).concat(sig);
+      while (st.order.length > 3) delete st.sigs[st.order.shift()];
+      localStorage.setItem(CAND_KEY, JSON.stringify(st));
+    } catch (e) {}
+  }
+  let finderRun = 0;
+  function renderFinder() {
+    const run = ++finderRun, mineAll = ctx.roster[ctx.me], gives = ui.give === 'any' ? mineAll : [ui.give];
+    const ck = g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + g, sig = Trade.candSig(ctx, InL.localDay(Date.now()), CAND_VER);
+    const saved = candStore().sigs[sig] || {};
+    mineAll.forEach(g => { if (!tradeCache[ck(g)] && saved[g]) tradeCache[ck(g)] = Trade.unpackCandidates(saved[g], pool); });
+    const todo = (ui.give === 'any' ? [] : [ui.give]).concat(mineAll.filter(g => g !== ui.give)).filter(g => !tradeCache[ck(g)]);
+    const draw = () => {
+      const pf = (k, id) => { const v = Trade.parseFilter(k, ui.fl[id]); $('f-' + id).classList.toggle('bad', v === undefined); return v; };
+      const lik = pf('lik', 'lik'), da = pf('da', 'da'), db = pf('db', 'db');   // a box that cannot be read is ignored and marked
+      const SHOW = 3000, opts = { limit: Infinity, minLikelihood: lik == null ? 0 : lik, minDA: da == null ? -Infinity : da, minDB: db == null ? -Infinity : db };
+      const matched = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])), opts), rows = matched.slice(0, SHOW), busy = todo.length ? 'Searching ' + (mineAll.length - todo.length) + '/' + mineAll.length + '… ' : '';
+      $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th></tr></thead><tbody>' +
+        rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.give.n) + '</td><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '</tr>').join('') + '</tbody>' : '';
+      const waiting = gives.some(g => !tradeCache[ck(g)]);
+      $('finder-msg').textContent = busy + (rows.length ? matched.length + ' trade' + (matched.length === 1 ? '' : 's') + ' match' + (matched.length > SHOW ? ' (best ' + SHOW + ' shown)' : '') + '. Click a row to load it into the Trade Builder.' : waiting ? '' : 'No one-for-one trade matches these filters.');
+      applySort('finder');
+    };
+    draw(); drawSellBuy(ck);
+    const step = () => {
+      if (run !== finderRun || !todo.length) return;
+      const g = todo.shift(); tradeCache[ck(g)] = Trade.tradeCandidates(ctx, g); candSave(sig, ck, [g]); draw();
+      if (todo.length) setTimeout(step, 0); else drawSellBuy(ck);
+    };
+    if (todo.length) setTimeout(step, 0);
+  }
+  // Sell High / Buy Low use the same candidates, so they appear once every one of my players has been searched
+  function drawSellBuy(ck) {
+    if (!ctx.roster[ctx.me].every(g => tradeCache[ck(g)])) { $('sell').innerHTML = $('buy').innerHTML = '<p class="hint">Searching…</p>'; return; }
+    const key = ui.leagueId + ':' + ctx.me + ':' + ctx.cur;
+    const sb = tradeCache[key] || (tradeCache[key] = Trade.sellHighBuyLow(ctx, { limit: 8, targets: 3, candidates: g => tradeCache[ck(g)] }));
+    const list = (items, kind) => items.length ? items.map(x => '<div class="tl"><b>' + esc(x.player.n) + '</b><span class="src">' + (kind === 'sell' ? 'valued ' : 'worth ') + x.gap.toFixed(2) + (kind === 'sell' ? ' above real' : ' above what they are valued') + '</span>' +
+      (x.trades.length ? '<ul>' + x.trades.map(t => '<li><button type="button" class="lnk" data-give="' + esc(t.give.key) + '" data-target="' + esc(t.target.key) + '" data-team="' + esc(t.team) + '">' + esc(t.give.n) + ' for ' + esc(t.target.n) + '</button> · ' + esc(nameOfTeam(t.team)) + ' · ' + pct(t.likelihood) + '% likely · ' + signed(t.dA) + ' you</li>').join('') + '</ul>' : '<p class="hint">No one-for-one trade helps you.</p>') + '</div>').join('') : '<p class="hint">None right now.</p>';
+    $('sell').innerHTML = list(sb.sellHigh, 'sell');
+    $('buy').innerHTML = list(sb.buyLow, 'buy');
+  }
+  function renderTrades() {
+    const mine = mineSorted();
+    if (ui.give !== 'any' && !mine.some(p => p.key === ui.give)) ui.give = 'any';
+    $('givelist').innerHTML = mine.map(p => '<option value="' + esc(p.n) + '"></option>').join('');
+    const gp = ui.give === 'any' ? null : pool.byKey.get(ui.give); $('give').value = gp ? gp.n : '';
+    $('f-lik').value = ui.fl.lik; $('f-da').value = ui.fl.da; $('f-db').value = ui.fl.db;
+    renderFinder();
+    const w = Trade.TRADE_W; $('weights').textContent = 'Perceived value = ' + Math.round(w.cur * 100) + '% current + ' + Math.round(w.proj * 100) + '% projection + ' + Math.round(w.adp * 100) + '% ADP';
+    renderBuilder();
+  }
+  function builderState() {
+    const ids = L.teams.map(t => t.id);
+    if (!bd || !ids.includes(bd.a) || !ids.includes(bd.b) || bd.a === bd.b) { const a = ctx.me; bd = { a, b: ids.find(t => t !== a), aGets: [], bGets: [], stat: (bd && bd.stat) || 'proj' }; }
+    return bd;
+  }
+  const lineFor = (pp, stat) => stat === 'cur' ? InP.curLine(pp, Trade.TRADE_W.shrinkGames) : pp.line;
+  const statTxt = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : v.toFixed(1);
+  const stats9 = l => [l.fgp, l.ftp, l.tpm, l.pts, l.reb, l.ast, l.stl, l.blk, l.to];
+  function sideRows(label, keys, stat) {
+    const pls = keys.map(k => pool.byKey.get(k)), lines = pls.map(p => lineFor(p, stat));
+    const zv = pls.map(p => InP.zscoreOf(PLAYERS, p, ui.zt, ui.zb)), zOk = zv.filter(v => v != null), zTxt = v => (v == null ? '—' : zsg(v));
+    let h = '<tr><th class="grp" colspan="' + (CATS.length + 2) + '">' + esc(label) + '</th></tr>';
+    lines.forEach((l, i) => { h += '<tr><td class="l">' + esc(pls[i].n) + '</td>' + stats9(l).map((v, c) => '<td>' + statTxt(v, c) + '</td>').join('') + '<td>' + zTxt(zv[i]) + '</td></tr>'; });
+    if (lines.length) {
+      const n = lines.length, sum = f => lines.reduce((s, l) => s + f(l), 0), fga = sum(l => l.fga), fta = sum(l => l.fta);
+      const tot = { fgp: fga ? sum(l => l.fgp * l.fga) / fga : 0, fga, ftp: fta ? sum(l => l.ftp * l.fta) / fta : 0, fta, tpm: sum(l => l.tpm), pts: sum(l => l.pts), reb: sum(l => l.reb), ast: sum(l => l.ast), stl: sum(l => l.stl), blk: sum(l => l.blk), to: sum(l => l.to) };
+      h += '<tr class="tot"><td class="l">Total</td>' + stats9(tot).map((v, c) => '<td>' + statTxt(v, c) + '</td>').join('') + '<td></td></tr>';
+      const zs = lines.map(l => InP.catZ(l, ctx.ref)), zc = c => zs.reduce((t, z) => t + z[c], 0);
+      h += '<tr class="tot"><td class="l">Zscore</td>' + CATS.map((_, c) => '<td>' + chip(.5 + zc(c) / 4, zsg(zc(c))) + '</td>').join('') + '<td>' + (zOk.length ? zsg(zOk.reduce((s2, v) => s2 + v, 0)) : '—') + '</td></tr>';
+    }
+    return h;
+  }
+  function renderBuilder() {
+    const S = builderState(), ids = L.teams.map(t => t.id);
+    $('ta').innerHTML = ids.map(t => '<option value="' + esc(t) + '">' + esc(nameOfTeam(t)) + (t === ctx.me ? ' (you)' : '') + '</option>').join(''); $('ta').value = S.a;
+    $('tb').innerHTML = ids.filter(t => t !== S.a).map(t => '<option value="' + esc(t) + '">' + esc(nameOfTeam(t)) + '</option>').join(''); $('tb').value = S.b;
+    document.querySelectorAll('#statv button').forEach(b => b.classList.toggle('on', b.dataset.v === S.stat));
+    $('zt').value = ui.zt; $('zb').value = ui.zb;
+    $('lab-a').textContent = nameOfTeam(S.a) + ' receives'; $('lab-b').textContent = nameOfTeam(S.b) + ' receives';
+    const opts = (team, picked) => ctx.roster[team].filter(f => !picked.includes(f)).map(f => pool.byKey.get(f)).map(p => '<option value="' + esc(p.n + ' · ' + p.t) + '"></option>').join('');
+    $('dl-a').innerHTML = opts(S.b, S.aGets); $('dl-b').innerHTML = opts(S.a, S.bGets);
+    const chips = (keys, side) => keys.map(k => '<li>' + esc(pool.byKey.get(k).n) + '<button type="button" data-side="' + side + '" data-rm="' + esc(k) + '" aria-label="Remove ' + esc(pool.byKey.get(k).n) + '">×</button></li>').join('');
+    $('list-a').innerHTML = chips(S.aGets, 'a'); $('list-b').innerHTML = chips(S.bGets, 'b');
+    $('multi').textContent = S.aGets.length !== S.bGets.length && S.aGets.length + S.bGets.length > 0 ? 'Uneven trade: each team keeps its whole roster here, so the team getting more players needs open spots or must drop someone. Win M counts every player involved.' : '';
+    $('bt').innerHTML = S.aGets.length + S.bGets.length ? '<thead><tr><th class="l">Player</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '<th title="Zscore of the chosen type and basis; players without a projection show a dash and are left out of the average and total">Total</th></tr></thead><tbody>' + sideRows(nameOfTeam(S.a) + ' receives', S.aGets, S.stat) + sideRows(nameOfTeam(S.b) + ' receives', S.bGets, S.stat) + '</tbody>' : '';
+    $('sum').innerHTML = ''; $('sum-msg').textContent = '';
+    if (!S.aGets.length || !S.bGets.length) { $('sum-msg').textContent = 'Add at least one player on each side to see the effect on rest-of-season Win M.'; return; }
+    try {
+      const r = Trade.evaluateTrade(ctx, { a: S.a, b: S.b, aGets: S.aGets, bGets: S.bGets });
+      $('sum').innerHTML = '<div class="kpi"><b>' + signed(r.dA) + '</b><span>' + esc(nameOfTeam(S.a)) + ' Win M (points)</span></div><div class="kpi"><b>' + signed(r.dB) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Win M</span></div>' +
+        '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>'
+      const zsum = ks => { const v = ks.map(k => InP.zscoreOf(PLAYERS, pool.byKey.get(k), ui.zt, ui.zb)).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
+      const zA = zsum(S.aGets), zB = zsum(S.bGets);
+      const dz = zA == null && zB == null ? null : (zA || 0) - (zB || 0), zl = ' Zscore';
+      $('sum').innerHTML += '<div class="kpi"><b>' + (dz == null ? '—' : zsg(dz)) + '</b><span>' + esc(nameOfTeam(S.a)) + zl + '</span></div><div class="kpi"><b>' + (dz == null ? '—' : zsg(-dz)) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Zscore</span></div>';
+    } catch (e) { $('sum-msg').textContent = e.message; }
+  }
+  function loadTrade(give, target, team) { bd = { a: ctx.me, b: team, aGets: [target], bGets: [give], stat: builderState().stat }; renderBuilder(); $('builder').scrollIntoView({ block: 'nearest' }); }
+  function addPlayer(side, text) {
+    const S = builderState(), from = side === 'a' ? S.b : S.a, picked = side === 'a' ? S.aGets : S.bGets, t = text.trim().toLowerCase();
+    const cands = ctx.roster[from].filter(f => !picked.includes(f)).map(f => pool.byKey.get(f));
+    const hit = cands.find(p => (p.n + ' · ' + p.t).toLowerCase() === t) || (cands.filter(p => p.n.toLowerCase() === t).length === 1 ? cands.find(p => p.n.toLowerCase() === t) : null);
+    if (hit) picked.push(hit.key);
+    renderBuilder();
+  }
+  $('give').addEventListener('change', e => {
+    const t = e.target.value.trim().toLowerCase(), mine = mineSorted();
+    const hit = t === '' || t === 'any' ? 'any' : (mine.find(p => p.n.toLowerCase() === t) || (mine.filter(p => p.n.toLowerCase().includes(t)).length === 1 ? mine.filter(p => p.n.toLowerCase().includes(t))[0] : null));
+    $('give').classList.toggle('bad', !hit);
+    if (!hit) return;
+    ui.give = hit === 'any' ? 'any' : hit.key; save(); renderFinder();
+    if (hit !== 'any') e.target.value = hit.n;
+  });
+  [['f-lik', 'lik'], ['f-da', 'da'], ['f-db', 'db']].forEach(([id, k]) => $(id).addEventListener('input', e => { ui.fl[k] = e.target.value; save(); renderFinder(); }));
+  $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr) loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team); });
+  ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
+  $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('zt').addEventListener('change', e => { ui.zt = e.target.value; save(); renderBuilder(); });
+  $('zb').addEventListener('change', e => { ui.zb = e.target.value; save(); renderBuilder(); });
+  $('statv').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { builderState().stat = b.dataset.v; renderBuilder(); } });
+  $('reset').addEventListener('click', () => { const S = builderState(); S.aGets = []; S.bGets = []; renderBuilder(); });
+  [['in-a', 'a'], ['in-b', 'b']].forEach(([id, side]) => { const el = $(id); el.addEventListener('change', () => { addPlayer(side, el.value); el.value = ''; }); });
+  ['list-a', 'list-b'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button[data-rm]'); if (!b) return; const S = builderState(), arr = b.dataset.side === 'a' ? S.aGets : S.bGets; arr.splice(arr.indexOf(b.dataset.rm), 1); renderBuilder(); }));
+
+  // Sortable columns, as on the League Dashboard: first click puts the best first, second reverses; names sort A to Z; kept in storage.
+  const cellKey = td => { const t = td.textContent.trim(); if (t === '—' || t === '') return null; const v = parseFloat(t.replace(/[,%+]/g, '').replace('−', '-')); return isNaN(v) ? t : v; };
+  function applySort(id) {
+    const st = (ui.sort || {})[id], tb = $(id).tBodies[0], ths = [...$(id).querySelectorAll('thead th')];
+    ths.forEach((th, i) => { th.tabIndex = 0; th.removeAttribute('aria-sort'); if (st && st.col === i) th.setAttribute('aria-sort', st.dir === 'asc' ? 'ascending' : 'descending'); });
+    if (!st || !tb || st.col >= ths.length) return;
+    const rows = [...tb.rows], k = r => r.children[st.col] ? cellKey(r.children[st.col]) : null, sgn = st.dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => { const x = k(a), y = k(b); if (x == null) return y == null ? 0 : 1; if (y == null) return -1;
+      return sgn * (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true })); });
+    rows.forEach(r => tb.appendChild(r));
+  }
+  ui.sort = ui.sort || {};
+  { const id = 'finder', go = th => { if (!th) return; const i = [...th.parentNode.children].indexOf(th), cur = ui.sort[id], best = th.classList.contains('l') ? 'asc' : 'desc';
+      ui.sort[id] = cur && cur.col === i ? { col: i, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { col: i, dir: best }; save(); applySort(id); };
+    $(id).addEventListener('click', e => go(e.target.closest('thead th')));
+    $(id).addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const th = e.target.closest('thead th'); if (th) { e.preventDefault(); go(th); } } }); }
+
+  $('retry').addEventListener('click', () => { fxWait = 0; load(); });
+  $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
+  $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
+  $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
+  // Settings changed in another tab (a different league, or other settings): load again
+  window.addEventListener('storage', e => {   // reload only for another league or other settings
+    if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
+    const was = SS.league && SS.league.id; SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was) load();
+  });
+  $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
+  $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
+  window.addEventListener('hashchange', () => { ui.tab = sectionOf(); if (pool) render(); });
+  $('addsleft').addEventListener('change', e => { const v = Math.max(0, Math.min(4, Math.round(+e.target.value || 0))); ui.adds[ui.leagueId + ':' + ui.week] = v; save(); renderPlan(+ui.week); });
+  load();
+})();
+</script>

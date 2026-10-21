@@ -29,7 +29,12 @@ Model pick; it never punts. Shared with friends via Cloudflare.
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
 - **Works:** board, Fantrax live sync (backoff + Worker cache), saved drafts/leagues (rename, import/export), League
   Dashboard, ADP/draft collector (GitHub Actions every 6 h).
-- **In progress:** nothing.
+- **In-season tools + Settings tab (ideas 95-109), released 2026-10-21:** Matchup and Trade Analyzers (`inseason.html`) and the Settings tab
+  (shared league store `league_store.js`). Specs/plans in `docs/superpowers/`; ledger with every ruling in
+  `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored). `Engine.pairMatchup` is the only engine change
+  (additions only, pinned by `engine_golden.test.js`). Decisions in force: Win M = vs this week's opponent in the Matchup Analyzer,
+  vs remaining regular-season matchups (periods 1-15) in the Trade Analyzer (projected playoffs later, #101); chances use gVar 1.87
+  and shrink toward 0.5 (k 0.72 matchup, 0.82 categories); players without projections use ESPN actuals or a waiver-level line.
 
 ## Current model (backtested in the user's format with real projections)
 
@@ -81,6 +86,30 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 8. User side: on the PC run `cd ~/Documents/FantasyBBall; git restore netlify.toml; git pull`; edit or delete the stale
    claude.ai Project instructions.
 
+9. **To add to `Sanctumx/Claude-Workflow`** (user rule: workflow changes are generalized; not done yet, needs the user's "push"):
+   (a) `template/GUIDELINES.md` and the `template/CLAUDE.md` "user's working rules": keep running plan tasks back to back unless
+   something needs the user's input; once a task has taken the conversation past the context limit (Messages past ~115K in
+   `/context`, hard stop ~265K), finish that task, record it (ledger, handoff) and don't autorun the next; tell the user to
+   `/handoff` and `/clear` (user, 2026-10-20). (b) The same as a feedback memory for the shared skills/templates, if they carry memories.
+   (c) The 2026-10-20 break-cue change keyed to Messages in `/context` (item 7) is also still unpushed there. (d) Windows notes for
+   the template's hook: its quoted test glob fails on Windows (pass the directory or expand the glob in node), and bash heredocs with
+   apostrophes break in the Bash tool (use the Write tool for scripts).
+10. In-season tools: at release, republish `courtside-draft-board.html` to the board artifact (engine.js changed) and trigger the
+   `collect-stats` workflow once by hand (`workflow_dispatch`; ESPN may block runner IPs, tested only from the PC). Open: #98 tune
+   perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit the shrink k with in-season data.
+11. Environment (this PC): `python3` is not installed, use `python`. (The after-edit hook's Windows glob problem is fixed, 2026-10-21.)
+12. **Queued next (after the Settings + In-season release): Rankings tab (idea 110).** User's brief (2026-10-21): a tab like
+    basketballmonster.com/playerrankings.aspx but in our layout: a Stats dropdown rather than multiple views; Zscore type, Playoff
+    boost etc. as on the board; on top of the different bases, the option to choose projections. Start with brainstorming.
+
 ## Next session starts with
 
-Nothing open for the draft kit; wait for the user's request. If they ask for workflow work, start with open item 7.
+Released 2026-10-21: In-season tools + Settings tab (merged to main). Still to do after the release: republish `courtside-draft-board.html` to the board
+artifact if not done, and trigger the `collect-stats` workflow once by hand (`workflow_dispatch`). Then **Rankings tab (idea 110, item 12)**: brainstorm first.
+Left open: a traded player's games still come from his preseason team; likelihood bias is a guess (#98); Win M ignores results so far (#103); IR on the
+League tab (#109).
+Browser checks: Playwright (`npm i playwright@1.48.2` + `npx playwright install chromium` in a scratch folder, or an earlier session's scratchpad `pw/`);
+copy `src/tests/browser/*.mjs` there, `REPO=<repo root> node X.mjs`, repo root served on :8765 (`python -m http.server 8765`).
+Build on this PC: `cd src && python gen.py && python build_site.py && cp site/{index,league,inseason,settings}.html ..` (CLAUDE.md has python3).
+Standing rule (user, 2026-10-20): keep running plan tasks unless something needs the user; once past the context limit (Messages > ~115K), finish
+the task, record it and stop; don't autorun the next one.

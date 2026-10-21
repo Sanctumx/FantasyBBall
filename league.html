@@ -166,17 +166,28 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
       <h4>Logging picks</h4>
       <p>Type a name and press Enter or Taken, or press Taken on his row; the pick goes to the team on the clock. Undo pick takes back the last one; tap a recent pick twice to take back an earlier one.</p>
       <h4>Fantrax sync</h4>
-      <p>Open your league's home page on Fantrax and copy the address from the browser bar (it looks like fantrax.com/fantasy/league/<b>abc123xyz</b>/home). Paste it into the box under Fantrax sync and press Connect; the ID alone works too. Then choose your team, so Win and availability are worked out for you. Teams, roster size and lineup slots are read from the league, and picks arrive every 10 seconds on the right teams, traded picks included. Sync runs on the hosted site only. Leagues are saved for one-click switching (Rename gives one your own name).</p>
+      <p>The league comes from Settings (top right): open your league's home page on Fantrax, copy the address from the browser bar (it looks like fantrax.com/fantasy/league/<b>abc123xyz</b>/home), paste it under Fantrax league and press Load; the ID alone works too. Settings reads the teams, roster size and lineup slots from the league, saves the league for one-click switching (Rename gives one your own name) and asks which team is yours. On the board, the Fantrax draft panel's Import draft from league puts the league's picks on the board, and with Auto-sync on they keep arriving every 10 seconds on the right teams, traded picks included. Your team there only picks who is on the clock for you. Sync runs on the hosted site only.</p>
       <h4>Stats and weights</h4>
       <p>Stats picks what the nine category columns show: Win added, Zscore or projected stats. Category weights (×0 to ×2; TO starts at ×0.5) change Zscore only; Win always counts every category.</p>
       <h4>League Dashboard</h4>
-      <p>League Dashboard (top right) analyzes a finished draft: pick the Draft Kit's current draft, a saved draft or a saved Fantrax league. On top, the team in focus against each opponent (chance to win the matchup and each category) and its category profile (win chance against an average team, projected total, rank). Below, every team against every team (matchup win %, category win % or expected categories) and every team's projected stats (raw, per week, Zscore or rank). Stats Total or Per game sets the basis for every number on that page (Per game ignores missed games); Playoff boost is Off, like the Model pick, so with the same Basis and Projections here its numbers match Your team. Click any column header to sort; percentages show one decimal.</p>
+      <p>League Dashboard (top right) analyzes the league loaded in Settings as it stands now: every team's current roster (players on IR are left out and noted). On top, the team in focus against each opponent (chance to win the matchup and each category) and its category profile (win chance against an average team, projected total, rank). Below, every team against every team (matchup win %, category win % or expected categories) and every team's projected stats (raw, per week, Zscore or rank). Stats Total or Per game sets the basis for every number on that page (Per game ignores missed games); Playoff boost is Off, like the Model pick, so with the same Basis and Projections here its numbers match Your team. Click any column header to sort; percentages show one decimal. Without a loaded league the page asks you to load one in Settings.</p>
       <h4>Saved drafts</h4>
       <p>Save, load, rename, delete or start a new draft; anything that would lose work asks for a second tap. Drafts live in this browser; Export (one draft) or Export all saves them to a file, and Import adds a file's drafts here, on any browser or device. Players are matched by name, so an older file still lands on the right players.</p>
       <h4>Colors</h4>
       <p>Green helps, red hurts, deeper means a bigger effect. There at and Lasts to are green from 75%, amber from 40%. Playoff games are green or red one game above or below average.</p>
       <h4>Limits</h4>
-      <p>Games caps aren't modeled. Lineup slots (League settings: Positions and C, G, F, G/C, F/C and UTIL slots, read from Fantrax when you connect; the rest of the roster is Reserve) are shown as position coverage under Your team but don't change values or the Model pick: in backtests slot conflicts cost only 0.1–0.3% of player-games, because on a typical day 6–8 of 12 players play and most have 2–3 positions.</p>
+      <p>Games caps aren't modeled. Lineup slots (League settings in Settings: Positions and C, G, F, G/C, F/C and UTIL slots, read from Fantrax when you load the league; the rest of the roster is Reserve) are shown as position coverage under Your team but don't change values or the Model pick: in backtests slot conflicts cost only 0.1–0.3% of player-games, because on a typical day 6–8 of 12 players play and most have 2–3 positions. Fantrax scoring, categories, IL size and playoff start are not read; set them yourself in Settings. The League Dashboard does not count IR players. Matchup and Trade cover 9-cat H2H only.</p>
+    </section>
+    <section class="how-card">
+      <h3>In-season tools</h3>
+      <h4>Weekly Matchup Analyzer</h4>
+      <p>Matchup Analyzer (top right) reads the league loaded in Settings: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here).</p>
+      <h4>Adds and the plan</h4>
+      <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. Plans cover the current week only.</p>
+      <h4>Trade Analyzer</h4>
+      <p>Trade Win M is your average chance over the remaining regular-season matchups against the real opponents, with both rosters changed; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
+      <h4>Shrinkage and missing projections</h4>
+      <p>Chances are pulled toward 50% (matchup by 0.72, each category by 0.82) because backtests on 2024-26 weeks showed projections alone are overconfident. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
     </section>
    </div>
   </div>
@@ -185,7 +196,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 <main>
   <section class="panel" aria-label="League to analyze">
     <div class="ctl">
-      <label class="f" for="src">League<select id="src"></select></label>
+      <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
       <label class="f" for="team">Team in focus<select id="team"></select></label>
       <label class="f" for="basis" title="Total counts projected games; Per game ignores games missed. Changes every number on the page.">Stats<select id="basis"><option value="total">Total</option><option value="pergame">Per game</option></select></label>
       <label class="f" for="proj">Projections<select id="proj"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></select></label>
@@ -218,7 +229,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     </section>
 
     <section class="panel">
-      <h2>Team stats <span class="meta" id="ts-sub">Projected season totals for each roster as drafted</span></h2>
+      <h2>Team stats <span class="meta" id="ts-sub">Projected season totals for each current roster</span></h2>
       <div class="ctl"><span class="seg" id="tsv" role="group" aria-label="Stats view"><button type="button" data-v="raw">Raw</button><button type="button" data-v="week">Per week</button><button type="button" data-v="z">Zscore</button><button type="button" data-v="rank">Rank</button></span></div>
       <div class="scroll"><table id="ts"></table></div>
       <p class="hint">Per game adds up each roster's per-game lines (FG% and FT% from makes and attempts). Zscore is against the league's teams; Rank 1 is best (fewest TO).</p>
@@ -1070,8 +1081,58 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     res.modelPick = best; res.slide = { w, cands };
     return res;
   }
+  // ---------- two-roster matchup with known games (in-season tools, 2026-10-20) ----------
+  // pairMatchup(A, B, { cats: 9|8, projErr: true }): A, B are arrays of { p: StatLine, games, gVar? }. Percentages are
+  // linearized around each team's own percentage, so the sign of the gap always follows the projected percentages.
+  // gVar = variance of that entry's games (default VAR_GAMES * games / GPW); entries with games <= 0 are skipped.
+  function matchProbN(ps, nc) {
+    let dist = [1];
+    for (const q of ps) { const nd = new Array(dist.length + 1).fill(0); dist.forEach((v, i) => { nd[i] += v * (1 - q); nd[i + 1] += v * q; }); dist = nd; }
+    let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
+    return w;
+  }
+  function pairTeam(R, projErr) {
+    let fga = 0, fgm = 0, fta = 0, ftm = 0;
+    R.forEach(e => { if (!(e.games > 0)) return; fga += e.p.fga * e.games; fgm += e.p.fgp * e.p.fga * e.games; fta += e.p.fta * e.games; ftm += e.p.ftp * e.p.fta * e.games; });
+    const ref = { pFG: fga > 0 ? fgm / fga : 0, pFT: fta > 0 ? ftm / fta : 0 };
+    const s = new Array(NC).fill(1); s[0] = fga > 0 ? 1 / fga : 0; s[1] = fta > 0 ? 1 / fta : 0;
+    const mean = new Float64Array(NC), idio = new Float64Array(NC), lsum = new Float64Array(NC), q = new Float64Array(NC);
+    let S = 0;
+    R.forEach(e => {
+      if (!(e.games > 0)) return;
+      const m = vec(e.p, ref, 1), wv = weekVar(e.p, ref, 82), pv = projErr ? projVar(e.p, e.games) : null;
+      const gv = e.gVar != null ? e.gVar : VAR_GAMES * e.games / GPW; S += gv;
+      for (let c = 0; c < NC; c++) {
+        const pgv = (wv[c] - m[c] * m[c] * VAR_GAMES) / GPW, sm = s[c] * m[c];
+        if (c > 1) mean[c] += m[c] * e.games;
+        idio[c] += s[c] * s[c] * e.games * pgv + (pv ? s[c] * s[c] * pv[c] : 0);
+        lsum[c] += sm * gv; q[c] += sm * sm * gv;
+      }
+    });
+    mean[0] = ref.pFG; mean[1] = ref.pFT;
+    const lam = new Float64Array(NC);
+    for (let c = 0; c < NC; c++) { lam[c] = S > 0 ? lsum[c] / S : 0; idio[c] += Math.max(0, q[c] - lam[c] * lam[c] * S); }
+    return { mean, idio, lam, S };
+  }
+  function pairMatchup(A, B, opts) {
+    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false;
+    const a = pairTeam(A, pe), b = pairTeam(B, pe), cat = [];
+    for (let c = 0; c < NC; c++) {
+      if (c >= nc) { cat.push(null); continue; }
+      cat.push(Phi((a.mean[c] - b.mean[c]) / Math.sqrt(a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S + 1e-9)));
+    }
+    const sa = Math.sqrt(a.S), sb = Math.sqrt(b.S), ps = new Array(nc);
+    let match = 0;
+    for (let j = 0; j < GH_Z.length; j++) for (let k = 0; k < GH_Z.length; k++) {
+      for (let c = 0; c < nc; c++) ps[c] = Phi((a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k]) / Math.sqrt(a.idio[c] + b.idio[c] + 1e-9));
+      match += GH_W[j] * GH_W[k] * matchProbN(ps, nc);
+    }
+    const mu = t => Array.from(t.mean, (x, c) => c === TO ? -x : x);
+    return { cat, match, mu: [mu(a), mu(b)] };
+  }
   const E2 = (...a) => evaluate(...a);
   const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  api.pairMatchup = pairMatchup;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);
 </script>
@@ -1110,17 +1171,189 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
     return o;
   }
-  // Toolbar between the two pages; `active` is 'kit' or 'league'
+  // Toolbar between the pages; `active` is 'kit', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
-    '<a href="./"' + (active === 'kit' ? ' aria-current="page"' : '') + '>Draft Kit</a>' +
-    '<a href="league.html"' + (active === 'league' ? ' aria-current="page"' : '') + '>League Dashboard</a></nav>';
+    [['kit', './', 'Draft'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade'], ['settings', 'settings.html', 'Settings']]
+      .map(([k, href, label]) => '<a href="' + href + '"' + (active === k ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
     '.sitenav a:hover{color:var(--ink)}' +
     '.sitenav a[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}' +
-    '.sitenav a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}';
+    '.sitenav a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}' +
+    '@media (max-width:520px){.sitenav a{padding:6px 8px;font-size:.84rem}}';
   const api = { norm, stripSfx, NAME_ALIAS, findListed, PROJ_KEYS, projOf, TOOLBAR_HTML, TOOLBAR_CSS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Shared = api;
+})(this);
+</script>
+<script>// The league every page shares (2026-10-20): league settings and the loaded Fantrax league live in one stored object that
+// Settings writes and Draft, League, Matchup and Trade read. Also the per-league memory (saved leagues, your team) and the
+// one-time migration from the keys the pages used before. Pure functions over get/set callbacks, so Node can test them.
+(function (root) {
+  'use strict';
+  const KEYS = { settings: 'courtside-settings-v1', board: 'courtside-board-v1', leagues: 'courtside-leagues-v1', inseason: 'courtside-inseason-v1' };
+  // league settings only; slot, order and draft field belong to a draft and stay on the Draft page
+  const LEAGUE_DEF = { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2 };
+  const LEAGUE_KEYS = Object.keys(LEAGUE_DEF).concat('luFx');
+  const LU_MAX = { luC: 4, luG: 6, luF: 6, luGC: 3, luFC: 3, luU: 10 };
+  // Lineup slots: which positions each starting slot takes (U = Util, anyone)
+  const SLOT_OK = { PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'], G: ['PG', 'SG'], F: ['SF', 'PF'], U: ['PG', 'SG', 'SF', 'PF', 'C'] };
+  // a slot may combine positions (Fantrax 'G/C', 'F/C'): eligible if any part is
+  const slotElig = sl => [...new Set(String(sl).split('/').flatMap(x => SLOT_OK[x] || []))];
+  const slotName = sl => sl === 'U' ? 'UTIL' : sl;
+  // Starting slots from the Lineup dropdowns: C, G, F and UTIL amounts; with PG SG SF PF on, G n = PG + SG + (n − 2) G and
+  // F n = SF + PF + (n − 2) F (one slot of a kind = plain G / F). A Fantrax list (luFx) wins.
+  function lineupSlots(c) {
+    if (Array.isArray(c.luFx) && c.luFx.length) return c.luFx.slice();
+    const sp = c.luSplit !== false, out = [];
+    const grp = (n, a, b, g) => { if (sp && n >= 2) { out.push(a, b); for (let k = 2; k < n; k++) out.push(g); } else for (let k = 0; k < n; k++) out.push(g); };
+    grp(c.luG, 'PG', 'SG', 'G'); grp(c.luF, 'SF', 'PF', 'F'); for (let k = 0; k < c.luC; k++) out.push('C');
+    for (let k = 0; k < (c.luGC || 0); k++) out.push('G/C'); for (let k = 0; k < (c.luFC || 0); k++) out.push('F/C'); for (let k = 0; k < c.luU; k++) out.push('U');
+    return out;
+  }
+
+  const intIn = (v, lo, hi, d) => Number.isInteger(v) && v >= lo && v <= hi ? v : d;
+  const oneOf = (v, list, d) => list.includes(v) ? v : d;
+  // league settings from anything saved: a valid value is kept, an invalid one becomes the default
+  function normalize(s) {
+    s = s || {};
+    const o = {
+      teams: intIn(s.teams, 4, 20, LEAGUE_DEF.teams), roster: intIn(s.roster, 8, 25, LEAGUE_DEF.roster),
+      scoring: oneOf(s.scoring, ['roto', 'h2h', 'most'], LEAGUE_DEF.scoring), cats: oneOf(s.cats, [8, 9], LEAGUE_DEF.cats),
+      asb: oneOf(s.asb, ['merged', 'separate'], LEAGUE_DEF.asb), poStart: intIn(s.poStart, 10, 25, LEAGUE_DEF.poStart),
+      poFmt: oneOf(s.poFmt, ['1-1-1', '1-1-2', '1-2-2', '2-2-2'], LEAGUE_DEF.poFmt), ilSpots: intIn(s.ilSpots, 0, 4, LEAGUE_DEF.ilSpots),
+      luSplit: typeof s.luSplit === 'boolean' ? s.luSplit : LEAGUE_DEF.luSplit };
+    Object.keys(LU_MAX).forEach(k => { o[k] = intIn(s[k], 0, LU_MAX[k], LEAGUE_DEF[k]); });
+    if (Array.isArray(s.luFx) && s.luFx.length && s.luFx.every(x => typeof x === 'string' && slotElig(x).length)) o.luFx = s.luFx.slice();
+    return o;
+  }
+
+  // same league settings: the lineup is compared as the slot list it produces, so a missing luFx equal to the dropdowns is no difference
+  const sameLeague = (a, b) => LEAGUE_KEYS.every(k => k === 'luFx' || JSON.stringify(a[k]) === JSON.stringify(b[k])) && JSON.stringify(lineupSlots(a)) === JSON.stringify(lineupSlots(b));
+
+  const parse = (get, key) => { try { return JSON.parse(get(key) || 'null'); } catch (e) { return null; } };
+  const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  const local = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+  // ---- saved leagues (the Fantrax leagues this browser has connected) ----
+  const readLeagues = get => { const l = parse(get, KEYS.leagues); return Array.isArray(l) ? l.filter(x => x && x.id) : []; };
+  const savedLeagues = get => readLeagues(get).sort((a, b) => (b.used || 0) - (a.used || 0));
+  function rememberLeague(get, set, id, name, myTeam) {
+    const l = readLeagues(get), i = l.findIndex(x => x.id === id);
+    // a name the user typed (custom) is kept when Fantrax sends its own on reconnect
+    const keep = i >= 0 && l[i].custom;
+    const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
+    if (i >= 0) l[i] = entry; else l.push(entry);
+    set(KEYS.leagues, JSON.stringify(l));
+  }
+  function renameLeague(get, set, id, name) {
+    const l = readLeagues(get), i = l.findIndex(x => x.id === id); if (i < 0 || !name) return;
+    l[i] = Object.assign({}, l[i], { name, custom: true }); set(KEYS.leagues, JSON.stringify(l));
+  }
+  const forgetLeague = (get, set, id) => set(KEYS.leagues, JSON.stringify(readLeagues(get).filter(x => x.id !== id)));
+  const defaultTeam = (get, id) => { const x = readLeagues(get).find(y => y.id === id); return x && x.myTeam != null ? x.myTeam : null; };
+  // the team a tab shows: its own remembered pick, else the Settings default, else the first team
+  const pickTeam = (remembered, ids, fallback) => ids.includes(remembered) ? remembered : ids.includes(fallback) ? fallback : ids[0];
+
+  // ---- the store ----
+  // First visit after this change: build the store from the keys the pages used before (never written here; pages save it).
+  function migrate(get) {
+    const board = obj(parse(get, KEYS.board)) || {}, ins = obj(parse(get, KEYS.inseason)) || {}, saved = savedLeagues(get), fx = obj(board.fx);
+    const settings = normalize(Object.assign({}, LEAGUE_DEF, obj(board.cfg) ? LEAGUE_KEYS.reduce((o, k) => { if (k in board.cfg) o[k] = board.cfg[k]; return o; }, {}) : {}));
+    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && saved.some(x => x.id === ins.leagueId) && ins.leagueId) || (saved[0] && saved[0].id) || null;
+    let league = null;
+    if (id) {
+      const rec = saved.find(x => x.id === id), same = fx && fx.leagueId === id && Array.isArray(fx.order);
+      league = { id, name: rec ? rec.name : 'League ' + id, teams: same ? fx.order.map(t => ({ id: t, name: (obj(fx.names) && fx.names[t]) || t })) : [], loadedAt: null };
+    }
+    return { settings, league, note: '', migrated: true };
+  }
+  function load(get) {
+    const st = obj(parse(get, KEYS.settings));
+    if (!st || !obj(st.settings)) return migrate(get);
+    const lg = obj(st.league);
+    return { settings: normalize(Object.assign({}, LEAGUE_DEF, st.settings)), league: lg && lg.id ? { id: lg.id, name: lg.name, teams: Array.isArray(lg.teams) ? lg.teams : [], loadedAt: lg.loadedAt == null ? null : lg.loadedAt } : null, note: typeof st.note === 'string' ? st.note : '', migrated: false };
+  }
+  const save = (set, st) => set(KEYS.settings, JSON.stringify({ v: 1, settings: st.settings, league: st.league || null, note: st.note || '' }));
+
+  // ---- Fantrax league -> settings ----
+  // Fantrax rosterInfo.positionConstraints → slot list: G2 / G3 are extra G rows, Flx / Util = U, a count per row (maxActive)
+  function fxSlots(league) {
+    const pc = league && league.rosterInfo && league.rosterInfo.positionConstraints; if (!pc || typeof pc !== 'object') return null;
+    const out = [];
+    for (const [k, v] of Object.entries(pc)) {
+      const n = Math.max(0, Math.min(10, Math.round(+(v && v.maxActive) || 0)));
+      const parts = k.toUpperCase().replace(/[\s+&-]+/g, '/').split('/').map(x => x.replace(/\d+$/, '')).flatMap(x => /^(FLX|FLEX|UTIL|UT|U)$/.test(x) ? ['U'] : SLOT_OK[x] ? [x] : (x.match(/PG|SG|SF|PF|G|F|C/g) || [x]));
+      const sl = [...new Set(parts)].join('/');
+      if (!sl.split('/').every(x => SLOT_OK[x])) continue;
+      for (let i = 0; i < n; i++) out.push(sl);
+    }
+    const rank = sl => { const i = ['PG', 'SG', 'G', 'SF', 'PF', 'F', 'C'].indexOf(sl); return i >= 0 ? i : sl === 'U' ? 9 : 8; };
+    out.sort((x, y) => rank(x) - rank(y));
+    return out.length ? out.slice(0, 20) : null;
+  }
+  const LU_COUNT = [['luC', x => x === 'C'], ['luG', x => ['PG', 'SG', 'G'].includes(x)], ['luF', x => ['SF', 'PF', 'F'].includes(x)], ['luGC', x => x === 'G/C'], ['luFC', x => x === 'F/C'], ['luU', x => x === 'U']];
+  // What Load changes: team count, roster size and lineup slots (Fantrax's public league data has no scoring, categories, IL or
+  // playoff start). Everything else in the settings stays as the user set it.
+  function applyFantrax(settings, league) {
+    const s = Object.assign({}, settings), changes = [], was = lineupSlots(settings);
+    const n = Object.keys((league && league.teamInfo) || {}).length;
+    if (n) { const t = Math.min(20, Math.max(4, n)); if (t !== s.teams) changes.push('Teams ' + s.teams + ' → ' + t); s.teams = t; }
+    const ri = league && league.rosterInfo && +league.rosterInfo.maxTotalPlayers;
+    if (ri) { const r = Math.min(25, Math.max(8, Math.round(ri))); if (r !== s.roster) changes.push('Roster size ' + s.roster + ' → ' + r); s.roster = r; }
+    const sl = fxSlots(league);
+    if (sl) {
+      s.luFx = sl; s.luSplit = sl.some(x => ['PG', 'SG', 'SF', 'PF'].includes(x));
+      LU_COUNT.forEach(f => { s[f[0]] = Math.min(LU_MAX[f[0]], sl.filter(f[1]).length); });
+      if (was.join(' ') !== sl.join(' ')) changes.push('Lineup ' + sl.map(slotName).join(' '));
+    }
+    return { settings: s, changes, note: changes.length ? 'Updated from Fantrax: ' + changes.join(' · ') + '.' : 'Settings already match Fantrax.' };
+  }
+  // every team of the league with its record, by name
+  function teamsOf(league, standings) {
+    const rec = {}; (Array.isArray(standings) ? standings : []).forEach(r => { if (r && r.teamId) rec[r.teamId] = r.points; });
+    return Object.values((league && league.teamInfo) || {}).filter(t => t && t.id).map(t => ({ id: t.id, name: t.name || t.id, record: rec[t.id] }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
+  }
+
+  // ---- schedule (the season's weeks and the playoffs), as on the board ----
+  const ASB_WEEK = 18;
+  function weekPlan(SCHED, asb) {
+    const n = SCHED.weeks.length, starts = SCHED.weeks.slice(), idx = [];
+    for (let w = 0; w < n; w++) idx.push([w]);
+    if (asb === 'merged') { idx.splice(ASB_WEEK - 1, 2, [ASB_WEEK - 1, ASB_WEEK]); starts.splice(ASB_WEEK, 1); }
+    return { idx, starts, count: idx.length };
+  }
+  function playoffRounds(SCHED, s) {
+    const plan = weekPlan(SCHED, s.asb), lens = s.poFmt.split('-').map(Number), rounds = [];
+    let w = s.poStart;
+    for (const L of lens) { const ws = []; for (let i = 0; i < L; i++, w++) if (w <= plan.count) ws.push(w); rounds.push(ws); }
+    return { plan, rounds, fits: w - 1 <= plan.count };
+  }
+  const clampPoStart = (s, SCHED) => Object.assign({}, s, { poStart: Math.max(10, Math.min(weekPlan(SCHED, s.asb).count, s.poStart)) });
+  // switching the All-Star break shifts the playoff start by the merged week
+  const withAsb = (s, asb) => Object.assign({}, s, { asb, poStart: s.poStart + (asb === s.asb ? 0 : asb === 'merged' ? -1 : 1) });
+
+  // ---- a league's draft -> picks for the Draft board ----
+  function fxDraftPlan(draft, teams, roster, league) {
+    const d = draft || {}, order = d.draftOrder && d.draftOrder.length ? d.draftOrder : Object.keys((league && league.teamInfo) || {}), N = order.length;
+    if (!N) return { order, items: [], skipped: 0, error: 'This league has no teams or draft order yet.' };
+    if (N !== teams) return { order, items: [], skipped: 0, error: 'Settings say ' + teams + ' teams; this league\'s draft has ' + N + '. Load the league again in Settings.' };
+    const items = []; let skipped = 0;
+    for (const p of (d.draftPicks || []).filter(x => x && x.round)) {
+      const k = p.pickInRound ? (p.round - 1) * N + (p.pickInRound - 1) : p.pick - 1;
+      if (!(k >= 0 && k < teams * roster)) { skipped++; continue; }
+      items.push({ k, t: order.indexOf(p.teamId), fid: p.playerId || null });
+    }
+    return { order, items, skipped, error: null };
+  }
+
+  const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
+  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local,
+    savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
+    fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
 })(this);
 </script>
 <script>// League page math (2026-10-18): every team's projected stats and its win chances against every other team, from one
@@ -1212,67 +1445,56 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
       match, cat, expCats, standings, rosters, raw, perWeek, z, rank, profile, swing: ctx.swing };
   }
 
-  // ---------- sources ----------
-  // League settings a saved board may lack (the Draft Kit's defaults for these keys)
+  // ---------- source: the loaded Fantrax league's current rosters ----------
+  // League settings a board may lack (the Draft Kit's defaults for the keys that are not league settings)
   const LEAGUE_DEF = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 3, field: 'easy', fieldZ: 'std',
     catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], poStart: 18, asb: 'merged', adpSrc: 'ftx', puntMode: 'off', puntLock: '', proj: 'avg', scarZ: 'off', scarP: 'off', zdrop: 0 };
-  const KEYS = { board: 'courtside-board-v1', saved: 'courtside-saved-drafts-v1', leagues: 'courtside-leagues-v1' };
-  const read = (store, k) => { try { return JSON.parse(store.getItem(k) || 'null'); } catch (e) { return null; } };
-  const fxNames = (fx, N) => fx && fx.names && fx.order ? Array.from({ length: N }, (_, t) => fx.names[fx.order[t]] || null) : null;
   const cfgOf = c => Object.assign({}, LEAGUE_DEF, c || {}, { fieldZ: 'std', puntMode: 'off', puntLock: '' });
-
-  // every league the page can load: the Draft Kit's current draft (when it has picks), saved drafts newest first, saved leagues
-  function listSources(store) {
-    const out = [], b = read(store, KEYS.board);
-    if (b && Array.isArray(b.picks) && b.picks.some(v => v != null)) out.push({ id: 'board', kind: 'board', label: 'Draft Kit · current draft' });
-    const sv = read(store, KEYS.saved);
-    if (Array.isArray(sv)) sv.slice().sort((x, y) => (y.savedAt || 0) - (x.savedAt || 0)).forEach(d => { if (d && d.name) out.push({ id: 'saved:' + d.name, kind: 'saved', label: d.name }); });
-    const lg = read(store, KEYS.leagues);
-    if (Array.isArray(lg)) lg.slice().sort((x, y) => (y.used || 0) - (x.used || 0)).forEach(l => { if (l && l.id) out.push({ id: 'fx:' + l.id, kind: 'fantrax', label: l.name || 'League ' + l.id, leagueId: l.id, myTeam: l.myTeam || null }); });
-    return out;
-  }
-  // {cfg, picks, owner, extra, names} for the current draft or a saved draft (Fantrax leagues load with sourceFromFantrax)
-  function sourceFromStore(store, id) {
-    const d = id === 'board' ? read(store, KEYS.board) : id.startsWith('saved:') ? (read(store, KEYS.saved) || []).find(x => x && x.name === id.slice(6)) : null;
-    if (!d) return null;
-    const cfg = cfgOf(d.cfg);
-    return { cfg, picks: (d.picks || []).slice(), owner: (d.owner || []).slice(), extra: (d.extra || []).slice(), names: fxNames(d.fx, cfg.teams) };
-  }
   const swapName = n => { const i = String(n).indexOf(','); return i < 0 ? String(n) : (n.slice(i + 1) + ' ' + n.slice(0, i)).trim(); };
-  // a Fantrax league's draft results as a source: teams in draft order, picks matched by name (unknown players become
-  // waiver-level extras, as on the Draft Kit), traded picks on the team that made them
-  function sourceFromFantrax(league, draft, fxPlayers, PLAYERS, baseCfg, myTeam) {
-    const order = draft.draftOrder && draft.draftOrder.length ? draft.draftOrder : Object.keys((league && league.teamInfo) || {});
-    const N = order.length, list = (draft.draftPicks || []).filter(d => d && d.round);
-    if (!N) throw new Error('This league has no teams or draft order yet.');
-    const maxRound = list.reduce((m, d) => Math.max(m, d.round), 0), listsAll = list.some(d => !d.playerId);
-    const cfg = cfgOf(Object.assign({}, baseCfg, { teams: Math.min(20, Math.max(4, N)) }));
-    cfg.roster = Math.min(25, Math.max(8, listsAll ? maxRound : Math.max(cfg.roster, maxRound)));
-    const mi = myTeam ? order.indexOf(myTeam) : -1; if (mi >= 0) cfg.slot = mi + 1;
-    const P = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i, key: Shared.norm(r.n) }));
-    const tail = PLAYERS.slice().sort((a, b) => b.rk - a.rk).slice(0, 15), avg = f => tail.reduce((s, q) => s + q[f], 0) / tail.length;
-    const picks = new Array(cfg.teams * cfg.roster).fill(null), owner = [], extra = [], byFid = {};
-    for (const d of list) {
-      const k = d.pickInRound ? (d.round - 1) * N + (d.pickInRound - 1) : d.pick - 1;
-      if (k < 0 || k >= picks.length) continue;
-      const t = order.indexOf(d.teamId); if (t >= 0) owner[k] = t;
-      if (!d.playerId) continue;
-      const info = fxPlayers && fxPlayers[d.playerId]; if (!info || !info.name) continue;
-      const name = swapName(info.name), q = Shared.findListed(P, name, info.team);
-      if (q) { picks[k] = q.id; continue; }
-      if (byFid[d.playerId] == null) {
-        extra.push({ n: name, t: info.team || '', p: String(info.position || '').replace(/,/g, '/'), g: Math.round(avg('g')), m: Math.round(avg('m')),
-          pts: avg('pts'), tpm: avg('tpm'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), fga: avg('fga'), ftp: avg('ftp'), fta: avg('fta'), to: avg('to'),
-          adp: null, ftx: null, rk: 999, inj: '', risk: '', note: 'Not in the projections. Counted as a waiver-level player.', fid: d.playerId });
-        byFid[d.playerId] = PLAYERS.length + extra.length - 1;
-      }
-      picks[k] = byFid[d.playerId];
+  // a Fantrax player id as a projected player (index into PLAYERS) or, when he is not in the projections, a waiver-level extra
+  // (the average of the 15 lowest-ranked projected players, as on the Draft Kit)
+  function matchFx(fid, fxPlayers, PLAYERS, P, tail, extra, byFid) {
+    const info = fxPlayers && fxPlayers[fid]; if (!info || !info.name) return null;
+    const name = swapName(info.name), q = Shared.findListed(P, name, info.team);
+    if (q) return { id: q.id, name: PLAYERS[q.id].n };
+    if (byFid[fid] == null) {
+      const avg = f => tail.reduce((s, r) => s + r[f], 0) / tail.length;
+      extra.push({ n: name, t: info.team || '', p: String(info.position || '').replace(/,/g, '/'), g: Math.round(avg('g')), m: Math.round(avg('m')),
+        pts: avg('pts'), tpm: avg('tpm'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), fga: avg('fga'), ftp: avg('ftp'), fta: avg('fta'), to: avg('to'),
+        adp: null, ftx: null, rk: 999, inj: '', risk: '', note: 'Not in the projections. Counted as a waiver-level player.', fid });
+      byFid[fid] = PLAYERS.length + extra.length - 1;
     }
-    const ti = (league && league.teamInfo) || {}, names = order.map(id => (ti[id] && ti[id].name) || null);
-    return { cfg, picks, owner, extra, names };
+    return { id: byFid[fid], name };
+  }
+  // The league as it stands now: each team's non-IR players on the board (IR players are left out and listed in `ir`; counting them
+  // is tabled, #109). Teams run by standings rank, then name. Rosters go round by round, so open spots are the late picks of their
+  // team. `rosters` and `standings` are the Worker's answers (what=rosters, what=standings).
+  function sourceFromRosters(league, rosters, standings, fxPlayers, PLAYERS, settings, myTeam) {
+    const ti = (league && league.teamInfo) || {}, tids = Object.keys(ti);
+    if (!tids.length) throw new Error('This league has no teams yet.');
+    const rank = {}; (Array.isArray(standings) ? standings : []).forEach(r => { if (r && r.teamId && r.rank != null && !isNaN(+r.rank)) rank[r.teamId] = +r.rank; });
+    const label = t => (ti[t] && ti[t].name) || t;
+    const ids = tids.slice().sort((x, y) => ((rank[x] == null ? 1e9 : rank[x]) - (rank[y] == null ? 1e9 : rank[y])) || String(label(x)).localeCompare(String(label(y)), undefined, { numeric: true }));
+    const N = ids.length, body = (rosters && rosters.rosters) || {};
+    const P = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i, key: Shared.norm(r.n) }));
+    const tail = PLAYERS.slice().sort((a, b) => b.rk - a.rk).slice(0, 15), extra = [], byFid = {}, ir = [];
+    const per = ids.map((tid, t) => {
+      const out = [];
+      ((body[tid] && body[tid].rosterItems) || []).forEach(x => {
+        const m = matchFx(x.id, fxPlayers, PLAYERS, P, tail, extra, byFid); if (!m) return;
+        if (x.status === 'INJURED_RESERVE') ir.push({ t, fid: x.id, name: m.name }); else out.push(m.id);
+      });
+      return out;
+    });
+    const R = Math.max((settings && settings.roster) || 0, ...per.map(r => r.length));
+    const cfg = cfgOf(Object.assign({}, settings, { teams: N, roster: R }));
+    const mi = myTeam ? ids.indexOf(myTeam) : -1; cfg.slot = mi >= 0 ? mi + 1 : 1;
+    const picks = new Array(N * R).fill(null), owner = new Array(N * R);
+    for (let j = 0; j < R; j++) for (let t = 0; t < N; t++) { const k = j * N + t; owner[k] = t; if (j < per[t].length) picks[k] = per[t][j]; }
+    return { cfg, picks, owner, extra, names: ids.map(label), ids, ir };
   }
 
-  const api = { computeLeague, rawTotals, playersFor, listSources, sourceFromStore, sourceFromFantrax, LEAGUE_DEF };
+  const api = { computeLeague, rawTotals, playersFor, sourceFromRosters };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.League = api;
 })(this);
 </script>
@@ -1283,8 +1505,9 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('league');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-league-v1';
-  let ui = { src: null, team: null, proj: null, mxv: 'match', mxc: 'all', tsv: 'raw' };
+  let ui = { teamBy: {}, proj: null, mxv: 'match', mxc: 'all', tsv: 'raw' };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  if (!ui.teamBy || typeof ui.teamBy !== 'object') ui.teamBy = {};   // team per league id (a Fantrax team id); old src/team keys are ignored
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const ord = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -1295,17 +1518,11 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     return '<span class="chip' + (b ? ' b' : '') + '" style="background:' + bg + '">' + txt + '</span>'; };
   const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
   const pct = v => (v * 100).toFixed(1);
-  const store = { getItem: k => { try { return localStorage.getItem(k); } catch (e) { return null; } } };
-  let sources = [], src = null, R = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0;
+  const LS = LeagueStore;
+  let SS = LS.load(LS.local.get), src = null, R = null, raw = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0;
+  const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
 
   function boardProj() { try { const b = JSON.parse(localStorage.getItem('courtside-board-v1') || 'null'); return b && b.cfg && b.cfg.proj; } catch (e) { return null; } }
-  function fillSources() {
-    sources = League.listSources(store);
-    $('src').innerHTML = sources.map(s => '<option value="' + esc(s.id) + '">' + esc((s.kind === 'fantrax' ? 'Fantrax · ' : s.kind === 'saved' ? 'Saved · ' : '') + s.label) + '</option>').join('');
-    if (!sources.length) { $('body').hidden = true; say('Nothing to analyze yet. Draft on the Draft Kit (or save a draft there), or connect a Fantrax league on the Draft Kit, then come back.'); return false; }
-    if (!sources.some(s => s.id === ui.src)) ui.src = sources[0].id;
-    $('src').value = ui.src; return true;
-  }
   $('proj').value = ui.proj || boardProj() || 'avg';
   if (ui.basis !== 'pergame') ui.basis = 'total';
   $('basis').value = ui.basis;
@@ -1320,28 +1537,24 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   }
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
+  // the league loaded in Settings: its current rosters, standings and player list from Fantrax
   async function loadSource() {
-    const seq = ++loadSeq, s = sources.find(x => x.id === ui.src); clearTimeout(fxTimer);
-    if (!s) return;
+    const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer);
     // nothing from the previous league stays on screen while this one loads or if it fails
-    $('body').hidden = true; $('fmt').textContent = ''; $('retry').hidden = true;
-    if (s.kind !== 'fantrax') {
-      src = League.sourceFromStore(store, s.id); fxWait = 0;
-      if (!src) { say('That draft is no longer saved. Pick another league.', true); return; }
-      say(''); return compute();
-    }
-    say('Loading ' + s.label + ' from Fantrax…');
+    $('body').hidden = true; $('fmt').textContent = ''; $('retry').hidden = true; src = null; raw = null;
+    $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
+    say('Loading ' + (lg.name || lg.id) + ' from Fantrax…');
     try {
-      const league = await fxGet('league', s.leagueId), draft = await fxGet('draft', s.leagueId);
+      const league = await fxGet('league', lg.id), rosters = await fxGet('rosters', lg.id), standings = await fxGet('standings', lg.id);
       if (!fxPlayers) fxPlayers = await fxGet('players');
       if (seq !== loadSeq) return;
-      let base = {}; try { const b = JSON.parse(localStorage.getItem('courtside-board-v1') || 'null'); base = (b && b.cfg) || {}; } catch (e) {}
-      src = League.sourceFromFantrax(league, draft, fxPlayers, PLAYERS, base, s.myTeam);
-      fxWait = 0; say(''); compute();
+      raw = { league, rosters, standings };
+      fxWait = 0; say(''); build();
     } catch (e) {
       if (seq !== loadSeq) return;
       $('retry').hidden = false;
-      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site. Here, pick a saved draft or the Draft Kit\'s current draft.', true); return; }
+      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site.', true); return; }
       if (transient(e)) {
         fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
         say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
@@ -1350,20 +1563,27 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
       say(e.message, true);
     }
   }
+  // the focus team is remembered per league (a Fantrax team id); a team no longer in the league falls back to the saved league's team
+  function build() {
+    const lg = SS.league, ids = Object.keys((raw.league && raw.league.teamInfo) || {});
+    const mine = LS.pickTeam(ui.teamBy[lg.id], ids, LS.defaultTeam(LS.local.get, lg.id));
+    try { src = League.sourceFromRosters(raw.league, raw.rosters, raw.standings, fxPlayers, PLAYERS, SS.settings, mine); } catch (e) { say(e.message, true); return; }
+    compute();
+  }
 
   function compute() {
     if (!src) return;
     R = League.computeLeague(PLAYERS, src, $('proj').value, ui.basis);
     if ($('swing')) $('swing').innerHTML = CATS.map((c, i) => '<span>' + c.l + ' ' + R.swing[i].toFixed(2) + '</span>').join('');
-    $('ts-sub').textContent = R.basis === 'pergame' ? 'Projected per game for each roster as drafted (missed games don\'t count)' : 'Projected season totals for each roster as drafted';
+    $('ts-sub').textContent = R.basis === 'pergame' ? 'Projected per game for each current roster (missed games don\'t count)' : 'Projected season totals for each current roster';
     $('tsv').querySelector('[data-v="week"]').hidden = R.basis === 'pergame';
     if (R.basis === 'pergame' && ui.tsv === 'week') ui.tsv = 'raw';
     $('body').hidden = false;
-    const t0 = ui.team != null && ui.team < R.N && ui._for === ui.src ? ui.team : R.me;
     $('team').innerHTML = R.names.map((n, t) => '<option value="' + t + '">' + esc(name(t)) + '</option>').join('');
-    $('team').value = String(t0); ui.team = t0; ui._for = ui.src;
+    $('team').value = String(R.me); ui.teamBy[SS.league.id] = src.ids[R.me];
     const c = R.cfg, sc = { h2h: 'H2H each category', most: 'H2H most categories', roto: 'Roto' }[c.scoring] || c.scoring;
-    $('fmt').textContent = R.N + ' teams · ' + (c.order === '3rr' ? '3RR' : 'Snake') + ' · ' + sc + ' · ' + R.nc + '-cat · ' + R.picked + ' of ' + R.total + ' picks';
+    $('fmt').textContent = R.N + ' teams · ' + sc + ' · ' + R.nc + '-cat · ' + R.picked + ' of ' + R.total + ' roster spots filled' + (src.ir.length ? ' · ' + src.ir.length + ' on IR left out' : '');
+    $('fmt').title = src.ir.length ? 'On IR, not counted: ' + src.ir.map(x => R.names[x.t] + ': ' + x.name).join('; ') : '';
     $('mxc').innerHTML = '<option value="all">All (average)</option>' + R.cats.map(k => '<option value="' + k + '">' + CATS[k].l + '</option>').join('');
     if (ui.mxc !== 'all' && !R.cats.includes(+ui.mxc)) ui.mxc = 'all';
     $('mxc').value = String(ui.mxc);
@@ -1372,7 +1592,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   const name = t => R.names[t] + (t === R.me ? ' (you)' : '');
 
   function render() {
-    const t = +ui.team, N = R.N;
+    const t = R.me, N = R.N;
     $('focusName').textContent = name(t);
     // head-to-head
     let h = '<thead><tr><th class="l">Opponent</th><th>Match</th>' + R.cats.map(c => '<th>' + CATS[c].l + '</th>').join('') + '</tr></thead><tbody>';
@@ -1443,14 +1663,19 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
-  $('src').addEventListener('change', e => { ui.src = e.target.value; ui.team = null; save(); loadSource(); });
-  $('team').addEventListener('change', e => { ui.team = +e.target.value; save(); render(); });
+  $('team').addEventListener('change', e => { ui.teamBy[SS.league.id] = src.ids[+e.target.value]; save(); build(); });
+  // Settings changed in another tab (a different league, or other settings): load again
+  window.addEventListener('storage', e => {   // reload only for another league or other settings; a rename or team choice in Settings changes neither
+    if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
+    const was = JSON.stringify([SS.league && SS.league.id, SS.settings]); SS = LS.load(LS.local.get);
+    if (JSON.stringify([SS.league && SS.league.id, SS.settings]) !== was) loadSource(); else if (src) build();
+  });
   $('proj').addEventListener('change', e => { ui.proj = e.target.value; save(); compute(); });
   $('basis').addEventListener('change', e => { ui.basis = e.target.value; save(); compute(); });
   $('mxv').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.mxv = b.dataset.v; save(); render(); });
   $('mxc').addEventListener('change', e => { ui.mxc = e.target.value; save(); render(); });
   $('tsv').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.tsv = b.dataset.v; save(); render(); });
-  if (fillSources()) loadSource();
+  loadSource();
 })();
 </script>
 

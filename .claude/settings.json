@@ -10,6 +10,8 @@
       "Read(/src/data/*.xls*)",
       "Read(/index.html)",
       "Read(/league.html)",
+      "Read(/inseason.html)",
+      "Read(/settings.html)",
       "Read(/math.html)",
       "Read(**/node_modules/**)"
     ]

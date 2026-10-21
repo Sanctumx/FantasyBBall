@@ -8,7 +8,60 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
-_(none yet)_
+108. **Settings tab (2026-10-20/21, all 10 tasks done; released 2026-10-21 together with the In-season tools).** Release fixes: "Switch settings?" no longer fires when a saved draft differs from Settings only in how the lineup is stored (`LeagueStore.sameLeague` compares the slot lists; unit-tested); the after-edit hook now runs `node --test src/tests/` (the quoted glob failed on Windows). The double refetch on the first Load could not be reproduced in the code (other tabs reload only when the league id or settings change) and was dropped. Final tasks: Matchup/Trade read the Settings league (picker and `DEFAULT_LEAGUE` removed, `ui.teamBy {matchup, trades}` seeded from the old `ui.team`, `teamFor(tab)`; a team change on a tab switch resets the Trade Builder and stops a running trade search; no league shows the Settings prompt with no request); How it works rewritten (Settings and Fantrax, current-roster League, limits). `inseason_page.mjs` rewritten (also fixed assertions stale since the Zscore-row change). Opus review fixes, each with a failing test first: (1) a Fantrax-synced 14-team board crashed Draft when Settings went to 12 teams (owner indexes beyond the team count; now `ownerV()`), (2) a size change deleted picks (now kept in `spill` in the board save and restored when the size grows; `browser/draft_resize.mjs`), (3) migration took the old hard-coded demo league from the In-Season key (now only a saved league), (4) Draft stops auto-sync when the Settings league changes, (5) League/Matchup reload only when the league id (or League: settings) changes, not on a rename. Deferred minors: "Switch settings?" also fires when only `luFx` differs and writes the draft's settings into the store without touching the loaded league (Settings may then show a team count that is not the league's); two writes per Load still refetch twice on the first fetch. Earlier status: Tasks 6-8: Draft's "Fantrax draft" panel imports the Settings league's draft via `fxDraftPlan` (team-count mismatch shows an error, Settings untouched, draft team kept in board `fx.myTeam`); `League.sourceFromRosters` builds the League source from current non-IR rosters (rounds-major, open spots keep their team, parity with a full draft tested); League tab reads the store, team remembered per league id; shared toolbar CSS shrinks under 520 px. 109 unit tests pass. The user wants to set the league once and have every tab read it,
+instead of syncing per tab. Design `docs/superpowers/specs/2026-10-20-settings-tab-design.md`, plan `docs/superpowers/plans/2026-10-20-settings-tab.md`
+(branch `settings-tab`, cut from `matchup-trade-analyzers`). Rulings: League Dashboard analyzes the league's current Fantrax rosters (not a draft);
+Load overwrites the settings it fetches with a one-line note; Draft is separate from the league (Load never touches picks/log/slot; slot, order,
+draft field and saved drafts stay on Draft; explicit "Import draft from league" button); team picker on every tab, not shared, remembered per tab
+and league; IR players left out on League (counting them is #109, tabled). Fantrax public league data has no scoring, categories, IL or playoff
+start, so Load fills teams, roster size and lineup slots only. Done: `src/league_store.js` (`LeagueStore`: store, migration from the old keys, saved
+leagues, `pickTeam`, Fantrax mapping, playoff-week helpers, `fxDraftPlan`) with `league_store.test.js` and `league_store_fx.test.js`; 112 unit tests pass.
+Tasks 3-5 (same day): fifth toolbar link, `gen.py`/`build_site.py` write `settings.html` and inject the store into all pages (Settings also gets SCHED);
+`src/settings.html` has the Fantrax league panel (Load with backoff, saved leagues rename/remove, team picker, Unload, exact Load note) and the league settings
+form (playoff hint, Fantrax lineup note, warning when the board has picks beyond the new size); `browser/settings_page.mjs` ALL PASS. Draft: `DEF` takes
+`LeagueStore.LEAGUE_DEF`, the store overlays the saved cfg's league keys, `#setup` keeps slot/order/field + `#lg-sum`, a `storage` event re-reads the store
+live, loading a saved draft with other league settings asks "Switch settings?" and then writes them to the store. `browser/draft_settings.mjs` ALL PASS with
+Draft output (clock, Your team, top 10 with Model pick) identical to `draft_baseline.json` recorded before the change. Remaining: Tasks 6-10 (Draft's Fantrax
+draft panel, League core, League tab, Matchup/Trade, How it works + review).
+Same session also shipped (unpushed, on `matchup-trade-analyzers`): toolbar labels Draft / League / Matchup / Trade; Trade Builder table with a Zscore row
+per category, a Total column, no Average row, value colors only on the Zscore row, centered summary tiles, Zscore tiles without type or basis.
+
+
+107. **Trade Builder Zscore (2026-10-20).** The Trade Builder table gets a Zscore column (per player, Average and Total rows) and the summary adds tiles for each team's Zscore change and for the Zscore each side receives; dropdowns Zscore type (Normal = the board's Standard, H2H-Adjusted, ROTO-Adjusted) and Basis (Per game default, Season, Mix). Values come from `Engine.buildContext` over `players.json` (default league, Average projections, TO x0.5), memoized per basis in `InPlayers.zscoreOf`; `pid` (index into players.json) is now on each pool player. Players without a projection show a dash and are left out of sums. The two teams' changes always cancel, so there is no Total Zscore tile. The types are on different scales (Wembanyama about +11.7 Normal, ROTO-Adjusted about 2.5x smaller); the Zscore always uses the projection, not the Current stat view.
+
+106. **Toolbar sections and the saved trade search (2026-10-20).** The toolbar is Draft Kit | League Dashboard | Matchup Analyzer | Trade Analyzer; the last two are sections of `inseason.html` chosen by the hash, switching without a reload. The trade candidates (every one-for-one for each of my players) are kept in `localStorage` (`courtside-trade-cands-v1`, last 3 signatures) keyed by `Trade.candSig`: rosters, my team, period, day, `TRADE_W`, `CAND_VER`. A reload or a visit from another page reuses them (browser test: under 3 s); Sell High / Buy Low are built from the same candidates, so they appear when all of my players are searched (about 10 s the first time, 0.7 s per player).
+
+105. **Trade likelihood bias (2026-10-20).** The user found likelihoods too high. Logistic now 1/(1+e^-(2.0 gapB + 0.1 dB - 0.75)); an empty trade is 32%, not 50%. Fixture league, best-value 25 offers: 11-33% (median 21%), before up to 78%. The -0.75 is a judgment call; tune with 98 (real accepted trades). Tests: median of the best 25 under 30%, none over 60%.
+
+104. **Trade finder rework (2026-10-20).** "Your player" accepts a name or Any (blank); filters are text boxes: Likelihood at least ("50%", "0.5", "50"), +Win M you / +Win M them at least (points; blank = no limit). The finder now lists every one-for-one with every other team's player, helpful or not (it used to keep only dA > 0 and show 25); the table shows about 25 rows with a scrollbar and a sticky header; the Buy Low column is gone (the Buy Low list stays). `Trade.tradeCandidates / filterTrades / parseFilter / packCandidates / unpackCandidates`; `findTrades` still defaults to trades that help me. Review fixes made the same day: a projection or ESPN row goes to one Fantrax player (rostered first), stale rosters flagged via `x-courtside-age`, plan moves sorted by day, Win M labelled whole week, frozen golden data (`golden_players.json`), clearer end-of-season message, Trades section hides the week box.
+
+95. **In-season tools shipped on the branch: Weekly Matchup Analyzer, waiver plan and Trade Analyzer (2026-10-20, items 95-103; supersedes the in-progress note below).**
+Branch `matchup-trade-analyzers` (not pushed); spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
+`docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`. New files: `inseason_league.js`, `inseason_players.js`, `matchup_core.js`,
+`trade_core.js`, `inseason.html` (built to `courtside-inseason.html` and the root `inseason.html`), `collect/espn_stats.mjs`, `calib_pair.js`;
+the Worker gained `rosters` and `standings`. `Engine.pairMatchup` is the only engine change (additions only, `engine_golden.test.js` pins the
+draft engine). **Calibration (Task 6, `calib_pair.js`, 20 seeds, rosters drafted by ADP from real preseason projections, real weekly
+actuals, all 91 pairs):** default games variance is overconfident (matchup slope 0.56 on 2025-26, 0.57 on 2024-25, Brier tied with the draft
+engine); gVar 1.87 on every entry is the best arm (Brier -0.0038 / -0.0077 matchup and -0.0041 / -0.0048 categories vs the draft engine, 2.5-4 SE) but
+still overconfident (matchup slope 0.72), as is the draft engine (0.75-0.77 on 2025-26); the analyst reads this as mostly the test world
+(preseason projections treated as true rates, no injuries or trades). Shipped caller-side in `matchup_core.js`: gVar 1.87 plus
+p' = 0.5 + k(p - 0.5) with k 0.72 (matchup) and 0.82 (categories; fit 0.77 on 2025-26, 0.87 on 2024-25, pooled). With it both seasons pass the
+bar except one thin bin (2025-26, predicted 0.90, observed 0.97, n 227); no held-out season remains, so refit k once in-season projections exist.
+**Rulings:** regular season = periods with team ids (1-15), not Fantrax's stated 17; Win M in the Matchup Analyzer is against this week's opponent
+only, in the Trade Analyzer over the remaining regular-season matchups; waiver adds start tomorrow (next local day); players without projections
+use ESPN actuals or a waiver-level line and are listed. Not built (open): projected playoffs in trade Win M (#101), multi-week plan (#102),
+week-to-date actuals (#103), tuning the perceived-value weights (#98).
+
+95. **In-season tools: Weekly Matchup Analyzer and Trade Analyzer (2026-10-20, in progress; items 95-103).** Design
+`docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`
+(13 tasks), branch `matchup-trade-analyzers`. Built so far: Worker routes `rosters` and `standings` (T1); `inseason_league.js` +
+`sched_days.json` (T2); ESPN stats collector, workflow and `stats/espn.json` (T3); `inseason_players.js` (T4); golden test pinning the
+draft engine (T5 step 1). Findings: Fantrax public API (league mm5i19xxmv4hcbcy) returns rosters, free-agent status and the matchup
+schedule with no login; matchups with team ids are periods 1-15 although Fantrax states lastRegularSeasonPeriod 17 (ruling: use the ids);
+ESPN `byathlete` needs `seasontype=2` (season=2026 alone returns playoffs) and answers 2025-26 for season=2027 until games exist.
+Analyst on `pairMatchup`: math sound; consistency test uses gVar 1.87, tolerance 0.05 per category / 0.03 match; calibration run (Task 6)
+gates the merge. Ledger with every ruling: `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored).
+
 
 ## Handoff as of 2026-10-18 (moved here unchanged)
 
