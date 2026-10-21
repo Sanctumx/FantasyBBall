@@ -97,6 +97,23 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 .how p{margin:0 0 4px;max-width:70ch;color:var(--ink);font-size:.9rem;line-height:1.45}
 .how .swing{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .how .swing span{font:500 .78rem var(--f-data);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+/* Settings page */
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:10px 12px}
+.grid2.rosterrow{grid-template-columns:repeat(auto-fit,minmax(92px,1fr));padding-top:12px;border-top:1px solid var(--line)}
+.sync-row input{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:.92rem;color:var(--ink);min-width:0}
+.sync-row{display:flex;gap:6px;flex-wrap:wrap}
+.sync-row input,.sync-row select{flex:1;min-width:10em}
+.sync-row select{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:.92rem}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn.warn{border-color:var(--bad);color:var(--bad)}
+.sync-status{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--muted)}
+.sync-status .dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+.sync-status.live .dot{background:var(--good)}
+.sync-status.err{color:var(--bad)}
+.sync-status.err .dot{background:var(--bad)}
+.note{margin:0;font-size:.88rem;color:var(--ink)}
+.note:empty,.hint:empty{display:none}
+.hint.warn{color:var(--warn)}
 </style>
 
 <header class="top">
@@ -105,21 +122,207 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 </header>
 
 <main>
-  <section class="panel" aria-label="Fantrax league">
-    <h2>Fantrax league</h2>
-    <p class="hint">Load a league here and Draft, League, Matchup and Trade all use it.</p>
+  <section class="panel" id="fx-panel" aria-label="Fantrax league">
+    <h2>Fantrax league <span class="meta">Draft, League, Matchup and Trade all use the league loaded here</span></h2>
+    <form class="sync-row" id="fx-form" autocomplete="off">
+      <input type="text" id="fx-league" placeholder="League ID from your league URL" aria-label="Fantrax league ID">
+      <button class="btn primary" type="submit" id="fx-load">Load</button>
+    </form>
+    <div class="sync-row" id="lg-row" hidden>
+      <select id="lg-sel" aria-label="Saved leagues"></select>
+      <input type="text" id="lg-name" aria-label="League name" maxlength="60" hidden>
+      <button class="btn" type="button" id="lg-go" title="Load this league">Load</button>
+      <button class="btn" type="button" id="lg-ren" title="Rename this league">Rename</button>
+      <button class="btn warn" type="button" id="lg-del" title="Forget this league">Remove</button>
+    </div>
+    <div class="sync-row" id="fx-on" hidden>
+      <label class="f" for="fx-team" style="flex:1">Your team<select id="fx-team"></select></label>
+      <button class="btn" type="button" id="fx-off" style="align-self:flex-end">Unload league</button>
+    </div>
+    <div class="sync-status" id="fx-status"><span class="dot"></span><span id="fx-text">No league loaded. Paste your league ID and press Load.</span></div>
+    <p class="note" id="fx-note" role="status"></p>
+    <p class="hint">Load fills teams, roster size and lineup slots from Fantrax. Scoring, categories, IL spots and the playoffs aren't in Fantrax's public data, so set those below.</p>
   </section>
-  <section class="panel" aria-label="League settings">
+
+  <section class="panel" id="setup" aria-label="League settings">
     <h2>League settings</h2>
+    <div class="grid2">
+      <label class="f" for="s-teams">Teams<select id="s-teams"></select></label>
+      <label class="f" for="s-scoring">Scoring<select id="s-scoring"><option value="roto">Roto</option><option value="h2h">H2H: each category</option><option value="most">H2H: most categories</option></select></label>
+      <label class="f" for="s-cats">Categories<select id="s-cats"><option value="9">9-cat</option><option value="8">8-cat (no TO)</option></select></label>
+      <label class="f" for="s-asb" title="Merged counts Feb 15–28 as one week">All-Star break<select id="s-asb"><option value="merged">Merged</option><option value="separate">Separate</option></select></label>
+      <label class="f" for="s-po">Playoffs start<select id="s-po"></select></label>
+      <label class="f" for="s-pofmt" title="Weeks per playoff round, for three rounds">Playoff format<select id="s-pofmt"><option value="1-1-1">1-1-1</option><option value="1-1-2">1-1-2</option><option value="1-2-2">1-2-2</option><option value="2-2-2">2-2-2</option></select></label>
+    </div>
+    <div class="grid2 rosterrow" aria-label="Roster and lineup">
+      <label class="f" for="s-roster">Roster size<select id="s-roster"></select></label>
+      <label class="f" for="s-il" title="Injured players' missed games count at replacement level, not zero">IL spots<select id="s-il"></select></label>
+      <label class="f" for="s-lupos" title="Starting slots by position (PG, SG, SF, PF) or only G and F">Positions<select id="s-lupos"><option value="split">PG SG SF PF</option><option value="gf">G and F only</option></select></label>
+      <label class="f" for="s-luc" title="Center slots">C slots<select id="s-luc"></select></label>
+      <label class="f" for="s-lug" title="Guard slots; with PG SG SF PF: a PG, an SG, the rest G">G slots<select id="s-lug"></select></label>
+      <label class="f" for="s-luf" title="Forward slots; with PG SG SF PF: an SF, a PF, the rest F">F slots<select id="s-luf"></select></label>
+      <label class="f" for="s-lugc" title="Slots that take a guard or a center">G/C slots<select id="s-lugc"></select></label>
+      <label class="f" for="s-lufc" title="Slots that take a forward or a center">F/C slots<select id="s-lufc"></select></label>
+      <label class="f" for="s-luu" title="Util slots (any position); the rest of the roster is Reserve">UTIL slots<select id="s-luu"></select></label>
+    </div>
+    <p class="hint" id="lu-fx" hidden></p>
+    <p class="hint" id="poHint"></p>
+    <p class="hint warn" id="sz-warn" role="status"></p>
   </section>
 </main>
 
+<script>/*__SCHED__*/</script>
 <script>/*__STORE__*/</script>
 <script>/*__SHARED__*/</script>
 <script>
 (function () {
   'use strict';
+  const LS = LeagueStore, $ = id => document.getElementById(id), get = LS.local.get, set = LS.local.set;
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('settings');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
+  let state = LS.load(get);
+  const persist = () => LS.save(set, state);
+  if (state.migrated) persist();   // the first visit writes the store built from the old keys
+
+  const fmtDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const fill = (el, from, to, val) => { el.innerHTML = ''; for (let i = from; i <= to; i++) el.add(new Option(String(i), String(i))); el.value = String(val); };
+  const status = (text, mode) => { $('fx-text').textContent = text; $('fx-status').className = 'sync-status' + (mode ? ' ' + mode : ''); };
+
+  // ---- settings form ----
+  const LU_IDS = { 's-luc': 'luC', 's-lug': 'luG', 's-luf': 'luF', 's-lugc': 'luGC', 's-lufc': 'luFC', 's-luu': 'luU' };
+  function sizeWarning() {
+    let n = 0;
+    try { const b = JSON.parse(get(LS.KEYS.board) || 'null'); if (b && Array.isArray(b.picks)) n = b.picks.slice(state.settings.teams * state.settings.roster).filter(v => v != null).length; } catch (e) {}
+    $('sz-warn').textContent = n ? 'Your Draft board has ' + n + ' pick' + (n > 1 ? 's' : '') + ' beyond this size. They are dropped when Draft opens.' : '';
+  }
+  function renderSettings() {
+    const s = state.settings = LS.clampPoStart(state.settings, SCHED), plan = LS.weekPlan(SCHED, s.asb);
+    fill($('s-teams'), 4, 20, s.teams); fill($('s-roster'), 8, 25, s.roster); fill($('s-il'), 0, 4, s.ilSpots);
+    Object.keys(LU_IDS).forEach(id => fill($(id), 0, LS.LU_MAX[LU_IDS[id]], s[LU_IDS[id]]));
+    $('s-scoring').value = s.scoring; $('s-cats').value = String(s.cats); $('s-asb').value = s.asb; $('s-pofmt').value = s.poFmt; $('s-lupos').value = s.luSplit ? 'split' : 'gf';
+    const po = $('s-po'); po.innerHTML = '';
+    for (let w = 10; w <= plan.count; w++) po.add(new Option('Wk ' + w + ' · ' + fmtDay(plan.starts[w - 1]), String(w)));
+    po.value = String(s.poStart);
+    const { rounds, fits } = LS.playoffRounds(SCHED, s), all = rounds.flat(), first = all[0], last = all[all.length - 1];
+    if (first) {
+      const endIso = last < plan.count ? plan.starts[last] : '2027-04-12';
+      const endDay = new Date(new Date(endIso + 'T12:00:00') - 864e5).toLocaleDateString([], { month: 'short', day: 'numeric' });
+      $('poHint').textContent = 'Playoffs: weeks ' + rounds.filter(r => r.length).map(r => r.length > 1 ? r[0] + '–' + r[r.length - 1] : r[0]).join(', ') + ' (' + fmtDay(plan.starts[first - 1]) + ' – ' + endDay + ')' +
+        (fits ? '' : '. The regular season ends at week ' + plan.count + ', so ' + (rounds.some(r => !r.length) ? 'the later rounds don\'t fit. Pick an earlier start.' : 'the last round is cut short.'));
+    } else $('poHint').textContent = '';
+    const fx = Array.isArray(s.luFx) && s.luFx.length;
+    $('lu-fx').hidden = !fx; $('lu-fx').textContent = fx ? 'Lineup from Fantrax: ' + s.luFx.map(LS.slotName).join(' ') + ' (change a slot dropdown to use your own)' : '';
+    sizeWarning();
+  }
+  function onSetting(e) {
+    const id = e.target.id, v = e.target.value, s = Object.assign({}, state.settings);
+    if (id === 's-teams') s.teams = +v; else if (id === 's-roster') s.roster = +v; else if (id === 's-scoring') s.scoring = v;
+    else if (id === 's-cats') s.cats = +v; else if (id === 's-il') s.ilSpots = +v; else if (id === 's-pofmt') s.poFmt = v; else if (id === 's-po') s.poStart = +v;
+    else if (id === 's-asb') Object.assign(s, LS.withAsb(s, v));
+    else { delete s.luFx; if (id === 's-lupos') s.luSplit = v === 'split'; else s[LU_IDS[id]] = +v; }   // your own slots replace the ones read from Fantrax
+    state.settings = LS.normalize(s); persist(); renderSettings();
+  }
+  ['s-teams', 's-roster', 's-scoring', 's-cats', 's-il', 's-pofmt', 's-po', 's-asb', 's-lupos'].concat(Object.keys(LU_IDS)).forEach(id => $(id).addEventListener('change', onSetting));
+
+  // ---- Fantrax league ----
+  async function fxGet(what, id) {
+    let r;
+    try { r = await fetch('api/fantrax?what=' + what + '&leagueId=' + encodeURIComponent(id), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    return body;
+  }
+  // busy (429), 5xx and dropped connections: keep the old state and retry after 10 s, 20 s, 40 s … up to 2 minutes
+  const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
+  let wait = 0, retryT = null, seq = 0;
+  function backoff(e, retry) {
+    wait = Math.min(120, wait ? wait * 2 : 10);
+    const why = e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer';
+    status(why + '. Retrying in ' + wait + ' s…', 'err'); clearTimeout(retryT); retryT = setTimeout(retry, wait * 1000);
+  }
+  const errText = e => e.message === 'nohost' ? 'Loading runs on the hosted site (courtside-basketball on Cloudflare).' : e.message === 'offline' ? 'Couldn\'t reach the sync service. Check your connection.' : e.message;
+  async function load(id) {
+    const mine = ++seq; clearTimeout(retryT);
+    status('Loading league ' + id + '…');
+    try {
+      const league = await fxGet('league', id);
+      let standings = null; try { standings = await fxGet('standings', id); } catch (e) {}   // records are optional
+      if (mine !== seq) return;
+      wait = 0;
+      const res = LS.applyFantrax(state.settings, league), name = league.leagueName || league.name || (league.leagueInfo && league.leagueInfo.name) || null;
+      LS.rememberLeague(get, set, id, name, null);
+      const saved = LS.savedLeagues(get).find(x => x.id === id);
+      state = { settings: res.settings, league: { id, name: saved ? saved.name : name || 'League ' + id, teams: LS.teamsOf(league, standings), loadedAt: Date.now() }, note: res.note };
+      persist(); renderAll(); status('Loaded ' + state.league.name + ' · ' + state.league.teams.length + ' teams', 'live');
+    } catch (e) {
+      if (mine !== seq) return;
+      if (transient(e)) { backoff(e, () => load(id)); return; }
+      wait = 0; status(errText(e), 'err');
+    }
+  }
+  $('fx-form').addEventListener('submit', e => {
+    e.preventDefault();
+    let id = $('fx-league').value.trim(); const m = id.match(/league\/([A-Za-z0-9]+)/); if (m) id = m[1];
+    if (!/^[A-Za-z0-9]{4,40}$/.test(id)) { status('Paste the league ID, the letters and numbers after /league/ in your Fantrax URL.', 'err'); return; }
+    load(id);
+  });
+  $('fx-team').addEventListener('change', e => { if (state.league && e.target.value) LS.rememberLeague(get, set, state.league.id, null, e.target.value); });
+  $('fx-off').addEventListener('click', () => { seq++; clearTimeout(retryT); state.league = null; state.note = ''; persist(); renderAll(); status('League unloaded. Draft keeps working on the settings above.'); });
+
+  // saved leagues
+  function renderLeagues() {
+    const l = LS.savedLeagues(get); $('lg-row').hidden = !l.length;
+    const sel = $('lg-sel'); sel.innerHTML = '';
+    l.forEach(x => sel.add(new Option(x.name + (x.name.includes(x.id) ? '' : ' · ' + x.id), x.id)));
+    if (state.league && l.some(x => x.id === state.league.id)) sel.value = state.league.id;
+  }
+  $('lg-go').addEventListener('click', () => { const id = $('lg-sel').value; if (id) { $('fx-league').value = id; load(id); } });
+  function renameEnd(commit) {
+    const inp = $('lg-name'); if (inp.hidden) return;
+    const id = inp.dataset.id, nm = inp.value.trim();
+    inp.hidden = true; $('lg-sel').hidden = false; $('lg-ren').textContent = 'Rename'; $('lg-go').hidden = false; $('lg-del').hidden = false;
+    if (commit && nm) {
+      LS.renameLeague(get, set, id, nm);
+      if (state.league && state.league.id === id && state.league.name !== nm) { state.league.name = nm; persist(); }
+      status('Renamed league ' + id + ' to "' + nm + '".');
+    }
+    renderLeagues(); $('lg-sel').value = id;
+  }
+  $('lg-ren').addEventListener('click', () => {
+    const inp = $('lg-name'); if (!inp.hidden) { renameEnd(true); return; }
+    const id = $('lg-sel').value, x = LS.savedLeagues(get).find(y => y.id === id); if (!x) return;
+    inp.dataset.id = id; inp.value = x.name; inp.hidden = false; $('lg-sel').hidden = true; $('lg-go').hidden = true; $('lg-del').hidden = true;
+    $('lg-ren').textContent = 'Save'; inp.focus(); inp.select();
+  });
+  $('lg-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); renameEnd(true); } else if (e.key === 'Escape') renameEnd(false); });
+  let armed = null;
+  $('lg-del').addEventListener('click', e => {
+    const id = $('lg-sel').value; if (!id) return;
+    if (armed !== id) { armed = id; e.currentTarget.textContent = 'Sure?'; setTimeout(() => { armed = null; $('lg-del').textContent = 'Remove'; }, 3000); return; }
+    armed = null; $('lg-del').textContent = 'Remove';
+    LS.forgetLeague(get, set, id);
+    if (state.league && state.league.id === id) { seq++; state.league = null; state.note = ''; persist(); }   // removing the loaded league unloads it
+    renderAll(); status('Removed league ' + id + ' from the saved list.');
+  });
+
+  function renderAll() {
+    renderSettings(); renderLeagues();
+    $('fx-note').textContent = state.note || '';
+    const lg = state.league; $('fx-on').hidden = !lg;
+    if (lg) {
+      $('fx-league').value = lg.id;
+      const sel = $('fx-team'); sel.innerHTML = '';
+      const mine = LS.defaultTeam(get, lg.id), known = lg.teams.some(t => t.id === mine);
+      if (!known) sel.add(new Option('Choose your team…', ''));
+      lg.teams.forEach(t => sel.add(new Option(t.name + (t.record != null ? ' (' + t.record + ')' : ''), t.id)));
+      sel.value = known ? mine : '';
+    }
+  }
+  renderAll();
+  if (state.league) status('Loaded ' + state.league.name + ' · ' + state.league.teams.length + ' teams' + (state.league.loadedAt ? '' : ' (from your Draft board; press Load to refresh)'), 'live');
+  // another tab changed the store: show it
+  window.addEventListener('storage', e => { if (e.key === LS.KEYS.settings || e.key === LS.KEYS.leagues) { state = LS.load(get); renderAll(); } });
 })();
 </script>
