@@ -71,3 +71,21 @@ test('a season-source table ranks and keeps unscaled games for display', () => {
   assert.strictEqual(t.filter(r => r.inPool).length, 168);
   const best = s.find(r => r.pid === t[0].pid); assert.ok(best.gp > 20);
 });
+
+const I = require('../inseason_league.js'), Pl = require('../inseason_players.js');
+const FXP = require('./fixtures/fx_players.json'), ROS = I.parseRosters(require('./fixtures/fx_rosters.json'));
+test('ownersOf: each rostered player maps to one row with his team and slot, IR included', () => {
+  const o = R.ownersOf(rows, FXP, ROS);
+  const fid = Object.keys(FXP).find(k => /Wembanyama/.test(FXP[k].name));
+  const team = Object.keys(ROS).find(t => ROS[t].some(x => x.fid === fid)), slot = ROS[team].find(x => x.fid === fid).slot;
+  const wp = rows.find(r => /Wembanyama/.test(r.n));
+  assert.deepStrictEqual(o.get(wp.pid), { owner: team, slot });
+  assert.ok(o.size > 100 && o.size <= 178);
+  assert.ok([...o.values()].some(v => v.slot === 'IR'));
+  assert.strictEqual(new Set([...o.keys()]).size, o.size);
+});
+
+test('ownersOf works on season-source rows too', () => {
+  const s = R.seasonSource(ESPN, PLAYERS), o = R.ownersOf(s, FXP, ROS);
+  assert.ok(o.size > 150);
+});

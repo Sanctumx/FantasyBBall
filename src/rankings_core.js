@@ -4,7 +4,7 @@
 // last-week lines. The engine is only called, never changed (the Model pick and Win do not see any of this).
 (function (root) {
   'use strict';
-  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
+  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), InLeague = root.InLeague || require('./inseason_league.js');
 
   const WEIGHTS = InPlayers.WEIGHTS;   // fixed: every category x1, TO x0.5 (user ruling D2)
   const TYPES = ['classic', 'h2h', 'adj'];   // Standard, H2H-Adjusted, ROTO-Adjusted
@@ -31,7 +31,20 @@
     });
   }
 
-  const SAME =(a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  // who owns each row: Map pid → {owner (Fantrax team id), slot}. Every rostered Fantrax player goes to the one row his name and
+  // team match (IR included); two Fantrax players claiming one row go to the one whose team matches.
+  function ownersOf(rows, fxPlayers, rosters) {
+    const list = rows.map(r => ({ n: r.n, t: r.t, id: r.pid })), best = new Map();
+    Object.keys(rosters || {}).forEach(team => rosters[team].forEach(x => {
+      const info = (fxPlayers && fxPlayers[x.fid]) || null; if (!info) return;
+      const m = InPlayers.matchTo(list, InPlayers.OVERRIDES.fx[x.fid] || info.name, info.team); if (!m) return;
+      const score = info.team && InLeague.toProjTeam(info.team) === m.t ? 1 : 0, cur = best.get(m.id);
+      if (!cur || score > cur.score) best.set(m.id, { score, owner: team, slot: x.slot });
+    }));
+    return new Map([...best].map(([pid, v]) => [pid, { owner: v.owner, slot: v.slot }]));
+  }
+
+  const SAME = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
   // rows → [{pid, z, cats[9], inPool}] best first; players with no games get z null and sort last.
   // opts: {teams, roster, type 'classic' | 'h2h' | 'adj', basis 'total' | 'pergame' | 'mix', cats 9 | 8}
@@ -69,6 +82,6 @@
     return out.concat(dead.map(r => ({ pid: r.pid, z: null, cats: null, inPool: false })));
   }
 
-  const api = { WEIGHTS, TYPES, cfgFor, projSource, seasonSource, table };
+  const api = { WEIGHTS, TYPES, cfgFor, projSource, seasonSource, ownersOf, table };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
 })(this);
