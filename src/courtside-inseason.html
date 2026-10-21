@@ -1309,7 +1309,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function migrate(get) {
     const board = obj(parse(get, KEYS.board)) || {}, ins = obj(parse(get, KEYS.inseason)) || {}, saved = savedLeagues(get), fx = obj(board.fx);
     const settings = normalize(Object.assign({}, LEAGUE_DEF, obj(board.cfg) ? LEAGUE_KEYS.reduce((o, k) => { if (k in board.cfg) o[k] = board.cfg[k]; return o; }, {}) : {}));
-    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && ins.leagueId) || (saved[0] && saved[0].id) || null;
+    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && saved.some(x => x.id === ins.leagueId) && ins.leagueId) || (saved[0] && saved[0].id) || null;
     let league = null;
     if (id) {
       const rec = saved.find(x => x.id === id), same = fx && fx.leagueId === id && Array.isArray(fx.order);
@@ -2187,7 +2187,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
   // Settings changed in another tab (a different league, or other settings): load again
-  window.addEventListener('storage', e => { if (e.key === LS.KEYS.settings || e.key === LS.KEYS.leagues) { SS = LS.load(LS.local.get); load(); } });
+  window.addEventListener('storage', e => {   // reload only for another league or other settings
+    if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
+    const was = SS.league && SS.league.id; SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was) load();
+  });
   $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
   window.addEventListener('hashchange', () => { ui.tab = sectionOf(); if (pool) render(); });

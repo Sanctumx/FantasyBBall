@@ -193,7 +193,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   function sizeWarning() {
     let n = 0;
     try { const b = JSON.parse(get(LS.KEYS.board) || 'null'); if (b && Array.isArray(b.picks)) n = b.picks.slice(state.settings.teams * state.settings.roster).filter(v => v != null).length; } catch (e) {}
-    $('sz-warn').textContent = n ? 'Your Draft board has ' + n + ' pick' + (n > 1 ? 's' : '') + ' beyond this size. They are dropped when Draft opens.' : '';
+    $('sz-warn').textContent = n ? 'Your Draft board has ' + n + ' pick' + (n > 1 ? 's' : '') + ' beyond this size. The board keeps them aside and brings them back if the size grows again.' : '';
   }
   function renderSettings() {
     const s = state.settings = LS.clampPoStart(state.settings, SCHED), plan = LS.weekPlan(SCHED, s.asb);

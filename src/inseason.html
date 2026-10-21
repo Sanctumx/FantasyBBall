@@ -530,7 +530,11 @@ tr.click{cursor:pointer}
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
   // Settings changed in another tab (a different league, or other settings): load again
-  window.addEventListener('storage', e => { if (e.key === LS.KEYS.settings || e.key === LS.KEYS.leagues) { SS = LS.load(LS.local.get); load(); } });
+  window.addEventListener('storage', e => {   // reload only for another league or other settings
+    if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
+    const was = SS.league && SS.league.id; SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was) load();
+  });
   $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
   window.addEventListener('hashchange', () => { ui.tab = sectionOf(); if (pool) render(); });

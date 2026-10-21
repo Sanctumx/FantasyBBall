@@ -71,7 +71,7 @@
   function migrate(get) {
     const board = obj(parse(get, KEYS.board)) || {}, ins = obj(parse(get, KEYS.inseason)) || {}, saved = savedLeagues(get), fx = obj(board.fx);
     const settings = normalize(Object.assign({}, LEAGUE_DEF, obj(board.cfg) ? LEAGUE_KEYS.reduce((o, k) => { if (k in board.cfg) o[k] = board.cfg[k]; return o; }, {}) : {}));
-    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && ins.leagueId) || (saved[0] && saved[0].id) || null;
+    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && saved.some(x => x.id === ins.leagueId) && ins.leagueId) || (saved[0] && saved[0].id) || null;
     let league = null;
     if (id) {
       const rec = saved.find(x => x.id === id), same = fx && fx.leagueId === id && Array.isArray(fx.order);

@@ -1258,7 +1258,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   function migrate(get) {
     const board = obj(parse(get, KEYS.board)) || {}, ins = obj(parse(get, KEYS.inseason)) || {}, saved = savedLeagues(get), fx = obj(board.fx);
     const settings = normalize(Object.assign({}, LEAGUE_DEF, obj(board.cfg) ? LEAGUE_KEYS.reduce((o, k) => { if (k in board.cfg) o[k] = board.cfg[k]; return o; }, {}) : {}));
-    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && ins.leagueId) || (saved[0] && saved[0].id) || null;
+    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && saved.some(x => x.id === ins.leagueId) && ins.leagueId) || (saved[0] && saved[0].id) || null;
     let league = null;
     if (id) {
       const rec = saved.find(x => x.id === id), same = fx && fx.leagueId === id && Array.isArray(fx.order);
@@ -1662,7 +1662,11 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
   $('team').addEventListener('change', e => { ui.teamBy[SS.league.id] = src.ids[+e.target.value]; save(); build(); });
   // Settings changed in another tab (a different league, or other settings): load again
-  window.addEventListener('storage', e => { if (e.key === LS.KEYS.settings || e.key === LS.KEYS.leagues) { SS = LS.load(LS.local.get); loadSource(); } });
+  window.addEventListener('storage', e => {   // reload only for another league or other settings; a rename or team choice in Settings changes neither
+    if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
+    const was = JSON.stringify([SS.league && SS.league.id, SS.settings]); SS = LS.load(LS.local.get);
+    if (JSON.stringify([SS.league && SS.league.id, SS.settings]) !== was) loadSource(); else if (src) build();
+  });
   $('proj').addEventListener('change', e => { ui.proj = e.target.value; save(); compute(); });
   $('basis').addEventListener('change', e => { ui.basis = e.target.value; save(); compute(); });
   $('mxv').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.mxv = b.dataset.v; save(); render(); });

@@ -24,7 +24,10 @@ test('an old board carries its league settings and connected league over; draft 
 });
 test('active league after migration: board fx, then the In-Season league, then the newest saved league', () => {
   const lg = J([{ id: 'old1', name: 'A', used: 1 }, { id: 'new2', name: 'B', used: 9 }]);
-  assert.strictEqual(S.load(getter({ 'courtside-leagues-v1': lg, 'courtside-inseason-v1': J({ leagueId: 'zz99' }) })).league.id, 'zz99');
+  assert.strictEqual(S.load(getter({ 'courtside-leagues-v1': lg, 'courtside-inseason-v1': J({ leagueId: 'old1' }) })).league.id, 'old1');
+  // the old Matchup page defaulted to a hard-coded league nobody saved: it must not become everyone's league
+  assert.strictEqual(S.load(getter({ 'courtside-leagues-v1': lg, 'courtside-inseason-v1': J({ leagueId: 'zz99' }) })).league.id, 'new2');
+  assert.strictEqual(S.load(getter({ 'courtside-inseason-v1': J({ leagueId: 'zz99' }) })).league, null);
   assert.strictEqual(S.load(getter({ 'courtside-leagues-v1': lg })).league.id, 'new2');
 });
 test('once written, the settings key wins over old keys', () => {

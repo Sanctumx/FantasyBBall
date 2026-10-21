@@ -1510,7 +1510,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   function migrate(get) {
     const board = obj(parse(get, KEYS.board)) || {}, ins = obj(parse(get, KEYS.inseason)) || {}, saved = savedLeagues(get), fx = obj(board.fx);
     const settings = normalize(Object.assign({}, LEAGUE_DEF, obj(board.cfg) ? LEAGUE_KEYS.reduce((o, k) => { if (k in board.cfg) o[k] = board.cfg[k]; return o; }, {}) : {}));
-    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && ins.leagueId) || (saved[0] && saved[0].id) || null;
+    const id = (fx && fx.leagueId) || (typeof ins.leagueId === 'string' && saved.some(x => x.id === ins.leagueId) && ins.leagueId) || (saved[0] && saved[0].id) || null;
     let league = null;
     if (id) {
       const rec = saved.find(x => x.id === id), same = fx && fx.leagueId === id && Array.isArray(fx.order);
@@ -1651,12 +1651,12 @@ const fmt2 = v => (v < -0.005 ? '−' : '') + Math.abs(v).toFixed(2);
 const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(0);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-let owner = [], fx = null, extra = [];   // owner: team per pick from Fantrax; fx: connected league; extra: drafted players missing from the projections
+let owner = [], fx = null, extra = [], spill = null;   // spill: picks (and owners) beyond the board size, kept so a Settings change never loses them; owner: team per pick from Fantrax; fx: connected league; extra: drafted players missing from the projections
 let SS = LS.load(LS.local.get), savedCfg = null;   // league settings shared with Settings, League, Matchup and Trade
 if (SS.migrated) LS.save(LS.local.set, SS);   // first visit after the change: build the store from the old keys
 // the store's league settings replace the league keys of a saved cfg (a luFx the store doesn't have is dropped)
 const overlay = (c, st) => { LS.LEAGUE_KEYS.forEach(k => { if (k in st) c[k] = st[k]; else delete c[k]; }); return c; };
-try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { savedCfg = s.cfg; picks = s.picks || []; log = s.log || []; owner = s.owner || []; fx = s.fx || null; extra = s.extra || []; } } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { savedCfg = s.cfg; picks = s.picks || []; log = s.log || []; owner = s.owner || []; spill = s.spill || null; fx = s.fx || null; extra = s.extra || []; } } catch (e) {}
 cfg = migrate(overlay(Object.assign({}, DEF, savedCfg || {}), SS.settings), savedCfg);
 cfg.scarZ = 'off'; cfg.scarP = 'off';   // scarcity is shown as information only (backtest 2026-10-16: boosting by it cost matchups)
 delete cfg.modelPickV1;   // Model pick fix (2026-10-16) applies to every saved board
@@ -1685,13 +1685,27 @@ function fit() {
   cfg.adpSrc = 'ftx';
   if (cfg.slot > cfg.teams) cfg.slot = cfg.teams;
   const T = cfg.teams * cfg.roster;
-  if (picks.length < T) picks = picks.concat(new Array(T - picks.length).fill(null));
-  else if (picks.length > T) { picks = picks.slice(0, T); }
+  if (picks.length < T) {
+    picks = picks.concat(new Array(T - picks.length).fill(null));
+    if (spill) {   // a bigger board again: put back the picks that did not fit
+      const at = spill.at; let used = 0;
+      for (let i = 0; at + i < T && i < spill.picks.length; i++, used++) { picks[at + i] = spill.picks[i]; if (spill.owner[i] != null) owner[at + i] = spill.owner[i]; }
+      spill = used < spill.picks.length ? { at: T, picks: spill.picks.slice(used), owner: spill.owner.slice(used) } : null;
+      if (spill && !spill.picks.some(v => v != null)) spill = null;
+    }
+  } else if (picks.length > T) {
+    const tail = picks.slice(T), to = []; for (let i = T; i < picks.length; i++) to.push(owner[i] != null ? owner[i] : null);
+    const old = spill ? spill : { picks: [], owner: [] };
+    if (tail.some(v => v != null) || old.picks.length) spill = { at: T, picks: tail.concat(old.picks), owner: to.concat(old.owner) };
+    picks = picks.slice(0, T);
+  }
   log = log.filter(k => k < T && picks[k] != null);
   if (owner.length > T) owner = owner.slice(0, T);
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify({ cfg, picks, log, owner, fx, extra })); } catch (e) {} }
-const teamOf = k => owner[k] != null ? owner[k] : E.teamAt(k, cfg.teams, cfg.order);
+// owners as the engine may use them: a team index beyond the current team count (board made for a bigger league) counts as none
+const ownerV = () => owner.map(t => t != null && t < cfg.teams ? t : null);
+function save() { try { localStorage.setItem(KEY, JSON.stringify({ cfg, picks, log, owner, spill, fx, extra })); } catch (e) {} }
+const teamOf = k => owner[k] != null && owner[k] < cfg.teams ? owner[k] : E.teamAt(k, cfg.teams, cfg.order);
 const teamName = t => t === cfg.slot - 1 ? 'You' : (fx && fx.names && fx.order && fx.names[fx.order[t]]) || 'Team ' + (t + 1);
 
 // ---------- playoff schedule ----------
@@ -1773,7 +1787,7 @@ function lgSummary() {
   $('lg-sum').innerHTML = 'League: ' + (lg && lg.name ? esc(lg.name) + ' · ' : '') + cfg.teams + ' teams · roster ' + cfg.roster + ' · ' + cfg.cats + '-cat ' + SC_NAME[cfg.scoring] + ' · IL ' + cfg.ilSpots + ' · <a href="settings.html">Edit in Settings</a>';
 }
 // Settings changed in another tab: take the new league settings now (a smaller league drops the extra picks, as before)
-window.addEventListener('storage', e => { if (e.key !== LS.KEYS.settings) return; SS = LS.load(LS.local.get); overlay(cfg, SS.settings); fit(); syncSetup(); renderFxLeague(); rebuild(); });
+window.addEventListener('storage', e => { if (e.key !== LS.KEYS.settings) return; SS = LS.load(LS.local.get); overlay(cfg, SS.settings); fit(); if (fxTimer && (!fxLeague() || !fx || fx.leagueId !== fxLeague().id)) fxStop('Stopped syncing: the league loaded in Settings changed.'); syncSetup(); renderFxLeague(); rebuild(); });
 
 $('s-field').addEventListener('change', e => { cfg.field = e.target.value; recompute(); });
 $('s-poboost').addEventListener('change', e => { cfg.poBoost = e.target.value; recompute(); });
@@ -1822,9 +1836,9 @@ function setPlayoffMult() {
 // On your turn the Model pick weighs value early and Win M + look-ahead after (engine slidePick): run after the first render so the board stays quick.
 let look2Timer = null;
 function recompute() {
-  setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner });
+  setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner: ownerV() });
   if (modelSame() !== !PM || (PM && PM.length !== P.length)) buildModel();   // e.g. Playoff boost changed (it doesn't rebuild)
-  if (PM) res.modelPick = E.evaluate(PM, ctxM, mcfg(), { picks, owner }).modelPick;
+  if (PM) res.modelPick = E.evaluate(PM, ctxM, mcfg(), { picks, owner: ownerV() }).modelPick;
   render(); save();
   clearTimeout(look2Timer);
   const cur = picks.indexOf(null);
@@ -1832,8 +1846,8 @@ function recompute() {
     if (picks.indexOf(null) !== cur) return;
     // Value early, then Win M + look-ahead: value share 95% / 73% / 27% / 5% at your picks 1-4 (engine slidePick, logistic k = 2)
     let mine = 0; for (let i = 0; i < cur; i++) if (teamOf(i) === cfg.slot - 1) mine++;
-    if (PM) { const r = E.slidePick(PM, ctxM, mcfg(), { picks, owner }, mine, E.evaluate(PM, ctxM, mcfg(), { picks, owner })); res.modelPick = r.modelPick; res.slide = r.slide; }
-    else res = E.slidePick(P, ctx, cfg, { picks, owner }, mine, res);
+    if (PM) { const r = E.slidePick(PM, ctxM, mcfg(), { picks, owner: ownerV() }, mine, E.evaluate(PM, ctxM, mcfg(), { picks, owner: ownerV() })); res.modelPick = r.modelPick; res.slide = r.slide; }
+    else res = E.slidePick(P, ctx, cfg, { picks, owner: ownerV() }, mine, res);
     render();
   }, 30);
 }
@@ -2094,7 +2108,7 @@ $('sv-list').addEventListener('click', e => {
     if ((replaces || other) && !arm('load:' + d.name, lb, other ? 'Switch settings?' : 'Replace?')) {
       svSay(other ? 'This draft used other league settings (' + ds.teams + ' teams, roster ' + ds.roster + '). Press Switch settings? to load it and change Settings to match' + (replaces ? ', and replace the draft on the board' : '') + '.' : 'Loading replaces the draft on the board. Press Replace? to continue, or save this one first.'); return; }
     if (other) { SS = { settings: ds, league: SS.league, note: '' }; LS.save(LS.local.set, SS); }
-    cfg = migrate(overlay(Object.assign({}, DEF, d.cfg), SS.settings), d.cfg); picks = (d.picks || []).slice(); log = (d.log || []).slice(); owner = (d.owner || []).slice(); fx = d.fx || null;
+    cfg = migrate(overlay(Object.assign({}, DEF, d.cfg), SS.settings), d.cfg); picks = (d.picks || []).slice(); spill = null; log = (d.log || []).slice(); owner = (d.owner || []).slice(); fx = d.fx || null;
     picks = absorbExtras(d.extra || [], picks);
     fit(); syncSetup(); renderFx(); setCur(d.name); $('sv-name').value = d.name;
     svSay('Loaded "' + d.name + '".'); rebuild(); renderSaves();
@@ -2170,7 +2184,7 @@ $('sv-file').addEventListener('change', async e => {
 $('sv-new').addEventListener('click', e => {
   if (picks.some(v => v != null) && !arm('new', e.currentTarget, 'Clear picks?')) { svSay('This clears the board (settings stay). Save first if you want to keep it.'); return; }
   $('sv-new').textContent = 'New draft';
-  picks = picks.map(() => null); log = []; setCur(null); $('sv-name').value = '';
+  picks = picks.map(() => null); spill = null; log = []; setCur(null); $('sv-name').value = '';
   svSay('New draft started.'); recompute(); renderSaves();
 });
 
