@@ -380,27 +380,20 @@ label.f select,label.f input{font-weight:400}
   </section>
 
   <section class="panel" id="sync">
-    <h2>Fantrax sync</h2>
-    <form class="sync-row" id="fx-form" autocomplete="off">
-      <input type="text" id="fx-league" placeholder="League ID from your league URL" aria-label="Fantrax league ID">
-      <button class="btn primary" type="submit" id="fx-connect">Connect</button>
-    </form>
-    <div class="sync-row" id="lg-row" style="margin-top:8px" hidden>
-      <select id="lg-sel" aria-label="Saved leagues"></select>
-      <input type="text" id="lg-name" aria-label="League name" maxlength="60" hidden>
-      <button class="btn" type="button" id="lg-go" title="Connect to this league">Connect</button>
-      <button class="btn" type="button" id="lg-ren" title="Rename this league">Rename</button>
-      <button class="btn warn" type="button" id="lg-del" title="Forget this league">Remove</button>
+    <h2>Fantrax draft</h2>
+    <div class="sync-row">
+      <button class="btn primary" type="button" id="fx-import">Import draft from league</button>
+      <span class="hint" id="fx-lg"></span>
     </div>
     <div id="fx-on" hidden>
       <label class="f" for="fx-team" style="margin-top:10px">Your team<select id="fx-team"></select></label>
       <div class="seg">
         <label class="check" for="fx-auto" style="padding:0"><input type="checkbox" id="fx-auto" checked> Auto-sync every 10 s</label>
         <button class="btn sm" type="button" id="fx-now">Sync now</button>
-        <button class="btn sm" type="button" id="fx-off">Disconnect</button>
+        <button class="btn sm" type="button" id="fx-off">Stop syncing</button>
       </div>
     </div>
-    <div class="sync-status" id="fx-status"><span class="dot"></span><span id="fx-text">Not connected. Picks made in your Fantrax draft room will appear here on their own.</span></div>
+    <div class="sync-status" id="fx-status"><span class="dot"></span><span id="fx-text">Not syncing. Import the draft to bring in picks as they are made in your Fantrax draft room.</span></div>
   </section>
 
   <section class="panel" id="clock">
@@ -657,7 +650,7 @@ function lgSummary() {
   $('lg-sum').innerHTML = 'League: ' + (lg && lg.name ? esc(lg.name) + ' · ' : '') + cfg.teams + ' teams · roster ' + cfg.roster + ' · ' + cfg.cats + '-cat ' + SC_NAME[cfg.scoring] + ' · IL ' + cfg.ilSpots + ' · <a href="settings.html">Edit in Settings</a>';
 }
 // Settings changed in another tab: take the new league settings now (a smaller league drops the extra picks, as before)
-window.addEventListener('storage', e => { if (e.key !== LS.KEYS.settings) return; SS = LS.load(LS.local.get); overlay(cfg, SS.settings); fit(); syncSetup(); rebuild(); });
+window.addEventListener('storage', e => { if (e.key !== LS.KEYS.settings) return; SS = LS.load(LS.local.get); overlay(cfg, SS.settings); fit(); syncSetup(); renderFxLeague(); rebuild(); });
 
 $('s-field').addEventListener('change', e => { cfg.field = e.target.value; recompute(); });
 $('s-poboost').addEventListener('change', e => { cfg.poBoost = e.target.value; recompute(); });
@@ -824,108 +817,54 @@ function matchFantrax(fid) {
   const added = addExtra(raw); added.fid = fid;
   return added;
 }
-// ---------- saved leagues ----------
-const LEAGUES = 'courtside-leagues-v1';
-function readLeagues() { try { return JSON.parse(localStorage.getItem(LEAGUES) || '[]'); } catch (e) { return []; } }
-function writeLeagues(l) { try { localStorage.setItem(LEAGUES, JSON.stringify(l)); } catch (e) {} }
-function rememberLeague(id, name, myTeam) {
-  const l = readLeagues(); const i = l.findIndex(x => x.id === id);
-  // a name the user typed (custom) is kept when Fantrax sends its own on reconnect
-  const keep = i >= 0 && l[i].custom;
-  const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
-  if (i >= 0) l[i] = entry; else l.push(entry);
-  writeLeagues(l); renderLeagues();
+const fxLeague = () => SS.league && SS.league.id ? SS.league : null;   // the league loaded in Settings
+function renderFxLeague() {
+  const lg = fxLeague();
+  $('fx-import').disabled = !lg;
+  $('fx-lg').innerHTML = lg ? 'League: ' + esc(lg.name || lg.id) : LS.NO_LEAGUE_HTML;
 }
-function renderLeagues() {
-  const l = readLeagues().sort((a, b) => b.used - a.used);
-  $('lg-row').hidden = !l.length;
-  const sel = $('lg-sel'); sel.innerHTML = '';
-  l.forEach(x => sel.add(new Option(x.name + (x.name.includes(x.id) ? '' : ' · ' + x.id), x.id)));
-  if (fx && fx.leagueId && l.some(x => x.id === fx.leagueId)) sel.value = fx.leagueId;
-}
-$('lg-go').addEventListener('click', () => { const id = $('lg-sel').value; if (!id) return; const saved = readLeagues().find(x => x.id === id); $('fx-league').value = id; if (saved && saved.myTeam) fx = { leagueId: id, myTeam: saved.myTeam }; fxConnect(id); });
-// Rename a saved league in place: the list becomes a text box (Enter or Save keeps it, Esc cancels)
-function lgEditEnd(commit) {
-  const inp = $('lg-name'); if (inp.hidden) return;
-  const id = inp.dataset.id, nm = inp.value.trim();
-  inp.hidden = true; $('lg-sel').hidden = false; $('lg-ren').textContent = 'Rename'; $('lg-go').hidden = false; $('lg-del').hidden = false;
-  if (commit && nm) { const l = readLeagues(), x = l.find(y => y.id === id); if (x && x.name !== nm) { x.name = nm; x.custom = true; writeLeagues(l); fxStatus('Renamed league ' + id + ' to "' + nm + '".'); } }
-  renderLeagues(); $('lg-sel').value = id;
-}
-$('lg-ren').addEventListener('click', () => {
-  const inp = $('lg-name');
-  if (!inp.hidden) { lgEditEnd(true); return; }
-  const id = $('lg-sel').value; if (!id) return; const x = readLeagues().find(y => y.id === id); if (!x) return;
-  inp.dataset.id = id; inp.value = x.name; inp.hidden = false; $('lg-sel').hidden = true; $('lg-go').hidden = true; $('lg-del').hidden = true;
-  $('lg-ren').textContent = 'Save'; inp.focus(); inp.select();
-});
-$('lg-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lgEditEnd(true); } else if (e.key === 'Escape') lgEditEnd(false); });
-let lgArmed = null;
-$('lg-del').addEventListener('click', e => {
-  const id = $('lg-sel').value; if (!id) return;
-  if (lgArmed !== id) { lgArmed = id; e.currentTarget.textContent = 'Sure?'; setTimeout(() => { lgArmed = null; $('lg-del').textContent = 'Remove'; }, 3000); return; }
-  lgArmed = null; $('lg-del').textContent = 'Remove';
-  writeLeagues(readLeagues().filter(x => x.id !== id)); renderLeagues(); fxStatus('Removed league ' + id + ' from the saved list.');
-});
-
-async function fxConnect(id) {
-  const prevMine = fx && fx.leagueId === id ? fx.myTeam : null;
-  clearTimeout(fxRetryT);   // a manual Connect replaces a pending retry (the wait keeps growing until an answer comes)
-  fx = { leagueId: id };
-  fxStatus('Connecting to league ' + id + '…');
+// Imports the draft of the league loaded in Settings: picks go onto the board, then it stays in sync. League settings are not touched.
+async function fxImport() {
+  const lg = fxLeague(); if (!lg) return;
+  const id = lg.id, prev = fx && fx.leagueId === id ? fx.myTeam : LS.defaultTeam(LS.local.get, id);
+  clearTimeout(fxRetryT);   // a manual Import replaces a pending retry (the wait keeps growing until an answer comes)
+  fx = { leagueId: id, myTeam: prev };
+  fxStatus('Importing the draft from league ' + id + '…');
   try {
     const [league, draft] = [await fxGet('league'), await fxGet('draft')];
-    const order = (draft.draftOrder && draft.draftOrder.length ? draft.draftOrder : Object.keys(league.teamInfo || {}));
-    if (!order.length) throw new Error('This league has no teams or draft order yet.');
+    const plan = LS.fxDraftPlan(draft, cfg.teams, cfg.roster, league);
+    if (plan.error) throw new Error(plan.error);
     const names = {}; Object.values(league.teamInfo || {}).forEach(t => { names[t.id] = t.name; });
-    fx = { leagueId: id, order, names, myTeam: prevMine };
-    { const sl = fxSlots(league); if (sl) {   // lineup slots from the league (display only); the dropdowns show the same counts
-      const n = f => Math.min(LU_MAX[f[0]], sl.filter(f[1]).length);
-      cfg.luFx = sl; cfg.luSplit = sl.some(x => ['PG', 'SG', 'SF', 'PF'].includes(x));
-      [['luC', x => x === 'C'], ['luG', x => ['PG', 'SG', 'G'].includes(x)], ['luF', x => ['SF', 'PF', 'F'].includes(x)], ['luGC', x => x === 'G/C'], ['luFC', x => x === 'F/C'], ['luU', x => x === 'U']].forEach(f => { cfg[f[0]] = n(f); });
-      syncSetup(); } }
-    rememberLeague(id, league.leagueName || league.name || (league.leagueInfo && league.leagueInfo.name) || null, prevMine);
+    fx = { leagueId: id, order: plan.order, names, myTeam: plan.order.includes(prev) ? prev : null };
     if (!fxPlayers) { fxStatus('Loading Fantrax player list…'); fxPlayers = await fxGet('players'); }
     renderFx();
     fxOk(); await fxApply(draft, true);
     fxSchedule();
   } catch (e) {
-    if (fxTransient(e)) { fx = Object.assign({ leagueId: id }, fx && fx.leagueId === id ? { myTeam: fx.myTeam || prevMine } : { myTeam: prevMine }); fxBackoff(e, () => { if (fx && fx.leagueId === id && !fx.order) fxConnect(id); }); save(); return; }
+    if (fxTransient(e)) { fx = Object.assign({ leagueId: id }, { myTeam: fx && fx.leagueId === id ? fx.myTeam : prev }); fxBackoff(e, () => { if (fx && fx.leagueId === id && !fx.order) fxImport(); }); save(); return; }
     fxOk(); fxStatus(fxErr(e), 'err'); fx = null; renderFx(); save();
   }
 }
 async function fxApply(draft, first) {
-  const order = fx.order, N = order.length;
-  const list = (draft.draftPicks || []).filter(d => d && d.round);
-  // When Fantrax lists every pick (future ones without a player), its last round is the roster size.
-  const maxRound = list.reduce((m, d) => Math.max(m, d.round), 0);
-  const listsAll = list.some(d => !d.playerId);
-  const rounds = listsAll ? maxRound : Math.max(cfg.roster, maxRound);
-  const reshape = N !== cfg.teams || rounds !== cfg.roster;
-  if (reshape) {
-    cfg.teams = Math.min(20, Math.max(4, N)); cfg.roster = Math.min(25, Math.max(8, rounds));
-    picks = []; log = []; owner = []; fit(); syncSetup();
-  }
-  if (fx.myTeam) { const i = order.indexOf(fx.myTeam); if (i >= 0 && cfg.slot !== i + 1) { cfg.slot = i + 1; syncSetup(); } }
+  const plan = LS.fxDraftPlan(Object.assign({}, draft, { draftOrder: fx.order }), cfg.teams, cfg.roster, null);
+  if (plan.error) { fxStop(); fxStatus(plan.error, 'err'); return; }
+  if (fx.myTeam) { const i = fx.order.indexOf(fx.myTeam); if (i >= 0 && cfg.slot !== i + 1) { cfg.slot = i + 1; syncSetup(); } }
   let added = 0, before = P.length;
-  for (const d of list) {
-    const k = d.pickInRound ? (d.round - 1) * N + (d.pickInRound - 1) : d.pick - 1;
-    if (k < 0 || k >= picks.length) continue;
-    const t = order.indexOf(d.teamId);
-    if (t >= 0) owner[k] = t;
-    if (!d.playerId) continue;
-    const p = matchFantrax(d.playerId);
+  for (const it of plan.items) {
+    if (it.t >= 0) owner[it.k] = it.t;
+    if (!it.fid) continue;
+    const p = matchFantrax(it.fid);
     if (!p) continue;
-    if (picks[k] !== p.id) {
-      const prev = picks.indexOf(p.id); if (prev >= 0 && prev !== k) { picks[prev] = null; log = log.filter(x => x !== prev); }
-      picks[k] = p.id; if (!log.includes(k)) log.push(k); added++;
+    if (picks[it.k] !== p.id) {
+      const prev = picks.indexOf(p.id); if (prev >= 0 && prev !== it.k) { picks[prev] = null; log = log.filter(x => x !== prev); }
+      picks[it.k] = p.id; if (!log.includes(it.k)) log.push(it.k); added++;
     }
   }
   const made = picks.filter(v => v != null).length;
   const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const state = draft.draftState ? ' · ' + String(draft.draftState).toLowerCase().replace(/_/g, ' ') : '';
-  fxStatus('Synced ' + time + ' · ' + made + ' of ' + picks.length + ' picks' + state + (added && !first ? ' · ' + added + ' new' : ''), 'live');
-  if (reshape || P.length !== before) rebuild(); else if (added || first) recompute(); else save();
+  fxStatus('Synced ' + time + ' · ' + made + ' of ' + picks.length + ' picks' + state + (added && !first ? ' · ' + added + ' new' : '') + (plan.skipped ? ' · ' + plan.skipped + ' past the roster size skipped' : ''), 'live');
+  if (P.length !== before) rebuild(); else if (added || first) recompute(); else save();
   if (made >= picks.length) fxStop('Draft complete. Synced all ' + made + ' picks.');
 }
 async function fxTick() {
@@ -937,30 +876,21 @@ function fxSchedule() { clearInterval(fxTimer); fxTimer = null; if (fx && $('fx-
 function fxStop(msg) { clearInterval(fxTimer); fxTimer = null; $('fx-auto').checked = false; if (msg) fxStatus(msg, 'live'); }
 function renderFx() {
   $('fx-on').hidden = !fx || !fx.order;
-  $('fx-connect').textContent = fx && fx.order ? 'Reconnect' : 'Connect';
-  if (fx) $('fx-league').value = fx.leagueId;
   if (!fx || !fx.order) return;
   const sel = $('fx-team'); sel.innerHTML = '';
   sel.add(new Option('Choose your team…', ''));
   fx.order.forEach((id, i) => sel.add(new Option((i + 1) + '. ' + (fx.names[id] || 'Team ' + (i + 1)), id)));
   sel.value = fx.myTeam || '';
 }
-$('fx-form').addEventListener('submit', e => {
-  e.preventDefault();
-  let id = $('fx-league').value.trim();
-  const m = id.match(/league\/([A-Za-z0-9]+)/); if (m) id = m[1];
-  if (!/^[A-Za-z0-9]{4,40}$/.test(id)) { fxStatus('Paste the league ID, the letters and numbers after /league/ in your Fantrax URL.', 'err'); return; }
-  fxConnect(id);
-});
+$('fx-import').addEventListener('click', fxImport);
 $('fx-team').addEventListener('change', e => {
   fx.myTeam = e.target.value || null;
-  rememberLeague(fx.leagueId, null, fx.myTeam);
   const i = fx.order.indexOf(fx.myTeam); if (i >= 0) { cfg.slot = i + 1; syncSetup(); }
   recompute();
 });
 $('fx-auto').addEventListener('change', () => { fxSchedule(); if ($('fx-auto').checked) fxTick(); });
 $('fx-now').addEventListener('click', fxTick);
-$('fx-off').addEventListener('click', () => { fxStop(); fxOk(); fx = null; owner = []; renderFx(); fxStatus('Disconnected. Picks already synced stay on the board.'); recompute(); });
+$('fx-off').addEventListener('click', () => { fxStop(); fxOk(); fx = null; owner = []; renderFx(); fxStatus('Stopped syncing. Picks already synced stay on the board.'); recompute(); });
 
 // ---------- help dialog ----------
 $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
@@ -1488,8 +1418,12 @@ function playerFirst() {
 }
 try { PHONE.addEventListener('change', () => renderTable()); } catch (e) {}
 
-fit(); syncSetup(); renderFx(); renderSaves(); renderLeagues();
-if (fx && fx.leagueId) { fxStatus('Reconnecting to league ' + fx.leagueId + '…'); setTimeout(() => fxConnect(fx.leagueId), 0); }
+fit(); syncSetup(); renderFx(); renderSaves(); renderFxLeague();
+// a saved draft's sync resumes only while its league is the one loaded in Settings
+if (fx && fx.leagueId) {
+  if (fxLeague() && fxLeague().id === fx.leagueId) { fxStatus('Reconnecting to league ' + fx.leagueId + '…'); setTimeout(fxImport, 0); }
+  else fxStatus('This draft was synced from league ' + fx.leagueId + ', which isn\'t the one loaded in Settings. Load it there, then Import the draft, to sync again.');
+}
 if (picks.some(v => v != null)) $('setup').open = false;
 rebuild();
 })();

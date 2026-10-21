@@ -106,12 +106,12 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 
 ## Next session starts with
 
-**Settings tab, branch `settings-tab` (from `matchup-trade-analyzers`), tasks 1-5 of 10 done** (112 unit tests pass). Done: store + helpers
+**Settings tab, branch `settings-tab` (from `matchup-trade-analyzers`), tasks 1-6 of 10 done** (112 unit tests pass). Done: store + helpers
 (1-2), toolbar fifth link + build wiring + `src/settings.html` (3), the Settings page with Load / saved leagues / league settings,
 `browser/settings_page.mjs` ALL PASS (4), Draft reads the store, `#setup` keeps slot/order/field + `#lg-sum`, storage event, saved-draft
 "Switch settings?" prompt, `browser/draft_settings.mjs` ALL PASS with output identical to the pre-change `draft_baseline.json` (5).
 Start at **Task 6** (Draft's Fantrax draft panel: `#sync` becomes "Fantrax draft" with Import draft from league; `fxConnect` still writes
-cfg league keys until then) of `docs/superpowers/plans/2026-10-20-settings-tab.md`, then Tasks 7-10 in order; execute inline, tests first,
+cfg league keys until then) of `docs/superpowers/plans/2026-10-20-settings-tab.md`, then Tasks 8-10 in order; execute inline, tests first,
 one review at the end. Spec: `docs/superpowers/specs/2026-10-20-settings-tab-design.md`. Rulings are in the archive entry 108.
 Browser checks: Playwright is installed in this session's scratchpad `pw/` (may be gone; `npm i playwright@1.48.2` + `npx playwright install
 chromium` in a scratch folder); copy the .mjs there, `REPO=<repo root> node X.mjs`, repo root served on :8765 (`python -m http.server 8765`).
