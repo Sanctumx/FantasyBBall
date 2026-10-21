@@ -79,6 +79,46 @@ Analyst on `pairMatchup`: math sound; consistency test uses gVar 1.87, tolerance
 gates the merge. Ledger with every ruling: `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored).
 
 
+## Handoff lines trimmed 2026-10-21 (moved here unchanged)
+
+Removed from `SESSION_HANDOFF.md` when it was cut from 12 KB to about 6 KB: duplicates of `CLAUDE.md`, finished or
+superseded items. Current model, defaults and architecture moved to `src/MODEL.md` instead.
+
+## Standing user rules
+
+- Push only when the user says "push" or types /release. Cloudflare is the only deploy; the Netlify site was deleted (2026-10-20).
+- Using the user's computer is allowed without asking each time until withdrawn (2026-10-18). The user starts PC runs.
+- Report test results in **prize equity**: `python3 prize_equity.py <arm>:<baseline> ...` (60/30/5 prizes, title-equivalents
+  per 100 seasons). Older items quote title equity (`equity.py`).
+- Engine, backtest and page rules (Model pick on `MODEL_CFG`, backtest before changing it, weights never affect Win,
+  tooltips, defaults) live in `.claude/rules/` and load when those files are opened.
+
+- **Live:** Cloudflare Worker `courtside-basketball` deploys every push to main; serves the board, the League Dashboard and
+  `/api/fantrax`. The old Netlify site (courtside-draft.netlify.app) is deleted.
+
+7. Workflow: break cues now keyed to Messages in `/context` (115K break, 265K stop) in CLAUDE.md, the status line
+   (`CTX_BASELINE`) and Claude-Workflow (2026-10-20, not pushed). Still open: idea #93 (move
+   backtest result files into `src/results/`).
+8. User side: on the PC run `cd ~/Documents/FantasyBBall; git restore netlify.toml; git pull`; edit or delete the stale
+   claude.ai Project instructions.
+
+9. **To add to `Sanctumx/Claude-Workflow`** (user rule: workflow changes are generalized; not done yet, needs the user's "push"):
+   (a) `template/GUIDELINES.md` and the `template/CLAUDE.md` "user's working rules": keep running plan tasks back to back unless
+   something needs the user's input; once a task has taken the conversation past the context limit (Messages past ~115K in
+   `/context`, hard stop ~265K), finish that task, record it (ledger, handoff) and don't autorun the next; tell the user to
+   `/handoff` and `/clear` (user, 2026-10-20). (b) The same as a feedback memory for the shared skills/templates, if they carry memories.
+   (c) The 2026-10-20 break-cue change keyed to Messages in `/context` (item 7) is also still unpushed there. (d) Windows notes for
+   the template's hook: its quoted test glob fails on Windows (pass the directory or expand the glob in node), and bash heredocs with
+   apostrophes break in the Bash tool (use the Write tool for scripts).
+10. In-season tools: at release, republish `courtside-draft-board.html` to the board artifact (engine.js changed) and trigger the
+   `collect-stats` workflow once by hand (`workflow_dispatch`; ESPN may block runner IPs, tested only from the PC). Open: #98 tune
+   perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit the shrink k with in-season data.
+11. Environment (this PC): `python3` is not installed, use `python`. (The after-edit hook's Windows glob problem is fixed, 2026-10-21.)
+
+12. **Rankings tab (idea 110), plan `docs/superpowers/plans/2026-10-21-rankings-tab.md` (user rulings D1-D5 in it).** Stage 1 (collector #113) is on main (PR #20). Stage 2 is BUILT on branch `rankings-page` (4 commits, NOT pushed): `src/rankings_core.js`, `src/rankings.html` (Source: Season to date / Projections; Zscore type, Basis, Stats, Hide taken, owners incl. IR), toolbar entry, `rankings.html` at the repo root, deny rule added. D1 as ruled by the user: Zscore is calculated on the top teams x roster players by H2H-adjusted value within the source (see archive 110b). Also built (2026-10-21): Playoff games column (boost control hidden, Win ignores it), position filter, Find, Show, Zscore -1/-2, punt weights (pool stays on default weights), Win C / Win M through `Engine.evaluate` like the Draft tab (`Rankings.winStart`; Win vs Replacement / Average player; saved team in Settings = its rosters fill the slots, weakest player's slot open, own players one run each), How it works text done. Stage 3 windows built (archive 110d), reviewer done; PR on "push" (engine unchanged; `shared.js` toolbar and CSS changed, so rebuild all pages).
+
+Standing rule (user, 2026-10-20): keep running plan tasks unless something needs the user; once past the context limit (Messages > ~115K), finish the task, record it and stop; don't autorun the next one.
+
 ## Handoff as of 2026-10-18 (moved here unchanged)
 
 Everything below is the full `src/SESSION_HANDOFF.md` as it stood when it was split into the short handoff, this archive and
