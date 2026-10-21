@@ -14,7 +14,7 @@ const lg = await p.$$eval('#how h3', h => h.map(x => x.textContent));
 const k = await b.newPage(); await k.goto('http://localhost:8765/index.html'); await k.waitForTimeout(1500);
 const kit = await k.$$eval('#how h3', h => h.map(x => x.textContent));
 ok(lg.length > 0 && lg.join() === kit.join(), 'same sections as the Draft Kit: ' + lg.join(', '));
-ok(await k.$eval('.sitenav', n => n.textContent.includes('League Dashboard')), 'Draft Kit toolbar links League Dashboard');
+ok(await k.$eval('.sitenav', n => n.textContent.includes('League')), 'Draft toolbar links League');
 await p.click('#how-close'); await p.waitForTimeout(200);
 ok(!(await p.isVisible('#how')), 'Close closes it');
 ok(errs.length === 0, 'no page errors ' + errs.join('; '));

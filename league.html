@@ -196,7 +196,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 <main>
   <section class="panel" aria-label="League to analyze">
     <div class="ctl">
-      <label class="f" for="src">League<select id="src"></select></label>
+      <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
       <label class="f" for="team">Team in focus<select id="team"></select></label>
       <label class="f" for="basis" title="Total counts projected games; Per game ignores games missed. Changes every number on the page.">Stats<select id="basis"><option value="total">Total</option><option value="pergame">Per game</option></select></label>
       <label class="f" for="proj">Projections<select id="proj"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></select></label>
@@ -229,7 +229,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     </section>
 
     <section class="panel">
-      <h2>Team stats <span class="meta" id="ts-sub">Projected season totals for each roster as drafted</span></h2>
+      <h2>Team stats <span class="meta" id="ts-sub">Projected season totals for each current roster</span></h2>
       <div class="ctl"><span class="seg" id="tsv" role="group" aria-label="Stats view"><button type="button" data-v="raw">Raw</button><button type="button" data-v="week">Per week</button><button type="button" data-v="z">Zscore</button><button type="button" data-v="rank">Rank</button></span></div>
       <div class="scroll"><table id="ts"></table></div>
       <p class="hint">Per game adds up each roster's per-game lines (FG% and FT% from makes and attempts). Zscore is against the league's teams; Rank 1 is best (fewest TO).</p>
@@ -1179,7 +1179,8 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     '.sitenav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
     '.sitenav a:hover{color:var(--ink)}' +
     '.sitenav a[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}' +
-    '.sitenav a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}';
+    '.sitenav a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}' +
+    '@media (max-width:520px){.sitenav a{padding:6px 8px;font-size:.84rem}}';
   const api = { norm, stripSfx, NAME_ALIAS, findListed, PROJ_KEYS, projOf, TOOLBAR_HTML, TOOLBAR_CSS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Shared = api;
 })(this);
@@ -1441,67 +1442,56 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
       match, cat, expCats, standings, rosters, raw, perWeek, z, rank, profile, swing: ctx.swing };
   }
 
-  // ---------- sources ----------
-  // League settings a saved board may lack (the Draft Kit's defaults for these keys)
+  // ---------- source: the loaded Fantrax league's current rosters ----------
+  // League settings a board may lack (the Draft Kit's defaults for the keys that are not league settings)
   const LEAGUE_DEF = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 3, field: 'easy', fieldZ: 'std',
     catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], poStart: 18, asb: 'merged', adpSrc: 'ftx', puntMode: 'off', puntLock: '', proj: 'avg', scarZ: 'off', scarP: 'off', zdrop: 0 };
-  const KEYS = { board: 'courtside-board-v1', saved: 'courtside-saved-drafts-v1', leagues: 'courtside-leagues-v1' };
-  const read = (store, k) => { try { return JSON.parse(store.getItem(k) || 'null'); } catch (e) { return null; } };
-  const fxNames = (fx, N) => fx && fx.names && fx.order ? Array.from({ length: N }, (_, t) => fx.names[fx.order[t]] || null) : null;
   const cfgOf = c => Object.assign({}, LEAGUE_DEF, c || {}, { fieldZ: 'std', puntMode: 'off', puntLock: '' });
-
-  // every league the page can load: the Draft Kit's current draft (when it has picks), saved drafts newest first, saved leagues
-  function listSources(store) {
-    const out = [], b = read(store, KEYS.board);
-    if (b && Array.isArray(b.picks) && b.picks.some(v => v != null)) out.push({ id: 'board', kind: 'board', label: 'Draft Kit · current draft' });
-    const sv = read(store, KEYS.saved);
-    if (Array.isArray(sv)) sv.slice().sort((x, y) => (y.savedAt || 0) - (x.savedAt || 0)).forEach(d => { if (d && d.name) out.push({ id: 'saved:' + d.name, kind: 'saved', label: d.name }); });
-    const lg = read(store, KEYS.leagues);
-    if (Array.isArray(lg)) lg.slice().sort((x, y) => (y.used || 0) - (x.used || 0)).forEach(l => { if (l && l.id) out.push({ id: 'fx:' + l.id, kind: 'fantrax', label: l.name || 'League ' + l.id, leagueId: l.id, myTeam: l.myTeam || null }); });
-    return out;
-  }
-  // {cfg, picks, owner, extra, names} for the current draft or a saved draft (Fantrax leagues load with sourceFromFantrax)
-  function sourceFromStore(store, id) {
-    const d = id === 'board' ? read(store, KEYS.board) : id.startsWith('saved:') ? (read(store, KEYS.saved) || []).find(x => x && x.name === id.slice(6)) : null;
-    if (!d) return null;
-    const cfg = cfgOf(d.cfg);
-    return { cfg, picks: (d.picks || []).slice(), owner: (d.owner || []).slice(), extra: (d.extra || []).slice(), names: fxNames(d.fx, cfg.teams) };
-  }
   const swapName = n => { const i = String(n).indexOf(','); return i < 0 ? String(n) : (n.slice(i + 1) + ' ' + n.slice(0, i)).trim(); };
-  // a Fantrax league's draft results as a source: teams in draft order, picks matched by name (unknown players become
-  // waiver-level extras, as on the Draft Kit), traded picks on the team that made them
-  function sourceFromFantrax(league, draft, fxPlayers, PLAYERS, baseCfg, myTeam) {
-    const order = draft.draftOrder && draft.draftOrder.length ? draft.draftOrder : Object.keys((league && league.teamInfo) || {});
-    const N = order.length, list = (draft.draftPicks || []).filter(d => d && d.round);
-    if (!N) throw new Error('This league has no teams or draft order yet.');
-    const maxRound = list.reduce((m, d) => Math.max(m, d.round), 0), listsAll = list.some(d => !d.playerId);
-    const cfg = cfgOf(Object.assign({}, baseCfg, { teams: Math.min(20, Math.max(4, N)) }));
-    cfg.roster = Math.min(25, Math.max(8, listsAll ? maxRound : Math.max(cfg.roster, maxRound)));
-    const mi = myTeam ? order.indexOf(myTeam) : -1; if (mi >= 0) cfg.slot = mi + 1;
-    const P = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i, key: Shared.norm(r.n) }));
-    const tail = PLAYERS.slice().sort((a, b) => b.rk - a.rk).slice(0, 15), avg = f => tail.reduce((s, q) => s + q[f], 0) / tail.length;
-    const picks = new Array(cfg.teams * cfg.roster).fill(null), owner = [], extra = [], byFid = {};
-    for (const d of list) {
-      const k = d.pickInRound ? (d.round - 1) * N + (d.pickInRound - 1) : d.pick - 1;
-      if (k < 0 || k >= picks.length) continue;
-      const t = order.indexOf(d.teamId); if (t >= 0) owner[k] = t;
-      if (!d.playerId) continue;
-      const info = fxPlayers && fxPlayers[d.playerId]; if (!info || !info.name) continue;
-      const name = swapName(info.name), q = Shared.findListed(P, name, info.team);
-      if (q) { picks[k] = q.id; continue; }
-      if (byFid[d.playerId] == null) {
-        extra.push({ n: name, t: info.team || '', p: String(info.position || '').replace(/,/g, '/'), g: Math.round(avg('g')), m: Math.round(avg('m')),
-          pts: avg('pts'), tpm: avg('tpm'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), fga: avg('fga'), ftp: avg('ftp'), fta: avg('fta'), to: avg('to'),
-          adp: null, ftx: null, rk: 999, inj: '', risk: '', note: 'Not in the projections. Counted as a waiver-level player.', fid: d.playerId });
-        byFid[d.playerId] = PLAYERS.length + extra.length - 1;
-      }
-      picks[k] = byFid[d.playerId];
+  // a Fantrax player id as a projected player (index into PLAYERS) or, when he is not in the projections, a waiver-level extra
+  // (the average of the 15 lowest-ranked projected players, as on the Draft Kit)
+  function matchFx(fid, fxPlayers, PLAYERS, P, tail, extra, byFid) {
+    const info = fxPlayers && fxPlayers[fid]; if (!info || !info.name) return null;
+    const name = swapName(info.name), q = Shared.findListed(P, name, info.team);
+    if (q) return { id: q.id, name: PLAYERS[q.id].n };
+    if (byFid[fid] == null) {
+      const avg = f => tail.reduce((s, r) => s + r[f], 0) / tail.length;
+      extra.push({ n: name, t: info.team || '', p: String(info.position || '').replace(/,/g, '/'), g: Math.round(avg('g')), m: Math.round(avg('m')),
+        pts: avg('pts'), tpm: avg('tpm'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), fga: avg('fga'), ftp: avg('ftp'), fta: avg('fta'), to: avg('to'),
+        adp: null, ftx: null, rk: 999, inj: '', risk: '', note: 'Not in the projections. Counted as a waiver-level player.', fid });
+      byFid[fid] = PLAYERS.length + extra.length - 1;
     }
-    const ti = (league && league.teamInfo) || {}, names = order.map(id => (ti[id] && ti[id].name) || null);
-    return { cfg, picks, owner, extra, names };
+    return { id: byFid[fid], name };
+  }
+  // The league as it stands now: each team's non-IR players on the board (IR players are left out and listed in `ir`; counting them
+  // is tabled, #109). Teams run by standings rank, then name. Rosters go round by round, so open spots are the late picks of their
+  // team. `rosters` and `standings` are the Worker's answers (what=rosters, what=standings).
+  function sourceFromRosters(league, rosters, standings, fxPlayers, PLAYERS, settings, myTeam) {
+    const ti = (league && league.teamInfo) || {}, tids = Object.keys(ti);
+    if (!tids.length) throw new Error('This league has no teams yet.');
+    const rank = {}; (Array.isArray(standings) ? standings : []).forEach(r => { if (r && r.teamId && r.rank != null && !isNaN(+r.rank)) rank[r.teamId] = +r.rank; });
+    const label = t => (ti[t] && ti[t].name) || t;
+    const ids = tids.slice().sort((x, y) => ((rank[x] == null ? 1e9 : rank[x]) - (rank[y] == null ? 1e9 : rank[y])) || String(label(x)).localeCompare(String(label(y)), undefined, { numeric: true }));
+    const N = ids.length, body = (rosters && rosters.rosters) || {};
+    const P = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i, key: Shared.norm(r.n) }));
+    const tail = PLAYERS.slice().sort((a, b) => b.rk - a.rk).slice(0, 15), extra = [], byFid = {}, ir = [];
+    const per = ids.map((tid, t) => {
+      const out = [];
+      ((body[tid] && body[tid].rosterItems) || []).forEach(x => {
+        const m = matchFx(x.id, fxPlayers, PLAYERS, P, tail, extra, byFid); if (!m) return;
+        if (x.status === 'INJURED_RESERVE') ir.push({ t, fid: x.id, name: m.name }); else out.push(m.id);
+      });
+      return out;
+    });
+    const R = Math.max((settings && settings.roster) || 0, ...per.map(r => r.length));
+    const cfg = cfgOf(Object.assign({}, settings, { teams: N, roster: R }));
+    const mi = myTeam ? ids.indexOf(myTeam) : -1; cfg.slot = mi >= 0 ? mi + 1 : 1;
+    const picks = new Array(N * R).fill(null), owner = new Array(N * R);
+    for (let j = 0; j < R; j++) for (let t = 0; t < N; t++) { const k = j * N + t; owner[k] = t; if (j < per[t].length) picks[k] = per[t][j]; }
+    return { cfg, picks, owner, extra, names: ids.map(label), ids, ir };
   }
 
-  const api = { computeLeague, rawTotals, playersFor, listSources, sourceFromStore, sourceFromFantrax, LEAGUE_DEF };
+  const api = { computeLeague, rawTotals, playersFor, sourceFromRosters };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.League = api;
 })(this);
 </script>
@@ -1512,8 +1502,9 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('league');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-league-v1';
-  let ui = { src: null, team: null, proj: null, mxv: 'match', mxc: 'all', tsv: 'raw' };
+  let ui = { teamBy: {}, proj: null, mxv: 'match', mxc: 'all', tsv: 'raw' };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  if (!ui.teamBy || typeof ui.teamBy !== 'object') ui.teamBy = {};   // team per league id (a Fantrax team id); old src/team keys are ignored
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const ord = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -1524,17 +1515,11 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     return '<span class="chip' + (b ? ' b' : '') + '" style="background:' + bg + '">' + txt + '</span>'; };
   const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
   const pct = v => (v * 100).toFixed(1);
-  const store = { getItem: k => { try { return localStorage.getItem(k); } catch (e) { return null; } } };
-  let sources = [], src = null, R = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0;
+  const LS = LeagueStore;
+  let SS = LS.load(LS.local.get), src = null, R = null, raw = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0;
+  const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
 
   function boardProj() { try { const b = JSON.parse(localStorage.getItem('courtside-board-v1') || 'null'); return b && b.cfg && b.cfg.proj; } catch (e) { return null; } }
-  function fillSources() {
-    sources = League.listSources(store);
-    $('src').innerHTML = sources.map(s => '<option value="' + esc(s.id) + '">' + esc((s.kind === 'fantrax' ? 'Fantrax · ' : s.kind === 'saved' ? 'Saved · ' : '') + s.label) + '</option>').join('');
-    if (!sources.length) { $('body').hidden = true; say('Nothing to analyze yet. Draft on the Draft Kit (or save a draft there), or connect a Fantrax league on the Draft Kit, then come back.'); return false; }
-    if (!sources.some(s => s.id === ui.src)) ui.src = sources[0].id;
-    $('src').value = ui.src; return true;
-  }
   $('proj').value = ui.proj || boardProj() || 'avg';
   if (ui.basis !== 'pergame') ui.basis = 'total';
   $('basis').value = ui.basis;
@@ -1549,28 +1534,24 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   }
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
+  // the league loaded in Settings: its current rosters, standings and player list from Fantrax
   async function loadSource() {
-    const seq = ++loadSeq, s = sources.find(x => x.id === ui.src); clearTimeout(fxTimer);
-    if (!s) return;
+    const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer);
     // nothing from the previous league stays on screen while this one loads or if it fails
-    $('body').hidden = true; $('fmt').textContent = ''; $('retry').hidden = true;
-    if (s.kind !== 'fantrax') {
-      src = League.sourceFromStore(store, s.id); fxWait = 0;
-      if (!src) { say('That draft is no longer saved. Pick another league.', true); return; }
-      say(''); return compute();
-    }
-    say('Loading ' + s.label + ' from Fantrax…');
+    $('body').hidden = true; $('fmt').textContent = ''; $('retry').hidden = true; src = null; raw = null;
+    $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
+    say('Loading ' + (lg.name || lg.id) + ' from Fantrax…');
     try {
-      const league = await fxGet('league', s.leagueId), draft = await fxGet('draft', s.leagueId);
+      const league = await fxGet('league', lg.id), rosters = await fxGet('rosters', lg.id), standings = await fxGet('standings', lg.id);
       if (!fxPlayers) fxPlayers = await fxGet('players');
       if (seq !== loadSeq) return;
-      let base = {}; try { const b = JSON.parse(localStorage.getItem('courtside-board-v1') || 'null'); base = (b && b.cfg) || {}; } catch (e) {}
-      src = League.sourceFromFantrax(league, draft, fxPlayers, PLAYERS, base, s.myTeam);
-      fxWait = 0; say(''); compute();
+      raw = { league, rosters, standings };
+      fxWait = 0; say(''); build();
     } catch (e) {
       if (seq !== loadSeq) return;
       $('retry').hidden = false;
-      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site. Here, pick a saved draft or the Draft Kit\'s current draft.', true); return; }
+      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site.', true); return; }
       if (transient(e)) {
         fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
         say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
@@ -1579,20 +1560,27 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
       say(e.message, true);
     }
   }
+  // the focus team is remembered per league (a Fantrax team id); a team no longer in the league falls back to the saved league's team
+  function build() {
+    const lg = SS.league, ids = Object.keys((raw.league && raw.league.teamInfo) || {});
+    const mine = LS.pickTeam(ui.teamBy[lg.id], ids, LS.defaultTeam(LS.local.get, lg.id));
+    try { src = League.sourceFromRosters(raw.league, raw.rosters, raw.standings, fxPlayers, PLAYERS, SS.settings, mine); } catch (e) { say(e.message, true); return; }
+    compute();
+  }
 
   function compute() {
     if (!src) return;
     R = League.computeLeague(PLAYERS, src, $('proj').value, ui.basis);
     if ($('swing')) $('swing').innerHTML = CATS.map((c, i) => '<span>' + c.l + ' ' + R.swing[i].toFixed(2) + '</span>').join('');
-    $('ts-sub').textContent = R.basis === 'pergame' ? 'Projected per game for each roster as drafted (missed games don\'t count)' : 'Projected season totals for each roster as drafted';
+    $('ts-sub').textContent = R.basis === 'pergame' ? 'Projected per game for each current roster (missed games don\'t count)' : 'Projected season totals for each current roster';
     $('tsv').querySelector('[data-v="week"]').hidden = R.basis === 'pergame';
     if (R.basis === 'pergame' && ui.tsv === 'week') ui.tsv = 'raw';
     $('body').hidden = false;
-    const t0 = ui.team != null && ui.team < R.N && ui._for === ui.src ? ui.team : R.me;
     $('team').innerHTML = R.names.map((n, t) => '<option value="' + t + '">' + esc(name(t)) + '</option>').join('');
-    $('team').value = String(t0); ui.team = t0; ui._for = ui.src;
+    $('team').value = String(R.me); ui.teamBy[SS.league.id] = src.ids[R.me];
     const c = R.cfg, sc = { h2h: 'H2H each category', most: 'H2H most categories', roto: 'Roto' }[c.scoring] || c.scoring;
-    $('fmt').textContent = R.N + ' teams · ' + (c.order === '3rr' ? '3RR' : 'Snake') + ' · ' + sc + ' · ' + R.nc + '-cat · ' + R.picked + ' of ' + R.total + ' picks';
+    $('fmt').textContent = R.N + ' teams · ' + sc + ' · ' + R.nc + '-cat · ' + R.picked + ' of ' + R.total + ' roster spots filled' + (src.ir.length ? ' · ' + src.ir.length + ' on IR left out' : '');
+    $('fmt').title = src.ir.length ? 'On IR, not counted: ' + src.ir.map(x => R.names[x.t] + ': ' + x.name).join('; ') : '';
     $('mxc').innerHTML = '<option value="all">All (average)</option>' + R.cats.map(k => '<option value="' + k + '">' + CATS[k].l + '</option>').join('');
     if (ui.mxc !== 'all' && !R.cats.includes(+ui.mxc)) ui.mxc = 'all';
     $('mxc').value = String(ui.mxc);
@@ -1601,7 +1589,7 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   const name = t => R.names[t] + (t === R.me ? ' (you)' : '');
 
   function render() {
-    const t = +ui.team, N = R.N;
+    const t = R.me, N = R.N;
     $('focusName').textContent = name(t);
     // head-to-head
     let h = '<thead><tr><th class="l">Opponent</th><th>Match</th>' + R.cats.map(c => '<th>' + CATS[c].l + '</th>').join('') + '</tr></thead><tbody>';
@@ -1672,14 +1660,15 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
   $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
-  $('src').addEventListener('change', e => { ui.src = e.target.value; ui.team = null; save(); loadSource(); });
-  $('team').addEventListener('change', e => { ui.team = +e.target.value; save(); render(); });
+  $('team').addEventListener('change', e => { ui.teamBy[SS.league.id] = src.ids[+e.target.value]; save(); build(); });
+  // Settings changed in another tab (a different league, or other settings): load again
+  window.addEventListener('storage', e => { if (e.key === LS.KEYS.settings || e.key === LS.KEYS.leagues) { SS = LS.load(LS.local.get); loadSource(); } });
   $('proj').addEventListener('change', e => { ui.proj = e.target.value; save(); compute(); });
   $('basis').addEventListener('change', e => { ui.basis = e.target.value; save(); compute(); });
   $('mxv').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.mxv = b.dataset.v; save(); render(); });
   $('mxc').addEventListener('change', e => { ui.mxc = e.target.value; save(); render(); });
   $('tsv').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.tsv = b.dataset.v; save(); render(); });
-  if (fillSources()) loadSource();
+  loadSource();
 })();
 </script>
 

@@ -106,17 +106,17 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 
 ## Next session starts with
 
-**Settings tab, branch `settings-tab` (from `matchup-trade-analyzers`), tasks 1-7 of 10 done** (109 unit tests pass). Done: store + helpers
+**Settings tab, branch `settings-tab` (from `matchup-trade-analyzers`), tasks 1-8 of 10 done** (109 unit tests pass). Done: store + helpers
 (1-2), toolbar fifth link + build wiring + `src/settings.html` (3), the Settings page with Load / saved leagues / league settings,
 `browser/settings_page.mjs` ALL PASS (4), Draft reads the store, `#setup` keeps slot/order/field + `#lg-sum`, storage event, saved-draft
 "Switch settings?" prompt, `browser/draft_settings.mjs` ALL PASS with output identical to the pre-change `draft_baseline.json` (5).
 Start at **Task 6** (Draft's Fantrax draft panel: `#sync` becomes "Fantrax draft" with Import draft from league; `fxConnect` still writes
-cfg league keys until then) of `docs/superpowers/plans/2026-10-20-settings-tab.md`, then Tasks 9-10 in order; execute inline, tests first,
+cfg league keys until then) of `docs/superpowers/plans/2026-10-20-settings-tab.md`, then Task 10 in order; execute inline, tests first,
 one review at the end. Spec: `docs/superpowers/specs/2026-10-20-settings-tab-design.md`. Rulings are in the archive entry 108.
 Browser checks: Playwright is installed in this session's scratchpad `pw/` (may be gone; `npm i playwright@1.48.2` + `npx playwright install
 chromium` in a scratch folder); copy the .mjs there, `REPO=<repo root> node X.mjs`, repo root served on :8765 (`python -m http.server 8765`).
 Build on this PC: `cd src && python gen.py && python build_site.py && cp site/{index,league,inseason,settings}.html ..` (CLAUDE.md has python3).
-League, Matchup and Trade browser tests (`league_page.mjs`, `inseason_page.mjs`, ...) are expected to break until Tasks 7-9 rewrite them.
+`inseason_page.mjs` is expected to break until Task 9 rewrites it.
 The In-Season tools (ideas 95-107, plus toolbar labels Draft / League / Matchup / Trade and the Trade Builder Zscore row) are built, reviewed and
 committed on `matchup-trade-analyzers`; wait for the user's "push", then the release steps (build check, PR, merge, republish the board artifact,
 trigger `collect-stats`). The Settings branch sits on top of it, so ship them together or the Settings branch after.

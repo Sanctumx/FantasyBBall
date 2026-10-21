@@ -1,9 +1,8 @@
 // League page: sortable columns and one-decimal percentages (2026-10-18). Needs playwright and the repo root on :8765.
 import { chromium } from 'playwright';
 import fs from 'fs';
-const PLAYERS = JSON.parse(fs.readFileSync((process.env.REPO || '/root/FantasyBBall') + '/src/players.json', 'utf8'));
-const byAdp = PLAYERS.map((p, i) => [p.ftx || 999, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
-const cfg = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 3, field: 'easy', poStart: 18, asb: 'merged', proj: 'avg' };
+import { mockLeague } from './league_mock.mjs';
+const M = mockLeague(process.env.REPO || '/root/FantasyBBall');
 const fails = []; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.push(m); };
 const num = s => parseFloat(String(s).replace(/[,%+]/g, '').replace('−', '-'));
 const sortedDesc = a => a.every((v, i) => i === 0 || a[i - 1] >= v), sortedAsc = a => a.every((v, i) => i === 0 || a[i - 1] <= v);
@@ -11,7 +10,8 @@ const sortedDesc = a => a.every((v, i) => i === 0 || a[i - 1] >= v), sortedAsc =
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1500, height: 1000 } });
 await ctx.route(/fonts\.g/, r => r.fulfill({ body: '', contentType: 'text/css' }));
-await ctx.addInitScript(s => { if (!sessionStorage.getItem('s')) { localStorage.clear(); localStorage.setItem('courtside-board-v1', s); sessionStorage.setItem('s', '1'); } }, JSON.stringify({ cfg, picks: byAdp.slice(0, 168) }));
+await ctx.route(/api\/fantrax/, M.route);
+await ctx.addInitScript(s => { if (!sessionStorage.getItem('s')) { localStorage.clear(); Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)); sessionStorage.setItem('s', '1'); } }, M.seed());
 const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.goto('http://localhost:8765/league.html'); await p.waitForTimeout(2000);
 const col = async (table, name) => p.evaluate(([t, n]) => { const ths = [...document.querySelectorAll('#' + t + ' thead th')]; const i = ths.findIndex(th => th.textContent.trim() === n);
