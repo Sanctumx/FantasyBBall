@@ -47,7 +47,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit shrink k.
 6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
 7. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 combine known
-   game stats with projections; #116 dropdown capping team slots the waiver add plan uses.
+   game stats with projections; (#116 done).
 
 ## Next session starts with
 
@@ -56,7 +56,7 @@ Hashtag refresh, 68 Hashtag-only players, box-score scoring of adds, Fantrax per
 `base`, a save without one counts as 234 players). 192 unit tests pass. Board artifact republished (v166). First step:
 refit
 the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
-#116, Best adds/plan on remaining games.
+**#130 Rankings tab like the Draft player list (MPG, Team, Position columns, Order by, highlight my players; user asked 2026-10-21) is next.** #116 done (May drop dropdown, branch drop-cap, pushed with the next release). Best adds/plan on remaining games.
 Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
 Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess
 (#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against

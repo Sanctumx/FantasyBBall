@@ -71,6 +71,13 @@ async function open(opts = {}) {
   ok((await p.textContent('#ignored')).length > 0, 'kept players survive a reload');
   await p.click('#ignored button'); await p.waitForTimeout(300);
   ok((await p.textContent('#ignored')) === '', 'clicking a kept name allows him as a drop again');
+  ok(await p.$eval('#dropcap', s => s.value) === 'all', 'May drop defaults to All');
+  await p.selectOption('#dropcap', '1'); await p.waitForTimeout(300);
+  ok(new Set(await p.$$eval('#adds tbody td.drop', t => t.map(x => x.textContent.replace(/×/g, '').trim()))).size === 1, 'May drop worst 1 leaves one distinct drop');
+  await p.reload(); await p.waitForSelector('#body:not([hidden])');
+  ok(await p.$eval('#dropcap', s => s.value) === '1', 'May drop survives a reload');
+  await p.selectOption('#dropcap', 'all'); await p.waitForTimeout(300);
+  ok(new Set(await p.$$eval('#adds tbody td.drop', t => t.map(x => x.textContent.replace(/×/g, '').trim()))).size > 1, 'May drop All brings back several drops');
   await p.fill('#addsleft', '0'); await p.dispatchEvent('#addsleft', 'change'); await p.waitForTimeout(200);
   ok((await p.$$eval('#plan-moves li', l => l.length)) === 0, 'Adds left 0 empties the plan');
   await p.selectOption('#week', '5'); await p.waitForTimeout(300);

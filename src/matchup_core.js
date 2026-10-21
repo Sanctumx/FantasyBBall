@@ -244,7 +244,7 @@
     const start = opp ? score([]) : null, plan = { start, end: start, moves: [], droppable: drops, note: null };
     if (!opp) return plan;
     const days = []; for (let t = addFrom(ctx, n); t < per.end; t += 24 * 3600e3) days.push(t);
-    const cands = simpleAdds(ctx, n, { limit: candidates, keep }).map(r => r.add), moves = [];
+    const cands = simpleAdds(ctx, n, { limit: candidates, keep, drops: Math.min(5, droppable == null ? Infinity : droppable) }).map(r => r.add), moves = [];
     let cur = start;
     for (let round = 0; round < addsLeft; round++) {
       let best = null;
