@@ -12,7 +12,8 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
-130.  **Rankings like the Draft player list (2026-10-21, user request, Open):** add MPG, Team, Position columns, an Order by control and highlight the user's own players in the Rankings tab (#110 code).
+130. **Rankings like the Draft list (2026-10-21, adopted).** Source rows carry `m` (minutes per game: projections via `Shared.projOf`, season and windows via the box/ESPN `min`), display only. Rankings page: MPG column after Pos, Order by select (Zscore / Win C / Win M, saved as `ui.order`; sets what # means and sorts by it; header clicks re-sort rows only; pending Win values rank last by Zscore), `tr.mine` highlight when owner = `myTeam()` (new `--mine-soft`). Browser test columns shifted +1 after Pos. No backtest: nothing the Model pick sees changed.
+
 
 116.  **May drop dropdown (2026-10-21, Adopted, branch `drop-cap`, commit e32a49d, not pushed):** `#dropcap` next to Adds left in the Matchup Analyzer (All, Worst 1-5; `ui.dropCap[leagueId]`). Passes `drops` to `simpleAdds` and `droppable` to `addPlan`; keep list is removed first, then the cap counts N. `addPlan` now ranks candidates with `drops: min(5, droppable)`. Tests: 2 unit tests in matchup_core.test.js (the cap tests pass on the old code too, they lock the behaviour), browser checks in inseason_page.mjs (all pass). How it works text updated (also fixed the stale 'still score the whole week' line). No model change, no backtest.
 
