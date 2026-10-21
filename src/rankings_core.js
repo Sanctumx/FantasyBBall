@@ -20,7 +20,18 @@
   // every projected player as a source row: {pid, n, t, pos, g, line, adp}
   function projSource(PLAYERS, proj) { return InPlayers.projLines(PLAYERS, proj).map(q => ({ pid: q.id, n: q.n, t: q.t, pos: q.pos, g: q.g, line: q.line, adp: q.adp })); }
 
-  const SAME = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  // ESPN season-to-date averages → source rows. The engine gets gp × 80 / (most games played) games so a Season-basis
+  // table counts games played; `gp` stays the real count for display. Percentages come from makes / attempts.
+  function seasonSource(espn, PLAYERS) {
+    const played = ((espn && espn.players) || []).filter(r => r.gp > 0), maxGp = Math.max(1, ...played.map(r => r.gp));
+    const list = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i }));
+    return played.map((r, i) => {
+      const m = InPlayers.matchTo(list, InPlayers.OVERRIDES.espn[r.id] || r.n, r.t);
+      return { pid: i, espnId: r.id, n: r.n, t: r.t, pos: m ? PLAYERS[m.id].p : '', gp: r.gp, g: r.gp * 80 / maxGp, line: InPlayers.espnLine(r), adp: m ? InPlayers.projLines([PLAYERS[m.id]], 'avg')[0].adp : null };
+    });
+  }
+
+  const SAME =(a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
   // rows → [{pid, z, cats[9], inPool}] best first; players with no games get z null and sort last.
   // opts: {teams, roster, type 'classic' | 'h2h' | 'adj', basis 'total' | 'pergame' | 'mix', cats 9 | 8}
@@ -58,6 +69,6 @@
     return out.concat(dead.map(r => ({ pid: r.pid, z: null, cats: null, inPool: false })));
   }
 
-  const api = { WEIGHTS, TYPES, cfgFor, projSource, table };
+  const api = { WEIGHTS, TYPES, cfgFor, projSource, seasonSource, table };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
 })(this);

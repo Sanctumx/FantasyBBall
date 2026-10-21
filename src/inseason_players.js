@@ -121,6 +121,6 @@
       ast: mix(a.ast, b.ast), stl: mix(a.stl, b.stl), blk: mix(a.blk, b.blk), to: mix(a.to, b.to) };
   }
 
-  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, projLines, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
+  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InPlayers = api;
 })(this);

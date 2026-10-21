@@ -54,3 +54,20 @@ test('8-cat leagues ignore turnovers', () => {
   const t = R.table(rows, { teams: 12, roster: 12, type: 'classic', basis: 'pergame', cats: 8 });
   t.slice(0, 20).forEach(r => assert.ok(near(r.z, r.cats.slice(0, 8).reduce((s, v) => s + v, 0), 1e-9)));
 });
+
+const ESPN = require('./fixtures/espn_2025_26.json');
+test('seasonSource: one row per player with games, games scaled to 80 for the busiest, percentages from makes', () => {
+  const s = R.seasonSource(ESPN, PLAYERS), played = ESPN.players.filter(p => p.gp > 0), maxGp = Math.max(...played.map(p => p.gp));
+  assert.strictEqual(s.length, played.length);
+  const top = s.find(r => r.gp === maxGp); assert.ok(near(top.g, 80));
+  const d = s.find(r => /Luka Don/.test(r.n)), e = played.find(p => /Luka Don/.test(p.n));
+  assert.ok(near(d.line.fgp, e.fgm / e.fga) && near(d.line.pts, e.pts) && near(d.g, e.gp * 80 / maxGp));
+  assert.ok(d.pos && d.pos !== '', 'position taken from players.json');
+  assert.strictEqual(new Set(s.map(r => r.pid)).size, s.length);
+});
+
+test('a season-source table ranks and keeps unscaled games for display', () => {
+  const s = R.seasonSource(ESPN, PLAYERS), t = R.table(s, { teams: 14, roster: 12, type: 'h2h', basis: 'total' });
+  assert.strictEqual(t.filter(r => r.inPool).length, 168);
+  const best = s.find(r => r.pid === t[0].pid); assert.ok(best.gp > 20);
+});
