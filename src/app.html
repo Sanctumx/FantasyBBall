@@ -524,7 +524,7 @@ let ctx = null, res = null;
 let sortKey = 'order', sortCat = null;
 const $ = id => document.getElementById(id);
 const norm = Shared.norm, stripSfx = Shared.stripSfx;   // shared.js (also used by the League page)
-const BASE_N = PLAYERS.length;
+const BASE_N = PLAYERS.length, LEGACY_BASE = 234;   // saves hold extras as ids base + index; a save without a base was made with 234 players
 P.forEach(p => { p.key = norm(p.n); });
 const ord = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const fmt1 = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
@@ -533,29 +533,30 @@ const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(0);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let owner = [], fx = null, extra = [], spill = null;   // spill: picks (and owners) beyond the board size, kept so a Settings change never loses them; owner: team per pick from Fantrax; fx: connected league; extra: drafted players missing from the projections
+let svBase = LEGACY_BASE;
 let SS = LS.load(LS.local.get), savedCfg = null;   // league settings shared with Settings, League, Matchup and Trade
 if (SS.migrated) LS.save(LS.local.set, SS);   // first visit after the change: build the store from the old keys
 // the store's league settings replace the league keys of a saved cfg (a luFx the store doesn't have is dropped)
 const overlay = (c, st) => { LS.LEAGUE_KEYS.forEach(k => { if (k in st) c[k] = st[k]; else delete c[k]; }); return c; };
-try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { savedCfg = s.cfg; picks = s.picks || []; log = s.log || []; owner = s.owner || []; spill = s.spill || null; fx = s.fx || null; extra = s.extra || []; } } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cfg) { savedCfg = s.cfg; picks = s.picks || []; log = s.log || []; owner = s.owner || []; spill = s.spill || null; fx = s.fx || null; extra = s.extra || []; svBase = s.base == null ? LEGACY_BASE : s.base; } } catch (e) {}
 cfg = migrate(overlay(Object.assign({}, DEF, savedCfg || {}), SS.settings), savedCfg);
 cfg.scarZ = 'off'; cfg.scarP = 'off';   // scarcity is shown as information only (backtest 2026-10-16: boosting by it cost matchups)
 delete cfg.modelPickV1;   // Model pick fix (2026-10-16) applies to every saved board
 // Fantrax and the projections spell some players differently (Alex / Alexandre Sarr, Cameron / Cam Johnson, Herbert / Herb
 // Jones, Luguentz / Lu Dort …). findListed matches those to the projected player; older boards that already got a second,
 // waiver-level copy have those picks moved onto the real player (2026-10-18).
-{ const sv = extra; extra = []; picks = absorbExtras(sv, picks); }
+{ const sv = extra; extra = []; picks = absorbExtras(sv, picks, svBase); }
 function findListed(name, team) { return Shared.findListed(P, name, team); }   // shared.js
 // adds saved extras (ids BASE_N + index when saved) and returns picks with those ids remapped: an extra that is really a
 // projected player points to him, the rest to their (possibly new) extra entry
-function absorbExtras(raws, pk) {
-  const map = {};
+function absorbExtras(raws, pk, base) {
+  const map = {}; base = base == null ? LEGACY_BASE : base;
   raws.forEach((raw, i) => {
     const q = findListed(raw.n, raw.t);
-    if (q) { map[BASE_N + i] = q.id; return; }
+    if (q) { map[base + i] = q.id; return; }
     let e = P.find(x => x.unlisted && x.n === raw.n);
     if (!e) { extra.push(raw); e = addExtra(raw); if (raw.fid) e.fid = raw.fid; }
-    map[BASE_N + i] = e.id;
+    map[base + i] = e.id;
   });
   return (pk || []).map(id => id != null && map[id] != null ? map[id] : id);
 }
@@ -585,7 +586,7 @@ function fit() {
 }
 // owners as the engine may use them: a team index beyond the current team count (board made for a bigger league) counts as none
 const ownerV = () => owner.map(t => t != null && t < cfg.teams ? t : null);
-function save() { try { localStorage.setItem(KEY, JSON.stringify({ cfg, picks, log, owner, spill, fx, extra })); } catch (e) {} }
+function save() { try { localStorage.setItem(KEY, JSON.stringify({ cfg, picks, log, owner, spill, fx, extra, base: BASE_N })); } catch (e) {} }
 const teamOf = k => owner[k] != null && owner[k] < cfg.teams ? owner[k] : E.teamAt(k, cfg.teams, cfg.order);
 const teamName = t => t === cfg.slot - 1 ? 'You' : (fx && fx.names && fx.order && fx.names[fx.order[t]]) || 'Team ' + (t + 1);
 
@@ -951,7 +952,7 @@ $('sv-form').addEventListener('submit', e => {
   const i = list.findIndex(d => d.name === name);
   if (i >= 0 && name !== curName && !arm('save:' + name, $('sv-save'), 'Overwrite?')) { svSay('"' + name + '" already exists. Press Overwrite? to replace it.'); return; }
   $('sv-save').textContent = 'Save';
-  const entry = { name, savedAt: Date.now(), cfg: JSON.parse(JSON.stringify(cfg)), picks: picks.slice(), log: log.slice(), owner: owner.slice(), fx, extra };
+  const entry = { name, savedAt: Date.now(), cfg: JSON.parse(JSON.stringify(cfg)), picks: picks.slice(), log: log.slice(), owner: owner.slice(), fx, extra, base: BASE_N };
   if (i >= 0) list[i] = entry; else list.push(entry);
   if (!writeSaves(list)) { svSay('Couldn\'t save: browser storage is full or blocked.', true); return; }
   setCur(name); svSay('Saved "' + name + '".'); renderSaves();
@@ -990,7 +991,7 @@ $('sv-list').addEventListener('click', e => {
       svSay(other ? 'This draft used other league settings (' + ds.teams + ' teams, roster ' + ds.roster + '). Press Switch settings? to load it and change Settings to match' + (replaces ? ', and replace the draft on the board' : '') + '.' : 'Loading replaces the draft on the board. Press Replace? to continue, or save this one first.'); return; }
     if (other) { SS = { settings: ds, league: SS.league, note: '' }; LS.save(LS.local.set, SS); }
     cfg = migrate(overlay(Object.assign({}, DEF, d.cfg), SS.settings), d.cfg); picks = (d.picks || []).slice(); spill = null; log = (d.log || []).slice(); owner = (d.owner || []).slice(); fx = d.fx || null;
-    picks = absorbExtras(d.extra || [], picks);
+    picks = absorbExtras(d.extra || [], picks, d.base);
     fit(); syncSetup(); renderFx(); setCur(d.name); $('sv-name').value = d.name;
     svSay('Loaded "' + d.name + '".'); rebuild(); renderSaves();
   } else if (db) {
@@ -1006,8 +1007,8 @@ $('sv-list').addEventListener('click', e => {
 const SV_APP = 'courtside-draft-kit';
 function pickNameOf(d, id) {
   if (id == null) return null;
-  if (id < BASE_N) return { n: PLAYERS[id].n, t: PLAYERS[id].t };
-  const x = (d.extra || [])[id - BASE_N]; return x ? { n: x.n, t: x.t } : null;
+  if (id < (d.base == null ? LEGACY_BASE : d.base)) return { n: PLAYERS[id].n, t: PLAYERS[id].t };
+  const b = d.base == null ? LEGACY_BASE : d.base, x = (d.extra || [])[id - b]; return x ? { n: x.n, t: x.t } : null;
 }
 function svExportFile(list) {
   return { app: SV_APP, kind: 'drafts', version: 1, exportedAt: new Date().toISOString(),
@@ -1027,16 +1028,18 @@ function svParseImport(text) {
   return arr.map((d, k) => {
     if (!d || !Array.isArray(d.picks) || typeof d.cfg !== 'object' || !d.cfg) throw new Error('Draft ' + (k + 1) + ' in that file is missing its picks or settings.');
     const names = Array.isArray(d.pickNames) ? d.pickNames : null;
+    const ob = d.base == null ? LEGACY_BASE : d.base;   // extras in the file are ids ob + index; they move to BASE_N + index
     const picks = d.picks.map((id, i) => {
       if (id == null) return null;
+      if (id >= ob) return BASE_N + (id - ob);
       const want = names && names[i];
       if (!want) return id;
       if (id < BASE_N && PLAYERS[id] && PLAYERS[id].n === want.n) return id;
       const q = findListed(want.n, want.t); if (q && q.id < BASE_N) return q.id;
-      return id >= BASE_N ? id : null;     // not on today's list and not carried as an extra: leave the pick open
+      return null;     // not on today's list and not carried as an extra: leave the pick open
     });
     const out = { name: String(d.name || 'Imported draft').slice(0, 60), savedAt: +d.savedAt || Date.now(), cfg: d.cfg, picks,
-      log: Array.isArray(d.log) ? d.log : [], owner: Array.isArray(d.owner) ? d.owner : [], fx: d.fx || null, extra: Array.isArray(d.extra) ? d.extra : [] };
+      log: Array.isArray(d.log) ? d.log : [], owner: Array.isArray(d.owner) ? d.owner : [], fx: d.fx || null, extra: Array.isArray(d.extra) ? d.extra : [], base: BASE_N };
     return out;
   });
 }

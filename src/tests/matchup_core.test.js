@@ -32,6 +32,11 @@ test('IR players sit out only the current period', () => {
   assert.strictEqual(s.from, per.start); assert.strictEqual(s.to, per.end);
 });
 
+test('simple adds: a full roster with every player kept (or drops: 0) returns no rows instead of throwing', () => {
+  assert.deepStrictEqual(M.simpleAdds(ctx, 1, { drops: 0 }), []);
+  assert.deepStrictEqual(M.simpleAdds(ctx, 1, { keep: ctx.roster[me].map(f => ctx.pool.byKey.get(f).key) }), []);
+});
+
 test('simple adds: drops come from the 5 lowest-value players, FA only, sorted; drops: 1 uses the lowest only', () => {
   const rows = M.simpleAdds(ctx, 1, { limit: 20 });
   assert.ok(rows.length > 5 && rows.length <= 20);

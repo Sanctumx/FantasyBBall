@@ -135,7 +135,7 @@
     const side = segs => {
       const pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {}, own = {};
       pp.forEach((p, i) => {
-        if (segs[i].from > per.start) return;
+        if (segs[i].from > per.start) return;   // relies on every real roster segment starting at per.start: only hypothetical adds start later
         if (!c.match.has(p.key)) { const m = InPlayers.matchTo(list, p.n, p.t); c.match.set(p.key, m && bx.players.get(m.id)); }
         const b = c.match.get(p.key);
         if (b) b.lines.forEach(l => (byDay[l.d] || (byDay[l.d] = [])).push({ p, v: l.v }));
@@ -164,7 +164,7 @@
 
   // the add tools' scorer: the current week counts the box scores so far (as the headline does), any other week is the whole-week projection
   function scoreWeek(ctx, segsA, segsB, n) {
-    if (n !== ctx.cur || !ctx.box) return scoreSegments(ctx, segsA, segsB, true);
+    if (n !== ctx.cur || !ctx.box || !ctx.box.length) return scoreSegments(ctx, segsA, segsB, true);
     const s = statusCore(ctx, ctx.box, segsA, segsB, n);
     return { cat: s.cat, match: s.match, mu: s.mu, games: s.games };
   }
@@ -191,6 +191,7 @@
     const base = scoreWeek(ctx, mine, oppSegs, n), baseG = segGames(ctx, mine, null, true);
     const active = ctx.roster[ctx.me].filter(f => ctx.pool.byKey.get(f).slot !== 'IR').length;
     const dropList = active < ctx.L.maxPlayers ? [null] : lowestValue(ctx, ctx.me, drops, keep);
+    if (!dropList.length) return [];   // full roster and every player kept: no add can be made
     const opts = dropList.map(drop => {
       const di = drop ? mine.findIndex(s => s.key === drop.key) : -1;
       const kept = drop ? mine.map((s, i) => i === di ? { key: s.key, from: s.from, to: Math.max(s.from, Math.min(s.to, from)) } : s) : mine;

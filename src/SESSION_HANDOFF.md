@@ -52,11 +52,10 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 ## Next session starts with
 
-**Branch `waiver-adds-keep-list`** (2 commits, unpushed, PR not opened): ideas 122-125 (Waiver adds panel, Team schedule, keep
+**Branch `waiver-adds-keep-list`** (unpushed, PR not opened; reviewed 2026-10-21, must-fix and should-fix done: saved extras now carry `base`, a save without one counts as 234 players): ideas 122-125 (Waiver adds panel, Team schedule, keep
 list, Hashtag refresh), **126** (68 Hashtag-only players, rank <= 300, now in players.json), **127** (waiver adds and plan
 scored from box scores like the Matchup headline) and **128** (period dates follow Fantrax: week 1 = Oct 20 - Oct 25). 190 unit
-tests and all browser checks pass. Next: reviewer on the branch diff, PR, push when the user says. Then:
-(board artifact republished as v165); refit
+tests and all browser checks pass. Next: PR, push when the user says. Idea 126 note: Hashtag-only rows carry Hashtag ADP while BBM rows keep BBM ADP (both feed makeValueRef). Then: refit
 the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
 #112, #116, Best adds/plan on remaining games.
 Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
