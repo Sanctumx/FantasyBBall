@@ -1,0 +1,210 @@
+<title>Rankings · Courtside Draft Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one controls panel on top, one sortable player table below. Same look as the League Dashboard. */
+:root{
+  --bg:#EFF1EE; --surface:#FFFFFF; --sunk:#F6F7F5; --ink:#15191B; --muted:#5D666B; --line:#D8DCD7;
+  --accent:#C24E1B; --mine:#1F5FA8; --good:#1A7F45; --bad:#C2372F; --warn:#A85A0D; --r:6px;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+button,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
+header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0}
+header.top h1 .logo{width:.9em;height:.9em;flex:none}
+header.top .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-right:24px}
+@media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}}
+main{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ctl{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:flex-end}
+.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
+.f select{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+#src{min-width:15em}
+.msg{margin:0;font-size:.9rem;color:var(--muted)}
+.msg:empty{display:none}
+.msg.err{color:var(--bad)}
+.msgrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.msgrow:has(.msg:empty):has(.retry[hidden]){display:none}
+.retry,.btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 12px;cursor:pointer;font-weight:600;white-space:nowrap}
+.btn:hover,.retry:hover{border-color:var(--muted)}
+.btn[aria-pressed="true"]{background:var(--surface);box-shadow:inset 0 -2px 0 var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.hint{color:var(--muted);font-size:.82rem;margin:0}
+.scroll{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;font:12.5px/1.3 var(--f-data);font-variant-numeric:tabular-nums;white-space:nowrap;width:100%}
+th,td{padding:3px 5px;text-align:center;border-bottom:1px solid var(--line)}
+th{font:600 .72rem/1.15 var(--f-body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-block:7px;border-bottom:1px solid var(--ink);cursor:pointer;user-select:none}
+th:hover,th[aria-sort]{color:var(--ink)}
+th[aria-sort="descending"]::after{content:" ▼";font-size:.6rem}
+th[aria-sort="ascending"]::after{content:" ▲";font-size:.6rem}
+td.l,th.l{text-align:left}
+td.l{font:13px var(--f-body);padding-right:10px}
+td.dim{color:var(--muted)}
+tbody tr:hover td{background:var(--sunk)}
+.chip{display:inline-block;min-width:3.4em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
+.chip.b{font-weight:700}
+</style>
+
+<header class="top">
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>Rankings</h1>
+  <div class="top-r"><span id="sitenav"></span></div>
+</header>
+
+<main>
+  <section class="panel" aria-label="Rankings controls">
+    <div class="ctl">
+      <label class="f" for="src">Source<select id="src" title="Season to date uses ESPN's averages; Projections use the board's projections.">
+        <option value="season">Season to date</option>
+        <optgroup label="Projections"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></optgroup></select></label>
+      <label class="f" for="type">Zscore type<select id="type" title="Standard: plain z-scores. H2H-Adjusted: in units of a weekly head-to-head gap. ROTO-Adjusted: in units of the team spread."><option value="classic">Standard</option><option value="h2h">H2H-Adjusted</option><option value="adj">ROTO-Adjusted</option></select></label>
+      <label class="f" for="basis" title="Season counts games played; Per game ignores games missed; Mix is halfway.">Basis<select id="basis"><option value="pergame">Per game</option><option value="total">Season</option><option value="mix">Mix</option></select></label>
+      <label class="f" for="stats">Stats<select id="stats"><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
+      <button type="button" class="btn" id="hide" aria-pressed="false" title="Needs a league loaded in Settings">Hide taken</button>
+    </div>
+    <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
+    <p class="hint" id="note"></p>
+  </section>
+
+  <section class="panel">
+    <div class="scroll"><table id="tbl"></table></div>
+  </section>
+</main>
+
+<script>/*__DATA__*/</script>
+<script>/*__ENGINE__*/</script>
+<script>/*__SHARED__*/</script>
+<script>/*__STORE__*/</script>
+<script>/*__RANKINGS__*/</script>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id), LS = LeagueStore, R = Rankings, InL = InLeague;
+  document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('rankings');
+  { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
+  const KEY = 'courtside-rankings-v1', CATN = ['FG%', 'FT%', '3PM', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TO'], RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+  let ui = { src: 'season', type: 'classic', basis: 'pergame', stats: 'z', hide: false, sort: 'z', dir: -1 };
+  try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  const oneOf = (v, l, d) => l.includes(v) ? v : d;
+  ui.src = oneOf(ui.src, ['season', 'avg', 'bbm', 'hs'], 'season'); ui.type = oneOf(ui.type, R.TYPES, 'classic'); ui.basis = oneOf(ui.basis, ['pergame', 'total', 'mix'], 'pergame');
+  ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.hide = !!ui.hide; if (typeof ui.sort !== 'string') ui.sort = 'z';
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
+  const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
+  let SS = LS.load(LS.local.get), espn = null, fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
+  const cache = new Map();   // source rows and tables, by key
+
+  async function fxGet(what, id) {
+    let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    return body;
+  }
+  const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
+  async function loadStats() {
+    try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
+  }
+
+  // the league loaded in Settings: owners come from its current rosters; the table works without it
+  async function loadLeague() {
+    const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); rosters = null; teamName = {}; owned.key = ''; $('retry').hidden = true;
+    if (!lg) { sayHtml('Load a league in <a href="settings.html">Settings</a> to see owners and hide taken players.'); draw(); return; }
+    say('Loading ' + (lg.name || lg.id) + ' from Fantrax…');
+    try {
+      const league = await fxGet('league', lg.id), ros = await fxGet('rosters', lg.id);
+      if (!fxPlayers) fxPlayers = await fxGet('players');
+      if (seq !== loadSeq) return;
+      const L = InL.parseLeague(league); L.teams.forEach(t => { teamName[t.id] = t.name; });
+      rosters = InL.parseRosters(ros); fxWait = 0; say('');
+    } catch (e) {
+      if (seq !== loadSeq) return;
+      $('retry').hidden = false;
+      if (e.message === 'nohost') say('Fantrax leagues load on the hosted site; owners are not shown here.', true);
+      else if (transient(e)) { fxWait = Math.min(120, fxWait ? fxWait * 2 : 10); say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true); fxTimer = setTimeout(() => { if (seq === loadSeq) loadLeague(); }, fxWait * 1000); }
+      else say(e.message, true);
+    }
+    draw();
+  }
+
+  const settings = () => SS.settings;
+  function sourceRows() {
+    const k = 'rows:' + ui.src; if (cache.has(k)) return cache.get(k);
+    const rows = ui.src === 'season' ? (espn ? R.seasonSource(espn, PLAYERS) : []) : R.projSource(PLAYERS, ui.src);
+    cache.set(k, rows); return rows;
+  }
+  function tableFor(rows) {
+    const s = settings(), k = ['tab', ui.src, ui.type, ui.basis, s.teams, s.roster, s.cats].join('|');
+    if (!cache.has(k)) cache.set(k, R.table(rows, { teams: s.teams, roster: s.roster, cats: s.cats, type: ui.type, basis: ui.basis }));
+    return cache.get(k);
+  }
+  const chip = (z, sc, txt) => { const d = Math.max(-1, Math.min(1, z / sc)) * .25, t = Math.abs(d) / .25;
+    const bg = Math.abs(d) < .02 ? 'transparent' : 'color-mix(in oklab, var(' + (d > 0 ? '--good' : '--bad') + ') ' + Math.round(12 + 58 * t) + '%, var(--surface))';
+    return '<span class="chip" style="background:' + bg + '">' + txt + '</span>'; };
+  const rawTxt = (r, c) => { const v = r.line[RAWK[c]]; return c < 2 ? v.toFixed(3).replace(/^0/, '') : v.toFixed(1); };
+  const zTxt = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+  const owned = { map: new Map(), key: '' };
+  function ownersFor(rows) {
+    if (!rosters) return new Map();
+    const k = ui.src + '|' + SS.league.id; if (owned.key !== k) owned.map = R.ownersOf(rows, fxPlayers, rosters), owned.key = k;
+    return owned.map;
+  }
+
+  function draw() {
+    const rows = sourceRows(), n = $('note');
+    $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
+    if (ui.src === 'season' && !espn) { $('tbl').innerHTML = ''; n.textContent = 'ESPN season stats are not available yet.'; return; }
+    const tab = tableFor(rows), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = R.WEIGHTS.slice(), s = settings();
+    if (s.cats !== 9) W[8] = 0;
+    const hide = ui.hide && !!rosters;
+    let list = tab.map((t, i) => ({ t, r: byPid.get(t.pid), rank: t.z == null ? null : i + 1, own: own.get(t.pid) || null }));
+    if (hide) list = list.filter(x => !x.own);
+    // colour scale per category: the 90th percentile of |weighted z| inside the pool
+    const sc = CATN.map((_, c) => { const a = tab.filter(t => t.inPool).map(t => Math.abs(t.cats[c] * W[c])).sort((p, q) => p - q); return Math.max(.3, a[Math.floor(a.length * .9)] || 1); });
+    const val = (x, k) => k === 'z' ? x.t.z : k === 'n' ? x.r.n : k === 't' ? x.r.t : k === 'pos' ? x.r.pos : k === 'own' ? (x.own ? (teamName[x.own.owner] || x.own.owner) : '') : k === 'gp' ? (x.r.gp != null ? x.r.gp : x.r.g)
+      : x.t.z == null ? null : (ui.stats === 'raw' ? (k === 8 ? -x.r.line.to : x.r.line[RAWK[k]]) : x.t.cats[k] * W[k]);
+    const k = ui.sort === 'z' || isNaN(+ui.sort) ? ui.sort : +ui.sort, str = typeof val(list[0] || { t: { z: 0 }, r: { n: '', t: '', pos: '', line: {} }, own: null }, k) === 'string';
+    list.sort((a, b) => { const x = val(a, k), y = val(b, k); if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+      return (str ? String(x).localeCompare(String(y)) : x - y) * ui.dir || (a.rank || 1e9) - (b.rank || 1e9); });
+    const th = (key, label, cls) => '<th data-k="' + key + '"' + (cls ? ' class="' + cls + '"' : '') + (String(ui.sort) === String(key) ? ' aria-sort="' + (ui.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '>' + label + '</th>';
+    const head = '<thead><tr><th data-nosort style="cursor:default">#</th>' + th('n', 'Player', 'l') + th('t', 'Team') + th('pos', 'Pos') + (rosters ? th('own', 'Owner', 'l') : '') + th('z', 'Zscore') + CATN.map((c, i) => th(i, c)).join('') + th('gp', 'Games') + '</tr></thead>';
+    const body = '<tbody>' + list.map(x => {
+      const z = x.t.z, cells = CATN.map((_, c) => z == null ? '<td class="dim">—</td>' : '<td>' + (ui.stats === 'raw' ? rawTxt(x.r, c) : chip(x.t.cats[c] * W[c], sc[c], zTxt(x.t.cats[c] * W[c]))) + '</td>').join('');
+      return '<tr><td class="dim">' + (x.rank == null ? '—' : x.rank) + '</td><td class="l">' + esc(x.r.n) + '</td><td>' + esc(x.r.t) + '</td><td>' + esc(x.r.pos) + '</td>' + (rosters ? '<td class="l' + (x.own ? '' : ' dim') + '">' + (x.own ? esc(teamName[x.own.owner] || x.own.owner) + (x.own.slot === 'IR' ? ' (IR)' : '') : 'Free agent') + '</td>' : '')
+        + '<td><b>' + (z == null ? '—' : zTxt(z)) + '</b></td>' + cells + '<td>' + (x.r.gp != null ? x.r.gp : Math.round(x.r.g)) + '</td></tr>'; }).join('') + '</tbody>';
+    $('tbl').innerHTML = head + body;
+    const K = s.teams * s.roster;
+    n.textContent = (ui.src === 'season' ? 'ESPN season averages' + (espn.label ? ' (' + espn.label + ')' : '') + (espn.fetchedAt ? ', updated ' + new Date(espn.fetchedAt).toLocaleString() : '') : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).';
+  }
+
+  function sync() { $('src').value = ui.src; $('type').value = ui.type; $('basis').value = ui.basis; $('stats').value = ui.stats; }
+  [['src', 'src'], ['type', 'type'], ['basis', 'basis'], ['stats', 'stats']].forEach(([id, k]) => $(id).addEventListener('change', () => { ui[k] = $(id).value; save(); draw(); }));
+  $('hide').addEventListener('click', () => { if (!rosters) return; ui.hide = !ui.hide; save(); draw(); });
+  $('retry').addEventListener('click', () => { fxWait = 0; loadLeague(); });
+  $('tbl').addEventListener('click', e => {
+    const h = e.target.closest('th[data-k]'); if (!h) return;
+    const k = h.dataset.k; if (String(ui.sort) === k) ui.dir = -ui.dir; else { ui.sort = k; ui.dir = (k === 'n' || k === 't' || k === 'pos' || k === 'own') ? 1 : -1; }
+    save(); draw();
+  });
+  window.addEventListener('storage', () => {
+    const was = SS.league && SS.league.id, s0 = JSON.stringify(SS.settings); SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was) loadLeague(); else if (JSON.stringify(SS.settings) !== s0) draw();
+  });
+  sync();
+  loadStats().then(j => { espn = j; draw(); loadLeague(); });
+})();
+</script>

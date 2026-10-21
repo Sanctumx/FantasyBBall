@@ -21,3 +21,8 @@ open('courtside-inseason.html','w').write(i)
 s=open('settings.html').read()
 s=s.replace('/*__SCHED__*/','const SCHED='+S+';').replace('/*__SHARED__*/',open('shared.js').read()).replace('/*__STORE__*/',open('league_store.js').read())
 open('courtside-settings.html','w').write(s)
+# Rankings page (2026-10-21): same data, engine and shared helpers, plus the in-season player modules and the rankings core
+r=open('rankings.html').read()
+mods=''.join(open(f).read()+chr(10) for f in ['inseason_league.js','inseason_players.js','rankings_core.js'])
+r=r.replace('/*__DATA__*/','const PLAYERS='+P+';').replace('/*__ENGINE__*/',open('engine.js').read()).replace('/*__SHARED__*/',open('shared.js').read()).replace('/*__STORE__*/',open('league_store.js').read()).replace('/*__RANKINGS__*/',mods)
+open('courtside-rankings.html','w').write(r)
