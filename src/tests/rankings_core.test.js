@@ -204,3 +204,14 @@ test('windowSource: window ends on the newest game, sums makes and attempts, ski
   assert.strictEqual(w14.rows[0].g, 80);
   assert.deepStrictEqual(R.windowSource([], 7, PLAYERS), { rows: [], from: null, to: null });
 });
+
+test('winStart (league): Average player is the average player on my roster', () => {
+  const t = mkLeague(12), mine = t[0].slice(0, 11), rs = mine.map(p => byPid.get(p));
+  const mean = f => rs.reduce((a, r) => a + f(r), 0) / rs.length, line = {};
+  Object.keys(rs[0].line).forEach(k => { line[k] = mean(r => r.line[k]); });
+  const fakePid = Math.max(...rows.map(r => r.pid)) + 1, fake = { pid: fakePid, n: 'Roster Average', t: 'XXX', pos: '', g: mean(r => r.g), line, adp: null, ftx: null };
+  const rows2 = rows.concat([fake]), tab2 = R.table(rows2, { teams: 14, roster: 12, type: 'classic', basis: 'total' });
+  const w = R.winStart(rows2, tab2, Object.assign({}, wOpts, { lists: t })), v = w.avg.get(fakePid), top = w.avg.get(lists[100]);
+  assert.ok(Math.abs(v.m) < 0.35 * Math.max(0.01, Math.abs(w.rep.get(fakePid).m - w.avg.get(fakePid).m)) + 0.02, 'a roster-average player has ~0 vs the roster average: ' + v.m + ' ' + w.rep.get(fakePid).m);
+  assert.ok(isFinite(top.m));
+});
