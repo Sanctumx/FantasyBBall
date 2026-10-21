@@ -1,6 +1,6 @@
 # Rankings tab: player rankings for the season
 
-Date: 2026-10-21 · Status: draft for the user's approval · IDEAS #110 (needs #113)
+Date: 2026-10-21 · Status: approved 2026-10-21 · IDEAS #110 (needs #113)
 
 ## Why
 
@@ -32,7 +32,7 @@ free agents are easy to find. Reference: basketballmonster.com/playerrankings.as
   ids match `espn.json`) into monthly files (`stats/box-YYYY-MM.json`, about 2 MB per season). Extends the hourly run.
   A window is the sum of lines over its dates, divided by games for per game.
 - **Projections:** `Shared.projOf` as on the board (Average / BBM / Hashtag).
-- **Rosters / owners:** the Settings league via `League.sourceFromRosters` (non-IR players; IR owners are not shown, #109).
+- **Rosters / owners:** the Settings league's current rosters including IR players (owner shown for all; `sourceFromRosters` leaves IR out today, so Rankings needs the IR list it already returns in `ir` or its own roster read).
 
 ## Calculation
 
@@ -66,9 +66,9 @@ Stages 2-3 are independent of the Matchup work queued after this (#114, #115), w
   Rankings' Projections / Average Zscore to the board's).
 - Never write to the league store.
 
-## Open questions for the user
+## Decisions (user, 2026-10-21)
 
-1. Windows by **calendar days** (7 / 14 / 30 days back) or by **the player's last N games**? (Plan: calendar days.)
-2. Mix basis on a window: keep the board's meaning (blend of per-game and season games), or drop Mix for windows? (Plan: keep.)
-3. Should the IR players of the Settings league show an owner? (Plan: no, as on League, #109.)
-4. Build order: stage 1 collector first (data accrues while the page is built), as above. OK?
+1. Windows are calendar days (7 / 14 / 30 days back).
+2. Mix keeps the board's meaning on windows.
+3. IR players of the Settings league show an owner on Rankings; the League page will be fixed to count IR later (#109).
+4. Build order as in Stages (collector first). Status: approved.
