@@ -205,6 +205,18 @@ test('windowSource: window ends on the newest game, sums makes and attempts, ski
   assert.deepStrictEqual(R.windowSource([], 7, PLAYERS), { rows: [], from: null, to: null });
 });
 
+test('every source row carries minutes per game as m (display only)', () => {
+  const Sh = require('../shared.js');
+  rows.slice(0, 50).forEach(r => assert.strictEqual(r.m, Sh.projOf(PLAYERS[r.pid], 'avg').m));
+  assert.ok(rows.some(r => r.m > 20));
+  const hs = R.projSource(PLAYERS, 'hs').find(r => PLAYERS[r.pid].hs);
+  assert.strictEqual(hs.m, PLAYERS[hs.pid].hs.m);
+  const s = R.seasonSource(ESPN, PLAYERS), byEspn = new Map(ESPN.players.map(p => [p.id, p]));
+  s.slice(0, 50).forEach(r => assert.strictEqual(r.m, byEspn.get(r.espnId).min));
+  const w14 = R.windowSource([BOX], 14, PLAYERS);
+  assert.strictEqual(w14.rows[0].m, 30);
+});
+
 test('winStart (league): Average player is the average player on my roster', () => {
   const t = mkLeague(12), mine = t[0].slice(0, 11), rs = mine.map(p => byPid.get(p));
   const mean = f => rs.reduce((a, r) => a + f(r), 0) / rs.length, line = {};
