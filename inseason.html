@@ -1716,10 +1716,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       });
     });
     const list = Array.from(seen.values());
-    Object.keys(ctx.roster).forEach(tid => ctx.roster[tid].forEach(key => {
+    const keys = [].concat(...Object.keys(ctx.roster).map(tid => ctx.roster[tid]), ctx.pool.players.filter(p => !p.owner && (p.fxStatus === 'FA' || p.fxStatus === 'WW')).map(p => p.key));
+    keys.forEach(key => {
       const p = ctx.pool.byKey.get(key), recent = (games[p.t] || []).sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0).slice(-3), m = recent.length >= 3 && InPlayers.matchTo(list, p.n, p.t);
       if (recent.length >= 3 && (!m || !recent.some(g => g.ids.has(m.id)))) out.add(key);
-    }));
+    });
     return out;
   }
 
@@ -1759,7 +1760,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function projectWeek(ctx, teamId, n) {
     const opp = InLeague.opponentOf(ctx.L, teamId, n);
     if (!opp) return { opp: null };
-    return Object.assign({ opp }, scoreSegments(ctx, teamSegments(ctx, teamId, n), teamSegments(ctx, opp, n), true));
+    return Object.assign({ opp }, scoreSegments(ctx, teamSegments(ctx, teamId, n), teamSegments(ctx, opp, n), n === ctx.cur));
   }
 
   // ---- week status: box-score totals so far + the games still to play (idea 118, 2026-10-21) ----
@@ -1822,7 +1823,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
         return { key: p.key, n: p.n, pos: p.pos, t: p.t, games: g, cur, proj, out: !!(ctx.out && ctx.out.has(p.key)) };
       });
       return { players, known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
-        entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * (whole[i] > 0 ? left[i] / whole[i] : 0) })) };
+        entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * Math.min(1, whole[i] > 0 ? left[i] / whole[i] : 1) })) };
     };
     const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
     const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;

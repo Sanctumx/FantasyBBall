@@ -160,3 +160,16 @@ test('a crowded night goes to the better per-game player, not the one projected 
   const per = L.periods.find(x => x.n === 1), g = M.segGames(c2, [{ key: 'hi', from: per.start, to: per.end }, { key: 'lo', from: per.start, to: per.end }], null, true);
   assert.ok(g[0] > 0 && g[1] === 0, 'games ' + g);
 });
+
+test('a free agent with no box line while his team has 3 boxed games is out (no free-agent counts every scheduled game)', () => {
+  const fa = pool.players.find(p => !p.owner && (p.fxStatus === 'FA' || p.fxStatus === 'WW') && p.t && pool.players.some(q => q !== p && q.t === p.t && q.src === 'proj'));
+  const mate = pool.players.find(q => q !== fa && q.t === fa.t && q.src === 'proj');
+  const b = box(['2026-10-13', '2026-10-14', '2026-10-15'].map(d => ({ d, lines: [[mate, {}]] })));
+  assert.ok(M.makeCtx({ L, pool, DAYS, rosters: ROS, me, nowMs: NOW, box: b }).out.has(fa.key));
+});
+
+test('a future week in the Matchup Analyzer keeps expected games like the Trade Analyzer', () => {
+  const n = ctx.cur + 1, opp2 = I.opponentOf(L, me, n);
+  const seg = t => M.teamSegments(ctx, t, n);
+  assert.strictEqual(M.projectWeek(ctx, me, n).match, M.scoreSegments(ctx, seg(me), seg(opp2), false).match);
+});
