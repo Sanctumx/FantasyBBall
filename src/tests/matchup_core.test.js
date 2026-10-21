@@ -114,3 +114,9 @@ test('a capped plan ranks its candidates only against allowed drops', () => {
   const plan = M.addPlan(ctx, { droppable: 1, candidates: 30 });
   assert.ok(plan.moves.every(m => seen.includes(m.add.key) || plan.moves.some(x => x !== m && x.add.key === m.add.key)));
 });
+
+test('a drop cap larger than the bench never lets the plan drop more than All does', () => {
+  const bench = ctx.L.maxPlayers - ctx.L.maxActive;
+  assert.strictEqual(M.addPlan(ctx, { droppable: 99 }).droppable.length, M.addPlan(ctx, {}).droppable.length);
+  assert.ok(M.addPlan(ctx, { droppable: 99 }).droppable.length <= bench);
+});
