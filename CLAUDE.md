@@ -75,8 +75,10 @@ They work alongside the routing above; this file takes precedence over them. Siz
 - **Skill budget** (overrides using-superpowers' "invoke at 1% chance"): for small and medium tasks don't load
   test-driven-development or executing-plans; the test-first rule in this file is enough. Load them only for a big
   feature. Never run writing-plans or executing-plans as subagents.
-- **Main model:** the session must be on Sonnet. The VS Code panel's model picker overrides `settings.json`; if the
-  session reports Opus, tell the user to switch the picker back.
+- **Main model:** Sonnet unless the user chose otherwise. The VS Code panel's model picker overrides `settings.json`,
+  so if the session is on Opus and the user hasn't said it's deliberate, mention it once.
+- **Skills and connectors:** unused claude.ai skills are turned off in `settings.json` (`skillOverrides`) and claude.ai
+  connectors are off (`disableClaudeAiConnectors`). To use one, change that line in `.claude/settings.local.json`.
 - **Planning:** writing-plans' thinking is done by the `planner` subagent (Opus); the main session only saves the file.
 - **Executing:** use executing-plans inline by default. Use subagent-driven-development only for tasks that are truly
   independent of each other, and give every subagent an explicit model, as that skill requires.

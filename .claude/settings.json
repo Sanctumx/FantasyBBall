@@ -1,6 +1,25 @@
 {
   "model": "sonnet",
   "effortLevel": "medium",
+  "disableClaudeAiConnectors": true,
+  "skillOverrides": {
+    "built-in-browser": "off",
+    "chrome-browser": "off",
+    "computer-use": "off",
+    "deep-research": "off",
+    "docs": "off",
+    "docx": "off",
+    "google-workspace": "off",
+    "impeccable": "off",
+    "import-memory": "off",
+    "morning": "off",
+    "new-project": "off",
+    "pdf": "off",
+    "pptx": "off",
+    "refresh": "off",
+    "skill-creator": "off",
+    "xlsx": "off"
+  },
   "permissions": {
     "deny": [
       "Read(/src/logs*.csv)",
