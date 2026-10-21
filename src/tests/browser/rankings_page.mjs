@@ -45,10 +45,10 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   await p.click('#tbl th[data-k="z"]'); await p.waitForTimeout(100);
   ok((await names(p))[0] === top, 'Zscore header sorts best first (' + top + ')');
   await p.selectOption('#stats', 'raw'); await p.waitForTimeout(100);
-  ok(/^\.\d{3}$/.test(await p.$eval('#tbl tbody tr:first-child td:nth-child(10)', e => e.textContent)), 'Raw shows FG% as .xxx');
+  ok(/^\.\d{3}$/.test(await p.$eval('#tbl tbody tr:first-child td:nth-child(11)', e => e.textContent)), 'Raw shows FG% as .xxx');
   await p.selectOption('#type', 'h2h'); await p.waitForTimeout(500);
   // playoff games column and Playoff boost
-  const poCol = () => p.$$eval('#tbl tbody tr td:nth-child(5)', t => t.map(e => +e.textContent));
+  const poCol = () => p.$$eval('#tbl tbody tr td:nth-child(6)', t => t.map(e => +e.textContent));
   ok(await p.$('#tbl th[data-k="po"]') !== null && (await poCol()).every(n => n > 5 && n < 40), 'Playoff games column lists games for every player');
   ok(!(await p.$eval('#poboost', e => e.offsetParent !== null)), 'Playoff boost control is hidden for now');
   await p.click('#tbl th[data-k="po"]'); await p.waitForTimeout(100);
@@ -60,7 +60,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
 { const { p, errs, ctx } = await open({});
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
   const col = i => p.$$eval('#tbl tbody tr td:nth-child(' + i + ')', t => t.map(e => e.textContent));
-  const z = async () => parseFloat((await col(7))[0].replace('−', '-'));
+  const z = async () => parseFloat((await col(8))[0].replace('−', '-'));
   const z0 = await z();
   await p.check('#pf-C'); await p.waitForTimeout(200);
   const pos = await col(4); ok(pos.length > 5 && pos.every(x => x.split('/').includes('C')), 'position filter C keeps only centers (' + pos.length + ')');
@@ -76,8 +76,8 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   ok(await p.$eval('#tbl th[data-k="3"]', e => e.className) === 'punted' && Math.abs(await z() - z0) > 1e-6, 'punting PTS strikes the header and changes Zscore');
   // Win C / Win M right after Zscore, Replacement vs Average player
   const heads = await p.$$eval('#tbl thead th', t => t.map(e => e.textContent.replace(/[▲▼ ]/g, '')));
-  ok(heads[7] === 'WinC' && heads[8] === 'WinM' && /Zscore/.test(heads[6]), 'Win C and Win M follow Zscore');
-  const wm = async () => (await col(9)).map(x => parseFloat(x.replace('−', '-')));
+  ok(heads[8] === 'WinC' && heads[9] === 'WinM' && /Zscore/.test(heads[7]), 'Win C and Win M follow Zscore');
+  const wm = async () => (await col(10)).map(x => parseFloat(x.replace('−', '-')));
   const m0 = await wm(); ok(m0.every(isFinite) && m0.some(v => v > 5) && m0.some(v => v < 0), 'Win M values are numbers, best players positive');
   await p.selectOption('#winvs', 'avg'); await p.waitForTimeout(300);
   const m1 = await wm(); ok(Math.abs(m1[0] - m0[0]) > 0.5, 'Average player view changes Win M (' + m0[0] + ' to ' + m1[0] + ')');
@@ -85,7 +85,18 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   await p.click('#tbl th[data-k="winM"]'); await p.waitForTimeout(100);
   const ms = await wm(); ok(ms.every((v, i) => i === 0 || v <= ms[i - 1] + 1e-9), 'Win M header sorts best first');
   await p.click('#tbl th[data-k="z"]'); await p.waitForTimeout(100);
-  const ds = await p.$$eval('#tbl tbody tr td:nth-child(9)', t => t.length); ok(ds > 100, 'rows still listed');
+  // MPG column and Order by (#130)
+  ok(heads[4] === 'MPG', 'MPG header sits between Pos and Playoff games');
+  const mp = (await col(5)).map(parseFloat); ok(mp.every(v => v > 0 && v <= 48), 'MPG values are minutes per game');
+  await p.selectOption('#orderby', 'winM'); await p.waitForTimeout(300);
+  const rk = () => p.$$eval('#tbl tbody tr td:nth-child(1)', t => t.map(e => +e.textContent));
+  const wsort = await wm(), rk1 = await rk();
+  ok(rk1.every((v, i) => v === i + 1) && wsort.every((v, i) => i === 0 || v <= wsort[i - 1] + 1e-9), 'Order by Win M: # is the Win M rank and rows sort by it');
+  await p.click('#tbl th[data-k="gp"]'); await p.waitForTimeout(100);
+  const rk2 = await rk(); ok(rk2.some((v, i) => v !== i + 1) && [...rk2].sort((a, b) => a - b).every((v, i) => v === i + 1), 'a header click re-sorts rows but # stays the Win M rank');
+  await p.selectOption('#orderby', 'z'); await p.waitForTimeout(200);
+  ok(await p.$$eval('#tbl tbody tr.mine', t => t.length) === 0, 'no league: no highlighted rows');
+  const ds = await p.$$eval('#tbl tbody tr td:nth-child(10)', t => t.length); ok(ds > 100, 'rows still listed');
   await p.click('#cw-reset'); await p.waitForTimeout(200);
   ok(Math.abs(await z() - z0) < 1e-9, 'Reset restores the weights');
   ok(errs.length === 0, '2b: no page errors ' + errs.join('; '));
@@ -99,6 +110,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   const taken = owners.filter(o => o && o !== 'Free agent').length;
   ok(taken > 100 && taken < 180, 'owners shown for the rostered players: ' + taken);
   ok(owners.some(o => /\(IR\)/.test(o)), 'IR players show an owner');
+  ok(await p.$$eval('#tbl tbody tr.mine', t => t.length) === 0, 'league without a saved team: no highlighted rows');
   await p.click('#hide'); await p.waitForTimeout(300);
   ok(await rows(p) === all - taken, 'Hide taken removes the owned players: ' + all + ' -> ' + await rows(p));
   ok(errs.length === 0, '3: no page errors ' + errs.join('; '));
@@ -108,13 +120,16 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
 { const { p, errs, ctx } = await open({ 'courtside-settings-v1': store({ id: 'lg1', name: 'Mock', teams: [], loadedAt: 1 }), 'courtside-leagues-v1': JSON.stringify([{ id: 'lg1', name: 'Mock', myTeam: Object.keys(FXR.rosters || FXR)[0], used: 1 }]) });
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(3500);
   ok(/spot of your weakest player/.test(await p.$eval('#note', e => e.textContent)), 'note says a player takes your weakest spot');
-  const own = await p.$$eval('#tbl tbody tr', t => t.map(r => [r.children[2].textContent, r.children[8].textContent]));
+  const own = await p.$$eval('#tbl tbody tr', t => t.map(r => [r.children[2].textContent, r.children[9].textContent]));
   const mineRows = own.filter(([o]) => o !== 'Free agent'), faRows = own.filter(([o]) => o === 'Free agent');
   ok(own.every(([, m]) => m !== '…'), 'all Win cells have filled in');
   ok(faRows.length > 20 && faRows.every(([, m]) => /\d/.test(m)), 'free agents have a Win M');
   const saved = await p.$eval('#myteam', e => e.value);
+  const mo = await p.$$eval('#tbl tbody tr', t => t.map(r => [r.classList.contains('mine'), r.children[2].textContent])), savedName = await p.$eval('#myteam option:checked', e => e.textContent);
+  ok(mo.some(([m]) => m) && mo.every(([m, o]) => m === (o.replace(' (IR)', '') === savedName)), 'my players are highlighted: exactly the rows owned by the saved team');
   ok(saved !== 'none' && await p.$$eval('#myteam option', o => o.length) === 15, 'My team starts as the Settings team, lists No team + 14 teams');
   await p.selectOption('#myteam', 'none'); await p.waitForTimeout(1500);
+  ok(await p.$$eval('#tbl tbody tr.mine', t => t.length) === 0, 'No team: nothing highlighted');
   ok(/add a team in Settings/.test(await p.$eval('#note', e => e.textContent)), 'No team: note drops the roster wording');
   const other = await p.$$eval('#myteam option', o => o.map(x => x.value).filter(v => v !== 'none')).then(l => l.find(v => v !== saved));
   await p.selectOption('#myteam', other); await p.waitForTimeout(3500);
