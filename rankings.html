@@ -85,7 +85,7 @@ tbody tr:hover td{background:var(--sunk)}
       <label class="f" for="type">Zscore type<select id="type" title="Standard: plain z-scores. H2H-Adjusted: in units of a weekly head-to-head gap. ROTO-Adjusted: in units of the team spread."><option value="classic">Standard</option><option value="h2h">H2H-Adjusted</option><option value="adj">ROTO-Adjusted</option></select></label>
       <label class="f" for="basis" title="Season counts games played; Per game ignores games missed; Mix is halfway.">Basis<select id="basis"><option value="pergame">Per game</option><option value="total">Season</option><option value="mix">Mix</option></select></label>
       <label class="f" for="stats">Stats<select id="stats"><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
-      <label class="f" for="poboost" title="Boost players whose teams play more games in your playoff weeks (Settings)">Playoff boost<select id="poboost"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
+      <label class="f" for="poboost" hidden title="Boost players whose teams play more games in your playoff weeks (Settings)">Playoff boost<select id="poboost"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
       <button type="button" class="btn" id="hide" aria-pressed="false" title="Needs a league loaded in Settings">Hide taken</button>
     </div>
     <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
@@ -1555,7 +1555,7 @@ tbody tr:hover td{background:var(--sunk)}
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const oneOf = (v, l, d) => l.includes(v) ? v : d;
   ui.src = oneOf(ui.src, ['season', 'avg', 'bbm', 'hs'], 'season'); ui.type = oneOf(ui.type, R.TYPES, 'classic'); ui.basis = oneOf(ui.basis, ['pergame', 'total', 'mix'], 'pergame');
-  ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.poboost = oneOf(ui.poboost, Object.keys(R.PO_LAMBDA), 'off'); ui.hide = !!ui.hide; if (typeof ui.sort !== 'string') ui.sort = 'z';
+  ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.poboost = 'off';   // control hidden for now (user, 2026-10-21); Win columns ignore it ui.hide = !!ui.hide; if (typeof ui.sort !== 'string') ui.sort = 'z';
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
