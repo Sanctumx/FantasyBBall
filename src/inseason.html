@@ -32,7 +32,6 @@ main{display:flex;flex-direction:column;gap:16px}
 .ctl{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:flex-end}
 .f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
 .f select,.f input{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
-#src{min-width:15em}
 #fmt{margin:0 0 0 auto;color:var(--muted);font-size:.8rem;align-self:center}
 .msg{margin:0;font-size:.9rem;color:var(--muted)}
 .msg:empty{display:none}
@@ -143,7 +142,7 @@ tr.click{cursor:pointer}
 <main>
   <section class="panel" aria-label="League, team and week">
     <div class="ctl">
-      <label class="f" for="src">League<select id="src"></select></label>
+      <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
       <label class="f" for="team">Your team<select id="team"></select></label>
       <label class="f" for="week" title="Win chances are projected for this matchup period">Week<select id="week"></select></label>
     </div>
@@ -228,10 +227,13 @@ tr.click{cursor:pointer}
   const sectionOf = () => location.hash === '#trades' ? 'trades' : 'matchup';   // the toolbar's Matchup Analyzer / Trade Analyzer links
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
-  const KEY = 'courtside-inseason-v1', DEFAULT_LEAGUE = 'mm5i19xxmv4hcbcy';
-  let ui = { leagueId: null, team: {}, tab: sectionOf(), week: null, adds: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
+  const KEY = 'courtside-inseason-v1', LS = LeagueStore;
+  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.tab = sectionOf();
+  // one remembered team per tab and league id; the old single map seeds both, then goes
+  if (!ui.teamBy || typeof ui.teamBy !== 'object') ui.teamBy = { matchup: Object.assign({}, ui.team), trades: Object.assign({}, ui.team) };
+  delete ui.team; ['matchup', 'trades'].forEach(k => { if (!ui.teamBy[k] || typeof ui.teamBy[k] !== 'object') ui.teamBy[k] = {}; });
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
@@ -243,16 +245,10 @@ tr.click{cursor:pointer}
   const signed = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
   const zsg = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
   const InL = InLeague, InP = InPlayers;
-  let sources = [], L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
+  let L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
 
-  function fillSources() {
-    let saved = []; try { saved = JSON.parse(localStorage.getItem('courtside-leagues-v1') || '[]'); } catch (e) {}
-    sources = (Array.isArray(saved) ? saved : []).filter(l => l && l.id).sort((a, b) => (b.used || 0) - (a.used || 0)).map(l => ({ id: l.id, label: l.name || 'League ' + l.id, myTeam: l.myTeam || null }));
-    if (!sources.some(s => s.id === DEFAULT_LEAGUE)) sources.push({ id: DEFAULT_LEAGUE, label: 'Fantrax league ' + DEFAULT_LEAGUE, myTeam: null });
-    $('src').innerHTML = sources.map(s => '<option value="' + esc(s.id) + '">' + esc(s.label) + '</option>').join('');
-    if (!sources.some(s => s.id === ui.leagueId)) ui.leagueId = sources[0].id;
-    $('src').value = ui.leagueId;
-  }
+  let SS = LS.load(LS.local.get);
+  const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
 
   let staleAge = 0;   // seconds old of the oldest answer the Worker served from memory because Fantrax was busy
   async function fxGet(what, id) {
@@ -270,8 +266,11 @@ tr.click{cursor:pointer}
     try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
   }
   async function load() {
-    const seq = ++loadSeq, id = ui.leagueId; clearTimeout(fxTimer); staleAge = 0;
-    $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true;
+    const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
+    $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
+    $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (!lg) { ui.leagueId = null; sayHtml(LS.NO_LEAGUE_HTML); return; }
+    const id = ui.leagueId = lg.id;
     say('Loading the league from Fantrax…');
     try {
       const league = await fxGet('league', id), ros = await fxGet('rosters', id), st = await fxGet('standings', id);
@@ -299,13 +298,13 @@ tr.click{cursor:pointer}
     const x = L.teams.find(q => q.id === t), s = standings && standings[t];
     return (x ? x.name : t) + (s && s.record ? ' (' + s.record + ')' : '');
   }
+  // the team in focus on a tab: remembered per tab and league, else the saved league's team, else the first
+  const teamFor = tab => LS.pickTeam(ui.teamBy[tab][ui.leagueId], L.teams.map(x => x.id), LS.defaultTeam(LS.local.get, ui.leagueId));
   function start() {
     const cur = InL.currentPeriod(L, Date.now());
     if (cur == null) { say(L.statedLastRegular > L.lastRegular ? 'No matchups with known opponents are left: Fantrax lists the later regular-season weeks without opponents yet.' : 'The regular season is over: there are no matchups left to project.'); return; }
     $('team').innerHTML = L.teams.map(t => '<option value="' + esc(t.id) + '">' + esc(teamLabel(t.id)) + '</option>').join('');
-    const mine = sources.find(s => s.id === ui.leagueId).myTeam;
-    let t = ui.team[ui.leagueId]; if (!L.teams.some(x => x.id === t)) t = L.teams.some(x => x.id === mine) ? mine : L.teams[0].id;
-    ui.team[ui.leagueId] = t; $('team').value = t;
+    const t = teamFor(ui.tab); ui.teamBy[ui.tab][ui.leagueId] = t; $('team').value = t;
     const weeks = InL.regularFrom(L, cur);
     $('week').innerHTML = weeks.map(n => { const p = L.periods.find(q => q.n === n); return '<option value="' + n + '">Week ' + n + (p ? ' · ' + InL.localDay(p.start).slice(5) + ' to ' + InL.localDay(p.end - 1).slice(5) : '') + '</option>'; }).join('');
     if (!weeks.includes(+ui.week)) ui.week = cur;
@@ -328,7 +327,9 @@ tr.click{cursor:pointer}
 
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
   function render() {
-    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: ui.team[ui.leagueId], nowMs: Date.now() });
+    $('team').value = teamFor(ui.tab);   // each tab keeps its own team
+    const meNow = teamFor(ui.tab); if (ctx && ctx.me !== meNow) { bd = null; finderRun++; }   // a different team: the Trade Builder starts over and a running trade search stops
+    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: teamFor(ui.tab), nowMs: Date.now() });
     $('sect').textContent = ui.tab === 'trades' ? 'Trade Analyzer' : 'Matchup Analyzer'; document.title = $('sect').textContent + ' · Courtside Draft Kit';
     document.querySelector('.sitenav').outerHTML = Shared.TOOLBAR_HTML(ui.tab);
     $('week').closest('label').hidden = ui.tab === 'trades';   // trades measure the rest of the season, so no week to pick
@@ -528,11 +529,12 @@ tr.click{cursor:pointer}
   $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
-  $('src').addEventListener('change', e => { ui.leagueId = e.target.value; save(); load(); });
-  $('team').addEventListener('change', e => { ui.team[ui.leagueId] = e.target.value; bd = null; save(); render(); });
+  // Settings changed in another tab (a different league, or other settings): load again
+  window.addEventListener('storage', e => { if (e.key === LS.KEYS.settings || e.key === LS.KEYS.leagues) { SS = LS.load(LS.local.get); load(); } });
+  $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
   window.addEventListener('hashchange', () => { ui.tab = sectionOf(); if (pool) render(); });
   $('addsleft').addEventListener('change', e => { const v = Math.max(0, Math.min(4, Math.round(+e.target.value || 0))); ui.adds[ui.leagueId + ':' + ui.week] = v; save(); renderPlan(+ui.week); });
-  fillSources(); load();
+  load();
 })();
 </script>
