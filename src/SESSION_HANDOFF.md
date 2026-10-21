@@ -54,7 +54,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 `main` has the Rankings tab and perf cache (PR #21 merged 2026-10-21). Branch `matchup-week-status` (unpushed, tests green:
 179 unit, Matchup/League/Rankings/Settings browser checks) holds the Matchup week status (idea 118, archive 118b): Current /
-Projected category table, whole-team table, Win M on remaining games. Next: on "push", PR and merge it (engine.js changed:
+Projected category table, whole-team table, Win M on remaining games. Also built there (idea 119, archive 119): Matchup games left are whole games per player; players with no box line or no minutes in their team's last 3 boxed games are out for the week ("out" in the team table); whole-games shrink k .83 matchup / .85 cats; Trade Analyzer unchanged (fractional g/82). Check name matching on real box scores once games exist. Note: 6 context-hook tests fail when run inside a long session (not code). Next: on "push", PR and merge it (engine.js changed:
 republish `courtside-draft-board.html`). Then #112, #116, and Best adds/plan on remaining games. Left open: Playoff boost
 hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess (#98); IR on the
 League tab (#109); week-status leftovers in archive 118b. Awaiting the user: why Games left is not whole (expected games =

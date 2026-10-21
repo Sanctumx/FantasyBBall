@@ -142,3 +142,11 @@ test('periodMonths can add the month before the period', () => {
   assert.deepStrictEqual(I.periodMonths({ start: Date.UTC(2026, 9, 26, 19), end: Date.UTC(2026, 10, 2, 23) }, true), ['2026-09', '2026-10', '2026-11']);
   assert.deepStrictEqual(I.periodMonths({ start: Date.UTC(2027, 0, 5, 19), end: Date.UTC(2027, 0, 12, 23) }, true), ['2026-12', '2027-01']);
 });
+
+test('a rostered player with no box line while his team has 3 boxed games is out', () => {
+  const t = Object.keys(ROS).find(k => { const ps = active(k); return ps.some(a => ps.some(b => b !== a && b.t === a.t)); }), ps = active(t);
+  const a = ps.find(x => ps.some(b => b !== x && b.t === x.t)), mate = ps.find(b => b !== a && b.t === a.t);
+  const b = box(['2026-10-13', '2026-10-14', '2026-10-15'].map(d => ({ d, lines: [[mate, {}]] })));
+  assert.ok(M.makeCtx({ L, pool, DAYS, rosters: ROS, me: t, nowMs: NOW, box: b }).out.has(a.key));
+  assert.ok(!M.makeCtx({ L, pool, DAYS, rosters: ROS, me: t, nowMs: NOW, box: box(b[0].games ? [] : []) }).out.has(a.key));
+});

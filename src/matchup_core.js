@@ -23,7 +23,7 @@
   }
 
   // Players who sat out their team's last 3 boxed games are out for the rest of the current week: a player who is playing now most
-  // likely plays his next 3-4 games. Only players matched to a box line are judged, and a team with fewer than 3 boxed games is not.
+  // likely plays his next 3-4 games. A player with no box line at all counts as out too (a failed name match would count him out as well). A team with fewer than 3 boxed games is not judged.
   function outSet(ctx, files) {
     const games = {}, seen = new Map(), out = new Set();
     (files || []).filter(Boolean).forEach(f => {
@@ -40,7 +40,7 @@
     const list = Array.from(seen.values());
     Object.keys(ctx.roster).forEach(tid => ctx.roster[tid].forEach(key => {
       const p = ctx.pool.byKey.get(key), recent = (games[p.t] || []).sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0).slice(-3), m = recent.length >= 3 && InPlayers.matchTo(list, p.n, p.t);
-      if (m && !recent.some(g => g.ids.has(m.id))) out.add(key);
+      if (recent.length >= 3 && (!m || !recent.some(g => g.ids.has(m.id)))) out.add(key);
     }));
     return out;
   }
