@@ -104,6 +104,7 @@ tbody tr:hover td{background:var(--sunk)}
       <label class="f" for="zdrop" title="Discount each player's worst one (−1) or two (−2) categories"><span>Zscore</span><select id="zdrop"><option value="0,0">Normal</option><option value="1,50">−1 50%</option><option value="1,0">−1 100%</option><option value="2,50">−2 50%</option><option value="2,0">−2 100%</option></select></label>
       <label class="f" for="show" title="How many players to list"><span>Show</span><select id="show"><option value="25">Top 25</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="0">All</option></select></label>
       <label class="f" for="winvs" title="Replacement: the best player left once the draft ends (as on the Draft tab). Average player: the average player on your roster when a team is saved in Settings, else an average player from the Zscore pool."><span>Win vs</span><select id="winvs"><option value="rep">Replacement</option><option value="avg">Average player</option></select></label>
+      <label class="f" for="myteam" title="The team Win is measured for: its players fill the slots and a new player takes the spot of its weakest. Starts as the team saved in Settings; No team measures against an empty draft."><span>My team</span><select id="myteam"><option value="none">No team</option></select></label>
       <label class="f" for="stats">Stats<select id="stats"><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
       <label class="f" for="poboost" hidden title="Boost players whose teams play more games in your playoff weeks (Settings)">Playoff boost<select id="poboost"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
       <button type="button" class="btn" id="hide" aria-pressed="false" title="Needs a league loaded in Settings">Hide taken</button>
@@ -1642,14 +1643,14 @@ tbody tr:hover td{background:var(--sunk)}
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-rankings-v1', CATN = ['FG%', 'FT%', '3PM', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TO'], RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
   const POS = ['PG', 'SG', 'SF', 'PF', 'C'], CWV = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
-  let ui = { src: 'season', type: 'classic', basis: 'pergame', stats: 'z', poboost: 'off', zdrop: '0,0', winvs: 'rep', show: 0, pos: [], cw: null, hide: false, sort: 'z', dir: -1 };
+  let ui = { src: 'season', type: 'classic', basis: 'pergame', stats: 'z', poboost: 'off', zdrop: '0,0', winvs: 'rep', show: 0, pos: [], cw: null, hide: false, sort: 'z', dir: -1, team: null };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const oneOf = (v, l, d) => l.includes(v) ? v : d;
   ui.src = oneOf(ui.src, ['season', 'w7', 'w14', 'w30', 'avg', 'bbm', 'hs'], 'season'); ui.type = oneOf(ui.type, R.TYPES, 'classic'); ui.basis = oneOf(ui.basis, ['pergame', 'total', 'mix'], 'pergame');
   ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.winvs = oneOf(ui.winvs, ['rep', 'avg'], 'rep'); ui.zdrop = oneOf(ui.zdrop, ['0,0', '1,50', '1,0', '2,50', '2,0'], '0,0'); ui.show = oneOf(+ui.show, [0, 25, 50, 100, 150, 200], 0); ui.pos = Array.isArray(ui.pos) ? ui.pos.filter(x => POS.includes(x)) : [];
   ui.cw = Array.isArray(ui.cw) && ui.cw.length === 9 && ui.cw.every(v => CWV.includes(+v)) ? ui.cw.map(Number) : R.WEIGHTS.slice(); let query = '';
   ui.poboost = 'off';   // control hidden for now (user, 2026-10-21); Win columns ignore it
-  ui.hide = !!ui.hide; ui.sort = oneOf(String(ui.sort), ['z', 'n', 'own', 't', 'pos', 'po', 'gp', 'winC', 'winM', '0', '1', '2', '3', '4', '5', '6', '7', '8'], 'z');
+  ui.team = typeof ui.team === 'string' ? ui.team : null; ui.hide = !!ui.hide; ui.sort = oneOf(String(ui.sort), ['z', 'n', 'own', 't', 'pos', 'po', 'gp', 'winC', 'winM', '0', '1', '2', '3', '4', '5', '6', '7', '8'], 'z');
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
@@ -1717,9 +1718,16 @@ tbody tr:hover td{background:var(--sunk)}
     return po.pg;
   }
   // Win C / Win M (Engine.evaluate, as on the Draft tab); with a saved team in Settings the league's rosters fill the slots
+  // the team Win is measured for: its own pick here, else the Settings team (null = none)
+  const myTeam = () => SS.league ? (ui.team == null ? LS.defaultTeam(LS.local.get, SS.league.id) : ui.team === 'none' ? null : ui.team) : null;
+  function fillTeams() {
+    const ids = rosters ? Object.keys(rosters).sort() : [], key = ids.map(id => id + teamName[id]).join('|'), sel = $('myteam');
+    if (sel.dataset.key !== key) { sel.dataset.key = key; sel.innerHTML = '<option value="none">No team</option>' + ids.map(id => '<option value="' + esc(id) + '">' + esc(teamName[id] || id) + '</option>').join(''); }
+    const me = myTeam(); sel.value = me != null && ids.includes(me) ? me : 'none'; sel.disabled = !ids.length;
+  }
   const win = { key: '', w: null, seq: 0, mine: false, wait: false };
   function winLists(rows, tab, own, s) {
-    const me = SS.league ? LS.defaultTeam(LS.local.get, SS.league.id) : null, ids = rosters ? Object.keys(rosters).sort() : [];
+    const me = myTeam(), ids = rosters ? Object.keys(rosters).sort() : [];
     if (me == null || ids.length !== s.teams || !ids.includes(me)) return null;
     const rk = new Map(tab.filter(t => t.z != null).map((t, i) => [t.pid, i])), by = {};
     own.forEach((v, pid) => { if (v.slot !== 'IR' && rk.has(pid)) (by[v.owner] = by[v.owner] || []).push(pid); });
@@ -1755,7 +1763,7 @@ tbody tr:hover td{background:var(--sunk)}
 
   function draw() {
     const rows = sourceRows(), n = $('note');
-    $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
+    fillTeams(); $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
     if (WINDAYS[ui.src] && !windowOf().rows.length) { $('tbl').innerHTML = ''; n.textContent = 'No games in the box-score files yet; the table fills in as the season is played.'; return; }
     const tab0 = tableFor(rows), tab = R.withPlayoffs(tab0, rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
     if (s.cats !== 9) W[8] = 0;
@@ -1799,6 +1807,7 @@ tbody tr:hover td{background:var(--sunk)}
   function syncW() { cwSel.forEach(el => { const c = +el.dataset.c, v = ui.cw[c]; el.value = String(v); el.className = v === 0 ? 'off' : v !== R.WEIGHTS[c] ? 'chg' : ''; el.disabled = c === 8 && settings().cats === 8; }); }
   function sync() { $('zdrop').value = ui.zdrop; $('winvs').value = ui.winvs; $('show').value = String(ui.show); document.querySelectorAll('#posf input').forEach(i => { i.checked = ui.pos.includes(i.value); }); syncW(); $('src').value = ui.src; $('type').value = ui.type; $('basis').value = ui.basis; $('stats').value = ui.stats; $('poboost').value = ui.poboost; }
   [['src', 'src'], ['type', 'type'], ['basis', 'basis'], ['stats', 'stats'], ['poboost', 'poboost']].forEach(([id, k]) => $(id).addEventListener('change', () => { ui[k] = $(id).value; save(); draw(); }));
+  $('myteam').addEventListener('change', () => { ui.team = $('myteam').value; save(); draw(); });
   [['zdrop', v => v], ['winvs', v => v], ['show', Number]].forEach(([id, f]) => $(id).addEventListener('change', () => { ui[id] = f($(id).value); save(); draw(); }));
   $('q').addEventListener('input', () => { query = $('q').value; draw(); });
   $('posf').addEventListener('change', () => { ui.pos = [...document.querySelectorAll('#posf input:checked')].map(i => i.value); save(); draw(); });

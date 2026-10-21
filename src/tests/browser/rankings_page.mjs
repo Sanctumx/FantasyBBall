@@ -112,6 +112,13 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   const mineRows = own.filter(([o]) => o !== 'Free agent'), faRows = own.filter(([o]) => o === 'Free agent');
   ok(own.every(([, m]) => m !== '…'), 'all Win cells have filled in');
   ok(faRows.length > 20 && faRows.every(([, m]) => /\d/.test(m)), 'free agents have a Win M');
+  const saved = await p.$eval('#myteam', e => e.value);
+  ok(saved !== 'none' && await p.$$eval('#myteam option', o => o.length) === 15, 'My team starts as the Settings team, lists No team + 14 teams');
+  await p.selectOption('#myteam', 'none'); await p.waitForTimeout(1500);
+  ok(/add a team in Settings/.test(await p.$eval('#note', e => e.textContent)), 'No team: note drops the roster wording');
+  const other = await p.$$eval('#myteam option', o => o.map(x => x.value).filter(v => v !== 'none')).then(l => l.find(v => v !== saved));
+  await p.selectOption('#myteam', other); await p.waitForTimeout(3500);
+  ok(/spot of your weakest player/.test(await p.$eval('#note', e => e.textContent)) && await p.$eval('#myteam', e => e.value) === other, 'picking another team measures for it');
   ok(errs.length === 0, '3b: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
