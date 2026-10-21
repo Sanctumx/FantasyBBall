@@ -1345,8 +1345,9 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
     let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
     return w;
   }
-  function pairTeam(R, projErr) {
+  function pairTeam(R, projErr, K) {
     let fga = 0, fgm = 0, fta = 0, ftm = 0;
+    if (K) { fga = K.fga; fgm = K.fgm; fta = K.fta; ftm = K.ftm; }
     R.forEach(e => { if (!(e.games > 0)) return; fga += e.p.fga * e.games; fgm += e.p.fgp * e.p.fga * e.games; fta += e.p.fta * e.games; ftm += e.p.ftp * e.p.fta * e.games; });
     const ref = { pFG: fga > 0 ? fgm / fga : 0, pFT: fta > 0 ? ftm / fta : 0 };
     const s = new Array(NC).fill(1); s[0] = fga > 0 ? 1 / fga : 0; s[1] = fta > 0 ? 1 / fta : 0;
@@ -1364,22 +1365,33 @@ const SCHED={"weeks":["2026-10-20","2026-10-26","2026-11-02","2026-11-09","2026-
       }
     });
     mean[0] = ref.pFG; mean[1] = ref.pFT;
+    if (K) { mean[2] += K.tpm; mean[3] += K.pts; mean[4] += K.reb; mean[5] += K.ast; mean[6] += K.stl; mean[7] += K.blk; mean[8] -= K.to; }
     const lam = new Float64Array(NC);
     for (let c = 0; c < NC; c++) { lam[c] = S > 0 ? lsum[c] / S : 0; idio[c] += Math.max(0, q[c] - lam[c] * lam[c] * S); }
     return { mean, idio, lam, S };
   }
+  // opts.known = [kA, kB]: each team's so-far totals { fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to }, counted with no variance;
+  // the entries are then the games still to play. With nothing known the result is unchanged. A category with no variance left
+  // is decided exactly (win 1, tie 0.5, loss 0).
   function pairMatchup(A, B, opts) {
-    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false;
-    const a = pairTeam(A, pe), b = pairTeam(B, pe), cat = [];
+    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false, kn = o.known || [null, null];
+    const a = pairTeam(A, pe, kn[0]), b = pairTeam(B, pe, kn[1]), cat = [];
+    const step = (d, v) => o.known && v < 1e-12 ? (d > 1e-12 ? 1 : d < -1e-12 ? 0 : 0.5) : null;
     for (let c = 0; c < NC; c++) {
       if (c >= nc) { cat.push(null); continue; }
-      cat.push(Phi((a.mean[c] - b.mean[c]) / Math.sqrt(a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S + 1e-9)));
+      const d = a.mean[c] - b.mean[c], v = a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S, st = step(d, v);
+      cat.push(st != null ? st : Phi(d / Math.sqrt(v + 1e-9)));
     }
     const sa = Math.sqrt(a.S), sb = Math.sqrt(b.S), ps = new Array(nc);
     let match = 0;
     for (let j = 0; j < GH_Z.length; j++) for (let k = 0; k < GH_Z.length; k++) {
-      for (let c = 0; c < nc; c++) ps[c] = Phi((a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k]) / Math.sqrt(a.idio[c] + b.idio[c] + 1e-9));
-      match += GH_W[j] * GH_W[k] * matchProbN(ps, nc);
+      let n = 0;   // categories tied exactly (known totals only) count for neither side
+      for (let c = 0; c < nc; c++) {
+        const d = a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k], v = a.idio[c] + b.idio[c], st = step(d, v + a.S + b.S);
+        if (st === 0.5) continue;
+        ps[n++] = st != null ? st : Phi(d / Math.sqrt(v + 1e-9));
+      }
+      match += GH_W[j] * GH_W[k] * matchProbN(n < nc ? ps.slice(0, n) : ps, n);
     }
     const mu = t => Array.from(t.mean, (x, c) => c === TO ? -x : x);
     return { cat, match, mu: [mu(a), mu(b)] };

@@ -16,6 +16,7 @@ const SEED = (my = TEAMS[0]) => ({
   'courtside-leagues-v1': JSON.stringify([{ id: LID, name: 'Home', myTeam: my, used: 1 }]) });
 const fails = []; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.push(m); };
 
+const errs0 = a => a.errs.length === 0;
 const b = await chromium.launch();
 async function open(opts = {}) {
   const seed = opts.seed === undefined ? SEED() : opts.seed; let calls = 0;
@@ -27,6 +28,7 @@ async function open(opts = {}) {
     r.fulfill({ body: FX[what] || '{}', contentType: 'application/json' });
   });
   await ctx.route(/stats\/espn\.json/, r => opts.noStats ? r.fulfill({ status: 404, body: 'nope' }) : r.fulfill({ body: ESPN, contentType: 'application/json' }));
+  await ctx.route(/stats\/box-.*\.json/, r => opts.box ? r.fulfill({ body: fx('box_week1.json'), contentType: 'application/json' }) : r.fulfill({ status: 404, body: 'nope' }));
   await ctx.addInitScript(t => { Date.now = () => t; }, NOW);
   await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.clear(); Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)); sessionStorage.setItem('seeded', '1'); } }, seed);
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
@@ -156,6 +158,16 @@ async function open(opts = {}) {
 { const { p, errs, ctx, calls } = await open({ seed: {} });
   ok(!!(await p.$('#msg a[href="settings.html"]')) && /Load a league in/.test(await p.textContent('#msg')) && calls() === 0 && errs.length === 0, 'no league: prompt with Settings link, no request');
   ok(await p.$eval('#body', e => e.hidden), 'no league: analyzers hidden');
+  await ctx.close(); }
+
+// week status: box scores of the current week -> so-far and rest tables, Win M counts the played games
+{ const a = await open(); ok(await a.p.$eval('#status', e => e.hidden), 'no box files: no status tables'); ok(errs0(a), 'no box: no errors'); await a.ctx.close();
+  const { p, errs, ctx } = await open({ box: true });
+  ok(!(await p.$eval('#status', e => e.hidden)), 'box games: status tables shown');
+  ok(await p.$$eval('#st-sofar tbody tr', r => r.length) === 9 && await p.$$eval('#st-rest tbody tr', r => r.length) === 9, 'both status tables list 9 categories');
+  ok(/so far counted/.test(await p.textContent('#kpis')), 'Win M label says played games are counted');
+  ok(await p.$$eval('#st-sofar tbody tr', r => +r[3].cells[1].textContent) > 0, 'so far table shows the played points (' + await p.$$eval('#st-sofar tbody tr', r => r[3].cells[1].textContent) + ')');
+  ok(errs.length === 0, 'box: no errors ' + errs.join('; '));
   await ctx.close(); }
 
 { const { p, errs, ctx } = await open({ noStats: true });

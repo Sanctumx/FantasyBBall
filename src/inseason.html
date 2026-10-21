@@ -158,6 +158,12 @@ tr.click{cursor:pointer}
           <h2><span class="vs" id="vs">You vs opponent</span><span class="meta" id="vs-dates"></span></h2>
           <div class="kpis" id="kpis"></div>
           <div class="scroll"><table id="cats"></table></div>
+          <div id="status" hidden>
+            <h3>So far this week <span class="meta" id="st-note"></span></h3>
+            <div class="scroll"><table id="st-sofar"></table></div>
+            <h3>Rest of the week, projected</h3>
+            <div class="scroll"><table id="st-rest"></table></div>
+          </div>
         </section>
         <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
           <section class="panel">
@@ -250,7 +256,7 @@ tr.click{cursor:pointer}
   const memo = new Map(); let memoGen = 0;
   const memoed = (key, fn) => { if (!memo.has(key)) memo.set(key, fn()); return memo.get(key); };
   const dayKey = () => InL.localDay(Date.now());
-  let L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
+  let L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, box = [], fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
 
   let SS = LS.load(LS.local.get);
   const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
@@ -270,6 +276,12 @@ tr.click{cursor:pointer}
   async function loadStats() {
     try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
   }
+  // box-score files of the matchup week (collector: stats/box-YYYY-MM.json); a missing file is just no games yet
+  async function loadBox(L) {
+    const cur = InL.currentPeriod(L, Date.now()), per = L.periods.find(p => p.n === cur);
+    if (!per) return [];
+    return Promise.all(InL.periodMonths(per).map(async m => { try { const r = await fetch('stats/box-' + m + '.json', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (e) { return null; } }));
+  }
   async function load() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
     memo.clear(); memoGen++; $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
@@ -281,8 +293,9 @@ tr.click{cursor:pointer}
       const league = await fxGet('league', id), ros = await fxGet('rosters', id), st = await fxGet('standings', id);
       if (!fxPlayers) fxPlayers = await fxGet('players');
       const stats = await loadStats();
+      const boxes = await loadBox(InL.parseLeague(league));
       if (seq !== loadSeq) return;
-      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; fetchedAt = new Date();
+      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; box = boxes; fetchedAt = new Date();
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
       Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
       fxWait = 0; say(''); start();
@@ -333,7 +346,9 @@ tr.click{cursor:pointer}
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
   const ctxFor = team => memoed('ctx|' + team + '|' + dayKey(), () => Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now() }));
   const addsLeft = n => { const v = ui.adds[ui.leagueId + ':' + n]; return v != null ? v : 4; };
-  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey()].join('|'), () => Matchup.projectWeek(c, c.me, n));
+  const hasBox = () => (box || []).some(f => f && Object.keys(f.games || {}).length);
+  // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
+  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : Matchup.projectWeek(c, c.me, n));
   const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey()].join('|'), () => Matchup.simpleAdds(c, n, { limit: 20 }));
   const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey()].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left }) : Matchup.addPlan(c, { periods: [n] }));
   // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
@@ -366,10 +381,19 @@ tr.click{cursor:pointer}
     const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
-    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): whole week projected, results so far not counted</span></div>' +
+    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): ' + (pw.known ? 'games played so far counted, the rest projected' : 'whole week projected, results so far not counted') + '</span></div>' +
       '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
     $('cats').innerHTML = '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
       CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
+    const shown = !!pw.known; $('status').hidden = !shown;
+    if (shown) {
+      const sofar = k => CATS.map((c, i) => i === 0 ? (k.fga ? k.fgm / k.fga : 0) : i === 1 ? (k.fta ? k.ftm / k.fta : 0) : [k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to][i - 2]);
+      const tbl = (a, b) => '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th></tr></thead><tbody>' + CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(a[i], i) + '</td><td>' + fmtStat(b[i], i) + '</td></tr>').join('') + '</tbody>';
+      const sa = sofar(pw.known[0]), sb = sofar(pw.known[1]);
+      $('st-sofar').innerHTML = tbl(sa, sb);
+      $('st-rest').innerHTML = tbl(pw.rest[0], pw.rest[1]);
+      $('st-note').textContent = 'estimate from your current roster box scores (no roster history)';
+    }
     // best single adds
     const rows = mAdds(ctx, n);
     $('adds').innerHTML = rows.length ? '<thead><tr><th class="l">Add</th><th>Pos</th><th>Team</th><th>Games</th><th class="l">Drop</th><th>Win M</th><th>+Win M</th></tr></thead><tbody>' +

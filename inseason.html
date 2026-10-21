@@ -248,6 +248,12 @@ tr.click{cursor:pointer}
           <h2><span class="vs" id="vs">You vs opponent</span><span class="meta" id="vs-dates"></span></h2>
           <div class="kpis" id="kpis"></div>
           <div class="scroll"><table id="cats"></table></div>
+          <div id="status" hidden>
+            <h3>So far this week <span class="meta" id="st-note"></span></h3>
+            <div class="scroll"><table id="st-sofar"></table></div>
+            <h3>Rest of the week, projected</h3>
+            <div class="scroll"><table id="st-rest"></table></div>
+          </div>
         </section>
         <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
           <section class="panel">
@@ -1157,8 +1163,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
     return w;
   }
-  function pairTeam(R, projErr) {
+  function pairTeam(R, projErr, K) {
     let fga = 0, fgm = 0, fta = 0, ftm = 0;
+    if (K) { fga = K.fga; fgm = K.fgm; fta = K.fta; ftm = K.ftm; }
     R.forEach(e => { if (!(e.games > 0)) return; fga += e.p.fga * e.games; fgm += e.p.fgp * e.p.fga * e.games; fta += e.p.fta * e.games; ftm += e.p.ftp * e.p.fta * e.games; });
     const ref = { pFG: fga > 0 ? fgm / fga : 0, pFT: fta > 0 ? ftm / fta : 0 };
     const s = new Array(NC).fill(1); s[0] = fga > 0 ? 1 / fga : 0; s[1] = fta > 0 ? 1 / fta : 0;
@@ -1176,22 +1183,33 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       }
     });
     mean[0] = ref.pFG; mean[1] = ref.pFT;
+    if (K) { mean[2] += K.tpm; mean[3] += K.pts; mean[4] += K.reb; mean[5] += K.ast; mean[6] += K.stl; mean[7] += K.blk; mean[8] -= K.to; }
     const lam = new Float64Array(NC);
     for (let c = 0; c < NC; c++) { lam[c] = S > 0 ? lsum[c] / S : 0; idio[c] += Math.max(0, q[c] - lam[c] * lam[c] * S); }
     return { mean, idio, lam, S };
   }
+  // opts.known = [kA, kB]: each team's so-far totals { fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to }, counted with no variance;
+  // the entries are then the games still to play. With nothing known the result is unchanged. A category with no variance left
+  // is decided exactly (win 1, tie 0.5, loss 0).
   function pairMatchup(A, B, opts) {
-    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false;
-    const a = pairTeam(A, pe), b = pairTeam(B, pe), cat = [];
+    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, pe = o.projErr !== false, kn = o.known || [null, null];
+    const a = pairTeam(A, pe, kn[0]), b = pairTeam(B, pe, kn[1]), cat = [];
+    const step = (d, v) => o.known && v < 1e-12 ? (d > 1e-12 ? 1 : d < -1e-12 ? 0 : 0.5) : null;
     for (let c = 0; c < NC; c++) {
       if (c >= nc) { cat.push(null); continue; }
-      cat.push(Phi((a.mean[c] - b.mean[c]) / Math.sqrt(a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S + 1e-9)));
+      const d = a.mean[c] - b.mean[c], v = a.idio[c] + b.idio[c] + a.lam[c] * a.lam[c] * a.S + b.lam[c] * b.lam[c] * b.S, st = step(d, v);
+      cat.push(st != null ? st : Phi(d / Math.sqrt(v + 1e-9)));
     }
     const sa = Math.sqrt(a.S), sb = Math.sqrt(b.S), ps = new Array(nc);
     let match = 0;
     for (let j = 0; j < GH_Z.length; j++) for (let k = 0; k < GH_Z.length; k++) {
-      for (let c = 0; c < nc; c++) ps[c] = Phi((a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k]) / Math.sqrt(a.idio[c] + b.idio[c] + 1e-9));
-      match += GH_W[j] * GH_W[k] * matchProbN(ps, nc);
+      let n = 0;   // categories tied exactly (known totals only) count for neither side
+      for (let c = 0; c < nc; c++) {
+        const d = a.mean[c] - b.mean[c] + a.lam[c] * sa * GH_Z[j] - b.lam[c] * sb * GH_Z[k], v = a.idio[c] + b.idio[c], st = step(d, v + a.S + b.S);
+        if (st === 0.5) continue;
+        ps[n++] = st != null ? st : Phi(d / Math.sqrt(v + 1e-9));
+      }
+      match += GH_W[j] * GH_W[k] * matchProbN(n < nc ? ps.slice(0, n) : ps, n);
     }
     const mu = t => Array.from(t.mean, (x, c) => c === TO ? -x : x);
     return { cat, match, mu: [mu(a), mu(b)] };
@@ -1497,6 +1515,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const localDay = ms => new Date(ms - LOCAL).toISOString().slice(0, 10);
   const dayStart = day => Date.parse(day + 'T00:00:00Z') + LOCAL;
   const nextDayStart = ms => dayStart(localDay(ms)) + DAY;
+  // New York calendar date of an instant, the date ESPN files a game under; the months ('YYYY-MM') a period touches
+  const nyDay = ms => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  function periodMonths(per) {
+    const a = nyDay(per.start).slice(0, 7), b = nyDay(per.end - 1).slice(0, 7), out = [a];
+    if (b !== a) out.push(b);
+    return out;
+  }
 
   // Expected games for each roster entry {t: team code, a: availability 0-1, from, to (ms, [from, to))}: the team's tip-offs
   // in the window, each worth a. On a local day where the entries' combined value exceeds maxActive (only that many
@@ -1509,7 +1534,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return hits.map(h => h.reduce((acc, [d, a]) => acc + a * (sum[d] > maxActive ? maxActive / sum[d] : 1), 0));
   }
 
-  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, rosterGames };
+  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodMonths, rosterGames };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InLeague = api;
 })(this);
 
@@ -1684,6 +1709,65 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return Object.assign({ opp }, scoreSegments(ctx, teamSegments(ctx, teamId, n), teamSegments(ctx, opp, n)));
   }
 
+  // ---- week status: box-score totals so far + the games still to play (idea 118, 2026-10-21) ----
+  const KCOLS = ['fgm', 'fga', 'ftm', 'fta', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+  const zeroK = () => { const k = {}; KCOLS.forEach(c => { k[c] = 0; }); return k; };
+  const kOf = (k0, r) => k0 + (1 - k0) * (1 - r);   // shrink eases to 1 as the week ends (r = share of the week's games still to play)
+
+  // monthly stats/box-YYYY-MM.json objects → the period's lines per player and each team's latest game date (ESPN abbreviations mapped)
+  function boxLines(files, per) {
+    const from = InLeague.nyDay(per.start), to = InLeague.nyDay(per.end - 1), players = new Map(), lastDay = {};
+    (files || []).filter(Boolean).forEach(f => Object.keys(f.games || {}).forEach(id => {
+      const g = f.games[id];
+      if (g.d < from || g.d > to) return;
+      Object.keys(g.teams).forEach(abbr => {
+        const t = InLeague.toProjTeam(abbr) || abbr;
+        if (!lastDay[t] || g.d > lastDay[t]) lastDay[t] = g.d;
+        g.teams[abbr].forEach(l => {
+          const v = {}; f.cols.forEach((c, i) => { v[c] = l[i + 1]; });
+          if (!(v.min > 0)) return;
+          const a = players.get(l[0]) || { id: l[0], n: InPlayers.OVERRIDES.espn[l[0]] || (f.names || {})[l[0]] || String(l[0]), t, d: '', lines: [] };
+          if (g.d >= a.d) { a.d = g.d; a.t = t; }
+          a.lines.push({ d: g.d, v }); players.set(l[0], a);
+        });
+      });
+    }));
+    return { players, lastDay };
+  }
+  // the instant after a team's latest boxed game tipped off (the period's start when it has none yet)
+  function cutoffOf(ctx, bx, team, per) {
+    const day = bx.lastDay[team];
+    if (!day) return per.start;
+    const tip = ((ctx.DAYS.games || ctx.DAYS)[team] || []).map(s => s * 1000).find(ms => InLeague.nyDay(ms) === day);
+    return Math.max(per.start, (tip != null ? tip : Date.parse(day + 'T00:00:00Z') + 28 * 3600e3) + 1);
+  }
+
+  // Both teams' status for period n: so-far totals (box lines of the current non-IR roster, at most maxActive players per day),
+  // the rest of the week projected from each team's own cutoff, and chances for the final result. FG% / FT% come from summed makes and
+  // attempts. Variance of the remaining games scales with the share of games left; the shrink eases from K to 1 with that share.
+  function weekStatus(ctx, files, teamId, n) {
+    const opp = InLeague.opponentOf(ctx.L, teamId, n);
+    if (!opp) return { opp: null };
+    const per = periodOf(ctx.L, n), bx = boxLines(files, per);
+    const list = Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id }));
+    const side = tid => {
+      const segs = teamSegments(ctx, tid, n), pp = segs.map(s => ctx.pool.byKey.get(s.key)), known = zeroK(), byDay = {};
+      pp.forEach(p => {
+        const m = InPlayers.matchTo(list, p.n, p.t), b = m && bx.players.get(m.id);
+        if (b) b.lines.forEach(l => (byDay[l.d] || (byDay[l.d] = [])).push({ p, v: l.v }));
+      });
+      Object.keys(byDay).forEach(d => byDay[d].sort((a, b) => valueOf(ctx, b.p) - valueOf(ctx, a.p)).slice(0, ctx.L.maxActive).forEach(x => KCOLS.forEach(c => { known[c] += x.v[c] || 0; })));
+      const rest = segs.map((s, i) => ({ key: s.key, from: Math.max(s.from, cutoffOf(ctx, bx, pp[i].t, per)), to: s.to }));
+      const whole = segGames(ctx, segs), left = segGames(ctx, rest);
+      return { known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
+        entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * (whole[i] > 0 ? left[i] / whole[i] : 0) })) };
+    };
+    const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
+    const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
+    return { opp, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
+      known: [A.known, B.known], games: [A.leftG, B.leftG], share };
+  }
+
   function addFrom(ctx, n) {
     const per = periodOf(ctx.L, n);
     return n === ctx.cur ? Math.max(per.start, InLeague.nextDayStart(ctx.nowMs)) : per.start;
@@ -1768,7 +1852,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return plan;
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, makeCtx, teamSegments, scoreSegments, projectWeek, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { GVAR, K_MATCH, K_CAT, makeCtx, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
 
@@ -1925,7 +2009,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const memo = new Map(); let memoGen = 0;
   const memoed = (key, fn) => { if (!memo.has(key)) memo.set(key, fn()); return memo.get(key); };
   const dayKey = () => InL.localDay(Date.now());
-  let L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
+  let L = null, rosters = null, standings = null, pool = null, ctx = null, espn = null, box = [], fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
 
   let SS = LS.load(LS.local.get);
   const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
@@ -1945,6 +2029,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   async function loadStats() {
     try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
   }
+  // box-score files of the matchup week (collector: stats/box-YYYY-MM.json); a missing file is just no games yet
+  async function loadBox(L) {
+    const cur = InL.currentPeriod(L, Date.now()), per = L.periods.find(p => p.n === cur);
+    if (!per) return [];
+    return Promise.all(InL.periodMonths(per).map(async m => { try { const r = await fetch('stats/box-' + m + '.json', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (e) { return null; } }));
+  }
   async function load() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
     memo.clear(); memoGen++; $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
@@ -1956,8 +2046,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       const league = await fxGet('league', id), ros = await fxGet('rosters', id), st = await fxGet('standings', id);
       if (!fxPlayers) fxPlayers = await fxGet('players');
       const stats = await loadStats();
+      const boxes = await loadBox(InL.parseLeague(league));
       if (seq !== loadSeq) return;
-      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; fetchedAt = new Date();
+      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; box = boxes; fetchedAt = new Date();
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
       Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
       fxWait = 0; say(''); start();
@@ -2008,7 +2099,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
   const ctxFor = team => memoed('ctx|' + team + '|' + dayKey(), () => Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now() }));
   const addsLeft = n => { const v = ui.adds[ui.leagueId + ':' + n]; return v != null ? v : 4; };
-  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey()].join('|'), () => Matchup.projectWeek(c, c.me, n));
+  const hasBox = () => (box || []).some(f => f && Object.keys(f.games || {}).length);
+  // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
+  const mPW = (c, n) => memoed(['pw', c.me, n, dayKey(), hasBox() ? 'b' : ''].join('|'), () => n === c.cur && hasBox() ? Matchup.weekStatus(c, box, c.me, n) : Matchup.projectWeek(c, c.me, n));
   const mAdds = (c, n) => memoed(['ad', c.me, n, dayKey()].join('|'), () => Matchup.simpleAdds(c, n, { limit: 20 }));
   const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey()].join('|'), () => n === c.cur ? Matchup.addPlan(c, { addsLeft: left }) : Matchup.addPlan(c, { periods: [n] }));
   // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
@@ -2041,10 +2134,19 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
     const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
-    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): whole week projected, results so far not counted</span></div>' +
+    $('kpis').innerHTML = '<div class="kpi big ' + band(pw.match) + '"><b id="winm">' + pct(pw.match) + '%</b><span>chance to win the matchup (Win M): ' + (pw.known ? 'games played so far counted, the rest projected' : 'whole week projected, results so far not counted') + '</span></div>' +
       '<div class="kpi"><b>' + pw.games[0].toFixed(1) + '</b><span>your expected games</span></div><div class="kpi"><b>' + pw.games[1].toFixed(1) + '</b><span>their expected games</span></div>';
     $('cats').innerHTML = '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th><th>Win %</th></tr></thead><tbody>' +
       CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(pw.mu[0][i], i) + '</td><td>' + fmtStat(pw.mu[1][i], i) + '</td><td>' + chip(pw.cat[i], pct(pw.cat[i])) + '</td></tr>').join('') + '</tbody>';
+    const shown = !!pw.known; $('status').hidden = !shown;
+    if (shown) {
+      const sofar = k => CATS.map((c, i) => i === 0 ? (k.fga ? k.fgm / k.fga : 0) : i === 1 ? (k.fta ? k.ftm / k.fta : 0) : [k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to][i - 2]);
+      const tbl = (a, b) => '<thead><tr><th class="l">Category</th><th>You</th><th>Them</th></tr></thead><tbody>' + CATS.map((c, i) => '<tr><td class="l">' + c.l + '</td><td>' + fmtStat(a[i], i) + '</td><td>' + fmtStat(b[i], i) + '</td></tr>').join('') + '</tbody>';
+      const sa = sofar(pw.known[0]), sb = sofar(pw.known[1]);
+      $('st-sofar').innerHTML = tbl(sa, sb);
+      $('st-rest').innerHTML = tbl(pw.rest[0], pw.rest[1]);
+      $('st-note').textContent = 'estimate from your current roster box scores (no roster history)';
+    }
     // best single adds
     const rows = mAdds(ctx, n);
     $('adds').innerHTML = rows.length ? '<thead><tr><th class="l">Add</th><th>Pos</th><th>Team</th><th>Games</th><th class="l">Drop</th><th>Win M</th><th>+Win M</th></tr></thead><tbody>' +
