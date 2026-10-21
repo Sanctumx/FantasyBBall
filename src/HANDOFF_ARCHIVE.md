@@ -8,6 +8,18 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
+108. **Settings tab (2026-10-20, in progress, tasks 1-2 of 10 done).** The user wants to set the league once and have every tab read it,
+instead of syncing per tab. Design `docs/superpowers/specs/2026-10-20-settings-tab-design.md`, plan `docs/superpowers/plans/2026-10-20-settings-tab.md`
+(branch `settings-tab`, cut from `matchup-trade-analyzers`). Rulings: League Dashboard analyzes the league's current Fantrax rosters (not a draft);
+Load overwrites the settings it fetches with a one-line note; Draft is separate from the league (Load never touches picks/log/slot; slot, order,
+draft field and saved drafts stay on Draft; explicit "Import draft from league" button); team picker on every tab, not shared, remembered per tab
+and league; IR players left out on League (counting them is #109, tabled). Fantrax public league data has no scoring, categories, IL or playoff
+start, so Load fills teams, roster size and lineup slots only. Done: `src/league_store.js` (`LeagueStore`: store, migration from the old keys, saved
+leagues, `pickTeam`, Fantrax mapping, playoff-week helpers, `fxDraftPlan`) with `league_store.test.js` and `league_store_fx.test.js`; 112 unit tests pass.
+Same session also shipped (unpushed, on `matchup-trade-analyzers`): toolbar labels Draft / League / Matchup / Trade; Trade Builder table with a Zscore row
+per category, a Total column, no Average row, value colors only on the Zscore row, centered summary tiles, Zscore tiles without type or basis.
+
+
 107. **Trade Builder Zscore (2026-10-20).** The Trade Builder table gets a Zscore column (per player, Average and Total rows) and the summary adds tiles for each team's Zscore change and for the Zscore each side receives; dropdowns Zscore type (Normal = the board's Standard, H2H-Adjusted, ROTO-Adjusted) and Basis (Per game default, Season, Mix). Values come from `Engine.buildContext` over `players.json` (default league, Average projections, TO x0.5), memoized per basis in `InPlayers.zscoreOf`; `pid` (index into players.json) is now on each pool player. Players without a projection show a dash and are left out of sums. The two teams' changes always cancel, so there is no Total Zscore tile. The types are on different scales (Wembanyama about +11.7 Normal, ROTO-Adjusted about 2.5x smaller); the Zscore always uses the projection, not the Current stat view.
 
 106. **Toolbar sections and the saved trade search (2026-10-20).** The toolbar is Draft Kit | League Dashboard | Matchup Analyzer | Trade Analyzer; the last two are sections of `inseason.html` chosen by the hash, switching without a reload. The trade candidates (every one-for-one for each of my players) are kept in `localStorage` (`courtside-trade-cands-v1`, last 3 signatures) keyed by `Trade.candSig`: rosters, my team, period, day, `TRADE_W`, `CAND_VER`. A reload or a visit from another page reuses them (browser test: under 3 s); Sell High / Buy Low are built from the same candidates, so they appear when all of my players are searched (about 10 s the first time, 0.7 s per player).

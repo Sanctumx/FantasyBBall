@@ -30,7 +30,7 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 - **Works:** board, Fantrax live sync (backoff + Worker cache), saved drafts/leagues (rename, import/export), League
   Dashboard, ADP/draft collector (GitHub Actions every 6 h).
 - **Built, not pushed:** In-season tools (Matchup Analyzer and Trade Analyzer sections of `inseason.html`, linked in the toolbar; ideas 95-107)
-  on branch `matchup-trade-analyzers`. Spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
+  on branch `matchup-trade-analyzers` (the Settings tab, idea 108, is in progress on `settings-tab`). Spec `docs/superpowers/specs/2026-10-20-matchup-and-trade-analyzer-design.md`, plan
   `docs/superpowers/plans/2026-10-20-matchup-and-trade-analyzer.md`; Tasks 1-13 steps 1-4 done (modules `inseason_league.js`,
   `inseason_players.js`, `matchup_core.js`, `trade_core.js`, page `inseason.html`; `Engine.pairMatchup` is the only engine change,
   additions only, pinned by `engine_golden.test.js`). Ledger with every ruling: `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md`
@@ -106,14 +106,18 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 
 ## Next session starts with
 
-In-season tools are built on `matchup-trade-analyzers`, reviewed (Opus) and extended this session (ideas 104-107: finder filters and
-Any, text boxes, every one-for-one with a scrollbar, saved trade search, Matchup Analyzer / Trade Analyzer as toolbar sections,
-Zscore column and tiles with type and basis, likelihood bias -0.75). Tests pass (95 unit, In-Season and League browser checks).
-Left open: a traded player's games still come from his preseason team in `players.json`; likelihood bias is a guess (#98); Win M
-ignores results so far (#103). Last-season ESPN stats stay as is (none exist for this season; the banner says "last season").
-Next: wait for the user's "push", then the release steps (build check, PR, merge, republish the board artifact, trigger `collect-stats`).
-Local look: `node dev.mjs <repo root>` style server (static files plus the real Worker for `/api/fantrax`) is the way to see Fantrax data
-locally (wrangler is not installed); Playwright lives in an earlier session's scratchpad `pw/` (or `npm i playwright@1.48.2` and
-`npx playwright install chromium` in a scratch folder; run `src/tests/browser/*.mjs` with `REPO=<repo root>`, repo root served on :8765).
-Standing rule (user, 2026-10-20): keep running plan tasks unless something needs the user; once past the context limit
-(Messages > ~115K), finish the task, record it and stop; don't autorun the next one.
+**Settings tab, branch `settings-tab` (from `matchup-trade-analyzers`), tasks 1-2 of 10 done** (store module and helpers, 112 unit tests pass).
+Start at **Task 3** of `docs/superpowers/plans/2026-10-20-settings-tab.md` (toolbar fifth link, `gen.py` / `build_site.py` / CLAUDE.md build line
+for `settings.html`, empty Settings page), then Tasks 4-10 in order; execute inline, tests first, one review at the end. Spec:
+`docs/superpowers/specs/2026-10-20-settings-tab-design.md`. Rulings are in the archive entry 108. Config edits for `settings.html` are done
+(`.claude/settings.json` deny, `.claude/rules/pages.md`); the CLAUDE.md build line and blocked-list edit comes with Task 3.
+The In-Season tools (ideas 95-107, plus toolbar labels Draft / League / Matchup / Trade and the Trade Builder Zscore row) are built, reviewed and
+committed on `matchup-trade-analyzers`; wait for the user's "push", then the release steps (build check, PR, merge, republish the board artifact,
+trigger `collect-stats`). The Settings branch sits on top of it, so ship them together or the Settings branch after.
+Left open: a traded player's games still come from his preseason team; likelihood bias is a guess (#98); Win M ignores results so far (#103); IR on
+the League tab (#109).
+Local look: `node dev.mjs <repo root>` style server (static files plus the real Worker for `/api/fantrax`); Playwright lives in an earlier session's
+scratchpad `pw/` (or `npm i playwright@1.48.2` and `npx playwright install chromium` in a scratch folder; run `src/tests/browser/*.mjs` with
+`REPO=<repo root>`, repo root served on :8765).
+Standing rule (user, 2026-10-20): keep running plan tasks unless something needs the user; once past the context limit (Messages > ~115K), finish
+the task, record it and stop; don't autorun the next one.
