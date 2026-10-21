@@ -8,6 +8,7 @@
 //  - Arms: E = draft engine catProb/pairProb (season-long, no weekly games); PM-def = pairMatchup default gVar;
 //    PM-bin = gVar n*a*(1-a); PM-sig = gVar 1.87 (SIGMA_G2).
 //  - PM-whole (2026-10-21): the Matchup Analyzer's whole games, games = n (every team game, a = 1), gVar 1.87; -k shrinks it with the same K.
+//  - PM-act: whole games only for players with a game in the 5 days before the week (0 otherwise); PM-actg: the same with the g/82 factor kept.
 //  - Metrics: Brier (matchup, and the 9 categories pooled), 10% reliability bins, calibration slope (OLS of outcome on
 //    chance), bootstrap SE over weeks.
 //  - Pass bar for PM-def: Brier no worse than E (diff <= +1 SE) for matchup and pooled cats on 2025-26 and 2024-25; matchup
@@ -25,8 +26,10 @@ const rng = seed => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013
 const gauss = r => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
 const { P, ctx, cfg: cfg0 } = B.setup(season, { proj: 'avg', realAdp: true });
 const cfg = Object.assign({}, cfg0, { ilSpots: 0, scoring: 'h2h', order: 'snake', slot: 1 });
-const { weekly, nweeks } = DATA[season], G = SCHED[season].games;
-const ARMS = ['E', 'PM-def', 'PM-bin', 'PM-sig', 'PM-sig-k', 'PM-whole', 'PM-whole-k'];
+const { weekly, nweeks } = DATA[season], G = SCHED[season].games, DAILY = require('./bt_daily.json')[season].daily;
+// recent-play filter: a player counts as playing in week w if he has a game in the 5 days before it (about his team's last 2-3 games); week 0 has no history, so all count
+const playing = (pid, w) => w === 0 || (DAILY[String(pid)] || []).some(r => r[0] >= 7 * w - 5 && r[0] <= 7 * w - 1);
+const ARMS = ['E', 'PM-def', 'PM-bin', 'PM-sig', 'PM-sig-k', 'PM-whole', 'PM-whole-k', 'PM-act', 'PM-act-k', 'PM-actg', 'PM-actg-k'];
 // PM-sig-k: PM-sig shrunk toward 0.5, p' = 0.5 + k(p - 0.5); k fit on 2025-26 (OLS slopes of PM-sig: matchup .72, cats .77 on 2025-26, .87 on 2024-25; pooled 0.82)
 const K_MATCH = 0.72, K_CAT = 0.82, shrink = (p, k) => 0.5 + k * (p - 0.5);
 // per arm: rows of [chance, outcome, weekIndex, category (0-8, or 9 = matchup)]
@@ -46,7 +49,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
     if (tot.some(t => t[w][1] === 0)) continue;
     const mk = (t, mode) => t.roster.map(e => {
       const n = (G[e.p.t] || [])[w] || 0, a = Math.min(1, e.p.g / 82), o = { p: e.p, games: n * a };
-      if (mode === 'whole') o.games = n; if (mode === 'bin') o.gVar = n * a * (1 - a); else if (mode === 'sig' || mode === 'whole') o.gVar = 1.87;
+      if (mode === 'whole') o.games = n; if (mode === 'act') o.games = playing(e.p.pid, w) ? n : 0; if (mode === 'actg') o.games = playing(e.p.pid, w) ? n * a : 0; if (mode === 'bin') o.gVar = n * a * (1 - a); else if (mode === 'sig') o.gVar = 1.87; else if (mode === 'whole' || mode === 'act' || mode === 'actg') o.gVar = +(process.env.GV || 1.87);
       return o;
     });
     for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
@@ -57,9 +60,11 @@ for (let seed = 1; seed <= SEEDS; seed++) {
       const put = (arm, cat, m) => { cat.forEach((p, c) => rows[arm].push([p, y[c], w, c])); rows[arm].push([m, ym, w, 9]); };
       const A = res.teams[i], Bt = res.teams[j];
       put('E', [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => res.catProb(A, Bt, c)), res.pairProb(A, Bt));
-      for (const [arm, mode] of [['PM-def', ''], ['PM-bin', 'bin'], ['PM-sig', 'sig'], ['PM-whole', 'whole']]) {
+      for (const [arm, mode] of [['PM-def', ''], ['PM-bin', 'bin'], ['PM-sig', 'sig'], ['PM-whole', 'whole'], ['PM-act', 'act'], ['PM-actg', 'actg']]) {
         const pm = E.pairMatchup(mk(A, mode), mk(Bt, mode)); put(arm, pm.cat, pm.match);
         if (arm === 'PM-sig') put('PM-sig-k', pm.cat.map(p => shrink(p, K_CAT)), shrink(pm.match, K_MATCH));
+        if (arm === 'PM-act') put('PM-act-k', pm.cat.map(p => shrink(p, K_CAT)), shrink(pm.match, K_MATCH));
+        if (arm === 'PM-actg') put('PM-actg-k', pm.cat.map(p => shrink(p, K_CAT)), shrink(pm.match, K_MATCH));
         if (arm === 'PM-whole') put('PM-whole-k', pm.cat.map(p => shrink(p, K_CAT)), shrink(pm.match, K_MATCH));
       }
     }

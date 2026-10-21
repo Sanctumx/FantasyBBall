@@ -6,15 +6,43 @@
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
   const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82;
+  // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
+  const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
 
   const periodOf = (L, n) => L.periods.find(p => p.n === n);
 
-  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref }) {
+  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref, box }) {
     const roster = {};
     Object.keys(rosters).forEach(t => { roster[t] = rosters[t].map(x => x.fid); });
     const projected = pool.players.filter(p => p.src === 'proj');
-    return { L, pool, DAYS, me, nowMs, cur: InLeague.currentPeriod(L, nowMs), ref: ref || InPlayers.makeValueRef(projected.map(p => ({ adp: p.adp, g: p.g, line: p.line }))), roster };
+    const ctx = { L, pool, DAYS, me, nowMs, cur: InLeague.currentPeriod(L, nowMs), ref: ref || InPlayers.makeValueRef(projected.map(p => ({ adp: p.adp, g: p.g, line: p.line }))), roster };
+    const per = periodOf(L, ctx.cur);
+    ctx.curEnd = per ? per.end : 0; ctx.out = outSet(ctx, box);
+    return ctx;
+  }
+
+  // Players who sat out their team's last 3 boxed games are out for the rest of the current week: a player who is playing now most
+  // likely plays his next 3-4 games. Only players matched to a box line are judged, and a team with fewer than 3 boxed games is not.
+  function outSet(ctx, files) {
+    const games = {}, seen = new Map(), out = new Set();
+    (files || []).filter(Boolean).forEach(f => {
+      const mi = f.cols.indexOf('min');
+      Object.keys(f.games || {}).forEach(id => {
+        const g = f.games[id];
+        Object.keys(g.teams).forEach(abbr => {
+          const t = InLeague.toProjTeam(abbr) || abbr, ids = new Set();
+          g.teams[abbr].forEach(l => { if (l[mi + 1] > 0) { ids.add(l[0]); seen.set(l[0], { id: l[0], n: InPlayers.OVERRIDES.espn[l[0]] || (f.names || {})[l[0]] || String(l[0]), t }); } });
+          (games[t] || (games[t] = [])).push({ d: g.d, ids });
+        });
+      });
+    });
+    const list = Array.from(seen.values());
+    Object.keys(ctx.roster).forEach(tid => ctx.roster[tid].forEach(key => {
+      const p = ctx.pool.byKey.get(key), recent = (games[p.t] || []).sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0).slice(-3), m = recent.length >= 3 && InPlayers.matchTo(list, p.n, p.t);
+      if (m && !recent.some(g => g.ids.has(m.id))) out.add(key);
+    }));
+    return out;
   }
 
   // whole-period window; IR players sit out only in the current period
@@ -32,7 +60,7 @@
       return InLeague.rosterGames(segs.map((s, i) => ({ t: pp[i].t, a: Math.min(1, pp[i].g / 82), from: s.from, to: s.to })), ctx.DAYS, ctx.L.maxActive, used);
     }
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, pp = segs.map(s => ctx.pool.byKey.get(s.key)), byDay = {}, out = segs.map(() => 0);
-    segs.forEach((s, i) => (G[pp[i].t] || []).map(x => x * 1000).filter(ms => ms >= s.from && ms < s.to).forEach(ms => {
+    segs.forEach((s, i) => (ctx.out && ctx.out.has(s.key) && s.from < ctx.curEnd ? [] : G[pp[i].t] || []).map(x => x * 1000).filter(ms => ms >= s.from && ms < s.to).forEach(ms => {
       const d = InLeague.localDay(ms);
       (byDay[d] || (byDay[d] = [])).push(i);
     }));
@@ -48,7 +76,7 @@
       return { games: g.reduce((s, x) => s + x, 0), entries: segs.map((s, i) => ({ p: ctx.pool.byKey.get(s.key).line, games: g[i], gVar: GVAR })) };
     };
     const A = side(segsA), B = side(segsB), r = Engine.pairMatchup(A.entries, B.entries);
-    return { mu: r.mu, cat: r.cat.map(p => shrink(p, K_CAT)), match: shrink(r.match, K_MATCH), games: [A.games, B.games] };
+    return { mu: r.mu, cat: r.cat.map(p => shrink(p, whole ? KW_CAT : K_CAT)), match: shrink(r.match, whole ? KW_MATCH : K_MATCH), games: [A.games, B.games] };
   }
   function projectWeek(ctx, teamId, n) {
     const opp = InLeague.opponentOf(ctx.L, teamId, n);
@@ -113,7 +141,7 @@
         const cur = [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to];
         const fga = k.fga + l.fga * g, fta = k.fta + l.fta * g;
         const proj = [fga ? (k.fgm + l.fgp * l.fga * g) / fga : 0, fta ? (k.ftm + l.ftp * l.fta * g) / fta : 0, k.tpm + l.tpm * g, k.pts + l.pts * g, k.reb + l.reb * g, k.ast + l.ast * g, k.stl + l.stl * g, k.blk + l.blk * g, k.to + l.to * g];
-        return { key: p.key, n: p.n, pos: p.pos, t: p.t, games: g, cur, proj };
+        return { key: p.key, n: p.n, pos: p.pos, t: p.t, games: g, cur, proj, out: !!(ctx.out && ctx.out.has(p.key)) };
       });
       return { players, known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
         entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * (whole[i] > 0 ? left[i] / whole[i] : 0) })) };
@@ -121,7 +149,7 @@
     const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
     const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
     const started = share < 1 || A.known.pts + B.known.pts + A.known.fga + B.known.fga > 0;
-    return { opp, started, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
+    return { opp, started, cat: r.cat.map(p => shrink(p, kOf(KW_CAT, share))), match: shrink(r.match, kOf(KW_MATCH, share)), mu: r.mu, total: r.mu, rest,
       known: [A.known, B.known], games: [A.leftG, B.leftG], share, roster: [A.players, B.players] };
   }
 
@@ -209,6 +237,6 @@
     return plan;
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, makeCtx, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);

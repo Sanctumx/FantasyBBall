@@ -202,7 +202,7 @@ tr.click{cursor:pointer}
     <section class="how-card">
       <h3>In-season tools</h3>
       <h4>Weekly Matchup Analyzer</h4>
-      <p>Matchup Analyzer (top right) reads the league loaded in Settings: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here). Games left are whole games: every real game his team still has this week counts as one (projected games missed are not netted off), and on a night with more players than active slots the lowest-value players sit.</p>
+      <p>Matchup Analyzer (top right) reads the league loaded in Settings: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here). Games left are whole games: every real game his team still has this week counts as one, and a player with no minutes in his team's last 3 games is counted out for the rest of the week (shown as out; a player who is playing now most likely plays his next 3-4 games). On a night with more players than active slots the lowest-value players sit.</p>
       <h4>This week so far</h4>
       <p>Once games of the current week are played (2026-27 box scores, updated hourly), Win M counts them: the so-far totals are known, and only the games still to play are projected, with their variance scaled by the share of games left and the shrink easing toward certainty as the week ends. FG% and FT% come from summed makes and attempts. The so-far totals are an estimate from your current non-IR roster (at most 10 players per day), since Fantrax gives no roster history. The Best single adds and the plan still score the whole week.</p>
       <h4>Adds and the plan</h4>
@@ -1505,9 +1505,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // New York calendar date of an instant, the date ESPN files a game under; the months ('YYYY-MM') a period touches
   const NY_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
   const nyDay = ms => { const o = {}; NY_FMT.formatToParts(new Date(ms)).forEach(p => { o[p.type] = p.value; }); return o.year + '-' + o.month + '-' + o.day; };
-  function periodMonths(per) {
+  function periodMonths(per, back) {
     const a = nyDay(per.start).slice(0, 7), b = nyDay(per.end - 1).slice(0, 7), out = [a];
     if (b !== a) out.push(b);
+    if (back) out.unshift(new Date(Date.UTC(+a.slice(0, 4), +a.slice(5) - 2, 1)).toISOString().slice(0, 7));   // the month before, for the games just before the week
     return out;
   }
 
@@ -1662,15 +1663,43 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
   const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82;
+  // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
+  const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
 
   const periodOf = (L, n) => L.periods.find(p => p.n === n);
 
-  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref }) {
+  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref, box }) {
     const roster = {};
     Object.keys(rosters).forEach(t => { roster[t] = rosters[t].map(x => x.fid); });
     const projected = pool.players.filter(p => p.src === 'proj');
-    return { L, pool, DAYS, me, nowMs, cur: InLeague.currentPeriod(L, nowMs), ref: ref || InPlayers.makeValueRef(projected.map(p => ({ adp: p.adp, g: p.g, line: p.line }))), roster };
+    const ctx = { L, pool, DAYS, me, nowMs, cur: InLeague.currentPeriod(L, nowMs), ref: ref || InPlayers.makeValueRef(projected.map(p => ({ adp: p.adp, g: p.g, line: p.line }))), roster };
+    const per = periodOf(L, ctx.cur);
+    ctx.curEnd = per ? per.end : 0; ctx.out = outSet(ctx, box);
+    return ctx;
+  }
+
+  // Players who sat out their team's last 3 boxed games are out for the rest of the current week: a player who is playing now most
+  // likely plays his next 3-4 games. Only players matched to a box line are judged, and a team with fewer than 3 boxed games is not.
+  function outSet(ctx, files) {
+    const games = {}, seen = new Map(), out = new Set();
+    (files || []).filter(Boolean).forEach(f => {
+      const mi = f.cols.indexOf('min');
+      Object.keys(f.games || {}).forEach(id => {
+        const g = f.games[id];
+        Object.keys(g.teams).forEach(abbr => {
+          const t = InLeague.toProjTeam(abbr) || abbr, ids = new Set();
+          g.teams[abbr].forEach(l => { if (l[mi + 1] > 0) { ids.add(l[0]); seen.set(l[0], { id: l[0], n: InPlayers.OVERRIDES.espn[l[0]] || (f.names || {})[l[0]] || String(l[0]), t }); } });
+          (games[t] || (games[t] = [])).push({ d: g.d, ids });
+        });
+      });
+    });
+    const list = Array.from(seen.values());
+    Object.keys(ctx.roster).forEach(tid => ctx.roster[tid].forEach(key => {
+      const p = ctx.pool.byKey.get(key), recent = (games[p.t] || []).sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0).slice(-3), m = recent.length >= 3 && InPlayers.matchTo(list, p.n, p.t);
+      if (m && !recent.some(g => g.ids.has(m.id))) out.add(key);
+    }));
+    return out;
   }
 
   // whole-period window; IR players sit out only in the current period
@@ -1688,7 +1717,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       return InLeague.rosterGames(segs.map((s, i) => ({ t: pp[i].t, a: Math.min(1, pp[i].g / 82), from: s.from, to: s.to })), ctx.DAYS, ctx.L.maxActive, used);
     }
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, pp = segs.map(s => ctx.pool.byKey.get(s.key)), byDay = {}, out = segs.map(() => 0);
-    segs.forEach((s, i) => (G[pp[i].t] || []).map(x => x * 1000).filter(ms => ms >= s.from && ms < s.to).forEach(ms => {
+    segs.forEach((s, i) => (ctx.out && ctx.out.has(s.key) && s.from < ctx.curEnd ? [] : G[pp[i].t] || []).map(x => x * 1000).filter(ms => ms >= s.from && ms < s.to).forEach(ms => {
       const d = InLeague.localDay(ms);
       (byDay[d] || (byDay[d] = [])).push(i);
     }));
@@ -1704,7 +1733,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       return { games: g.reduce((s, x) => s + x, 0), entries: segs.map((s, i) => ({ p: ctx.pool.byKey.get(s.key).line, games: g[i], gVar: GVAR })) };
     };
     const A = side(segsA), B = side(segsB), r = Engine.pairMatchup(A.entries, B.entries);
-    return { mu: r.mu, cat: r.cat.map(p => shrink(p, K_CAT)), match: shrink(r.match, K_MATCH), games: [A.games, B.games] };
+    return { mu: r.mu, cat: r.cat.map(p => shrink(p, whole ? KW_CAT : K_CAT)), match: shrink(r.match, whole ? KW_MATCH : K_MATCH), games: [A.games, B.games] };
   }
   function projectWeek(ctx, teamId, n) {
     const opp = InLeague.opponentOf(ctx.L, teamId, n);
@@ -1769,7 +1798,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
         const cur = [k.fga ? k.fgm / k.fga : 0, k.fta ? k.ftm / k.fta : 0, k.tpm, k.pts, k.reb, k.ast, k.stl, k.blk, k.to];
         const fga = k.fga + l.fga * g, fta = k.fta + l.fta * g;
         const proj = [fga ? (k.fgm + l.fgp * l.fga * g) / fga : 0, fta ? (k.ftm + l.ftp * l.fta * g) / fta : 0, k.tpm + l.tpm * g, k.pts + l.pts * g, k.reb + l.reb * g, k.ast + l.ast * g, k.stl + l.stl * g, k.blk + l.blk * g, k.to + l.to * g];
-        return { key: p.key, n: p.n, pos: p.pos, t: p.t, games: g, cur, proj };
+        return { key: p.key, n: p.n, pos: p.pos, t: p.t, games: g, cur, proj, out: !!(ctx.out && ctx.out.has(p.key)) };
       });
       return { players, known, wholeG: whole.reduce((a, x) => a + x, 0), leftG: left.reduce((a, x) => a + x, 0),
         entries: segs.map((s, i) => ({ p: pp[i].line, games: left[i], gVar: GVAR * (whole[i] > 0 ? left[i] / whole[i] : 0) })) };
@@ -1777,7 +1806,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const A = side(teamId), B = side(opp), r = Engine.pairMatchup(A.entries, B.entries, { known: [A.known, B.known] });
     const rest = Engine.pairMatchup(A.entries, B.entries).mu, share = A.wholeG + B.wholeG > 0 ? (A.leftG + B.leftG) / (A.wholeG + B.wholeG) : 1;
     const started = share < 1 || A.known.pts + B.known.pts + A.known.fga + B.known.fga > 0;
-    return { opp, started, cat: r.cat.map(p => shrink(p, kOf(K_CAT, share))), match: shrink(r.match, kOf(K_MATCH, share)), mu: r.mu, total: r.mu, rest,
+    return { opp, started, cat: r.cat.map(p => shrink(p, kOf(KW_CAT, share))), match: shrink(r.match, kOf(KW_MATCH, share)), mu: r.mu, total: r.mu, rest,
       known: [A.known, B.known], games: [A.leftG, B.leftG], share, roster: [A.players, B.players] };
   }
 
@@ -1865,7 +1894,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return plan;
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, makeCtx, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
 
@@ -2046,7 +2075,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   async function loadBox(L) {
     const cur = InL.currentPeriod(L, Date.now()), per = L.periods.find(p => p.n === cur);
     if (!per) return [];
-    return Promise.all(InL.periodMonths(per).map(async m => { try { const r = await fetch('stats/box-' + m + '.json', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (e) { return null; } }));
+    return Promise.all(InL.periodMonths(per, true).map(async m => { try { const r = await fetch('stats/box-' + m + '.json', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (e) { return null; } }));
   }
   async function load() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
@@ -2110,7 +2139,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
-  const ctxFor = team => memoed('ctx|' + team + '|' + dayKey(), () => Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now() }));
+  const ctxFor = team => memoed('ctx|' + team + '|' + dayKey(), () => Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now(), box }));
   const addsLeft = n => { const v = ui.adds[ui.leagueId + ':' + n]; return v != null ? v : 4; };
   const hasBox = () => (box || []).some(f => f && Object.keys(f.games || {}).length);
   // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
@@ -2159,7 +2188,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $('status').hidden = !pw.roster;
     if (pw.roster) {
       $('st-team').innerHTML = '<thead><tr><th class="l">Player</th><th>Games left</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '</tr></thead><tbody>' +
-        pw.roster[0].map(r => '<tr><td class="l">' + esc(r.n) + ' <span class="src">' + esc(r.t) + '</span></td><td>' + r.games.toFixed(0) + '</td>' +
+        pw.roster[0].map(r => '<tr><td class="l">' + esc(r.n) + ' <span class="src">' + esc(r.t) + '</span></td><td>' + (r.out ? '<span class="src" title="No minutes in his team\'s last 3 games: counted out for the rest of the week">out</span>' : r.games.toFixed(0)) + '</td>' +
           CATS.map((c, i) => '<td><b>' + fmtStat(r.proj[i], i) + '</b><span class="src"> ' + fmtStat(r.cur[i], i) + '</span></td>').join('') + '</tr>').join('') + '</tbody>';
       $('st-note').textContent = 'projected final, with what he has done so far in grey; estimate from your current roster (no roster history)';
     }

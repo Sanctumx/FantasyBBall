@@ -123,3 +123,22 @@ test('games left are whole numbers: real team games still to play, no availabili
   const t = M.weekStatus(ctx, box([{ d: firstDay(a), lines: [[a, { pts: 9 }]] }]), me, 1).roster[0].find(r => r.key === a.key).games;
   assert.strictEqual(t, n - 1, 'a played game comes off by exactly one');
 });
+
+test('a player who sat out his team last 3 boxed games is out for the rest of the week', () => {
+  const t = Object.keys(ROS).find(k => { const ps = active(k); return ps.some(a => ps.some(b => b !== a && b.t === a.t)); }), ps = active(t);
+  const a = ps.find(x => ps.some(b => b !== x && b.t === x.t)), mate = ps.find(b => b !== a && b.t === a.t);
+  // game 0: both play; games 1-3: only the teammate
+  const mk = n => box([{ d: '2026-10-12', lines: [[a, {}], [mate, {}]] }].concat(['2026-10-13', '2026-10-14', '2026-10-15'].slice(0, n).map(d => ({ d, lines: [[mate, {}]] }))));
+  const mkCtx = b => M.makeCtx({ L, pool, DAYS, rosters: ROS, me: t, nowMs: NOW, box: b });
+  const c3 = mkCtx(mk(3));
+  assert.ok(c3.out.has(a.key), 'sat out three games'); assert.ok(!c3.out.has(mate.key), 'played them');
+  const r = M.weekStatus(c3, [], t, 1).roster[0].find(x => x.key === a.key);
+  assert.strictEqual(r.games, 0); assert.strictEqual(r.out, true);
+  assert.ok(!mkCtx(mk(2)).out.has(a.key), 'he played one of the last 3 team games');
+  assert.strictEqual(mkCtx().out.size, 0, 'no box, nobody judged');
+});
+
+test('periodMonths can add the month before the period', () => {
+  assert.deepStrictEqual(I.periodMonths({ start: Date.UTC(2026, 9, 26, 19), end: Date.UTC(2026, 10, 2, 23) }, true), ['2026-09', '2026-10', '2026-11']);
+  assert.deepStrictEqual(I.periodMonths({ start: Date.UTC(2027, 0, 5, 19), end: Date.UTC(2027, 0, 12, 23) }, true), ['2026-12', '2027-01']);
+});

@@ -278,7 +278,7 @@ tr.click{cursor:pointer}
   async function loadBox(L) {
     const cur = InL.currentPeriod(L, Date.now()), per = L.periods.find(p => p.n === cur);
     if (!per) return [];
-    return Promise.all(InL.periodMonths(per).map(async m => { try { const r = await fetch('stats/box-' + m + '.json', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (e) { return null; } }));
+    return Promise.all(InL.periodMonths(per, true).map(async m => { try { const r = await fetch('stats/box-' + m + '.json', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (e) { return null; } }));
   }
   async function load() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
@@ -342,7 +342,7 @@ tr.click{cursor:pointer}
   }
 
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
-  const ctxFor = team => memoed('ctx|' + team + '|' + dayKey(), () => Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now() }));
+  const ctxFor = team => memoed('ctx|' + team + '|' + dayKey(), () => Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now(), box }));
   const addsLeft = n => { const v = ui.adds[ui.leagueId + ':' + n]; return v != null ? v : 4; };
   const hasBox = () => (box || []).some(f => f && Object.keys(f.games || {}).length);
   // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
@@ -391,7 +391,7 @@ tr.click{cursor:pointer}
     $('status').hidden = !pw.roster;
     if (pw.roster) {
       $('st-team').innerHTML = '<thead><tr><th class="l">Player</th><th>Games left</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '</tr></thead><tbody>' +
-        pw.roster[0].map(r => '<tr><td class="l">' + esc(r.n) + ' <span class="src">' + esc(r.t) + '</span></td><td>' + r.games.toFixed(0) + '</td>' +
+        pw.roster[0].map(r => '<tr><td class="l">' + esc(r.n) + ' <span class="src">' + esc(r.t) + '</span></td><td>' + (r.out ? '<span class="src" title="No minutes in his team\'s last 3 games: counted out for the rest of the week">out</span>' : r.games.toFixed(0)) + '</td>' +
           CATS.map((c, i) => '<td><b>' + fmtStat(r.proj[i], i) + '</b><span class="src"> ' + fmtStat(r.cur[i], i) + '</span></td>').join('') + '</tr>').join('') + '</tbody>';
       $('st-note').textContent = 'projected final, with what he has done so far in grey; estimate from your current roster (no roster history)';
     }
