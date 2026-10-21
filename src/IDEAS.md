@@ -12,7 +12,7 @@ title % points. Tests before item 50 ran in the old backtest world (prior-season
 overturned; re-test old-world results before relying on them.
 
 **Rules:** edit a row in place when its status changes; never delete a row; one line per row; put the deciding numbers in
-Result. New ideas take the next number (next: **129**).
+Result. New ideas take the next number (next: **135**).
 
 | # | Date | Area | Idea | Status | Result |
 |---|------|------|------|--------|--------|
