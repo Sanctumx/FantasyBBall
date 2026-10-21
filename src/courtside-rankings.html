@@ -89,6 +89,7 @@ tbody tr:hover td{background:var(--sunk)}
       <label class="f" for="basis" title="Season counts games played; Per game ignores games missed; Mix is halfway.">Basis<select id="basis"><option value="pergame">Per game</option><option value="total">Season</option><option value="mix">Mix</option></select></label>
       <label class="f" for="zdrop" title="Discount each player's worst one (−1) or two (−2) categories"><span>Zscore</span><select id="zdrop"><option value="0,0">Normal</option><option value="1,50">−1 50%</option><option value="1,0">−1 100%</option><option value="2,50">−2 50%</option><option value="2,0">−2 100%</option></select></label>
       <label class="f" for="show" title="How many players to list"><span>Show</span><select id="show"><option value="25">Top 25</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="0">All</option></select></label>
+      <label class="f" for="winvs" title="Replacement: the best player left once the draft ends (as on the Draft tab). Average player: an average player from the Zscore pool."><span>Win vs</span><select id="winvs"><option value="rep">Replacement</option><option value="avg">Average player</option></select></label>
       <label class="f" for="stats">Stats<select id="stats"><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
       <label class="f" for="poboost" hidden title="Boost players whose teams play more games in your playoff weeks (Settings)">Playoff boost<select id="poboost"><option value="off">Off</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="vstrong">Very strong</option></select></label>
       <button type="button" class="btn" id="hide" aria-pressed="false" title="Needs a league loaded in Settings">Hide taken</button>
@@ -1462,7 +1463,7 @@ tbody tr:hover td{background:var(--sunk)}
   }
 
   // every projected player as a source row: {pid, n, t, pos, g, line, adp}
-  function projSource(PLAYERS, proj) { return InPlayers.projLines(PLAYERS, proj).map(q => ({ pid: q.id, n: q.n, t: q.t, pos: q.pos, g: q.g, line: q.line, adp: q.adp })); }
+  function projSource(PLAYERS, proj) { return InPlayers.projLines(PLAYERS, proj).map(q => ({ pid: q.id, n: q.n, t: q.t, pos: q.pos, g: q.g, line: q.line, adp: q.adp, ftx: PLAYERS[q.id].ftx != null ? PLAYERS[q.id].ftx : null })); }
 
   // ESPN season-to-date averages → source rows. The engine gets gp × 80 / (most games played) games so a Season-basis
   // table counts games played; `gp` stays the real count for display. Percentages come from makes / attempts.
@@ -1548,7 +1549,50 @@ tbody tr:hover td{background:var(--sunk)}
     return lam ? out.filter(x => x.z != null).sort((a, b) => b.z - a.z).concat(out.filter(x => x.z == null)) : out;
   }
 
-  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, ownersOf, table, playoffGames, withPlayoffs };
+  // ---- Win C / Win M: Engine.evaluate exactly as the Draft tab runs it (season-long, gain over a replacement-level slot) ----
+  // Projection rows use the Fantrax ADP the board uses; season rows have none, so the table's value order stands in.
+  // "Average player" view = gain minus the gain of an average Zscore-pool player (a made-up entry behind every real player,
+  // so it never enters the engine's replacement window) in the same run. With no league: all picks empty, slot 1 (the board
+  // at pick 1). With a league: o.lists = [my pids, then each other team's pids] (non-IR, best first, up to roster size) fill
+  // their slots; my weakest player's slot is open, so a free agent is measured in place of him. My own players each get a run with
+  // their slot open (step()), since a player already on the team has no gain in the main run.
+  // winStart(rows, tab, o) → {rep, avg: Map pid → {c, m}, pending: [pids], step()}; c = Win C (hundredths), m = Win M (points)
+  function winStart(rows, tab, o) {
+    const cfg = cfgFor(o), N = cfg.teams, Rr = cfg.roster;
+    const live = rows.filter(r => r.g > 0).sort((a, b) => a.pid - b.pid), idx = new Map(live.map((r, i) => [r.pid, i]));
+    const rank = new Map(tab.filter(t => t.z != null).map((t, i) => [t.pid, i + 1]));
+    const P = Eng.prepPlayers(live.map(r => Object.assign({}, r.line, { g: r.g, ftx: r.ftx !== undefined ? r.ftx : (rank.get(r.pid) || null) })));
+    const ctx = Eng.buildContext(P, cfg), n0 = P.length;
+    // average-player entry from the Zscore pool; needs enough real players that the replacement window never reaches it
+    let ai = -1;
+    const pool = tab.filter(t => t.inPool && idx.has(t.pid)).map(t => P[idx.get(t.pid)]);
+    if (pool.length && n0 >= N * Rr + 8) {
+      const x = Array.from(pool[0].x, (_, c) => pool.reduce((a, p) => a + p.x[c], 0) / pool.length), pv = Array.from(pool[0].pv, (_, c) => pool.reduce((a, p) => a + p.pv[c], 0) / pool.length);
+      const a = Object.assign({}, pool[0], { id: n0, x: Float64Array.from(x), pv: Float64Array.from(pv), adpUse: 1e4, sd: 1, fieldV: -1e9, boardRaw: -1e9, adpE: 1e4, sdE: 1 });
+      P.push(a); ai = n0;
+    }
+    const gains = (picks, owner) => {
+      Eng.evaluate(P, ctx, cfg, { picks, owner });
+      const base = ai < 0 ? { c: 0, m: 0 } : { c: P[ai].gain * 100, m: P[ai].gainM * 100 };
+      return { g: P.slice(0, n0).map(p => ({ c: p.gain * 100, m: p.gainM * 100 })), base };
+    };
+    const rep = new Map(), avg = new Map(), put = (r, pid) => { const i = idx.get(pid), v = r.g[i]; rep.set(pid, v); avg.set(pid, { c: v.c - r.base.c, m: v.m - r.base.m }); };
+    const lists = o.lists || null;
+    const full = lists ? lists.map(l => l.filter(pid => idx.has(pid)).slice(0, Rr)) : null;
+    const build = skip => {   // my team in slots 0..R-1 (minus the skipped pid), team t in slots t*R..
+      const picks = new Array(N * Rr).fill(null), owner = new Array(N * Rr);
+      for (let k = 0; k < N * Rr; k++) owner[k] = Math.floor(k / Rr);
+      if (full) full.forEach((l, t) => l.forEach((pid, s) => { if (pid !== skip) picks[t * Rr + s] = idx.get(pid); }));
+      return { picks, owner };
+    };
+    const weakest = full && full[0].length >= Rr ? full[0][full[0].length - 1] : null;
+    const main = build(weakest), r0 = gains(main.picks, lists ? main.owner : undefined);
+    live.forEach(r => put(r0, r.pid));
+    const pending = full ? full[0].filter(pid => pid !== weakest) : [];
+    return { rep, avg, pending, hasAvg: ai >= 0, step() { const pid = pending.shift(); if (pid == null) return null; const b = build(pid); put(gains(b.picks, b.owner), pid); return pid; } };
+  }
+
+  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, ownersOf, table, playoffGames, withPlayoffs, winStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
 })(this);
 
@@ -1561,11 +1605,11 @@ tbody tr:hover td{background:var(--sunk)}
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-rankings-v1', CATN = ['FG%', 'FT%', '3PM', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TO'], RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
   const POS = ['PG', 'SG', 'SF', 'PF', 'C'], CWV = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
-  let ui = { src: 'season', type: 'classic', basis: 'pergame', stats: 'z', poboost: 'off', zdrop: '0,0', show: 0, pos: [], cw: null, hide: false, sort: 'z', dir: -1 };
+  let ui = { src: 'season', type: 'classic', basis: 'pergame', stats: 'z', poboost: 'off', zdrop: '0,0', winvs: 'rep', show: 0, pos: [], cw: null, hide: false, sort: 'z', dir: -1 };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const oneOf = (v, l, d) => l.includes(v) ? v : d;
   ui.src = oneOf(ui.src, ['season', 'avg', 'bbm', 'hs'], 'season'); ui.type = oneOf(ui.type, R.TYPES, 'classic'); ui.basis = oneOf(ui.basis, ['pergame', 'total', 'mix'], 'pergame');
-  ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.zdrop = oneOf(ui.zdrop, ['0,0', '1,50', '1,0', '2,50', '2,0'], '0,0'); ui.show = oneOf(+ui.show, [0, 25, 50, 100, 150, 200], 0); ui.pos = Array.isArray(ui.pos) ? ui.pos.filter(x => POS.includes(x)) : [];
+  ui.stats = oneOf(ui.stats, ['z', 'raw'], 'z'); ui.dir = ui.dir === 1 ? 1 : -1; ui.winvs = oneOf(ui.winvs, ['rep', 'avg'], 'rep'); ui.zdrop = oneOf(ui.zdrop, ['0,0', '1,50', '1,0', '2,50', '2,0'], '0,0'); ui.show = oneOf(+ui.show, [0, 25, 50, 100, 150, 200], 0); ui.pos = Array.isArray(ui.pos) ? ui.pos.filter(x => POS.includes(x)) : [];
   ui.cw = Array.isArray(ui.cw) && ui.cw.length === 9 && ui.cw.every(v => CWV.includes(+v)) ? ui.cw.map(Number) : R.WEIGHTS.slice(); let query = '';
   ui.poboost = 'off';   // control hidden for now (user, 2026-10-21); Win columns ignore it ui.hide = !!ui.hide; if (typeof ui.sort !== 'string') ui.sort = 'z';
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
@@ -1622,6 +1666,26 @@ tbody tr:hover td{background:var(--sunk)}
     if (po.key !== k) po.pg = R.playoffGames(SCHED, s), po.key = k;
     return po.pg;
   }
+  // Win C / Win M (Engine.evaluate, as on the Draft tab); with a saved team in Settings the league's rosters fill the slots
+  const win = { key: '', w: null, seq: 0, mine: false, wait: false };
+  function winLists(rows, tab, own, s) {
+    const me = SS.league ? LS.defaultTeam(LS.local.get, SS.league.id) : null, ids = rosters ? Object.keys(rosters).sort() : [];
+    if (me == null || ids.length !== s.teams || !ids.includes(me)) return null;
+    const rk = new Map(tab.filter(t => t.z != null).map((t, i) => [t.pid, i])), by = {};
+    own.forEach((v, pid) => { if (v.slot !== 'IR' && rk.has(pid)) (by[v.owner] = by[v.owner] || []).push(pid); });
+    return [me].concat(ids.filter(x => x !== me)).map(id => (by[id] || []).sort((a, b) => rk.get(a) - rk.get(b)).slice(0, s.roster));
+  }
+  function winFor(rows, tab, own) {
+    const s = settings(), lists = winLists(rows, tab, own, s);
+    win.mine = !!lists;
+    const key = ['win', ui.src, ui.basis, ui.type, s.teams, s.roster, s.cats, s.ilSpots, lists ? lists.map(l => l.join(',')).join(';') : 'none'].join('|');
+    if (win.key === key) return win.w;
+    win.key = key; const seq = ++win.seq;
+    win.w = R.winStart(rows, tab, { teams: s.teams, roster: s.roster, cats: s.cats, ilSpots: s.ilSpots, basis: ui.basis, lists });
+    const tick = () => { if (seq !== win.seq) return; if (win.w.step() != null) { draw(); setTimeout(tick, 0); } else draw(); };
+    if (win.w.pending.length) setTimeout(tick, 0);
+    return win.w;
+  }
   function tableFor(rows) {
     const s = settings(), k = ['tab', ui.src, ui.type, ui.basis, s.teams, s.roster, s.cats].join('|');
     if (!cache.has(k)) cache.set(k, R.table(rows, { teams: s.teams, roster: s.roster, cats: s.cats, type: ui.type, basis: ui.basis }));
@@ -1643,9 +1707,10 @@ tbody tr:hover td{background:var(--sunk)}
     const rows = sourceRows(), n = $('note');
     $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
     if (ui.src === 'season' && !espn) { $('tbl').innerHTML = ''; n.textContent = 'ESPN season stats are not available yet.'; return; }
-    const tab = R.withPlayoffs(tableFor(rows), rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
+    const tab0 = tableFor(rows), tab = R.withPlayoffs(tab0, rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
     if (s.cats !== 9) W[8] = 0;
     syncW();
+    const wn = winFor(rows, tab0, own), wv = pid => { const m = wn[ui.winvs].get(pid); return m ? (!win.mine || !wn.pending.includes(pid) ? m : null) : null; };
     // Zscore from the weighted categories; -1 / -2 take off the worst one or two (50% = half of it, 100% = all of it)
     const [zd, zp] = ui.zdrop.split(',').map(Number), keep = zp / 100;
     tab.forEach(t => { if (t.z == null) return;
@@ -1660,29 +1725,31 @@ tbody tr:hover td{background:var(--sunk)}
     if (q) list = list.filter(x => String(x.r.n).toLowerCase().includes(q) || String(x.r.t).toLowerCase() === q);
     // colour scale per category: the 90th percentile of |weighted z| inside the pool
     const sc = CATN.map((_, c) => { const a = tab.filter(t => t.inPool).map(t => Math.abs(t.cats[c] * W[c])).sort((p, q) => p - q); return Math.max(.3, a[Math.floor(a.length * .9)] || 1); });
-    const val = (x, k) => k === 'z' ? x.t.zw : k === 'n' ? x.r.n : k === 't' ? x.r.t : k === 'pos' ? x.r.pos : k === 'own' ? (x.own ? (teamName[x.own.owner] || x.own.owner) : '') : k === 'gp' ? (x.r.gp != null ? x.r.gp : x.r.g) : k === 'po' ? x.t.po
+    const val = (x, k) => k === 'z' ? x.t.zw : k === 'n' ? x.r.n : k === 't' ? x.r.t : k === 'pos' ? x.r.pos : k === 'own' ? (x.own ? (teamName[x.own.owner] || x.own.owner) : '') : k === 'gp' ? (x.r.gp != null ? x.r.gp : x.r.g) : k === 'po' ? x.t.po : k === 'winC' ? (wv(x.r.pid) || {}).c : k === 'winM' ? (wv(x.r.pid) || {}).m
       : x.t.z == null ? null : (ui.stats === 'raw' ? (k === 8 ? -x.r.line.to : x.r.line[RAWK[k]]) : x.t.cats[k] * W[k]);
     const k = ui.sort === 'z' || isNaN(+ui.sort) ? ui.sort : +ui.sort, str = typeof val(list[0] || { t: { z: 0 }, r: { n: '', t: '', pos: '', line: {} }, own: null }, k) === 'string';
     list.sort((a, b) => { const x = val(a, k), y = val(b, k); if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
       return (str ? String(x).localeCompare(String(y)) : x - y) * ui.dir || (a.rank || 1e9) - (b.rank || 1e9); });
     const matched = list.length; if (ui.show) list = list.slice(0, ui.show);
-    const th = (key, label, cls) => '<th data-k="' + key + '"' + (cls ? ' class="' + cls + '"' : '') + (String(ui.sort) === String(key) ? ' aria-sort="' + (ui.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '>' + label + '</th>';
-    const head = '<thead><tr><th data-nosort style="cursor:default">#</th>' + th('n', 'Player', 'l') + (rosters ? th('own', 'Owner', 'l') : '') + th('t', 'Team') + th('pos', 'Pos') + th('po', 'Playoff games') + th('gp', 'Games') + th('z', zd ? '−' + zd + ' ' + (100 - zp) + '% Zscore' : 'Zscore') + CATN.map((c, i) => th(i, c, W[i] === 0 ? 'punted' : '')).join('') + '</tr></thead>';
+    const wsc = f => { const a = [...wn[ui.winvs].values()].map(v => Math.abs(v[f])).sort((p, q) => p - q); return Math.max(1, a[Math.floor(a.length * .9)] || 1); }, wS = { c: wsc('c'), m: wsc('m') };
+    const wTd = (pid, f) => { const m = wv(pid); if (!m) return '<td class="dim">' + (wn.rep.has(pid) ? '…' : '—') + '</td>'; return '<td>' + chip(m[f], wS[f], (m[f] > 0.05 ? '+' : '') + (m[f] < 0 ? '−' : '') + Math.abs(m[f]).toFixed(1)) + '</td>'; };
+    const th = (key, label, cls, tip) => '<th data-k="' + key + '"' + (cls ? ' class="' + cls + '"' : '') + (tip ? ' title="' + tip + '"' : '') + (String(ui.sort) === String(key) ? ' aria-sort="' + (ui.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '>' + label + '</th>';
+    const head = '<thead><tr><th data-nosort style="cursor:default">#</th>' + th('n', 'Player', 'l') + (rosters ? th('own', 'Owner', 'l') : '') + th('t', 'Team') + th('pos', 'Pos') + th('po', 'Playoff games') + th('gp', 'Games') + th('z', zd ? '−' + zd + ' ' + (100 - zp) + '% Zscore' : 'Zscore') + th('winC', 'Win C', '', 'Category wins added, in hundredths of a win, ' + (ui.winvs === 'avg' ? 'over an average player' : 'over a replacement-level player (as on the Draft tab)')) + th('winM', 'Win M', '', 'Matchup win chance added, in points, ' + (ui.winvs === 'avg' ? 'over an average player' : 'over a replacement-level player (as on the Draft tab)')) + CATN.map((c, i) => th(i, c, W[i] === 0 ? 'punted' : '')).join('') + '</tr></thead>';
     const body = '<tbody>' + list.map(x => {
       const z = x.t.z, cells = CATN.map((_, c) => z == null ? '<td class="dim">—</td>' : '<td' + (W[c] === 0 ? ' class="punted"' : '') + '>' + (ui.stats === 'raw' ? rawTxt(x.r, c) : chip(x.t.cats[c] * W[c], sc[c], zTxt(x.t.cats[c] * W[c]))) + '</td>').join('');
       return '<tr><td class="dim">' + (x.rank == null ? '—' : x.rank) + '</td><td class="l">' + esc(x.r.n) + '</td>' + (rosters ? '<td class="l' + (x.own ? '' : ' dim') + '">' + (x.own ? esc(teamName[x.own.owner] || x.own.owner) + (x.own.slot === 'IR' ? ' (IR)' : '') : 'Free agent') + '</td>' : '') + '<td>' + esc(x.r.t) + '</td><td>' + esc(x.r.pos) + '</td><td title="' + (x.t.per ? 'Per round: ' + x.t.per.join(' / ') : '') + '">' + (x.t.po == null ? '—' : x.t.po) + '</td><td>' + (x.r.gp != null ? x.r.gp : Math.round(x.r.g)) + '</td>'
-        + '<td><b>' + (z == null ? '—' : zTxt(x.t.zw)) + '</b></td>' + cells + '</tr>'; }).join('') + '</tbody>';
+        + '<td><b>' + (z == null ? '—' : zTxt(x.t.zw)) + '</b></td>' + wTd(x.r.pid, 'c') + wTd(x.r.pid, 'm') + cells + '</tr>'; }).join('') + '</tbody>';
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
-    n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + (ui.src === 'season' ? 'ESPN season averages' + (espn.label ? ' (' + espn.label + ')' : '') + (espn.fetchedAt ? ', updated ' + new Date(espn.fetchedAt).toLocaleString() : '') : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + 'Win C / Win M are season-long, as on the Draft tab, against simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : '; add a team in Settings to measure against your roster') + '. ' + (ui.src === 'season' ? 'ESPN season averages' + (espn.label ? ' (' + espn.label + ')' : '') + (espn.fetchedAt ? ', updated ' + new Date(espn.fetchedAt).toLocaleString() : '') : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
   }
 
   const cwSel = [...document.querySelectorAll('#catw select')];
   cwSel.forEach(el => { el.innerHTML = CWV.map(v => '<option value="' + v + '"' + (v === 0 ? ' title="Punt"' : '') + '>×' + v + '</option>').join(''); });
   function syncW() { cwSel.forEach(el => { const c = +el.dataset.c, v = ui.cw[c]; el.value = String(v); el.className = v === 0 ? 'off' : v !== R.WEIGHTS[c] ? 'chg' : ''; el.disabled = c === 8 && settings().cats === 8; }); }
-  function sync() { $('zdrop').value = ui.zdrop; $('show').value = String(ui.show); document.querySelectorAll('#posf input').forEach(i => { i.checked = ui.pos.includes(i.value); }); syncW(); $('src').value = ui.src; $('type').value = ui.type; $('basis').value = ui.basis; $('stats').value = ui.stats; $('poboost').value = ui.poboost; }
+  function sync() { $('zdrop').value = ui.zdrop; $('winvs').value = ui.winvs; $('show').value = String(ui.show); document.querySelectorAll('#posf input').forEach(i => { i.checked = ui.pos.includes(i.value); }); syncW(); $('src').value = ui.src; $('type').value = ui.type; $('basis').value = ui.basis; $('stats').value = ui.stats; $('poboost').value = ui.poboost; }
   [['src', 'src'], ['type', 'type'], ['basis', 'basis'], ['stats', 'stats'], ['poboost', 'poboost']].forEach(([id, k]) => $(id).addEventListener('change', () => { ui[k] = $(id).value; save(); draw(); }));
-  [['zdrop', v => v], ['show', Number]].forEach(([id, f]) => $(id).addEventListener('change', () => { ui[id] = f($(id).value); save(); draw(); }));
+  [['zdrop', v => v], ['winvs', v => v], ['show', Number]].forEach(([id, f]) => $(id).addEventListener('change', () => { ui[id] = f($(id).value); save(); draw(); }));
   $('q').addEventListener('input', () => { query = $('q').value; draw(); });
   $('posf').addEventListener('change', () => { ui.pos = [...document.querySelectorAll('#posf input:checked')].map(i => i.value); save(); draw(); });
   $('catw').addEventListener('change', e => { const el = e.target.closest('select'); if (!el) return; ui.cw[+el.dataset.c] = +el.value; syncW(); save(); draw(); });
@@ -1695,8 +1762,8 @@ tbody tr:hover td{background:var(--sunk)}
     save(); draw();
   });
   window.addEventListener('storage', () => {
-    const was = SS.league && SS.league.id, s0 = JSON.stringify(SS.settings); SS = LS.load(LS.local.get);
-    if ((SS.league && SS.league.id) !== was) loadLeague(); else if (JSON.stringify(SS.settings) !== s0) draw();
+    const was = SS.league && SS.league.id, s0 = JSON.stringify(SS.settings), me0 = was ? LS.defaultTeam(LS.local.get, was) : null; SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
   });
   sync();
   loadStats().then(j => { espn = j; draw(); loadLeague(); });

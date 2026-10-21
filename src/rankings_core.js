@@ -18,7 +18,7 @@
   }
 
   // every projected player as a source row: {pid, n, t, pos, g, line, adp}
-  function projSource(PLAYERS, proj) { return InPlayers.projLines(PLAYERS, proj).map(q => ({ pid: q.id, n: q.n, t: q.t, pos: q.pos, g: q.g, line: q.line, adp: q.adp })); }
+  function projSource(PLAYERS, proj) { return InPlayers.projLines(PLAYERS, proj).map(q => ({ pid: q.id, n: q.n, t: q.t, pos: q.pos, g: q.g, line: q.line, adp: q.adp, ftx: PLAYERS[q.id].ftx != null ? PLAYERS[q.id].ftx : null })); }
 
   // ESPN season-to-date averages → source rows. The engine gets gp × 80 / (most games played) games so a Season-basis
   // table counts games played; `gp` stays the real count for display. Percentages come from makes / attempts.
@@ -104,6 +104,49 @@
     return lam ? out.filter(x => x.z != null).sort((a, b) => b.z - a.z).concat(out.filter(x => x.z == null)) : out;
   }
 
-  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, ownersOf, table, playoffGames, withPlayoffs };
+  // ---- Win C / Win M: Engine.evaluate exactly as the Draft tab runs it (season-long, gain over a replacement-level slot) ----
+  // Projection rows use the Fantrax ADP the board uses; season rows have none, so the table's value order stands in.
+  // "Average player" view = gain minus the gain of an average Zscore-pool player (a made-up entry behind every real player,
+  // so it never enters the engine's replacement window) in the same run. With no league: all picks empty, slot 1 (the board
+  // at pick 1). With a league: o.lists = [my pids, then each other team's pids] (non-IR, best first, up to roster size) fill
+  // their slots; my weakest player's slot is open, so a free agent is measured in place of him. My own players each get a run with
+  // their slot open (step()), since a player already on the team has no gain in the main run.
+  // winStart(rows, tab, o) → {rep, avg: Map pid → {c, m}, pending: [pids], step()}; c = Win C (hundredths), m = Win M (points)
+  function winStart(rows, tab, o) {
+    const cfg = cfgFor(o), N = cfg.teams, Rr = cfg.roster;
+    const live = rows.filter(r => r.g > 0).sort((a, b) => a.pid - b.pid), idx = new Map(live.map((r, i) => [r.pid, i]));
+    const rank = new Map(tab.filter(t => t.z != null).map((t, i) => [t.pid, i + 1]));
+    const P = Eng.prepPlayers(live.map(r => Object.assign({}, r.line, { g: r.g, ftx: r.ftx !== undefined ? r.ftx : (rank.get(r.pid) || null) })));
+    const ctx = Eng.buildContext(P, cfg), n0 = P.length;
+    // average-player entry from the Zscore pool; needs enough real players that the replacement window never reaches it
+    let ai = -1;
+    const pool = tab.filter(t => t.inPool && idx.has(t.pid)).map(t => P[idx.get(t.pid)]);
+    if (pool.length && n0 >= N * Rr + 8) {
+      const x = Array.from(pool[0].x, (_, c) => pool.reduce((a, p) => a + p.x[c], 0) / pool.length), pv = Array.from(pool[0].pv, (_, c) => pool.reduce((a, p) => a + p.pv[c], 0) / pool.length);
+      const a = Object.assign({}, pool[0], { id: n0, x: Float64Array.from(x), pv: Float64Array.from(pv), adpUse: 1e4, sd: 1, fieldV: -1e9, boardRaw: -1e9, adpE: 1e4, sdE: 1 });
+      P.push(a); ai = n0;
+    }
+    const gains = (picks, owner) => {
+      Eng.evaluate(P, ctx, cfg, { picks, owner });
+      const base = ai < 0 ? { c: 0, m: 0 } : { c: P[ai].gain * 100, m: P[ai].gainM * 100 };
+      return { g: P.slice(0, n0).map(p => ({ c: p.gain * 100, m: p.gainM * 100 })), base };
+    };
+    const rep = new Map(), avg = new Map(), put = (r, pid) => { const i = idx.get(pid), v = r.g[i]; rep.set(pid, v); avg.set(pid, { c: v.c - r.base.c, m: v.m - r.base.m }); };
+    const lists = o.lists || null;
+    const full = lists ? lists.map(l => l.filter(pid => idx.has(pid)).slice(0, Rr)) : null;
+    const build = skip => {   // my team in slots 0..R-1 (minus the skipped pid), team t in slots t*R..
+      const picks = new Array(N * Rr).fill(null), owner = new Array(N * Rr);
+      for (let k = 0; k < N * Rr; k++) owner[k] = Math.floor(k / Rr);
+      if (full) full.forEach((l, t) => l.forEach((pid, s) => { if (pid !== skip) picks[t * Rr + s] = idx.get(pid); }));
+      return { picks, owner };
+    };
+    const weakest = full && full[0].length >= Rr ? full[0][full[0].length - 1] : null;
+    const main = build(weakest), r0 = gains(main.picks, lists ? main.owner : undefined);
+    live.forEach(r => put(r0, r.pid));
+    const pending = full ? full[0].filter(pid => pid !== weakest) : [];
+    return { rep, avg, pending, hasAvg: ai >= 0, step() { const pid = pending.shift(); if (pid == null) return null; const b = build(pid); put(gains(b.picks, b.owner), pid); return pid; } };
+  }
+
+  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, ownersOf, table, playoffGames, withPlayoffs, winStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
 })(this);

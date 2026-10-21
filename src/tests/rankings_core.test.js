@@ -116,3 +116,70 @@ test('withPlayoffs: Off keeps z, adds games; boost scales z and categories and r
   }
   assert.ok(on.every((x, i) => i === 0 || x.z == null || on[i - 1].z != null && on[i - 1].z >= x.z), 'sorted best first, no-games last');
 });
+
+// Win C / Win M: calculated by Engine.evaluate exactly like the Draft tab (season-long, gain over replacement), plus an
+// "Average player" view (gain minus the gain of an average Zscore-pool player in the same run)
+const Eng = require('../engine.js'), Shared = require('../shared.js');
+const tabAvg = R.table(rows, { teams: 14, roster: 12, type: 'classic', basis: 'total' });
+const wOpts = { teams: 14, roster: 12, cats: 9, ilSpots: 3, basis: 'total' };
+const byPid = new Map(rows.map(r => [r.pid, r]));
+const boardGains = () => {   // the Draft tab at pick 1, slot 1 with the default settings
+  const P = Eng.prepPlayers(PLAYERS.map(r => Object.assign({}, r, Shared.projOf(r, 'avg')))), cfg = R.cfgFor({ basis: 'total' });
+  const ctx = Eng.buildContext(P, cfg); Eng.evaluate(P, ctx, cfg, { picks: new Array(14 * 12).fill(null) });
+  return P.map(p => ({ c: p.gain * 100, m: p.gainM * 100 }));
+};
+
+test('winStart (no league): Replacement equals the Draft tab at pick 1', () => {
+  const w = R.winStart(rows, tabAvg, wOpts), b = boardGains();
+  for (const [pid, v] of w.rep) { assert.ok(near(v.c, b[pid].c, 1e-6) && near(v.m, b[pid].m, 1e-6), 'pid ' + pid); }
+  assert.strictEqual(w.rep.size, rows.filter(r => r.g > 0).length);
+  assert.strictEqual(w.pending.length, 0);
+});
+
+test('winStart: Average player view shifts every row by one constant and ranks the same', () => {
+  const w = R.winStart(rows, tabAvg, wOpts), ids = [...w.rep.keys()];
+  const dC = ids.map(i => w.rep.get(i).c - w.avg.get(i).c), dM = ids.map(i => w.rep.get(i).m - w.avg.get(i).m);
+  assert.ok(dC.every(v => near(v, dC[0], 1e-9)) && dM.every(v => near(v, dM[0], 1e-9)) && dC[0] > 0, 'constant positive shift ' + dC[0]);
+});
+
+test('winStart: the average-player entry does not move real gains', () => {
+  const small = R.winStart(rows.slice(0, 150), R.table(rows.slice(0, 150), { teams: 14, roster: 12, type: 'classic', basis: 'total' }), wOpts);
+  assert.ok(small.rep.size > 0);   // too few rows for the average entry: Average view falls back to Replacement
+  const w = R.winStart(rows, tabAvg, wOpts), b = boardGains();
+  assert.ok(near(w.rep.get(0).c, b[0].c, 1e-9));
+});
+
+test('winStart: Jokic beats the pool tail, 8 categories is finite, repeat calls and reversed rows agree', () => {
+  const w = R.winStart(rows, tabAvg, wOpts), jokic = rows.find(r => /Jokic/.test(r.n)).pid, last = tabAvg.filter(t => t.z != null).slice(-1)[0].pid;
+  assert.ok(w.rep.get(jokic).m > 0 && w.rep.get(jokic).m > w.rep.get(last).m && w.rep.get(last).m < 0);
+  const w8 = R.winStart(rows, tabAvg, Object.assign({}, wOpts, { cats: 8 }));
+  assert.ok([...w8.rep.values()].every(v => isFinite(v.c) && isFinite(v.m)));
+  const again = R.winStart(rows, tabAvg, wOpts); assert.ok(near(again.rep.get(jokic).c, w.rep.get(jokic).c, 1e-12));
+  const rev = rows.slice().reverse(), wr = R.winStart(rev, R.table(rev, { teams: 14, roster: 12, type: 'classic', basis: 'total' }), wOpts);
+  assert.ok(near(wr.rep.get(jokic).m, w.rep.get(jokic).m, 1e-6));
+});
+
+test('winStart: better counting stats raise both numbers', () => {
+  const pid = tabAvg.filter(t => t.z != null)[60].pid, up = rows.map(r => r.pid === pid ? Object.assign({}, r, { line: Object.assign({}, r.line, { pts: r.line.pts * 1.1, reb: r.line.reb * 1.1, ast: r.line.ast * 1.1 }) }) : r);
+  const a = R.winStart(rows, tabAvg, wOpts).rep.get(pid), b = R.winStart(up, tabAvg, wOpts).rep.get(pid);
+  assert.ok(b.c > a.c && b.m > a.m);
+});
+
+// league mode: team 0 is mine; lists are top-roster player ids (best first)
+const lists = tabAvg.filter(t => t.z != null).map(t => t.pid);
+const mkLeague = (mineN) => { const t = []; for (let k = 0; k < 14; k++) t.push(lists.slice(k * 12 + (k ? 0 : 0), k * 12 + 12)); t[0] = t[0].slice(0, mineN); return t; };
+test('winStart (league): a free agent replaces my weakest; my players come from their own runs', () => {
+  const teams = mkLeague(12), w = R.winStart(rows, tabAvg, Object.assign({}, wOpts, { teams: 14, lists: teams }));
+  assert.strictEqual(w.pending.length, 11, 'one run for each of my players except the weakest');
+  const fa = lists[200]; assert.ok(w.rep.get(fa) && isFinite(w.rep.get(fa).m));
+  assert.ok(![...w.rep.values()].every(v => v.m === 0), 'an open slot exists, so gains are not all zero');
+  const weakest = teams[0][11], before = w.rep.get(weakest); assert.ok(before && isFinite(before.m), 'the weakest comes from the main run');
+  while (w.pending.length) w.step();
+  assert.ok(teams[0].every(pid => w.rep.has(pid) && w.avg.has(pid) && isFinite(w.rep.get(pid).c)));
+  assert.ok(w.rep.get(teams[0][0]).m > w.rep.get(teams[0][11]).m, 'my best starter is worth more than my weakest');
+});
+test('winStart (league): a short roster needs no extra runs for its open slot', () => {
+  const w = R.winStart(rows, tabAvg, Object.assign({}, wOpts, { lists: mkLeague(6) }));
+  assert.strictEqual(w.pending.length, 6); while (w.pending.length) w.step();
+  assert.ok([...w.rep.values()].every(v => isFinite(v.m)));
+});

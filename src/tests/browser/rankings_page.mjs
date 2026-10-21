@@ -42,7 +42,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   await p.click('#tbl th[data-k="z"]'); await p.waitForTimeout(100);
   ok((await names(p))[0] === top, 'Zscore header sorts best first (' + top + ')');
   await p.selectOption('#stats', 'raw'); await p.waitForTimeout(100);
-  ok(/^\.\d{3}$/.test(await p.$eval('#tbl tbody tr:first-child td:nth-child(8)', e => e.textContent)), 'Raw shows FG% as .xxx');
+  ok(/^\.\d{3}$/.test(await p.$eval('#tbl tbody tr:first-child td:nth-child(10)', e => e.textContent)), 'Raw shows FG% as .xxx');
   await p.selectOption('#type', 'h2h'); await p.waitForTimeout(500);
   // playoff games column and Playoff boost
   const poCol = () => p.$$eval('#tbl tbody tr td:nth-child(5)', t => t.map(e => +e.textContent));
@@ -71,6 +71,18 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   await p.selectOption('#zdrop', '0,0');
   await p.selectOption('#cw-3', '0'); await p.waitForTimeout(300);
   ok(await p.$eval('#tbl th[data-k="3"]', e => e.className) === 'punted' && Math.abs(await z() - z0) > 1e-6, 'punting PTS strikes the header and changes Zscore');
+  // Win C / Win M right after Zscore, Replacement vs Average player
+  const heads = await p.$$eval('#tbl thead th', t => t.map(e => e.textContent.replace(/[▲▼ ]/g, '')));
+  ok(heads[7] === 'WinC' && heads[8] === 'WinM' && /Zscore/.test(heads[6]), 'Win C and Win M follow Zscore');
+  const wm = async () => (await col(9)).map(x => parseFloat(x.replace('−', '-')));
+  const m0 = await wm(); ok(m0.every(isFinite) && m0.some(v => v > 5) && m0.some(v => v < 0), 'Win M values are numbers, best players positive');
+  await p.selectOption('#winvs', 'avg'); await p.waitForTimeout(300);
+  const m1 = await wm(); ok(Math.abs(m1[0] - m0[0]) > 0.5, 'Average player view changes Win M (' + m0[0] + ' to ' + m1[0] + ')');
+  await p.selectOption('#winvs', 'rep');
+  await p.click('#tbl th[data-k="winM"]'); await p.waitForTimeout(100);
+  const ms = await wm(); ok(ms.every((v, i) => i === 0 || v <= ms[i - 1] + 1e-9), 'Win M header sorts best first');
+  await p.click('#tbl th[data-k="z"]'); await p.waitForTimeout(100);
+  const ds = await p.$$eval('#tbl tbody tr td:nth-child(9)', t => t.length); ok(ds > 100, 'rows still listed');
   await p.click('#cw-reset'); await p.waitForTimeout(200);
   ok(Math.abs(await z() - z0) < 1e-9, 'Reset restores the weights');
   ok(errs.length === 0, '2b: no page errors ' + errs.join('; '));
@@ -87,6 +99,17 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   await p.click('#hide'); await p.waitForTimeout(300);
   ok(await rows(p) === all - taken, 'Hide taken removes the owned players: ' + all + ' -> ' + await rows(p));
   ok(errs.length === 0, '3: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+
+// 3b. saved team: my players show values, a free agent is measured in place of my weakest
+{ const { p, errs, ctx } = await open({ 'courtside-settings-v1': store({ id: 'lg1', name: 'Mock', teams: [], loadedAt: 1 }), 'courtside-leagues-v1': JSON.stringify([{ id: 'lg1', name: 'Mock', myTeam: Object.keys(FXR.rosters || FXR)[0], used: 1 }]) });
+  await p.selectOption('#src', 'avg'); await p.waitForTimeout(3500);
+  ok(/spot of your weakest player/.test(await p.$eval('#note', e => e.textContent)), 'note says a player takes your weakest spot');
+  const own = await p.$$eval('#tbl tbody tr', t => t.map(r => [r.children[2].textContent, r.children[8].textContent]));
+  const mineRows = own.filter(([o]) => o !== 'Free agent'), faRows = own.filter(([o]) => o === 'Free agent');
+  ok(own.every(([, m]) => m !== '…'), 'all Win cells have filled in');
+  ok(faRows.length > 20 && faRows.every(([, m]) => /\d/.test(m)), 'free agents have a Win M');
+  ok(errs.length === 0, '3b: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
 // 4. phone width: the page itself does not scroll sideways, the table scrolls inside its panel
