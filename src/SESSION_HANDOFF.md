@@ -32,7 +32,7 @@ Model pick; it never punts. Shared with friends via Cloudflare.
 - **In-season tools + Settings tab (ideas 95-109), released 2026-10-21:** Matchup and Trade Analyzers (`inseason.html`) and the Settings tab
   (shared league store `league_store.js`). Specs/plans in `docs/superpowers/`; ledger with every ruling in
   `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored). `Engine.pairMatchup` is the only engine change
-  (additions only, pinned by `engine_golden.test.js`). ESPN actuals refresh hourly in game windows (#111, on `stats-hourly`, not pushed). Decisions in force: Win M = vs this week's opponent in the Matchup Analyzer,
+  (additions only, pinned by `engine_golden.test.js`). ESPN actuals refresh hourly in game windows (#111, merged 2026-10-21; two manual runs from GitHub succeeded, no data yet because ESPN has no 2026-27 stats until games are played). Decisions in force: Win M = vs this week's opponent in the Matchup Analyzer,
   vs remaining regular-season matchups (periods 1-15) in the Trade Analyzer (projected playoffs later, #101); chances use gVar 1.87
   and shrink toward 0.5 (k 0.72 matchup, 0.82 categories); players without projections use ESPN actuals or a waiver-level line.
 
@@ -98,14 +98,15 @@ Model pick; it never punts. Shared with friends via Cloudflare.
    `collect-stats` workflow once by hand (`workflow_dispatch`; ESPN may block runner IPs, tested only from the PC). Open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit the shrink k with in-season data.
 11. Environment (this PC): `python3` is not installed, use `python`. (The after-edit hook's Windows glob problem is fixed, 2026-10-21.)
-12. **Queued next (after the Settings + In-season release): Rankings tab (idea 110).** User's brief (2026-10-21): a tab like
-    basketballmonster.com/playerrankings.aspx but in our layout: a Stats dropdown rather than multiple views; Zscore type, Playoff
-    boost etc. as on the board; on top of the different bases, the option to choose projections. Start with brainstorming.
+12. **Rankings tab (idea 110), brainstorm in progress, no code.** Decisions are in archive entry 110 (Source dropdown actuals windows or projections; Hide taken via Settings league rosters; no min-games hiding). Needs the box-score collector (#113) first. Next: write the design doc (`docs/superpowers/specs/2026-10-21-rankings-tab-design.md`), run the builder check, user approves, then planner and staged build.
+13. **League Dashboard "Projected" fix (#112):** user's spec: per game = team's average value, per week = week totals, per season = season totals (details in IDEAS 112). Small-to-medium task, `league_core.js` computeLeague + `league.html` profile; do before or after Rankings.
+14. This PC now has the GitHub CLI installed and logged in as Sanctumx (`gh` at `C:\Program Files\GitHub CLI`, add to PATH in the Bash tool): `gh pr create/merge` and `gh workflow run <id>` work; the workflow name lookup needs the id (`gh workflow list`).
+
+15. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 Matchup Analyzer combines known game stats (current matchup status) with projections (needs #113 box-score data / #103).
 
 ## Next session starts with
 
-Released 2026-10-21: In-season tools + Settings tab (merged to main). Still to do after the release: republish `courtside-draft-board.html` to the board
-artifact if not done, and trigger the `collect-stats` workflow once by hand (`workflow_dispatch`). Then **Rankings tab (idea 110, item 12)**: brainstorm first.
+Released 2026-10-21: In-season tools + Settings tab, then hourly ESPN stats (#111), all on main; board artifact republished (v164). On the next game night check the Actions tab ("Collect ESPN stats" green, commits only after games). Next: continue the Rankings brainstorm (item 12): write the design from archive entry 110, then the builder check. #112 is done (merged).
 Left open: a traded player's games still come from his preseason team; likelihood bias is a guess (#98); Win M ignores results so far (#103); IR on the
 League tab (#109).
 Browser checks: Playwright (`npm i playwright@1.48.2` + `npx playwright install chromium` in a scratch folder, or an earlier session's scratchpad `pw/`);

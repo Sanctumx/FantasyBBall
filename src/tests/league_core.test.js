@@ -44,9 +44,31 @@ test('stat ranks are 1..N per category and TO rank 1 has the fewest turnovers', 
   assert.ok(R.raw.every(r => r[8] >= R.raw[best][8]));
 });
 
-test('per week divides season totals by the regular-season weeks', () => {
+test('per week divides season totals by the 24 NBA weeks (82 games / 3.42)', () => {
   const R = L.computeLeague(PLAYERS, src(168), 'avg');
-  assert.ok(near(R.perWeek[3][3], R.raw[3][3] / 17));
+  assert.ok(near(R.perWeek[3][3], R.raw[3][3] / 24));
+});
+
+test('team stats count only the active slots (10 of 12), best-ranked players first', () => {
+  const s = src(168), R = L.computeLeague(PLAYERS, s, 'avg');
+  const top = R.rosters[0].slice().sort((a, b) => a.rk - b.rk).slice(0, 10);
+  assert.ok(near(R.raw[0][3], L.rawTotals(top)[3], 1e-6));
+  const G = L.computeLeague(PLAYERS, s, 'avg', 'pergame');
+  assert.ok(near(G.raw[0][3], top.reduce((a, p) => a + p.pts, 0), 1e-6));
+});
+
+test('active slot count follows the lineup settings: lu* sum, or the Fantrax slot list when present', () => {
+  const top = (R, n) => L.rawTotals(R.rosters[0].slice().sort((a, b) => a.rk - b.rk).slice(0, n))[3];
+  const a = src(168); Object.assign(a.cfg, { luC: 2, luG: 2, luF: 2, luGC: 0, luFC: 0, luU: 2 });
+  const Ra = L.computeLeague(PLAYERS, a, 'avg'); assert.ok(near(Ra.raw[0][3], top(Ra, 8), 1e-6));
+  const b = src(168); b.cfg.luFx = ['PG', 'SG', 'G/F', 'SF', 'PF', 'C', 'U'];
+  const Rb = L.computeLeague(PLAYERS, b, 'avg'); assert.ok(near(Rb.raw[0][3], top(Rb, 7), 1e-6));
+});
+
+test('a team with fewer players than active slots has open picks fill only the leftover active slots', () => {
+  const s = src(100); s.cfg.luFx = ['PG', 'SG', 'G/F', 'SF', 'PF', 'C', 'U'];
+  const R = L.computeLeague(PLAYERS, s, 'avg');
+  for (let t = 0; t < 14; t++) { assert.strictEqual(R.open[t], 12 - R.rosters[t].length); assert.ok(R.raw[t].every(Number.isFinite)); }
 });
 
 test('half-filled draft still computes everything', () => {
@@ -70,15 +92,15 @@ test('mid-draft team stats include a typical player at each open pick, as the wi
   for (let t = 0; t < 14; t++) {
     const drafted = L.rawTotals(R.rosters[t]);
     assert.strictEqual(R.open[t], 12 - R.rosters[t].length);
-    if (R.open[t] > 0) assert.ok(R.raw[t][3] > drafted[3] && R.raw[t][4] > drafted[4], 'team ' + t);
+    if (R.open[t] > 0 && R.rosters[t].length < 10) assert.ok(R.raw[t][3] > drafted[3] && R.raw[t][4] > drafted[4], 'team ' + t);
   }
   const full = L.computeLeague(PLAYERS, src(168), 'avg');
   assert.ok(full.open.every(n => n === 0));
-  assert.deepStrictEqual(full.raw[3], L.rawTotals(full.rosters[3]));
+  assert.deepStrictEqual(full.raw[3], L.rawTotals(full.rosters[3].slice().sort((a, b) => a.rk - b.rk).slice(0, 10)));
 });
 
 test('per game adds up the roster per-game lines (missed games do not count)', () => {
-  const R = L.computeLeague(PLAYERS, src(168), 'avg'), r = R.rosters[2];
+  const R = L.computeLeague(PLAYERS, src(168), 'avg'), r = R.rosters[2].slice().sort((a, b) => a.rk - b.rk).slice(0, 10);
   assert.ok(near(R.perGame[2][3], r.reduce((a, p) => a + p.pts, 0)));
   assert.ok(near(R.perGame[2][0], r.reduce((a, p) => a + p.fgp * p.fga, 0) / r.reduce((a, p) => a + p.fga, 0)));
   const R2 = L.computeLeague(PLAYERS, src(100), 'avg');
