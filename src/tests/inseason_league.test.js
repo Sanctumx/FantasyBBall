@@ -111,3 +111,11 @@ test('every ESPN team code maps to a sched.json team', () => {
   assert.ok(codes.size >= 30);
   for (const c of codes) assert.ok(SCHED.games[I.toProjTeam(c)], 'ESPN code ' + c);
 });
+
+test('period labels use Fantrax dates: week 1 is Oct 20 - Oct 25, week 2 Oct 26 - Nov 1, and the day list matches', () => {
+  const p = n => L.periods.find(q => q.n === n);
+  assert.strictEqual(I.localDay(p(1).start), '2026-10-20'); assert.strictEqual(I.periodLast(p(1)), '2026-10-25');
+  assert.strictEqual(I.localDay(p(2).start), '2026-10-26'); assert.strictEqual(I.periodLast(p(2)), '2026-11-01');
+  assert.deepStrictEqual(I.periodDays(p(1)), ['2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25']);
+  assert.strictEqual(I.periodDays(p(2)).length, 7);
+});

@@ -345,7 +345,7 @@ tr.click{cursor:pointer}
     $('team').innerHTML = L.teams.map(t => '<option value="' + esc(t.id) + '">' + esc(teamLabel(t.id)) + '</option>').join('');
     const t = teamFor(ui.tab); ui.teamBy[ui.tab][ui.leagueId] = t; $('team').value = t;
     const weeks = InL.regularFrom(L, cur);
-    $('week').innerHTML = weeks.map(n => { const p = L.periods.find(q => q.n === n); return '<option value="' + n + '">Week ' + n + (p ? ' · ' + InL.localDay(p.start).slice(5) + ' to ' + InL.localDay(p.end - 1).slice(5) : '') + '</option>'; }).join('');
+    $('week').innerHTML = weeks.map(n => { const p = L.periods.find(q => q.n === n); return '<option value="' + n + '">Week ' + n + (p ? ' · ' + InL.localDay(p.start).slice(5) + ' to ' + InL.periodLast(p).slice(5) : '') + '</option>'; }).join('');
     if (!weeks.includes(+ui.week)) ui.week = cur;
     $('week').value = String(ui.week);
     freshness(); save(); $('body').hidden = false; render();
@@ -398,7 +398,7 @@ tr.click{cursor:pointer}
 
   function renderMatchup() {
     const n = +ui.week, pw = mPW(ctx, n), per = L.periods.find(p => p.n === n);
-    $('vs-dates').textContent = per ? InL.localDay(per.start) + ' to ' + InL.localDay(per.end - 1) : '';
+    $('vs-dates').textContent = per ? InL.localDay(per.start) + ' to ' + InL.periodLast(per) : '';
     if (!pw.opp) { $('vs').textContent = 'No matchup this week'; $('kpis').innerHTML = ''; $('cats').innerHTML = ''; $('adds').innerHTML = ''; $('adds-msg').textContent = ''; $('plan-moves').innerHTML = ''; $('plan-note').textContent = ''; $('plan-sum').textContent = ''; $('sched').innerHTML = ''; return; }
     const nameOf = t => (L.teams.find(x => x.id === t) || { name: t }).name;
     $('vs').textContent = nameOf(ctx.me) + ' vs ' + nameOf(pw.opp);
@@ -445,7 +445,7 @@ tr.click{cursor:pointer}
   function renderSchedule(n, per) {
     if (!per) { $('sched').innerHTML = ''; return; }
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, days = [], today = InL.localDay(ctx.nowMs);
-    for (let t = per.start; t < per.end; t += 86400000) days.push(InL.localDay(t));
+    InL.periodDays(per).forEach(d => days.push(d));
     const ps = ctx.roster[ctx.me].map(k => ctx.pool.byKey.get(k)).filter(Boolean);
     const rows = ps.map(p => {
       const off = (ctx.out && ctx.out.has(p.key) && n === ctx.cur) || (p.slot === 'IR' && n === ctx.cur), set = new Set((G[p.t] || []).map(s => InL.localDay(s * 1000)));

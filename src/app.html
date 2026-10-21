@@ -685,7 +685,7 @@ function applyProj(Ps = P, proj = cfg.proj) {
     PROJ_KEYS.concat(['fgp', 'ftp']).forEach(k => { p[k] = s[k]; });
     const g = p.g; p.fgm = p.fgp * p.fga * g; p.fgaT = p.fga * g; p.ftm = p.ftp * p.fta * g; p.ftaT = p.fta * g;
     p.tot = { tpm: p.tpm * g, pts: p.pts * g, reb: p.reb * g, ast: p.ast * g, stl: p.stl * g, blk: p.blk * g, to: p.to * g };
-    p.projSrc = proj !== 'bbm' && !raw.hs ? 'bbm' : null;
+    p.projSrc = raw.src === 'hs' ? (proj === 'bbm' ? 'hs' : null) : (proj !== 'bbm' && !raw.hs ? 'bbm' : null);   // 'hs' = Hashtag-only player shown in BBM mode
   });
 }
 // Model pick settings (2026-10-18, user rule): the Model pick always drafts with the settings that tested best for prize
@@ -826,7 +826,7 @@ function matchFantrax(fid) {
   p = P.find(q => q.unlisted && q.fid === fid);
   if (p) return p;
   // Not in the projections: add him as a waiver-level player so the pick still counts for his team
-  const tail = P.filter(q => !q.unlisted).sort((a, b) => b.rk - a.rk).slice(0, 15);
+  const tail = P.filter(q => !q.unlisted && q.src !== 'hs').sort((a, b) => b.rk - a.rk).slice(0, 15);
   const avg = f => tail.reduce((s, q) => s + q[f], 0) / tail.length;
   const raw = { n: name, t: info.team || '', p: (info.position || '').replace(/,/g, '/'), g: Math.round(avg('g')), m: Math.round(avg('m')),
     pts: avg('pts'), tpm: avg('tpm'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), fga: avg('fga'), ftp: avg('ftp'), fta: avg('fta'), to: avg('to'),

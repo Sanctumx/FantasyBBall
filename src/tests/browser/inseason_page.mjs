@@ -51,7 +51,7 @@ async function open(opts = {}) {
   const fresh = await p.textContent('#fresh');
   ok(/2025-26/.test(fresh) && /last season/.test(fresh), 'freshness strip names 2025-26 and last season');
   ok(/Rosters fetched/.test(fresh) && /Projections/.test(fresh), 'freshness strip shows rosters and projections');
-  ok(/\d+ players without projections/.test(await p.textContent('#nomatch-sum')) && (await p.textContent('#nomatch-list')).includes('Aday Mara'), 'unmatched count shown and lists Aday Mara');
+  ok(/\d+ players without projections/.test(await p.textContent('#nomatch-sum')) && (await p.textContent('#nomatch-list')).includes('Carter Bryant'), 'unmatched count shown and lists Carter Bryant');
   const drops = await p.$$eval('#adds tbody td.drop', t => t.map(x => x.textContent));
   ok(drops.length >= 1 && new Set(drops).size > 1 && new Set(drops).size <= 5, 'Best adds: rows pair with up to 5 different drops (' + drops.length + ' rows, ' + new Set(drops).size + ' drops)');
   ok(await p.$eval('#addsleft', i => i.value) === '4', 'Adds left defaults to 4');

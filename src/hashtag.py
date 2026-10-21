@@ -20,6 +20,28 @@ for p in P:
     h = H.get(k)
     if h: p['hs'] = {kk: v for kk, v in h.items() if kk != 'name'}; hit += 1
     else: p.pop('hs', None); miss.append(p['n'])
+ADD_TO_RANK = 300   # Hashtag-only players up to this Hashtag rank are added (idea 126)
+TEAM = {'GS': 'GSW', 'NO': 'NOR', 'NY': 'NYK', 'SA': 'SAS', 'PHX': 'PHO', 'BKN': 'BKN'}
+# idempotent: drop rows added by an earlier run, then add every Hashtag player BBM lacks
+P = [p for p in P if p.get('src') != 'hs']
+have = {norm(ALIAS.get(p['n'], p['n'])) for p in P}
+import glob
+snap = json.load(open(sorted(glob.glob('collect/data/adp/*.json'))[-1]))['players']
+fx = {}
+for q in snap:
+    n = q['name']; n = (n.split(', ')[1] + ' ' + n.split(', ')[0]) if ', ' in n else n
+    fx[norm(n)] = q['adp']
+rk, added = max(p['rk'] for p in P), []
+for _, r in X.iterrows():
+    k = norm(r['PLAYER'])
+    if k in have or k not in H or int(str(r['R#']).split()[0]) > ADD_TO_RANK: continue
+    h = H[k]; rk += 1
+    adp = float(r['ADP']) if str(r['ADP']) not in ('nan', '', '-') else None
+    P.append(dict(n=h['name'], t=TEAM.get(r['TEAM'], r['TEAM']), p=str(r['POS']).replace(',', '/'), **{kk: v for kk, v in h.items() if kk != 'name'},
+                  adp=adp, ftx=fx.get(k), rk=rk, inj='', risk='', note='Hashtag only (no BBM projection).', src='hs',
+                  hs={kk: v for kk, v in h.items() if kk != 'name'}))
+    added.append(h['name'])
+print('Hashtag-only players added:', len(added))
 json.dump(P, open('players.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 print('hashtag rows', len(H), '| BBM players', len(P), '| matched', hit)
 print('BBM players with no Hashtag projection:', miss)

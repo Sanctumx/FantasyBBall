@@ -123,7 +123,7 @@
     const ids = tids.slice().sort((x, y) => ((rank[x] == null ? 1e9 : rank[x]) - (rank[y] == null ? 1e9 : rank[y])) || String(label(x)).localeCompare(String(label(y)), undefined, { numeric: true }));
     const N = ids.length, body = (rosters && rosters.rosters) || {};
     const P = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i, key: Shared.norm(r.n) }));
-    const tail = PLAYERS.slice().sort((a, b) => b.rk - a.rk).slice(0, 15), extra = [], byFid = {}, ir = [];
+    const tail = PLAYERS.filter(q => q.src !== 'hs').sort((a, b) => b.rk - a.rk).slice(0, 15), extra = [], byFid = {}, ir = [];
     const per = ids.map((tid, t) => {
       const out = [];
       ((body[tid] && body[tid].rosterItems) || []).forEach(x => {

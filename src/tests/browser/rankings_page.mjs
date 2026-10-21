@@ -35,7 +35,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   ok(errs.length === 0, '1: no page errors ' + errs.join('; '));
   // 2. projections and sorting
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
-  ok(await rows(p) === 234, 'projections list all 234 players');
+  ok(await rows(p) === 302, 'projections list all 302 players');
   await p.selectOption('#src', 'w7'); await p.waitForTimeout(800);
   ok(await rows(p) > 20 && /[Gg]ames 20\d\d-\d\d-\d\d to /.test(await p.$eval('#note', e => e.textContent)), 'Last week lists players from the box scores and names its dates');
   await p.selectOption('#src', 'avg'); await p.waitForTimeout(500);
