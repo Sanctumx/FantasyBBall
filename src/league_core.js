@@ -60,7 +60,7 @@
     // open picks count a typical player at that pick in the raw stats too, the same window the engine uses for the win chances
     // (players by expected draft slot, Gaussian weights around the j-th upcoming pick)
     // only the active lineup scores: the best-ranked rostered players fill the active slots, open picks fill what is left
-    const active = ['luC', 'luG', 'luF', 'luGC', 'luFC', 'luU'].reduce((a, k) => a + (+cfg[k] || 0), 0) || Math.max(1, cfg.roster - 2);
+    const active = (Array.isArray(cfg.luFx) && cfg.luFx.length) ? cfg.luFx.length : ['luC', 'luG', 'luF', 'luGC', 'luFC', 'luU'].reduce((a, k) => a + (+cfg[k] || 0), 0) || Math.max(1, cfg.roster - 2);
     const acc = rosters.map(() => new Array(11).fill(0)), accG = rosters.map(() => new Array(11).fill(0)), open = new Array(N).fill(0), left = new Array(N).fill(active);
     rosters.forEach((r, t) => r.slice().sort((a, b) => a.rk - b.rk).slice(0, active).forEach(p => { addTo(acc[t], line(p), 1); addTo(accG[t], line(p, 1), 1); left[t]--; }));
     const av = res.avail, A = av.length, tAt = k => (state.owner && state.owner[k] != null) ? state.owner[k] : E.teamAt(k, N, cfg.order);

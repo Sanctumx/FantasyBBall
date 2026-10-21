@@ -5,6 +5,8 @@ Find things with `src/IDEAS.md` (one line per idea, with its item number) or by 
 
 New entries go in "Entries after 2026-10-18" below, newest first, numbered one higher than the last item in `IDEAS.md`.
 Never edit old entries; add a new one that supersedes them.
+112.  [x] **League Dashboard projected stats (2026-10-21).** Only the active lineup counts (Fantrax slot list `luFx`, else the lu* sum, else roster−2), best preseason `rk` first; open picks fill leftover active slots; per week = season ÷ 24 NBA weeks (was ÷17 and all 12 players); per game = the active lineup's per-game line. Win chances unchanged; team-stat ranks and Z use the capped numbers. Review caught an unescaped apostrophe that broke the page script; fixed, browser checks league_page/league_sort pass. 126 unit tests.
+
 
 ## Entries after 2026-10-18
 

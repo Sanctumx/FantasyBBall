@@ -57,6 +57,20 @@ test('team stats count only the active slots (10 of 12), best-ranked players fir
   assert.ok(near(G.raw[0][3], top.reduce((a, p) => a + p.pts, 0), 1e-6));
 });
 
+test('active slot count follows the lineup settings: lu* sum, or the Fantrax slot list when present', () => {
+  const top = (R, n) => L.rawTotals(R.rosters[0].slice().sort((a, b) => a.rk - b.rk).slice(0, n))[3];
+  const a = src(168); Object.assign(a.cfg, { luC: 2, luG: 2, luF: 2, luGC: 0, luFC: 0, luU: 2 });
+  const Ra = L.computeLeague(PLAYERS, a, 'avg'); assert.ok(near(Ra.raw[0][3], top(Ra, 8), 1e-6));
+  const b = src(168); b.cfg.luFx = ['PG', 'SG', 'G/F', 'SF', 'PF', 'C', 'U'];
+  const Rb = L.computeLeague(PLAYERS, b, 'avg'); assert.ok(near(Rb.raw[0][3], top(Rb, 7), 1e-6));
+});
+
+test('a team with fewer players than active slots has open picks fill only the leftover active slots', () => {
+  const s = src(100); s.cfg.luFx = ['PG', 'SG', 'G/F', 'SF', 'PF', 'C', 'U'];
+  const R = L.computeLeague(PLAYERS, s, 'avg');
+  for (let t = 0; t < 14; t++) { assert.strictEqual(R.open[t], 12 - R.rosters[t].length); assert.ok(R.raw[t].every(Number.isFinite)); }
+});
+
 test('half-filled draft still computes everything', () => {
   const R = L.computeLeague(PLAYERS, src(84), 'avg');
   assert.strictEqual(R.picked, 84); assert.strictEqual(R.total, 168);
