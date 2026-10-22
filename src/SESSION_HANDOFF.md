@@ -40,8 +40,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
    Messages, planner and reviewer at Opus medium (high for hard areas), skill budget rule and unused claude.ai skills and
    connectors off in `settings.json`, handoff budget 8 KB checked by the hook, release/handoff details in
    `docs/release-handoff.md`. Check `/skills` in a fresh session that `skillOverrides` hides the synced skills. Check the
-   weekly usage after a few days; if handoffs feel too frequent try 80K / 150K. The two leftover items are on
-   Claude-Workflow branch `workflow-rule-and-heredoc` (the hook glob fix was already in the template); merge on "push".
+   weekly usage after a few days; if handoffs feel too frequent try 80K / 150K. The two leftover template items are merged (Claude-Workflow #2, 2026-10-22).
 5. In-season open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit shrink k.
 6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
