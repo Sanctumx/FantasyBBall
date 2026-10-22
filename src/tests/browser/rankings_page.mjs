@@ -45,7 +45,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   await p.click('#tbl th[data-k="z"]'); await p.waitForTimeout(100);
   ok((await names(p))[0] === top, 'Zscore header sorts best first (' + top + ')');
   await p.selectOption('#stats', 'raw'); await p.waitForTimeout(100);
-  ok(/^\.\d{3}$/.test(await p.$eval('#tbl tbody tr:first-child td:nth-child(11)', e => e.textContent)), 'Raw shows FG% as .xxx');
+  ok(/^\.\d{3}$/.test(await p.$eval('#tbl tbody tr:first-child td:nth-child(12)', e => e.textContent)), 'Raw shows FG% as .xxx');
   await p.selectOption('#type', 'h2h'); await p.waitForTimeout(500);
   // playoff games column and Playoff boost
   const poCol = () => p.$$eval('#tbl tbody tr td:nth-child(6)', t => t.map(e => +e.textContent));
@@ -94,6 +94,11 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(2)', t => t.map(e => e.t
   ok(rk1.every((v, i) => v === i + 1) && wsort.every((v, i) => i === 0 || v <= wsort[i - 1] + 1e-9), 'Order by Win M: # is the Win M rank and rows sort by it');
   await p.click('#tbl th[data-k="gp"]'); await p.waitForTimeout(100);
   const rk2 = await rk(); ok(rk2.some((v, i) => v !== i + 1) && [...rk2].sort((a, b) => a - b).every((v, i) => v === i + 1), 'a header click re-sorts rows but # stays the Win M rank');
+  // Edge = Order by rank minus Win M rank (#135)
+  const ei = (await p.$$eval('#tbl thead th', h => h.findIndex(e => e.dataset.k === 'edge'))) + 1, edges = async () => (await col(ei)).map(s => s.replace('−', '-').replace('+', ''));
+  ok(ei > 0, 'Edge header exists'); ok((await edges()).every(v => v === '0' || v === '—'), 'Order by Win M: Edge is 0 for everyone');
+  await p.selectOption('#orderby', 'z'); await p.waitForTimeout(300);
+  ok((await edges()).some(v => /^-?[1-9]/.test(v)), 'Order by Zscore: Edge shows differences from the Win M rank');
   await p.selectOption('#orderby', 'z'); await p.waitForTimeout(200);
   ok(await p.$$eval('#tbl tbody tr.mine', t => t.length) === 0, 'no league: no highlighted rows');
   const ds = await p.$$eval('#tbl tbody tr td:nth-child(10)', t => t.length); ok(ds > 100, 'rows still listed');
