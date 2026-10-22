@@ -12,6 +12,8 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
+131. **Team tab brainstorm, so far (2026-10-22, in progress).** User decisions: the Team tab is for (a) seeing all my stats and (b) testing trade targets on my team. The swap is a preview only (never changes the saved league), any number of players in and out (2-for-1, 3-for-2), and incoming players can be other teams' players or waiver-wire pickups; stats are chosen with dropdowns (per game / weekly / season, projected / real / both: exact list still to confirm). Recon: one shared `TOOLBAR_HTML` in `src/shared.js:37-45` builds the tab bar for every page (the Team tab and the reorder are small); Draft tooltips are native `title=` attributes in `src/app.html` (rule in `.claude/rules/pages.md`); How it works is one `<dialog class="how">` in `app.html`, copied by `gen.py` into League and In-Season; `league_core.js` `computeLeague` and `matchup_core.js` already give per-team totals, Win C/M and the category matrix. Not yet asked: the matchup/category matrix on this tab, how it differs from the Trade Analyzer, tab order details. The visual companion (mockups) was offered; no answer yet. No code written.
+
 130. **Rankings like the Draft list (2026-10-21, adopted).** Source rows carry `m` (minutes per game: projections via `Shared.projOf`, season and windows via the box/ESPN `min`), display only. Rankings page: MPG column after Pos, Order by select (Zscore / Win C / Win M, saved as `ui.order`; sets what # means and sorts by it; header clicks re-sort rows only; pending Win values rank last by Zscore), `tr.mine` highlight when owner = `myTeam()` (new `--mine-soft`). Browser test columns shifted +1 after Pos. No backtest: nothing the Model pick sees changed.
 
 

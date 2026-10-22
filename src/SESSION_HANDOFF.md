@@ -1,6 +1,6 @@
 # Session handoff — Courtside Draft Kit (Fantasy BBall)
 
-_Last updated: 2026-10-21_ · Current state only, about 60 lines / 6 KB. Replace lines instead of appending; trim by moving
+_Last updated: 2026-10-22_ · Current state only, about 60 lines / 6 KB. Replace lines instead of appending; trim by moving
 text (stable reference → `src/MODEL.md`, finished detail → archive), never by deleting it.
 Every idea ever tried: `src/IDEAS.md` (one line each, search it). Full write-ups: `src/HANDOFF_ARCHIVE.md` (search `^N\.`).
 How work gets done and the user's standing rules: `CLAUDE.md`. Model, defaults, architecture, backtest world: `src/MODEL.md`.
@@ -40,9 +40,8 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
    Messages, planner and reviewer at Opus medium (high for hard areas), skill budget rule and unused claude.ai skills and
    connectors off in `settings.json`, handoff budget 8 KB checked by the hook, release/handoff details in
    `docs/release-handoff.md`. Check `/skills` in a fresh session that `skillOverrides` hides the synced skills. Check the
-   weekly usage after a few days; if handoffs feel too frequent try 80K / 150K. Still to add to `Sanctumx/Claude-Workflow`:
-   (a) the "keep running plan tasks; past the context limit finish, record, stop" rule in `template/CLAUDE.md`'s working
-   rules; (d) the after-edit hook's Windows glob fix and the heredoc note.
+   weekly usage after a few days; if handoffs feel too frequent try 80K / 150K. The two leftover items are on
+   Claude-Workflow branch `workflow-rule-and-heredoc` (the hook glob fix was already in the template); merge on "push".
 5. In-season open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit shrink k.
 6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
@@ -56,7 +55,7 @@ Hashtag refresh, 68 Hashtag-only players, box-score scoring of adds, Fantrax per
 `base`, a save without one counts as 234 players). 192 unit tests pass. Board artifact republished (v166). First step:
 refit
 the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
-#130 done and released (Rankings: MPG, Order by, my players highlighted). **Next: the tab overhaul #131-134 (user, 2026-10-21): Rankings left of Draft, new Team tab between them (all players with projected/real stats, average totals, Win C/M, swap a player, matchup/category matrix), a collapsible How it works panel on every tab, hover tooltips redone like the Draft tab, compact tabs that fill the space. Big feature: brainstorming with the user, then planner.** #116 and #112 are merged. Best adds/plan on remaining games.
+#130 done and released (Rankings: MPG, Order by, my players highlighted). **Next: the tab overhaul #131-134 (user, 2026-10-21). Brainstorming is under way (decisions in archive 131: Team tab = see all my stats + preview-only swaps of any number of players, incl. waiver pickups, dropdowns pick the stats view); resume it, the visual-companion offer is unanswered, then write the design doc (`docs/superpowers/specs/`), builder check, planner. Rankings left of Draft, new Team tab between them (all players with projected/real stats, average totals, Win C/M, swap a player, matchup/category matrix), a collapsible How it works panel on every tab, hover tooltips redone like the Draft tab, compact tabs that fill the space. Big feature: brainstorming with the user, then planner.** #116 and #112 are merged. Best adds/plan on remaining games.
 Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
 Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess
 (#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against
