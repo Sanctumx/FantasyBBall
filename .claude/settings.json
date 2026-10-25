@@ -21,7 +21,18 @@
     "xlsx": "off"
   },
   "permissions": {
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh api:*merge*)"
+    ],
     "deny": [
+      "Edit(/index.html)",
+      "Edit(/league.html)",
+      "Edit(/inseason.html)",
+      "Edit(/settings.html)",
+      "Edit(/rankings.html)",
+      "Edit(/math.html)",
       "Read(/src/logs*.csv)",
       "Read(/src/bt_daily.json)",
       "Read(/src/bt_data.json)",

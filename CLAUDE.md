@@ -18,30 +18,28 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 
 ## Keeping context lean (`.claude/`)
 
-- **Blocked from reading** (`settings.json` deny rules): `src/logs*.csv`, `src/bt_daily.json`, `src/bt_data.json`,
-  backtest result files `src/bt_*_*.json`, `src/data/*.xls*`, and the built pages `index.html`, `league.html`,
-  `inseason.html`, `settings.html`, `math.html` (which also blocks editing them by hand). Scripts still read them; to inspect one, run a short node or
-  python snippet that prints only what you need.
-- **Path rules** (`.claude/rules/`): engine and backtest rules, and board/page rules, load only when matching files are
-  opened.
-- **Hook** (`.claude/hooks/after-edit.mjs`): after an edit to tested code it runs the unit tests (~3 s) and reports
-  failures; after an edit to the handoff it warns past 150 lines. Fix what it reports before moving on.
-- **Context hooks** (`.claude/hooks/context-warn.mjs`, `context-stop.mjs`): once the conversation passes about 60K
-  tokens (stop past 120K) I get a one-line warning and you get the same instruction: finish the current task, don't
-  start further plan tasks, run `/handoff`, then tell me to `/clear`. If a turn ends past 60K with no handoff
-  recorded, the Stop hook makes you run it once. Works in the app's Claude Code tab, VS Code and the terminal, and
-  measures the start-up cost from the session log (no need to run `/context`); `CTX_BASELINE` overrides it.
-- **Status line** (`.claude/statusline.mjs`): model and effort, context %, 5-hour plan usage, cache state, branch,
-  and a hint when it's time to `/handoff` and `/clear` (cues in `Sanctumx/Claude-Workflow` `template/GUIDELINES.md`).
-  It shows only in the terminal. In the Claude app or VS Code panel the context hooks give the same warning; read
-  **Messages** in `/context`, not the total, if you check by hand: the app starts around 95K before any work.
+- **Blocked** (`settings.json` deny rules): reading `src/logs*.csv`, `src/bt_daily.json`, `src/bt_data.json`, backtest
+  results `src/bt_*_*.json`, `src/data/*.xls*`, and the built pages `index.html`, `league.html`, `inseason.html`,
+  `settings.html`, `rankings.html`, `math.html`; editing the built pages by hand is blocked too (rebuild them instead).
+  Scripts still read them; to inspect one, run a short node or python snippet that prints only what you need.
+- **Asks first:** `git push`, `gh pr merge` and the merge API call prompt the user every time (`permissions.ask`).
+- **Path rules** (`.claude/rules/`): engine/backtest rules and board/page rules load only when matching files are opened.
+- **Test hook** (`after-edit.mjs`): after an edit to tested code it runs the unit tests (~3 s); after an edit to the
+  handoff it warns past 150 lines. Fix what it reports before moving on.
+- **Context hooks** (`context-warn.mjs`, `context-stop.mjs`): once the conversation passes about 60K tokens (stop past
+  120K) the user and you get a warning. Finish the current task, start no further plan tasks, run `/handoff`, then tell the
+  user to `/clear`. If a turn ends past 60K with no handoff recorded, the Stop hook makes you run it once. They measure the
+  start-up cost from the session log; `CTX_BASELINE` overrides it. If checking by hand, read **Messages** in `/context`,
+  not the total (the app starts around 95K).
+- **Status line** (`statusline.mjs`, terminal only): model, context %, plan usage, cache state, branch, and a hint when
+  to `/handoff` and `/clear`.
 
 ## Model routing
 
-The main session runs on **Sonnet at medium effort**: in Claude Code from `.claude/settings.json`, in the Claude app by
-keeping the model picker on Sonnet. Judgment work goes to subagents, each pinned to its own model and effort in
-`.claude/agents/`, so the right model and effort are picked automatically and the main session never switches model
-(its cache stays warm).
+The main session runs on **Sonnet at medium effort** (`.claude/settings.json`; in the Claude app, keep the picker on
+Sonnet). Judgment work goes to subagents pinned to their own model and effort in `.claude/agents/`, so the main session
+never switches model and its cache stays warm. If the session is on Opus and the user hasn't said it's deliberate,
+mention it once (the VS Code picker overrides `settings.json`).
 
 | Work | Who does it | Model · effort |
 | --- | --- | --- |
@@ -73,26 +71,22 @@ They work alongside the routing above; this file takes precedence over them. Siz
 | Big feature, or anything that changes what the Model pick sees | Full flow: brainstorming (main session, it needs the user), then the `planner` drafts the writing-plans document from that skill's format and the main session saves it, then executing-plans inline, then one review. |
 
 - **Skill budget** (overrides using-superpowers' "invoke at 1% chance"): for small and medium tasks don't load
-  test-driven-development or executing-plans; the test-first rule in this file is enough. Load them only for a big
-  feature. Never run writing-plans or executing-plans as subagents.
-- **Main model:** Sonnet unless the user chose otherwise. The VS Code panel's model picker overrides `settings.json`,
-  so if the session is on Opus and the user hasn't said it's deliberate, mention it once.
-- **Skills and connectors:** unused claude.ai skills are turned off in `settings.json` (`skillOverrides`) and claude.ai
-  connectors are off (`disableClaudeAiConnectors`; a `true` anywhere wins, so `/mcp` can't turn one back on). To use
-  one, edit those lines in `.claude/settings.json` (Claude Code reloads it mid-session).
-- **Planning:** writing-plans' thinking is done by the `planner` subagent (Opus); the main session only saves the file.
-- **Executing:** use executing-plans inline by default. Use subagent-driven-development only for tasks that are truly
-  independent of each other, and give every subagent an explicit model, as that skill requires.
+  test-driven-development or executing-plans; the test-first rule below is enough. Load them only for a big feature.
+  Never run writing-plans or executing-plans as subagents.
+- **Executing:** inline by default. Use subagent-driven-development only for truly independent tasks, and give every
+  subagent an explicit model, as that skill requires.
 - **Reviewing:** one review per branch. When a skill asks for a code review, run the `reviewer` subagent with that
-  skill's template (Opus; Sonnet only for docs, config or wording-only branches).
+  skill's template.
+- **Skills and connectors:** unused claude.ai skills are off in `settings.json` (`skillOverrides`) and connectors are off
+  (`disableClaudeAiConnectors`; a `true` anywhere wins, so `/mcp` can't turn one back on). To use one, edit those lines
+  (Claude Code reloads the file mid-session).
 - **Worktrees:** fine to use; the after-edit hook tests the checkout being edited.
 
 ## The user's working rules
 
-- Push, merge or deploy only when the user says "push" or types /release.
-- Keep running plan tasks back to back unless something needs the user's input; but once a task has taken the conversation
-  past the context limit (Messages past about 60K in `/context`), finish that task, record it, and don't autorun further
-  tasks: tell the user to `/handoff` and `/clear` (user, 2026-10-20).
+- Push, merge or deploy only when the user says "push" or types /release (the ask prompt above is the backstop).
+- Keep running plan tasks back to back unless something needs the user's input; the exception is the context limit
+  above (user, 2026-10-20).
 - Using the user's computer (copying files there, staging results back) is allowed without asking each time (user,
   2026-10-18) until the user withdraws it. The user still starts PC backtest runs themselves.
 - Every improvement to the workflow (CLAUDE.md, skills, subagents, settings, hooks) is also generalized for other
