@@ -32,6 +32,7 @@
       "Edit(/inseason.html)",
       "Edit(/settings.html)",
       "Edit(/rankings.html)",
+      "Edit(/team.html)",
       "Edit(/math.html)",
       "Read(/src/logs*.csv)",
       "Read(/src/bt_daily.json)",
@@ -43,6 +44,7 @@
       "Read(/inseason.html)",
       "Read(/settings.html)",
       "Read(/rankings.html)",
+      "Read(/team.html)",
       "Read(/math.html)",
       "Read(**/node_modules/**)"
     ]
