@@ -7,6 +7,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fetchJsonRetry } from './espn_fetch.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, '..', '..', 'stats', 'espn.json');
@@ -50,9 +51,8 @@ export function nextFile(prev, first, players, season, now) {
 async function fetchAll(season) {
   const players = []; let first = null;
   for (let page = 1, pages = 1; page <= pages; page++) {
-    const r = await fetch(`${BASE}?category=general&limit=1000&page=${page}&season=${season}&seasontype=2`, { headers: { accept: 'application/json', 'user-agent': 'courtside-stats-collector' } });
-    if (!r.ok) throw new Error('ESPN answered HTTP ' + r.status);
-    const body = await r.json();
+    if (page > 1) await new Promise(r => setTimeout(r, 500));
+    const body = await fetchJsonRetry(`${BASE}?category=general&limit=1000&page=${page}&season=${season}&seasontype=2`);
     if (!first) first = body;
     pages = (body.pagination && body.pagination.pages) || 1;
     players.push(...parseByAthlete(body));

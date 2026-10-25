@@ -10,6 +10,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fetchJsonRetry } from './espn_fetch.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=';
@@ -87,11 +88,7 @@ export const missingGames = (files, events) => events.filter(e => { const f = fi
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-export async function fetchJson(url) {
-  const r = await fetch(url, { headers: { accept: 'application/json', 'user-agent': 'courtside-stats-collector' } });
-  if (!r.ok) throw new Error('ESPN answered HTTP ' + r.status);
-  return r.json();
-}
+export const fetchJson = url => fetchJsonRetry(url);
 
 export async function run({ season, dates, outDir, now = new Date(), fetchJson: get = fetchJson, log = console.log, pauseMs = 250 }) {
   const bad = dates.filter(d => !/^\d{8}$/.test(d)); if (bad.length) throw new Error('Dates must be YYYYMMDD, got ' + bad.join(','));
