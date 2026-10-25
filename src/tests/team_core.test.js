@@ -84,3 +84,41 @@ test('Plays %: pct is null when the team has no games left', () => {
   const r = T.playsPct(ctx, stateOf(keys, []));
   keys.forEach(k => { assert.strictEqual(r[k].pct, null); assert.strictEqual(r[k].gl, 0); });
 });
+
+// weightedZ and teamLine (task 4)
+const R = require('../rankings_core.js'), Rows = R.projSource(PLAYERS, 'avg');
+
+test('weightedZ with all weights 1 reproduces the Rankings Zscore exactly; 0 drops a category; 0.5 halves it', () => {
+  const tab = R.table(Rows, { teams: 12, roster: 12, type: 'h2h', basis: 'pergame' }).filter(r => r.z != null).slice(0, 40);
+  tab.forEach(r => assert.ok(Math.abs(T.weightedZ(r.cats, null) - r.z) < 1e-12));
+  tab.forEach(r => assert.ok(Math.abs(T.weightedZ(r.cats, [1, 1, 1, 1, 1, 1, 1, 1, 1]) - r.z) < 1e-12));
+  const r = tab[0], W = Pl.WEIGHTS, w0 = [1, 1, 1, 1, 1, 1, 1, 1, 1], w5 = w0.slice();
+  w0[3] = 0; w5[3] = 0.5;
+  assert.ok(Math.abs(T.weightedZ(r.cats, w0) - (r.z - r.cats[3] * W[3])) < 1e-12);
+  assert.ok(Math.abs(T.weightedZ(r.cats, w5) - (r.z - 0.5 * r.cats[3] * W[3])) < 1e-12);
+});
+
+test('teamLine: Plays % x line summed over players, counting stats per active slot, percentages from makes and attempts', () => {
+  const a = { fgp: 0.5, fga: 10, ftp: 0.8, fta: 5, tpm: 2, pts: 20, reb: 5, ast: 4, stl: 1, blk: 1, to: 2 };
+  const b = { fgp: 0.4, fga: 20, ftp: 0.5, fta: 4, tpm: 1, pts: 10, reb: 3, ast: 2, stl: 0, blk: 0, to: 1 };
+  const t = T.teamLine([{ line: a, pct: 1 }, { line: b, pct: 0.5 }], 10);
+  assert.ok(Math.abs(t.pts - 2.5) < 1e-12 && Math.abs(t.to - 0.25) < 1e-12);
+  assert.ok(Math.abs(t.fga - 2) < 1e-12 && Math.abs(t.fgp - (5 + 4) / 20) < 1e-12);
+  assert.ok(Math.abs(t.ftp - (4 + 1) / 7) < 1e-12);
+  assert.strictEqual(T.teamLine([], 10).fgp, 0);
+  assert.strictEqual(T.teamLine([{ line: a, pct: null }], 10).pts, 0);   // no games left counts for nothing
+});
+
+// name search (task 5)
+test('search: accent- and case-insensitive, partial, every word must match, starts-with first, limit honoured', () => {
+  const list = [{ n: 'Nikola Jokić' }, { n: 'Nikola Vučević' }, { n: 'Jonas Valančiūnas' }, { n: 'Bojan Bogdanović' }, { n: 'Luka Dončić' }, { n: 'Dan Smith' }, { n: 'Anthony Edwards' }];
+  const names = q => T.search(list, q).map(x => x.n);
+  assert.deepStrictEqual(names('jokic'), ['Nikola Jokić']);
+  assert.deepStrictEqual(names('NIK vu'), ['Nikola Vučević']);
+  assert.deepStrictEqual(names('doncic'), ['Luka Dončić']);
+  assert.deepStrictEqual(names('jo'), ['Nikola Jokić', 'Jonas Valančiūnas']);
+  assert.deepStrictEqual(names('an'), ['Anthony Edwards', 'Jonas Valančiūnas', 'Bojan Bogdanović', 'Dan Smith']);   // a word starting with it first, then inside a word, list order within each
+  assert.deepStrictEqual(names(''), []);
+  assert.deepStrictEqual(names('zzz'), []);
+  assert.strictEqual(T.search(list, 'n', 2).length, 2);
+});
