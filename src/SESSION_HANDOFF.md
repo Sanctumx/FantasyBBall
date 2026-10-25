@@ -46,6 +46,8 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
 7. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 combine known
    game stats with projections; (#116 done).
+8. **#136** ESPN collectors (`espn_stats.mjs`, `espn_box.mjs`): add retry with backoff on 429/403/5xx and a short delay
+   between requests (user, 2026-10-22). Open; small fix, no cookies are sent.
 
 ## Next session starts with
 
