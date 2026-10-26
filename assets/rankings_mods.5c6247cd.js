@@ -214,6 +214,8 @@
     return ref;
   }
   const valueZ = (line, g, ref) => (rawValue(total(line, g, ref), ref) - ref.vMean) / ref.vSd;
+  // g games of `line` plus G - g games of `fill` (a player who misses games is replaced by the team's worst player for them)
+  const valueZFill = (line, g, fill, G, ref) => { const a = total(line, g, ref), b = total(fill, Math.max(0, G - g), ref); return (rawValue(a.map((v, c) => v + b[c]), ref) - ref.vMean) / ref.vSd; };
   // per-game z in each category, positive = good for the team (turnovers flipped)
   const catZ = (line, ref) => total(line, 1, ref).map((v, c) => (c === 8 ? -1 : 1) * (v - ref.pgMean[c]) / ref.pgSd[c]);
 
@@ -226,7 +228,7 @@
       ast: mix(a.ast, b.ast), stl: mix(a.stl, b.stl), blk: mix(a.blk, b.blk), to: mix(a.to, b.to) };
   }
 
-  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, waiverLevel, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
+  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, waiverLevel, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, valueZFill, catZ, curLine };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InPlayers = api;
 })(this);
 
@@ -333,6 +335,17 @@
   const api = { table, FP_SLOT, noise, engineView, entry, STATS, RHO, DISP, statsOf, perGame, pgVar, projVar, weekVar, key };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Points = api;
 })(this);
+
+// The one shrink every Win C / Win M display reads (#139, #147): Team, Rankings and the Trade Analyzer. Display only, never in the Model pick.
+// Fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (calib_ros_k.js): pooled k 0.43 match, 0.65 per category; shipped at
+// 0.6 / 0.75 (user, 2026-10-26) because the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident.
+(function (root) {
+  'use strict';
+  const SHRINK = { match: 0.6, cat: 0.75 };
+  const shrink = (p, k) => 0.5 + k * (p - 0.5);
+  const api = { SHRINK, shrink };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.WinK = api;
+})(typeof self !== 'undefined' ? self : this);
 
 // Rankings core (2026-10-21): per-game lines from any source → Zscore table. Pure; browser and Node.
 // Rule (user, 2026-10-21): a source's Zscore is calculated on the top X players by H2H-adjusted value within that source,
@@ -522,7 +535,8 @@
     let ctx = Eng.buildContext(P, cfg);
     const n0 = P.length, pts = o.points ? Points.FP_SLOT : -1;   // points mode: one FP total in a category slot (points_core.engineView)
     if (o.points) { const v = Points.engineView(P, ctx, cfg, o.points); P = v.P; ctx = v.ctx; }
-    const cOf = p => pts < 0 ? p.gain * 100 : null, mOf = p => pts < 0 ? p.gainM * 100 : p.gainC[pts] * 100;
+    const sk = o.shrink && pts < 0 ? o.shrink : { match: 1, cat: 1 };   // #147: the Team tab's pull toward 50% (WinK.SHRINK), display only; a gain is a difference of chances, so it scales by k
+    const cOf = p => pts < 0 ? p.gain * 100 * sk.cat : null, mOf = p => pts < 0 ? p.gainM * 100 * sk.match : p.gainC[pts] * 100;
     const lists = o.lists || null;
     const full = lists ? lists.map(l => l.filter(pid => idx.has(pid)).slice(0, Rr)) : null;
     // average-player entry: the average player on my roster when a league is loaded, else the Zscore pool's average; needs enough

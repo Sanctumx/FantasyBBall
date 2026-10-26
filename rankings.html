@@ -132,7 +132,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
 <script src="assets/shared.9f9a6a1b.js"></script>
 <script src="assets/store.22818a7e.js"></script>
 <script src="assets/fxcache.3a003ffb.js"></script>
-<script src="assets/rankings_mods.73c3d81d.js"></script>
+<script src="assets/rankings_mods.5c6247cd.js"></script>
 <script>
 (function () {
   'use strict';
@@ -232,7 +232,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
     const key = ['win', ptKey(), ui.src, ui.basis, WINDAYS[ui.src] ? ui.type : '', s.teams, s.roster, s.cats, s.ilSpots, lists ? lists.map(l => l.join(',')).join(';') : 'none'].join('|');
     if (win.key === key) return win.w;
     win.key = key; const seq = ++win.seq;
-    win.w = R.winStart(rows, tab, { teams: s.teams, roster: s.roster, cats: s.cats, ilSpots: s.ilSpots, basis: ui.basis, lists, points: pw() });
+    win.w = R.winStart(rows, tab, { teams: s.teams, roster: s.roster, cats: s.cats, ilSpots: s.ilSpots, basis: ui.basis, lists, points: pw(), shrink: WinK.SHRINK });
     const tick = () => { if (seq !== win.seq) return; if (win.w.step() != null) { draw(); setTimeout(tick, 0); } else draw(); };
     if (win.w.pending.length) setTimeout(tick, 0);
     return win.w;
@@ -311,7 +311,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
     const zeroPts = P_ && Object.values(P_).every(v => !v);
-    n.textContent = (zeroPts ? 'All point values are 0: enter your league\'s values in Settings. ' : '') + (matched < tab.length ? matched + ' players match. ' : '') + (P_ ? 'Win M is season-long, as on the Draft tab, against' : 'Win C / Win M are season-long, as on the Draft tab, against') + ' simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. ' + (P_ ? 'Points are your Settings point values times each stat; Season multiplies by games played, Mix by the midpoint of his games and the top ' + K + ' players\' average (scaled to games played). Win M treats each team\'s week as one points total, with the engine\'s own stat noise plus measured correlations between stats (a high-scoring night is usually also a high-FG night).' : 'Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).') + (ui.poboost !== 'off' ? (P_ ? ' Playoff boost scales the Points value by 1 + strength' : ' Playoff boost scales Zscore and each category by 1 + strength') + ' × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    n.textContent = (zeroPts ? 'All point values are 0: enter your league\'s values in Settings. ' : '') + (matched < tab.length ? matched + ' players match. ' : '') + (P_ ? 'Win M is season-long, as on the Draft tab, against' : 'Win C / Win M are season-long, as on the Draft tab, against') + ' simulated league teams' + (P_ ? '' : ', pulled toward 50% as on the Team tab (Win M by 0.6, Win C by 0.75)') + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. ' + (P_ ? 'Points are your Settings point values times each stat; Season multiplies by games played, Mix by the midpoint of his games and the top ' + K + ' players\' average (scaled to games played). Win M treats each team\'s week as one points total, with the engine\'s own stat noise plus measured correlations between stats (a high-scoring night is usually also a high-FG night).' : 'Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).') + (ui.poboost !== 'off' ? (P_ ? ' Playoff boost scales the Points value by 1 + strength' : ' Playoff boost scales Zscore and each category by 1 + strength') + ' × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
     prewarm();
   }
 

@@ -229,13 +229,13 @@ tr.click{cursor:pointer}
       <h4>Adds and the plan</h4>
       <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. May drop limits the drops to your 1 to 5 lowest-value players (players on the keep list are never dropped and don't count); All uses up to 5 for single adds and your bench size for the plan. Plans cover the current week only.</p>
       <h4>Trade Analyzer</h4>
-      <p>Trade Win M is your average chance over the remaining regular-season matchups against the real opponents, with both rosters changed; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
+      <p>Trade Win M is your average chance against every other team over the rest of the regular season (the Team tab's forecast, opponents weighted equally), with both rosters changed; an IL player counts as healthy, with the games his projection leaves him (it already includes the time he is expected to miss) and the reserve refilling the rest; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
       <h4>Rankings</h4>
-      <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, as the gain over a replacement-level player (Win vs: Average player subtracts an average player on your roster instead, or an average pool player when no team is saved in Settings). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
+      <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, pulled toward 50% by the same factors as the Team tab in category leagues (0.75 for Win C, 0.6 for Win M; the order and Edge do not change), as the gain over a replacement-level player (Win vs: Average player subtracts an average player on your roster instead, or an average pool player when no team is saved in Settings). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
       <h4>Points leagues</h4>
       <p>Settings can score a league in fantasy points (a value per stat). Draft, League, Matchup, Trade and Rankings don't value points leagues yet and say so; nothing is calculated from the category model for a points league.</p>
       <h4>Shrinkage and missing projections</h4>
-      <p>Chances are pulled toward 50% (matchup by 0.72, each category by 0.82) because backtests on 2024-26 weeks showed projections alone are overconfident. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
+      <p>Chances are pulled toward 50% because backtests showed projections alone are overconfident: in the Matchup Analyzer (one week) the matchup by 0.83 and each category by 0.85; in the Trade Analyzer and the Team tab (the weeks still to come) by 0.6 and 0.75, a stronger pull because errors in a player's projection last all season. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
     </section>
    </div>
   </div>
@@ -1951,6 +1951,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return ref;
   }
   const valueZ = (line, g, ref) => (rawValue(total(line, g, ref), ref) - ref.vMean) / ref.vSd;
+  // g games of `line` plus G - g games of `fill` (a player who misses games is replaced by the team's worst player for them)
+  const valueZFill = (line, g, fill, G, ref) => { const a = total(line, g, ref), b = total(fill, Math.max(0, G - g), ref); return (rawValue(a.map((v, c) => v + b[c]), ref) - ref.vMean) / ref.vSd; };
   // per-game z in each category, positive = good for the team (turnovers flipped)
   const catZ = (line, ref) => total(line, 1, ref).map((v, c) => (c === 8 ? -1 : 1) * (v - ref.pgMean[c]) / ref.pgSd[c]);
 
@@ -1963,7 +1965,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       ast: mix(a.ast, b.ast), stl: mix(a.stl, b.stl), blk: mix(a.blk, b.blk), to: mix(a.to, b.to) };
   }
 
-  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, waiverLevel, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
+  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, waiverLevel, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, valueZFill, catZ, curLine };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InPlayers = api;
 })(this);
 
@@ -1974,6 +1976,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   'use strict';
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
+  // K_MATCH / K_CAT: fractional games of a later week (Matchup Analyzer), fitted weekly. The rest-of-season k is WinK.SHRINK (Team, Rankings, Trade)
   const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82;
   // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
   const KW_MATCH = 0.83, KW_CAT = 0.85;
@@ -2237,45 +2240,569 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
 
+// Points mode (#137): fantasy points of a stat line and its variance, in the engine's own units. Pure; browser and Node.
+// A player's FP per game is m = sum of weight x stat over the 11 point stats (fgm = fgp x fga, ftm = ftp x fta, as in prepPlayers).
+// Variances use the engine's per-stat fits plus the within-player per-game correlations measured by points_fit.js.
+// The engine view (below) puts one FP total in category slot FP_SLOT so Engine.evaluate runs unchanged.
+(function (root) {
+  'use strict';
+  const Eng = root.Engine || require('./engine.js');
+  const V = Eng.VARS;
+  const STATS = ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'tpm', 'fgm', 'fga', 'ftm', 'fta'];
+  // pooled within-player per-game correlation, STATS order (logs3.csv, 2023-24 to 2025-26, 723 player-seasons; points_fit.js)
+  const RHO = [[1,0.266792,0.158245,0.132771,0.078307,0.105515,0.661442,0.936542,0.746937,0.45797,0.450334],[0.266792,1,0.19313,0.07668,0.120267,0.130567,0.096615,0.259927,0.332803,0.149784,0.164514],[0.158245,0.19313,1,0.110404,0.049083,0.086772,0.086326,0.152083,0.180555,0.075083,0.077246],[0.132771,0.07668,0.110404,1,0.031628,0.070447,0.0623,0.131739,0.151708,0.059698,0.066785],[0.078307,0.120267,0.049083,0.031628,1,0.037035,0.037042,0.073029,0.084922,0.046119,0.048935],[0.105515,0.130567,0.086772,0.070447,0.037035,1,0.054546,0.094183,0.098167,0.069185,0.074498],[0.661442,0.096615,0.086326,0.0623,0.037042,0.054546,1,0.574231,0.431381,0.047454,0.050242],[0.936542,0.259927,0.152083,0.131739,0.073029,0.094183,0.574231,1,0.77874,0.165897,0.178942],[0.746937,0.332803,0.180555,0.151708,0.084922,0.098167,0.431381,0.77874,1,0.194198,0.204821],[0.45797,0.149784,0.075083,0.059698,0.046119,0.069185,0.047454,0.165897,0.194198,1,0.943422],[0.450334,0.164514,0.077246,0.066785,0.048935,0.074498,0.050242,0.178942,0.204821,0.943422,1]];
+  // variance / mean of the four stats the engine has no fit for (points_fit.js; the same method gives the engine's 7: reb 1.336, to 1.022)
+  const DISP = { fgm: 1.225, fga: 1.406, ftm: 2.004, fta: 2.182 };
+  const ENG_IX = { tpm: 2, pts: 3, reb: 4, ast: 5, stl: 6, blk: 7, to: 8 };   // slot of the engine's own per-game variance
+
+  // per-game stats of a line (raw or prepped); shooting made = percentage x attempts, 0 when there are no attempts
+  function statsOf(l) {
+    const num = v => v > 0 || v < 0 ? +v : 0, fga = num(l.fga), fta = num(l.fta);
+    return { pts: num(l.pts), reb: num(l.reb), ast: num(l.ast), stl: num(l.stl), blk: num(l.blk), to: num(l.to), tpm: num(l.tpm),
+      fgm: fga > 0 ? num(l.fgp) * fga : 0, fga, ftm: fta > 0 ? num(l.ftp) * fta : 0, fta };
+  }
+  const wOf = w => STATS.map(k => (w && +w[k]) || 0);
+  function perGame(l, w) { const s = statsOf(l), a = wOf(w); return STATS.reduce((t, k, i) => t + a[i] * s[k], 0); }
+  const quad = (a, v) => { let t = 0; for (let i = 0; i < 11; i++) { if (!a[i]) continue; for (let j = 0; j < 11; j++) if (a[j]) t += a[i] * a[j] * RHO[i][j] * v[i] * v[j]; } return Math.max(0, t); };
+  // game-to-game variance of one game's FP
+  function pgVar(l, w) {
+    const s = statsOf(l), ev = Eng.perGameVar(Object.assign({}, l, s, { fgp: s.fga > 0 ? s.fgm / s.fga : 0, ftp: s.fta > 0 ? s.ftm / s.fta : 0 }));
+    const sd = STATS.map(k => Math.sqrt(ENG_IX[k] != null ? ev[ENG_IX[k]] : DISP[k] * s[k]));
+    return quad(wOf(w), sd);
+  }
+  // projection error of a season's FP at g games: the engine's 12% per counting stat, correlated by the same rho
+  function projVar(l, g, w) { const s = statsOf(l); return Math.pow(V.PROJ_SD * g, 2) * quad(wOf(w), STATS.map(k => s[k])); }
+  // weekly variance: games in a week x per-game variance + variance of the games count x m squared
+  function weekVar(l, g, w) { const m = perGame(l, w); return (V.GPW * g / 82) * pgVar(l, w) + m * m * V.VAR_GAMES; }
+  const key = w => wOf(w).join(',');
+
+
+  // ---------- the engine view: one FP total in category slot FP_SLOT, zeros elsewhere ----------
+  // Engine.evaluate then runs unchanged: its single-category chance for FP_SLOT is the normal chance one weekly total beats another,
+  // and Win M = 100 x gainC[FP_SLOT]. Never read gainM (it runs over 9 slots with 8 tied).
+  const FP_SLOT = 3;
+  const WEEKS = Eng.WEEKS;
+
+  // team noise in the units of ctx.idioNoise / loadS / h2hNoise, from the engine's own 80 simulated ADP drafts
+  // (the draws, SIGMA_G2 factor and formulas of the engine's scaleFor, for the FP total only)
+  function noise(P, ctx, cfg, w) {
+    const sims = Eng.draftSims(P, cfg), N = cfg.teams, teamsN = sims.length * N;
+    const m = P.map(p => perGame(p, w)), WV = P.map((p, i) => weekVar(p, p.gUse, w));
+    let s1 = 0, s2 = 0, wpg = 0, wsum = 0, picks = 0;
+    sims.forEach(sim => sim.forEach(team => team.forEach(i => { s1 += m[i]; s2 += m[i] * m[i]; wpg += WV[i] - m[i] * m[i] * V.VAR_GAMES; wsum += WV[i]; picks++; })));
+    const nT = picks / teamsN, S1 = s1 / teamsN, S2 = s2 / teamsN, PGv = wpg / teamsN, nk = cfg.noiseK != null ? +cfg.noiseK : 1;
+    const idio = Math.max(1e-9, PGv + V.SIGMA_G2 * Math.max(0, S2 - S1 * S1 / nT));
+    return { idio: 2 * idio * WEEKS * WEEKS * nk, load: S1 / nT * WEEKS, h2h: 2 * (wsum / teamsN) * WEEKS * WEEKS * nk };
+  }
+
+  // mean per-game FP of the free-agent tier, the engine's pgRepl for FP: ADP ranks N*R+1 .. N*R+20
+  function replFP(P, cfg, w) {
+    const byAdp = P.slice().sort((a, b) => Eng.adpOf(a, cfg.adpSrc) - Eng.adpOf(b, cfg.adpSrc));
+    const fa = byAdp.slice(Math.min(byAdp.length - 1, cfg.teams * cfg.roster), Math.min(byAdp.length, cfg.teams * cfg.roster + 20));
+    return fa.reduce((t, p) => t + perGame(p, w), 0) / (fa.length || 1);
+  }
+
+  // P: prepped players after Engine.buildContext(P, cfg) (they carry gUse); returns copies for Engine.evaluate
+  function engineView(P, ctx, cfg, w) {
+    const rep = replFP(P, cfg, w), nz = noise(P, ctx, cfg, w);
+    const view = P.map(p => {
+      const m = perGame(p, w), x = new Float64Array(Eng.NC), pv = new Float64Array(Eng.NC);
+      x[FP_SLOT] = m * p.gUse + Math.max(0, V.SEASON_G - p.gUse) * ctx.ilFill * rep;
+      pv[FP_SLOT] = projVar(p, p.gUse, w);
+      return Object.assign({}, p, { x, pv, fieldV: x[FP_SLOT], boardRaw: x[FP_SLOT] });
+    });
+    const vctx = Object.assign({}, ctx), set = (a, v) => { const o = new Float64Array(Eng.NC); o[FP_SLOT] = v; return o; };
+    vctx.idioNoise = set(0, nz.idio); vctx.loadS = set(0, nz.load); vctx.h2hNoise = set(0, nz.h2h);
+    vctx.pgRepl = set(0, rep); vctx.streamK = new Float64Array(Eng.NC).fill(1);
+    return { P: view, ctx: vctx };
+  }
+
+  // a stat line at `games` season games as a team-total entry (IL fill off): the points version of Engine.entryVec
+  function entry(l, games, ctx, w) {
+    const x = new Float64Array(Eng.NC), pv = new Float64Array(Eng.NC);
+    x[FP_SLOT] = perGame(l, w) * games; pv[FP_SLOT] = projVar(l, games, w);
+    return { x, pv };
+  }
+
+  // ---------- Rankings table in points ----------
+  // rows as Rankings.projSource gives them ({pid, g, gp?, line}). Per game: FP per game. Season: FP per game x games (gp when the
+  // source has it). Mix: FP per game x the midpoint of g and G0 (x gp/g, so a partial season stays on the Season scale), where G0 is the mean g of the top teams x roster players by Season
+  // points: the same halfway point the engine uses (every stat is linear in games). Rows with no games go last with z null.
+  function table(rows, w, o) {
+    const N = o.teams || 14, R = o.roster || 12, K = N * R, basis = ['pergame', 'total', 'mix'].includes(o.basis) ? o.basis : 'total';
+    const live = rows.filter(r => r.g > 0).map(r => ({ pid: r.pid, fpg: perGame(r.line, w), g: r.g, gp: r.gp != null ? r.gp : r.g }));
+    const dead = rows.filter(r => !(r.g > 0));
+    const season = live.slice().sort((a, b) => b.fpg * b.gp - a.fpg * a.gp || a.pid - b.pid).slice(0, K);
+    const G0 = season.length ? season.reduce((t, r) => t + r.g, 0) / season.length : 0;
+    const zOf = r => basis === 'pergame' ? r.fpg : basis === 'mix' ? r.fpg * (r.g + G0) / 2 * (r.gp / r.g) : r.fpg * r.gp;
+    const out = live.map(r => ({ pid: r.pid, z: zOf(r), fpg: r.fpg, cats: null, inPool: false })).sort((a, b) => b.z - a.z || a.pid - b.pid);
+    out.slice(0, K).forEach(r => { r.inPool = true; });
+    return out.concat(dead.map(r => ({ pid: r.pid, z: null, fpg: null, cats: null, inPool: false })));
+  }
+
+  const api = { table, FP_SLOT, noise, engineView, entry, STATS, RHO, DISP, statsOf, perGame, pgVar, projVar, weekVar, key };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Points = api;
+})(this);
+
+// Team tab core (#131, 2026-10-25): preview roster state and swaps. Pure; browser and Node. Nothing here touches the saved league.
+// Slots: active, reserve, il. Fantrax RESERVE is the reserve (it fills the nights Active leaves open, so it counts); IL does not count.
+(function (root) {
+  'use strict';
+  const InLeague = root.InLeague || require('./inseason_league.js'), Matchup = root.Matchup || require('./matchup_core.js'),
+    Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Shared = root.Shared || require('./shared.js');
+  const SLOTS = ['active', 'reserve', 'il'];
+  const FROM_FANTRAX = { ACTIVE: 'active', RESERVE: 'reserve', IR: 'il' };
+  // the slots that count in the team's stats, Win C and Win M
+  const COUNTED = ['active', 'reserve'];
+  const counted = state => state.order.filter(k => COUNTED.includes(state.slots[k]));
+
+  // rows: parseRosters entries [{ fid, slot }] for my team
+  function initState(rows) {
+    const slots = {}, order = [];
+    rows.forEach(x => { slots[x.fid] = FROM_FANTRAX[x.slot] || 'reserve'; order.push(x.fid); });
+    return { slots, order };
+  }
+
+  function moveSlot(state, key, slot) {
+    if (!(key in state.slots)) throw new Error('player not on the preview roster: ' + key);
+    if (!SLOTS.includes(slot)) throw new Error('unknown slot: ' + slot);
+    return { slots: Object.assign({}, state.slots, { [key]: slot }), order: state.order.slice() };
+  }
+
+  // any number of players out and in; incoming players start in the reserve
+  function applySwap(state, outKeys, inKeys) {
+    outKeys.forEach(k => { if (!(k in state.slots)) throw new Error('player not on the preview roster: ' + k); });
+    if (new Set(outKeys).size !== outKeys.length || new Set(inKeys).size !== inKeys.length) throw new Error('duplicate player in swap');
+    inKeys.forEach(k => { if (k in state.slots && !outKeys.includes(k)) throw new Error('player already on the roster: ' + k); });
+    const slots = Object.assign({}, state.slots), out = new Set(outKeys);
+    outKeys.forEach(k => { delete slots[k]; });
+    inKeys.forEach(k => { slots[k] = 'reserve'; });
+    return { slots, order: state.order.filter(k => !out.has(k)).concat(inKeys.filter(k => !state.order.includes(k) || out.has(k))) };
+  }
+
+  // remaining regular season: from now to the end of the last regular period (schedule times are in seconds, ctx times in ms)
+  function window(ctx) {
+    const last = ctx.L.periods.find(p => p.n === ctx.L.lastRegular);
+    return { from: ctx.nowMs, to: last ? last.end : ctx.nowMs };
+  }
+
+  // team games left in the window; says nothing about Plays %
+  function gamesLeft(ctx, team) {
+    const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, w = window(ctx);
+    return (G[team] || []).filter(s => s * 1000 >= w.from && s * 1000 < w.to).length;
+  }
+
+  // team games from now to the end of the NBA schedule (past the league's last regular week); the GL column reads this
+  function seasonGamesLeft(ctx, team) {
+    const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {};
+    return (G[team] || []).filter(s => s * 1000 >= ctx.nowMs).length;
+  }
+
+  // games per key over the window. segGames zeroes an "out" player's segment when it starts before ctx.curEnd, which is meant
+  // for the rest of the current week only, so the window is cut at curEnd and the two parts are summed
+  function windowGames(ctx, keys, used) {
+    const w = window(ctx), cut = Math.min(Math.max(ctx.curEnd || 0, w.from), w.to), seg = (key, from, to) => ({ key, from, to });
+    if (cut <= w.from || cut >= w.to) return Matchup.segGames(ctx, keys.map(k => seg(k, w.from, w.to)), used, true);
+    const a = Matchup.segGames(ctx, keys.map(k => seg(k, w.from, cut)), used, true), b = Matchup.segGames(ctx, keys.map(k => seg(k, cut, w.to)), used, true);
+    return a.map((x, i) => x + b[i]);
+  }
+
+  // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
+  // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
+  // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
+  function playsPct(ctx, state) {
+    const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
+    const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
+    const act = by('active'), bench = by('reserve'), res = {};
+    const done = (k, played, hypo) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; };
+    const gA = windowGames(ctx, act, null), count = {}, used = {};
+    act.forEach((k, i) => {
+      done(k, gA[i]);
+      const out = ctx.out && ctx.out.has(k);
+      (G[byKey.get(k).t] || []).map(s => s * 1000).filter(ms => ms >= w.from && ms < w.to && !(out && ms < ctx.curEnd)).forEach(ms => { const d = InLeague.localDay(ms); count[d] = (count[d] || 0) + 1; });
+    });
+    Object.keys(count).forEach(d => { used[d] = Math.min(max, count[d]); });
+    const gB = windowGames(ctx, bench, used);
+    bench.forEach((k, i) => done(k, gB[i]));
+    by('il').forEach(k => {
+      const g = windowGames(ctx, bench.concat(k), used);
+      done(k, g[g.length - 1], true);
+    });
+    return res;
+  }
+
+  // Zscore with a 0-1 weight per category (punt lens): the Rankings Zscore is sum(cats[c] x base weight[c]); weights default to 1
+  // nCats = the league's category count (9 or 8; turnovers carry no weight in 8), as in Rankings.table
+  function weightedZ(cats, weights, nCats) {
+    const W = Eng.catWeights({ catW: InPlayers.WEIGHTS, cats: nCats || 9 });
+    return cats.reduce((s, v, c) => s + v * W[c] * (weights && weights[c] != null ? weights[c] : 1), 0);
+  }
+
+  // my team's per-game line: entries [{ line, pct, hypo }] (pct = Plays %, null counts for nothing; hypo rows are left out); counting stats are
+  // sum(pct x stat) / slots, the percentages come from summed makes and attempts
+  function teamLine(entries, slots) {
+    const S = { fga: 0, fgm: 0, fta: 0, ftm: 0, tpm: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0 };
+    entries.forEach(e => {
+      if (e.hypo) return;
+      const p = e.pct || 0, l = e.line;
+      S.fga += p * l.fga; S.fgm += p * l.fga * l.fgp; S.fta += p * l.fta; S.ftm += p * l.fta * l.ftp;
+      ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'].forEach(k => { S[k] += p * l[k]; });
+    });
+    const out = { fgp: S.fga ? S.fgm / S.fga : 0, fga: S.fga / slots, ftp: S.fta ? S.ftm / S.fta : 0, fta: S.fta / slots };
+    ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'].forEach(k => { out[k] = S[k] / slots; });
+    return out;
+  }
+
+  // type-ahead matcher: accent- and case-insensitive; every typed word must start a word of the name or sit inside one.
+  // Names with a matching word start come first; list order breaks ties. -> up to `limit` items of `list` (items have .n)
+  function search(list, query, limit) {
+    const q = Shared.norm(query).split(/\s+/).filter(Boolean);
+    if (!q.length) return [];
+    const hits = [[], []];
+    list.forEach(x => {
+      const n = Shared.norm(x.n), words = n.split(/\s+/);
+      if (!q.every(t => n.includes(t))) return;
+      hits[q.every(t => words.some(w => w.startsWith(t))) ? 0 : 1].push(x);
+    });
+    return hits[0].concat(hits[1]).slice(0, limit || 50);
+  }
+
+  const api = { SLOTS, COUNTED, counted, windowGames, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
+})(typeof self !== 'undefined' ? self : this);
+
+// The one shrink every Win C / Win M display reads (#139, #147): Team, Rankings and the Trade Analyzer. Display only, never in the Model pick.
+// Fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (calib_ros_k.js): pooled k 0.43 match, 0.65 per category; shipped at
+// 0.6 / 0.75 (user, 2026-10-26) because the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident.
+(function (root) {
+  'use strict';
+  const SHRINK = { match: 0.6, cat: 0.75 };
+  const shrink = (p, k) => 0.5 + k * (p - 0.5);
+  const api = { SHRINK, shrink };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.WinK = api;
+})(typeof self !== 'undefined' ? self : this);
+
+// Team tab win numbers (#131 PR 2, 2026-10-25; moved onto the Rankings / Draft-tab engine 2026-10-26): the matrix of the previewed
+// roster against every other team, each player's Win C / Win M contribution, and the player-list module scores. Pure; browser and
+// Node. Nothing here changes the saved league, ctx or the pool. Every team's players get their remaining Plays % games per
+// average week (mine and every opponent's, with the nightly cap), turned into season-equivalent games (x WEEKS) and summed into
+// one forecast per team with Engine.entryVec; Engine.evaluate then gives every pairing's category and match chances, with the
+// engine's own noise (SIGMA_G2 games variance); the chances are then pulled toward 0.5 by SHRINK (#139).
+// Units follow Rankings: m = Win M points (100 x the change in the match chance), c = Win C hundredths (100 x the change in
+// the summed category chances, averaged over the opponents).
+(function (root) {
+  'use strict';
+  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Team = root.Team || require('./team_core.js'), Pts = root.Points || require('./points_core.js'), WinK = root.WinK || require('./win_k.js');
+  const NC = Eng.NC;
+
+  // the engine context of a ctx's player pool: noise and pool averages from simulated drafts of the real league (rostered players
+  // first), IL fill off because Plays % already counts the games a player misses. Built once per ctx and category count.
+  const ectxs = new WeakMap();
+  // Points leagues (#137): w = the point values; the engine view puts one FP total in category slot Points.FP_SLOT and the rest is unchanged.
+  function engCtx(ctx, nc, w) {
+    let by = ectxs.get(ctx); if (!by) ectxs.set(ctx, by = {});
+    const bk = w ? 'p|' + Pts.key(w) : nc;
+    if (!by[bk]) {
+      const N = Object.keys(ctx.roster).length, R = ctx.L.maxActive, adp = p => p.adp == null ? 1e9 : p.adp;
+      const list = ctx.pool.players.filter(p => p.g > 0).sort((a, b) => (a.owner ? 0 : 1) - (b.owner ? 0 : 1) || adp(a) - adp(b));
+      by[bk] = engCtxFrom(list.map(p => Object.assign({}, p.line, { g: p.g })), N, R, nc, w);
+    }
+    return by[bk];
+  }
+
+  // the engine context of a list of stat lines (with g) in draft order: N teams of R players, nc categories. engCtx's body, shared with calib_ros.js
+  function engCtxFrom(lines, N, R, nc, w) {
+    const P = Eng.prepPlayers(lines.map((p, i) => Object.assign({}, p, { ftx: i + 1 })));
+    const cfg = { teams: N, roster: R, slot: 1, order: '3rr', scoring: 'h2h', cats: nc, ilSpots: 0, field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '',
+      catW: InPlayers.WEIGHTS.slice(), adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0, basis: 'total' };
+    const cx = Eng.buildContext(P, cfg);
+    return w ? { ctx: Pts.engineView(P, cx, cfg, w).ctx, cfg, w } : { ctx: cx, cfg };
+  }
+
+  // one team's forecast: the sum of its entries' category vectors and projection variances. Entries are { p: stat line, games per
+  // average week, sign? } (sign -1 takes an entry out of the team).
+  function teamVec(e, entries) {
+    const mu = new Float64Array(NC), v = new Float64Array(NC);
+    entries.forEach(en => {
+      const s = en.sign || 1, ev = e.w ? Pts.entry(en.p, en.games * Eng.WEEKS, e.ctx, e.w) : Eng.entryVec(en.p, e.ctx, en.games * Eng.WEEKS);
+      for (let c = 0; c < NC; c++) { mu[c] += s * ev.x[c]; v[c] += s * ev.pv[c]; }
+    });
+    return { mu, v };
+  }
+
+  // remaining regular-season weeks: each period counts the share of it that lies in the Team.window
+  function weeksLeft(ctx) {
+    const w = Team.window(ctx);
+    return ctx.L.periods.filter(p => p.n <= ctx.L.lastRegular).reduce((s, p) => s + Math.max(0, Math.min(p.end, w.to) - Math.max(p.start, w.from)) / (p.end - p.start), 0);
+  }
+
+  // a Team.initState for another team from its Fantrax slots; IL players and the excluded keys (players I brought in) are left out
+  function oppState(ctx, teamId, exclude) {
+    const rows = ctx.roster[teamId].filter(f => !(exclude && exclude.has(f)) && ctx.pool.byKey.get(f).slot !== 'IR').map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
+    return Team.initState(rows);
+  }
+
+  // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
+  function side(ctx, state, W) {
+    const r = Team.playsPct(ctx, state);
+    return state.order.filter(k => Team.COUNTED.includes(state.slots[k]) && !r[k].hypo)
+      .map(k => ({ key: k, p: ctx.pool.byKey.get(k).line, games: r[k].played / W }));
+  }
+
+  // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
+  // opponents' forecasts are the same for every previewed roster that removes the same players from them, so they are cached per ctx
+  const memos = new WeakMap();
+  function oppTeam(ctx, e, nc, tid, exclude, W) {   // e carries the point values, so the memo key must too
+    let memo = memos.get(ctx);
+    if (!memo) { memo = new Map(); memos.set(ctx, memo); }
+    const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '');
+    if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude), W)));
+    return memo.get(id);
+  }
+
+  // my previewed roster against every other team. -> { weeks, teams: [{ id, cat[9], match, winC }], mean: { cat, match, winC } }
+  // (cat entries beyond the league's category count are null). opts: cats 9 | 8. Players I hold leave their old team's side.
+  function matrix(ctx, state, opts) {
+    const W = weeksLeft(ctx);
+    if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order), W, opts);
+  }
+
+  // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
+  // their old team's side (everyone on my roster, and a candidate I bring in)
+  // Shrink toward 50%, fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (#139, calib_ros_k.js): pooled k 0.43 match,
+  // 0.65 per category (one k per category did not beat one k); unshrunk was about twice too confident. Shipped at 0.6 / 0.75 (user, 2026-10-26):
+  // the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident. opts.shrink overrides.
+  const SHRINK = WinK.SHRINK, shr = WinK.shrink;
+  function matrixOf(ctx, mine, exclude, W, o) {
+    const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o && o.points), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
+    const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W)));
+    const out = evalVecs(e, tv);
+    if (e.w) {   // one points total: the match chance is the single-slot chance (not shrunk: the k was fitted on categories); no category or Win C numbers
+      const F = Pts.FP_SLOT, teams = ids.map((id, i) => ({ id, cat: null, match: out.catProb(out.teams[0], out.teams[i + 1], F), winC: null, ppw: tv[i + 1].mu[F] / Eng.WEEKS }));
+      return { weeks: W, teams, mean: { cat: null, match: teams.reduce((s, t) => s + t.match, 0) / (teams.length || 1), winC: null, ppw: tv[0].mu[F] / Eng.WEEKS } };   // ppw = points in an average week
+    }
+    const k = (o && o.shrink) || SHRINK;
+    const teams = ids.map((id, i) => {
+      const A = out.teams[0], B = out.teams[i + 1], cat = Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(A, B, c), k.cat));
+      return { id, cat, match: shr(out.pairProb(A, B), k.match), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
+    });
+    const avg = f => teams.reduce((s, t) => s + f(t), 0) / (teams.length || 1);
+    return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
+  }
+
+  // The state of team t holding the fantrax ids `fids` (a trade's roster): its players keep their Fantrax slots, IL players count for
+  // an IL player counts as healthy (user, 2026-10-26): his per-game line in an Active slot, his games from the projection, which
+  // already includes the time he is expected to miss (Hashtag), and the Reserve refills the nights he is out. Each incoming player
+  // takes a slot the outgoing ones left (Active first), else the reserve. Incoming players are sorted, so the slots do not depend on
+  // the order of `fids` (the leagueWin memo key sorts them)
+  function tradeState(ctx, t, fids) {
+    const keep = new Set(fids), was = new Set(ctx.roster[t]), slotOf = f => { const s = ctx.pool.byKey.get(f).slot; return s === 'IR' ? 'ACTIVE' : s; };
+    const rows = ctx.roster[t].filter(f => keep.has(f)).map(f => ({ fid: f, slot: slotOf(f) }));
+    const free = ctx.roster[t].filter(f => !keep.has(f)).map(slotOf).sort((a, b) => (a === 'ACTIVE' ? 0 : 1) - (b === 'ACTIVE' ? 0 : 1));
+    fids.filter(f => !was.has(f)).sort().forEach(f => rows.push({ fid: f, slot: free.length ? free.shift() : 'RESERVE' }));
+    return Team.initState(rows);
+  }
+
+  // Every team's chance against every other team with the rosters R (fantrax ids per team; default the saved ones), rest of season, from one
+  // Engine.evaluate run: the forecaster the Team tab shows, with the same SHRINK. -> { W, ids, P } with P[i][j] = team i's match chance
+  // against team j (null on the diagonal); opts.rows (team ids) fills only those rows. null with no weeks left.
+  // opts: cats 9 | 8, points, shrink. Team forecasts are cached per ctx (team, its roster, weeks, categories, point values)
+  const lwMemos = new WeakMap();
+  function leagueWin(ctx, R, o) {
+    const W = weeksLeft(ctx);
+    if (!(W > 0)) return null;
+    const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o && o.points), ids = Object.keys(ctx.roster), rows = new Set((o && o.rows) || ids), k = (o && o.shrink) || SHRINK;
+    let memo = lwMemos.get(ctx); if (!memo) lwMemos.set(ctx, memo = new Map());
+    const vecs = ids.map(t => {
+      const id = t + '|' + (R || ctx.roster)[t].slice().sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '');
+      if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, tradeState(ctx, t, (R || ctx.roster)[t]), W)));
+      return memo.get(id);
+    });
+    const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
+    const P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? out.catProb(out.teams[i], out.teams[j], F) : shr(out.pairProb(out.teams[i], out.teams[j]), k.match)));
+    return { W, ids, P };
+  }
+
+  // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb
+  function evalVecs(e, vecs) {
+    const pl = vecs.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
+    return Eng.evaluate(pl, e.ctx, Object.assign({}, e.cfg, { teams: pl.length, roster: 1, slot: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
+  }
+
+  const dCats = (a, b) => a.mean.cat ? a.mean.cat.map((v, c) => v == null ? 0 : 100 * (v - b.mean.cat[c])) : null;
+  const gain = (a, b) => ({ c: a.mean.winC == null ? null : 100 * (a.mean.winC - b.mean.winC), m: 100 * (a.mean.match - b.mean.match), dCat: dCats(a, b) });
+  const sub = (x, y) => x == null || y == null ? null : x - y, subV = (x, y) => x && y ? x.map((v, c) => v - y[c]) : null;
+
+  // each roster player's contribution to my Win C / Win M: active and reserve = the team minus the team without him (the reserve
+  // refills his nights); IL = the team with him in the reserve minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
+  // one player's contribution given the current roster's matrix `base` (playerWin's per-player step, so a page can score one at a time)
+  // opts.baseline 'avg' (Vs average): see avgParts; my own Active / Reserve player X = the team minus (the team with X replaced by an average
+  // player); my IL player = a candidate. Default 'rep' = the raw contribution.
+  function playerGain(ctx, state, k, base, opts) {
+    if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };   // (points: the zero gain keeps its category zeros; nothing shows them)
+    if (opts && opts.baseline === 'avg') {
+      const ap = (opts.ap) || avgParts(ctx, state, base.weeks);
+      if (ap) { const own = Team.COUNTED.includes(state.slots[k]); return own ? gain(base, avgOwn(ctx, state, ap, k, opts)) : Object.assign(gain(avgCandidate(ctx, state, ap, k, opts), base), { hypo: true }); }
+    }
+    const s = state.slots[k], counted = Team.COUNTED.includes(s), without = Team.applySwap(state, [k], []);
+    return counted ? gain(base, matrix(ctx, without, opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts), base), { hypo: true });
+  }
+
+  // the made-up average player of Vs average (user 2026-10-26). n = my counted players, tot = their games per week, M = the Active spots
+  // (ctx.L.maxActive), mean = the games-weighted mean line with tot / M games (so his totals are one M-th of the team's), share = the games my
+  // counted players get out of the games their own team schedules allow, with no nightly cap (the team's average lineup share).
+  // -> null with no counted player or no games
+  function avgParts(ctx, state, W) {
+    const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
+    const allowed = Team.counted(state).reduce((a, k) => a + Team.windowGames(ctx, [k], null)[0], 0);   // each player alone: no nightly cap
+    if (!n || !(tot > 0) || !(allowed > 0)) return null;
+    return { W, mine, n, tot, M, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
+  }
+
+  // a player not counted on my team replaces the average player: current team - average + him, his games times the share
+  function avgCandidate(ctx, state, ap, key, opts) {
+    const g = Team.windowGames(ctx, [key], null)[0] / ap.W * ap.share;
+    const mine = ap.mine.concat(Object.assign({}, ap.mean, { sign: -1 }), { p: ctx.pool.byKey.get(key).line, games: g });
+    return matrixOf(ctx, mine, new Set(state.order).add(key), ap.W, opts);
+  }
+
+  // my counted player replaced by an average-line player who keeps his games (so a Reserve player is judged on his quality, not his slot)
+  function avgOwn(ctx, state, ap, key, opts) {
+    const e = ap.mine.find(x => x.key === key);
+    return matrixOf(ctx, ap.mine.filter(x => x.key !== key).concat(Object.assign({}, ap.mean, { games: e.games })), new Set(state.order), ap.W, opts);
+  }
+
+  // points my counted players produce in an average remaining week: sum of FP per game x Plays % games per week
+  function pointsPerWeek(ctx, state, w) {
+    const Wk = weeksLeft(ctx); if (!(Wk > 0)) return 0;
+    return side(ctx, state, Wk).reduce((t, e) => t + Pts.perGame(e.p, w) * e.games, 0);
+  }
+
+  function playerWin(ctx, state, opts) {
+    const base = matrix(ctx, state, opts), res = {};
+    state.order.forEach(k => { res[k] = playerGain(ctx, state, k, base, opts); });
+    return res;
+  }
+
+  // Player-list scores for the Team tab module. Baselines: 'rep' = the player replaces my worst Active / Reserve player (lowest Win M
+  // contribution); 'avg' = the same minus what an average-player entry in his place would give, as on the Rankings tab (the entry is
+  // the mean per-game line of my Active and Reserve players, with the worst player's team schedule). dM / dC are the real changes in my
+  // Win M (points) / Win C (hundredths); weights (0-1 per category) only change the sort: by dM when all are 1, else by the weighted
+  // sum of the change in each category's chance. My own Active / Reserve players are their contribution minus the worst player's (the
+  // worst shows 0); my IL / Reserve players are a swap for the worst, like a candidate.
+  // opts: baseline 'rep' | 'avg', weights, cats, k, candidates (keys; default every pool player, my own included)
+  // -> [{ key, owner, dM, dC, dCat[], sort }] sorted by sort, highest first (ties keep candidate order)
+  // the scoring split in three so a page can score one candidate at a time (TeamView.moduleJob): moduleSetup does the work every row
+  // shares (the matrix, each counted player's contribution, the worst player, the average-entry offset) and returns null with no
+  // games left or no counted player; moduleRow scores one key; moduleSort orders rows (a copy). Each row also carries old / new, my
+  // Win M in points before and after: new = the current Win M + the raw change, old = the current Win M + the baseline offset (0 for
+  // 'rep'), so new - old = dM in both baselines.
+  // opts.base / opts.pw: the matrix and per-player gains when already computed (a job gets them one piece at a time)
+  function moduleSetup(ctx, state, opts) {
+    const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode, points: o.points }, base = o.base || matrix(ctx, state, mo);
+    if (!base.mean) return null;
+    if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks); return ap ? { base, ap, mo, avg: true } : null; }
+    const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state);
+    if (!counted.length) return null;
+    const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst];
+    return { base, pw, worst, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
+  }
+
+  // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team
+  function swapScore(ctx, state, su, cx, key) {
+    const s0 = key in state.slots ? Team.applySwap(state, [su.worst], []) : Team.applySwap(state, [su.worst], [key]);
+    return gain(matrix(cx, Team.moveSlot(s0, key, su.wSlot === 'reserve' ? 'active' : su.wSlot), su.mo), su.base);   // Active claims nights before the Reserve, so a Reserve slot would score him on leftovers
+  }
+
+  function moduleRow(ctx, state, su, key) {
+    const own = key in state.slots, s = own ? state.slots[key] : null, owner = own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), cur = 100 * su.base.mean.match;
+    if (su.avg) {
+      const counted = own && Team.COUNTED.includes(s), a = counted ? avgOwn(ctx, state, su.ap, key, su.mo) : avgCandidate(ctx, state, su.ap, key, su.mo), g = counted ? gain(su.base, a) : gain(a, su.base);
+      return { key, owner, dM: g.m, dC: g.c, dCat: g.dCat, old: counted ? cur - g.m : cur, new: counted ? cur : cur + g.m };
+    }
+    const pw = su.pw, zero = () => su.mo.points ? null : new Array(9).fill(0);
+    let r;
+    if (key === su.worst) r = { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
+    else if (own && Team.COUNTED.includes(s)) r = { c: sub(pw[key].c, pw[su.worst].c), m: pw[key].m - pw[su.worst].m, dCat: subV(pw[key].dCat, pw[su.worst].dCat) };
+    else r = swapScore(ctx, state, su, ctx, key);
+    return { key, owner, dM: r.m - su.off.m, dC: sub(r.c, su.off.c), dCat: subV(r.dCat, su.off.dCat), old: cur + su.off.m, new: cur + r.m };
+  }
+
+  function moduleSort(rows, weights) {
+    const weighted = weights && weights.some(w => w != null && w !== 1) && rows.every(r => r.dCat);
+    return rows.map((r, i) => Object.assign({}, r, { sort: weighted ? r.dCat.reduce((a, v, c) => a + v * (weights[c] == null ? 1 : weights[c]), 0) : r.dM, i }))
+      .sort((a, b) => b.sort - a.sort || a.i - b.i).map(r => { delete r.i; return r; });
+  }
+
+  function moduleScores(ctx, state, opts) {
+    const o = opts || {}, su = moduleSetup(ctx, state, o);
+    if (!su) return [];
+    return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
+  }
+
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
+})(typeof self !== 'undefined' ? self : this);
+
 // Trade core (2026-10-20): rest-of-season Win M for a roster change, perceived player value and trade likelihood.
 // Pure; browser and Node. Builds on matchup_core (a team's week vs its real opponent) and inseason_players (value scale).
 (function (root) {
   'use strict';
-  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Matchup = root.Matchup || require('./matchup_core.js');
+  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), TeamWin = root.TeamWin || require('./team_win.js');
 
-  const TRADE_W = { cur: 0.4, proj: 0.3, adp: 0.3, shrinkGames: 20, slope: 2.0, winM: 0.1, tagGap: 0.5, bias: -0.75 };   // bias: a manager wants to come out ahead, so an even-looking swap is not a coin flip
+  // winM was 0.1 on the old pairMatchup scale; #147 moved dB to the TeamWin forecaster, where dB is larger, so 0.1 x 0.672 (a fit of old dB on new dB over
+  // the 2145 one-for-one candidates of the fixture league, scratch script fit_winm.js) keeps the likelihood moving with dB as much as before
+  const TRADE_W = { cur: 0.4, proj: 0.3, adp: 0.3, shrinkGames: 20, slope: 2.0, winM: 0.07, tagGap: 0.5, bias: -0.75 };   // bias: a manager wants to come out ahead, so an even-looking swap is not a coin flip
 
-  // mean Win M over the remaining regular-season matchups with the rosters as given (fids per team, IR rule as in the current week);
-  // the current week counts whole scheduled games, later weeks expected games (g/82)
-  function rosWinM(ctx, roster, teamId) {
-    if (ctx.cur == null) return { mean: null, periods: [] };
-    const segs = (t, n) => Matchup.teamSegments(ctx, t, n, roster[t].filter(f => n !== ctx.cur || ctx.pool.byKey.get(f).slot !== 'IR'));
-    const periods = [];
-    InLeague.regularFrom(ctx.L, ctx.cur).forEach(n => {
-      const opp = InLeague.opponentOf(ctx.L, teamId, n);
-      if (opp) periods.push({ n, opp, p: Matchup.scoreSegments(ctx, segs(teamId, n), segs(opp, n), n === ctx.cur).match });
+  // Rest-of-season Win M with the rosters as given (fids per team): the Team tab's forecaster (TeamWin.leagueWin, one Engine.evaluate run, the
+  // shared WinK.SHRINK on every term), the mean over every other team weighted equally (user, 2026-10-26: until playoff odds are in).
+  // IL players count for nothing. opts: cats, points, shrink as TeamWin.leagueWin. -> { mean, opps: [{ opp, p }] }, mean null with no weeks left
+  function rosMeans(ctx, roster, teams, opts) {
+    const none = { mean: null, opps: [] }, lw = ctx.cur == null ? null : TeamWin.leagueWin(ctx, roster, Object.assign({}, opts, { rows: teams })), out = {};
+    teams.forEach(t => {
+      if (!lw) { out[t] = none; return; }
+      const row = lw.P[lw.ids.indexOf(t)], opps = lw.ids.map((o, j) => ({ opp: o, p: row[j] })).filter(x => x.opp !== t);
+      out[t] = { mean: opps.length ? opps.reduce((s, x) => s + x.p, 0) / opps.length : null, opps };
     });
-    return { mean: periods.length ? periods.reduce((s, x) => s + x.p, 0) / periods.length : null, periods };
+    return out;
   }
+  const rosWinM = (ctx, roster, teamId, opts) => rosMeans(ctx, roster, [teamId], opts)[teamId];
+  const optKey = o => o ? JSON.stringify([o.cats, o.points, o.shrink]) : '';
 
   // projected players' values, best first (the ADP-implied value of a rank)
   function projValues(ctx) {
     if (!ctx._projVals) ctx._projVals = ctx.pool.players.filter(p => p.src === 'proj').map(p => InPlayers.valueZ(p.line, p.g, ctx.ref)).sort((a, b) => b - a);
     return ctx._projVals;
   }
+  // an IL player's season value: his projected games (which already hold the time he misses) at his line, the rest of the season at the
+  // line of his owner's worst non-IL player (user, 2026-10-26); everyone else is valued over his own games
+  const FULL_G = 82;
+  function worstLine(ctx, owner) {
+    const c = ctx._worst = ctx._worst || {};
+    if (!(owner in c)) {
+      const ps = (ctx.roster[owner] || []).map(f => ctx.pool.byKey.get(f)).filter(p => p.slot !== 'IR').sort((a, b) => InPlayers.valueZ(a.line, a.g, ctx.ref) - InPlayers.valueZ(b.line, b.g, ctx.ref));
+      c[owner] = ps.length ? ps[0].line : null;
+    }
+    return c[owner];
+  }
+  function seasonZ(ctx, pp, line) {
+    const fill = pp.slot === 'IR' && pp.g < FULL_G ? worstLine(ctx, pp.owner) : null;
+    return fill ? InPlayers.valueZFill(line, pp.g, fill, FULL_G, ctx.ref) : InPlayers.valueZ(line, pp.g, ctx.ref);
+  }
   function perceived(ctx, pp) {
-    const proj = InPlayers.valueZ(pp.line, pp.g, ctx.ref), cur = InPlayers.valueZ(InPlayers.curLine(pp, TRADE_W.shrinkGames), pp.g, ctx.ref);
+    const proj = seasonZ(ctx, pp, pp.line), cur = seasonZ(ctx, pp, InPlayers.curLine(pp, TRADE_W.shrinkGames));
     const vals = projValues(ctx), rank = Math.max(1, Math.min(vals.length, Math.round(pp.adp == null ? 168 : pp.adp)));
     const adp = vals[rank - 1];
     return { cur, proj, adp, pv: TRADE_W.cur * cur + TRADE_W.proj * proj + TRADE_W.adp * adp, rv: proj };
   }
 
-  function baseline(ctx, t) {
-    ctx._ros = ctx._ros || {};
-    return ctx._ros[t] === undefined ? (ctx._ros[t] = rosWinM(ctx, ctx.roster, t).mean) : ctx._ros[t];
+  function baseline(ctx, t, opts) {
+    const ro = ctx._ros = ctx._ros || {}, k = t + '#' + optKey(opts);
+    return ro[k] === undefined ? (ro[k] = rosWinM(ctx, ctx.roster, t, opts).mean) : ro[k];
   }
-  // aGets: fids A receives from B; bGets: fids B receives from A. dA, dB in percentage points of rest-of-season Win M.
-  function evaluateTrade(ctx, { a, b, aGets, bGets }) {
+  // aGets: fids A receives from B; bGets: fids B receives from A. dA, dB in percentage points of rest-of-season Win M (opts: see rosMeans).
+  function evaluateTrade(ctx, { a, b, aGets, bGets }, opts) {
     if (a === b) throw new Error('A trade needs two different teams');
     const ra = new Set(ctx.roster[a]), rb = new Set(ctx.roster[b]);
     aGets.forEach(f => { if (!rb.has(f)) throw new Error('Player ' + f + ' is not on the giving team'); if (bGets.includes(f)) throw new Error('Player ' + f + ' is on both sides'); });
@@ -2283,10 +2810,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const R = Object.assign({}, ctx.roster);
     R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets);
     R[b] = ctx.roster[b].filter(f => !aGets.includes(f)).concat(bGets);
-    // rest-of-season matchups are cached per (team, the two changed rosters)
-    const sig = t => R[t].slice().sort().join(','), cache = ctx._rosCache = ctx._rosCache || new Map(), sab = sig(a) + '|' + sig(b);
-    const mean = t => { const k = t + '#' + sab; if (!cache.has(k)) cache.set(k, rosWinM(ctx, R, t).mean); return cache.get(k); };
-    const dA = 100 * (mean(a) - baseline(ctx, a)), dB = 100 * (mean(b) - baseline(ctx, b));
+    // one league run gives both sides; cached per (the two changed rosters, options)
+    const sig = t => R[t].slice().sort().join(','), cache = ctx._rosCache = ctx._rosCache || new Map(), key = a + '#' + sig(a) + '|' + b + '#' + sig(b) + '|' + optKey(opts);
+    if (!cache.has(key)) { const m = rosMeans(ctx, R, [a, b], opts); cache.set(key, [m[a].mean, m[b].mean]); }
+    const after = cache.get(key), dA = 100 * (after[0] - baseline(ctx, a, opts)), dB = 100 * (after[1] - baseline(ctx, b, opts));
     const pvSum = fs => fs.reduce((s, f) => s + perceived(ctx, ctx.pool.byKey.get(f)).pv, 0);
     const gapB = pvSum(bGets) - pvSum(aGets);
     return { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi: aGets.length !== bGets.length };
@@ -2603,7 +3130,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   // One player's candidate trades take about 0.7 s, so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
-  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v2';
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v3';
   const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
   function candSave(sig, ck, gives) {
     try {

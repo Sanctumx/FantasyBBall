@@ -94,6 +94,8 @@ They work alongside the routing above; this file takes precedence over them. Siz
   above (user, 2026-10-20).
 - Using the user's computer (copying files there, staging results back) is allowed without asking each time (user,
   2026-10-18) until the user withdraws it. The user still starts PC backtest runs themselves.
+- Bat files the user runs on the PC show only one updating "Estimated time remaining" line and close on their own when
+  finished: quiet console, everything else to the results file, no `pause` (user, 2026-10-26).
 - Every improvement to the workflow (CLAUDE.md, skills, subagents, settings, hooks) is also generalized for other
   projects where possible: the general version goes in `Sanctumx/Claude-Workflow` (templates under `template/`, rules
   in `template/GUIDELINES.md`) and in the shared skills (user, 2026-10-20).

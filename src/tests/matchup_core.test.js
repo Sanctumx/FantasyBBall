@@ -120,3 +120,9 @@ test('a drop cap larger than the bench never lets the plan drop more than All do
   assert.strictEqual(M.addPlan(ctx, { droppable: 99 }).droppable.length, M.addPlan(ctx, {}).droppable.length);
   assert.ok(M.addPlan(ctx, { droppable: 99 }).droppable.length <= bench);
 });
+
+test('weekly k stays 0.72 / 0.82 for the Matchup Analyzer (the rest-of-season k is WinK.SHRINK, #147)', () => {
+  assert.strictEqual(M.K_MATCH, 0.72); assert.strictEqual(M.K_CAT, 0.82); assert.strictEqual(M.KR_MATCH, undefined);
+  const a = M.teamSegments(ctx, me, 2), b = M.teamSegments(ctx, I.opponentOf(L, me, 2), 2), w = M.scoreSegments(ctx, a, b, false), p = M.projectWeek(ctx, me, 2);
+  assert.strictEqual(p.match, w.match);   // a future week in the Matchup Analyzer uses the weekly k
+});

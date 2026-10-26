@@ -39,7 +39,7 @@ test('side: only active and reserve players become entries', () => {
 });
 
 // every team's forecast = the sum of its players' Engine.entryVec at (Plays % games per average week x WEEKS), then one Engine.evaluate run
-test('matrix: every cell equals a hand-built Engine.evaluate run over the same entries (no shrink)', () => {
+test('matrix: every cell equals a hand-built Engine.evaluate run over the same entries, shrunk toward 50% by W.SHRINK (#139)', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), m = W.matrix(ctx, st), Wk = W.weeksLeft(ctx);
   const adp = p => p.adp == null ? 1e9 : p.adp, list = ctx.pool.players.filter(p => p.g > 0).sort((a, b) => (a.owner ? 0 : 1) - (b.owner ? 0 : 1) || adp(a) - adp(b));
   const cfg = { teams: ids.length, roster: ctx.L.maxActive, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 0, field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '',
@@ -49,9 +49,10 @@ test('matrix: every cell equals a hand-built Engine.evaluate run over the same e
   const tv = [vecOf(W.side(ctx, st, Wk))].concat(m.teams.map(t => vecOf(W.side(ctx, W.oppState(ctx, t.id, new Set(st.order)), Wk))));
   const pl = tv.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
   const out = Eng.evaluate(pl, ec, Object.assign({}, cfg, { teams: pl.length, roster: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
+  const sh = (p, k) => 0.5 + k * (p - 0.5);
   m.teams.forEach((cell, i) => {
-    assert.ok(near(cell.match, out.pairProb(out.teams[0], out.teams[i + 1]), 1e-12), cell.id);
-    cell.cat.forEach((p, c) => assert.ok(near(p, out.catProb(out.teams[0], out.teams[i + 1], c), 1e-12), cell.id + ' cat ' + c));
+    assert.ok(near(cell.match, sh(out.pairProb(out.teams[0], out.teams[i + 1]), W.SHRINK.match), 1e-12), cell.id);
+    cell.cat.forEach((p, c) => assert.ok(near(p, sh(out.catProb(out.teams[0], out.teams[i + 1], c), W.SHRINK.cat), 1e-12), cell.id + ' cat ' + c));
   });
   assert.strictEqual(m.teams.length, ids.length - 1);
 });
@@ -232,11 +233,32 @@ test('avg: no worst-player rule (nobody is forced to 0); rep still has one', () 
   assert.ok(rep.some(r => r.dM === 0));
 });
 
+test('engCtxFrom / evalVecs: the pieces calib_ros.js reuses give the matrix numbers', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), Wk = W.weeksLeft(ctx);
+  assert.strictEqual(typeof W.engCtxFrom, 'function'); assert.strictEqual(typeof W.evalVecs, 'function'); assert.strictEqual(typeof W.teamVec, 'function');
+  const e = W.engCtxFrom(ctx.pool.players.filter(p => p.g > 0).map(p => Object.assign({}, p.line, { g: p.g })), Object.keys(ctx.roster).length, ctx.L.maxActive, 9);
+  const vecs = [W.teamVec(e, W.side(ctx, st, Wk))].concat(Object.keys(ctx.roster).filter(t => t !== ctx.me).map(t => W.teamVec(e, W.side(ctx, W.oppState(ctx, t, new Set(st.order)), Wk))));
+  const out = W.evalVecs(e, vecs), m = W.matrix(ctx, st, { shrink: { match: 1, cat: 1 } });
+  assert.ok(Math.abs(out.pairProb(out.teams[0], out.teams[1]) - m.teams[0].match) < 0.02);   // a different pool order gives a nearby context, not an identical one
+  assert.ok(Math.abs(out.catProb(out.teams[0], out.teams[1], 0) + out.catProb(out.teams[1], out.teams[0], 0) - 1) < 1e-9);
+});
+
+test('matrix: opts.shrink overrides the constants, {match:1, cat:1} gives the raw engine chances; winC and the means follow the shrunk cells (#139)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), s = W.matrix(ctx, st), r = W.matrix(ctx, st, { shrink: { match: 1, cat: 1 } });
+  assert.ok(W.SHRINK.match < 1 && W.SHRINK.cat < 1 && W.SHRINK.match > 0 && W.SHRINK.cat > 0);
+  s.teams.forEach((t, i) => {
+    assert.ok(near(t.match, 0.5 + W.SHRINK.match * (r.teams[i].match - 0.5), 1e-12));
+    assert.ok(near(t.winC, t.cat.reduce((a, v) => a + (v == null ? 0 : v), 0), 1e-12));
+  });
+  assert.ok(near(s.mean.match, s.teams.reduce((a, t) => a + t.match, 0) / s.teams.length, 1e-12));
+  assert.ok(Math.abs(s.mean.match - 0.5) < Math.abs(r.mean.match - 0.5) || near(r.mean.match, 0.5, 1e-9));
+});
+
 // ---- points mode (#137) ----
 const Pts = require('../points_core.js'), YAHOO = { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 };
 
 test('points: with one stat scored, each opponent match chance equals the category matrix for that stat', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), cat = W.matrix(ctx, st), pt = W.matrix(ctx, st, { points: { reb: 1 } });
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), cat = W.matrix(ctx, st, { shrink: { match: 1, cat: 1 } }), pt = W.matrix(ctx, st, { points: { reb: 1 } });
   assert.strictEqual(pt.teams.length, cat.teams.length);
   pt.teams.forEach((t, i) => { assert.ok(near(t.match, cat.teams[i].cat[4], 1e-12), t.id); assert.strictEqual(t.cat, null); assert.strictEqual(t.winC, null); });
   assert.strictEqual(pt.mean.cat, null); assert.strictEqual(pt.mean.winC, null);
@@ -284,4 +306,47 @@ test('points: a shared ctx used with weights A then B gives what a fresh ctx giv
   const shared = mk(nowMs, g); W.matrix(shared, st, { points: A });
   const after = W.matrix(shared, st, { points: B }), fresh = W.matrix(mk(nowMs, g), st, { points: B });
   assert.deepStrictEqual(after.teams.map(t => t.match), fresh.teams.map(t => t.match)); assert.strictEqual(after.mean.match, fresh.mean.match);
+});
+
+// ---- #147: one k for every tab, and the league-wide matrix the Trade Analyzer reads ----
+test('WinK: Team, Rankings and Trade read one shrink object', () => {
+  const K = require('../win_k.js');
+  assert.strictEqual(W.SHRINK, K.SHRINK); assert.deepStrictEqual(K.SHRINK, { match: 0.6, cat: 0.75 });
+  assert.ok(near(K.shrink(0.9, 0.6), 0.5 + 0.6 * 0.4));
+});
+
+test('leagueWin: with no IL players my row is the Team tab matrix with every opponent weighted equally', () => {
+  const R0 = {}; Object.keys(ROS).forEach(t => { R0[t] = ROS[t].map(x => Object.assign({}, x, { slot: x.slot === 'IR' ? 'RESERVE' : x.slot })); });
+  const pool0 = Pl.buildPool({ PLAYERS, fxPlayers: fx('fx_players.json'), espn: fx('espn_2025_26.json'), L, rosters: R0 });
+  const ctx = M.makeCtx({ L, pool: pool0, DAYS: games(last.start, last.end), rosters: R0, me, nowMs: last.start }), lw = W.leagueWin(ctx, ctx.roster), m = W.matrix(ctx, T.initState(R0[me]));
+  const mi = lw.ids.indexOf(me), mean = lw.ids.filter(t => t !== me).reduce((s, t) => s + lw.P[mi][lw.ids.indexOf(t)], 0) / (ids.length - 1);
+  assert.ok(near(mean, m.mean.match, 1e-9));
+  lw.ids.forEach((a, i) => lw.ids.forEach((b, j) => { if (i < j) assert.ok(near(lw.P[i][j] + lw.P[j][i], 1, 0.05), 'pair ' + a + b); }));
+});
+
+test('leagueWin: one linear k on every pair (shrink 1 vs 0.6)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), a = W.leagueWin(ctx, ctx.roster, { shrink: { match: 1, cat: 1 } }), b = W.leagueWin(ctx, ctx.roster, { shrink: { match: 0.6, cat: 0.75 } });
+  a.P.forEach((row, i) => row.forEach((p, j) => { if (i !== j) assert.ok(near(b.P[i][j] - 0.5, 0.6 * (p - 0.5), 1e-12)); }));
+});
+
+test('tradeState: an IL player counts as healthy (kept: Active; incoming: the freed Active slot); slot order does not depend on fids order', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), slot = f => ctx.pool.byKey.get(f).slot;
+  const x = ctx.roster[me].filter(f => slot(f) === 'ACTIVE').slice(0, 2), ys = ctx.roster[other].filter(f => slot(f) === 'ACTIVE').slice(0, 2);
+  const keep = ctx.roster[me].filter(f => !x.includes(f)), a = W.tradeState(ctx, me, keep.concat(ys)), b = W.tradeState(ctx, me, keep.concat(ys.slice().reverse()));
+  ys.forEach(y => assert.strictEqual(a.slots[y], b.slots[y]));
+  const il = ctx.roster[other].find(f => slot(f) === 'IR');
+  if (il) { const s = W.tradeState(ctx, me, keep.concat([il, ys[0]])); assert.strictEqual(s.slots[il], 'active'); assert.strictEqual(s.slots[ys[0]], 'active'); }
+  const mineIl = ctx.roster[me].find(f => slot(f) === 'IR');
+  if (mineIl) assert.strictEqual(a.slots[mineIl], 'active');
+});
+
+test('leagueWin: a traded roster moves the incoming player into the slot the outgoing one left, an incoming IL player counts as healthy', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), x = ctx.roster[me].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE'), y = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE');
+  const R = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(y), [other]: ctx.roster[other].filter(f => f !== y).concat(x) });
+  const st = W.tradeState(ctx, me, R[me]);
+  assert.strictEqual(st.slots[y], 'active'); assert.ok(!(x in st.slots));
+  const il = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'IR');
+  if (il) { const R2 = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(il), [other]: ctx.roster[other].filter(f => f !== il).concat(x) }); assert.strictEqual(W.tradeState(ctx, me, R2[me]).slots[il], 'active'); }
+  const a = W.leagueWin(ctx, ctx.roster), b = W.leagueWin(ctx, R);
+  assert.ok(Math.abs(a.P[a.ids.indexOf(me)][a.ids.indexOf(other)] - b.P[b.ids.indexOf(me)][b.ids.indexOf(other)]) > 1e-6);
 });

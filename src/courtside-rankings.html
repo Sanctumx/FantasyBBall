@@ -1740,6 +1740,8 @@ tbody tr.mine:hover td{background:var(--sunk)}
     return ref;
   }
   const valueZ = (line, g, ref) => (rawValue(total(line, g, ref), ref) - ref.vMean) / ref.vSd;
+  // g games of `line` plus G - g games of `fill` (a player who misses games is replaced by the team's worst player for them)
+  const valueZFill = (line, g, fill, G, ref) => { const a = total(line, g, ref), b = total(fill, Math.max(0, G - g), ref); return (rawValue(a.map((v, c) => v + b[c]), ref) - ref.vMean) / ref.vSd; };
   // per-game z in each category, positive = good for the team (turnovers flipped)
   const catZ = (line, ref) => total(line, 1, ref).map((v, c) => (c === 8 ? -1 : 1) * (v - ref.pgMean[c]) / ref.pgSd[c]);
 
@@ -1752,7 +1754,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
       ast: mix(a.ast, b.ast), stl: mix(a.stl, b.stl), blk: mix(a.blk, b.blk), to: mix(a.to, b.to) };
   }
 
-  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, waiverLevel, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
+  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, waiverLevel, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, valueZFill, catZ, curLine };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InPlayers = api;
 })(this);
 
@@ -1859,6 +1861,17 @@ tbody tr.mine:hover td{background:var(--sunk)}
   const api = { table, FP_SLOT, noise, engineView, entry, STATS, RHO, DISP, statsOf, perGame, pgVar, projVar, weekVar, key };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Points = api;
 })(this);
+
+// The one shrink every Win C / Win M display reads (#139, #147): Team, Rankings and the Trade Analyzer. Display only, never in the Model pick.
+// Fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (calib_ros_k.js): pooled k 0.43 match, 0.65 per category; shipped at
+// 0.6 / 0.75 (user, 2026-10-26) because the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident.
+(function (root) {
+  'use strict';
+  const SHRINK = { match: 0.6, cat: 0.75 };
+  const shrink = (p, k) => 0.5 + k * (p - 0.5);
+  const api = { SHRINK, shrink };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.WinK = api;
+})(typeof self !== 'undefined' ? self : this);
 
 // Rankings core (2026-10-21): per-game lines from any source → Zscore table. Pure; browser and Node.
 // Rule (user, 2026-10-21): a source's Zscore is calculated on the top X players by H2H-adjusted value within that source,
@@ -2048,7 +2061,8 @@ tbody tr.mine:hover td{background:var(--sunk)}
     let ctx = Eng.buildContext(P, cfg);
     const n0 = P.length, pts = o.points ? Points.FP_SLOT : -1;   // points mode: one FP total in a category slot (points_core.engineView)
     if (o.points) { const v = Points.engineView(P, ctx, cfg, o.points); P = v.P; ctx = v.ctx; }
-    const cOf = p => pts < 0 ? p.gain * 100 : null, mOf = p => pts < 0 ? p.gainM * 100 : p.gainC[pts] * 100;
+    const sk = o.shrink && pts < 0 ? o.shrink : { match: 1, cat: 1 };   // #147: the Team tab's pull toward 50% (WinK.SHRINK), display only; a gain is a difference of chances, so it scales by k
+    const cOf = p => pts < 0 ? p.gain * 100 * sk.cat : null, mOf = p => pts < 0 ? p.gainM * 100 * sk.match : p.gainC[pts] * 100;
     const lists = o.lists || null;
     const full = lists ? lists.map(l => l.filter(pid => idx.has(pid)).slice(0, Rr)) : null;
     // average-player entry: the average player on my roster when a league is loaded, else the Zscore pool's average; needs enough
@@ -2183,7 +2197,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
     const key = ['win', ptKey(), ui.src, ui.basis, WINDAYS[ui.src] ? ui.type : '', s.teams, s.roster, s.cats, s.ilSpots, lists ? lists.map(l => l.join(',')).join(';') : 'none'].join('|');
     if (win.key === key) return win.w;
     win.key = key; const seq = ++win.seq;
-    win.w = R.winStart(rows, tab, { teams: s.teams, roster: s.roster, cats: s.cats, ilSpots: s.ilSpots, basis: ui.basis, lists, points: pw() });
+    win.w = R.winStart(rows, tab, { teams: s.teams, roster: s.roster, cats: s.cats, ilSpots: s.ilSpots, basis: ui.basis, lists, points: pw(), shrink: WinK.SHRINK });
     const tick = () => { if (seq !== win.seq) return; if (win.w.step() != null) { draw(); setTimeout(tick, 0); } else draw(); };
     if (win.w.pending.length) setTimeout(tick, 0);
     return win.w;
@@ -2262,7 +2276,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
     const zeroPts = P_ && Object.values(P_).every(v => !v);
-    n.textContent = (zeroPts ? 'All point values are 0: enter your league\'s values in Settings. ' : '') + (matched < tab.length ? matched + ' players match. ' : '') + (P_ ? 'Win M is season-long, as on the Draft tab, against' : 'Win C / Win M are season-long, as on the Draft tab, against') + ' simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. ' + (P_ ? 'Points are your Settings point values times each stat; Season multiplies by games played, Mix by the midpoint of his games and the top ' + K + ' players\' average (scaled to games played). Win M treats each team\'s week as one points total, with the engine\'s own stat noise plus measured correlations between stats (a high-scoring night is usually also a high-FG night).' : 'Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).') + (ui.poboost !== 'off' ? (P_ ? ' Playoff boost scales the Points value by 1 + strength' : ' Playoff boost scales Zscore and each category by 1 + strength') + ' × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    n.textContent = (zeroPts ? 'All point values are 0: enter your league\'s values in Settings. ' : '') + (matched < tab.length ? matched + ' players match. ' : '') + (P_ ? 'Win M is season-long, as on the Draft tab, against' : 'Win C / Win M are season-long, as on the Draft tab, against') + ' simulated league teams' + (P_ ? '' : ', pulled toward 50% as on the Team tab (Win M by 0.6, Win C by 0.75)') + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. ' + (P_ ? 'Points are your Settings point values times each stat; Season multiplies by games played, Mix by the midpoint of his games and the top ' + K + ' players\' average (scaled to games played). Win M treats each team\'s week as one points total, with the engine\'s own stat noise plus measured correlations between stats (a high-scoring night is usually also a high-FG night).' : 'Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).') + (ui.poboost !== 'off' ? (P_ ? ' Playoff boost scales the Points value by 1 + strength' : ' Playoff boost scales Zscore and each category by 1 + strength') + ' × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
     prewarm();
   }
 
