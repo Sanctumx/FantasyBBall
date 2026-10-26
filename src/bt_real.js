@@ -96,7 +96,9 @@ const ARMS = [['Current board', {}], ['Win M + look-ahead (no slide)', { slideEn
   // New category scarcity (2026-10-18: concentration + depletion, engine catIdx) as a boost on Win / Win M, vs arm 23.
   // The old drop-based scarcity cost about 5 points when boosted (handoff); this re-tests the new measure.
   ['K2 + category scarcity boost Light', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', scarZ: 'light' }],
-  ['K2 + category scarcity boost Medium', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', scarZ: 'medium' }]];
+  ['K2 + category scarcity boost Medium', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', scarZ: 'medium' }],
+  // Plays % by roster rank (#141, 2026-10-26): the 11th and 12th best entries of each team scaled by 98.5% / 96% in the Model pick; baseline = arm 23
+  ['K2 + Plays % by roster rank', { slideEngine: false, slide: { value: 'blend', fit: 'look2', alpha: 0.5, mid: 1.5, k: 2 }, puntMode: 'off', playsRank: true }]];
 const [name, c] = ARMS[arm], rows = [], t0 = Date.now();
 for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
   const { fmt, opp: oppKind, ...cx } = c, old = fmt === 'old';

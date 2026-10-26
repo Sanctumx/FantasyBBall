@@ -498,11 +498,11 @@ label.f select,label.f input{font-weight:400}
 
 </div>
 
-<script src="assets/players.af9cbf9f.js"></script>
+<script src="assets/players.f8db9ca9.js"></script>
 <script src="assets/sched.42cc8c3b.js"></script>
-<script src="assets/engine.95e53a1b.js"></script>
+<script src="assets/engine.00768e2b.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.f6a996f6.js"></script>
+<script src="assets/store.22818a7e.js"></script>
 <script>
 (function(){
 'use strict';
@@ -863,14 +863,15 @@ function matchFantrax(fid) {
   return added;
 }
 const fxLeague = () => SS.league && SS.league.id ? SS.league : null;   // the league loaded in Settings
+const fxManual = lg => !!lg && !!LS.manualLeague(LS.local.get, lg.id);   // a pasted league has no draft to import; its rosters never reach the Model pick
 function renderFxLeague() {
   const lg = fxLeague();
-  $('fx-import').disabled = !lg;
-  $('fx-lg').innerHTML = lg ? 'League: ' + esc(lg.name || lg.id) : LS.NO_LEAGUE_HTML;
+  $('fx-import').disabled = !lg || fxManual(lg);
+  $('fx-lg').innerHTML = lg ? 'League: ' + esc(lg.name || lg.id) + (fxManual(lg) ? ' (manual: no draft to import)' : '') : LS.NO_LEAGUE_HTML;
 }
 // Imports the draft of the league loaded in Settings: picks go onto the board, then it stays in sync. League settings are not touched.
 async function fxImport() {
-  const lg = fxLeague(); if (!lg) return;
+  const lg = fxLeague(); if (!lg || fxManual(lg)) return;
   const id = lg.id, prev = fx && fx.leagueId === id ? fx.myTeam : LS.defaultTeam(LS.local.get, id);
   clearTimeout(fxRetryT);   // a manual Import replaces a pending retry (the wait keeps growing until an answer comes)
   fx = { leagueId: id, myTeam: prev };

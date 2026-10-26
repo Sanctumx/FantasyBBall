@@ -235,6 +235,7 @@ tr.lrow{cursor:pointer}
 
 <script>/*__DATA__*/
 /*__DAYS__*/</script>
+<script>/*__SCHED__*/</script>
 <script>/*__ENGINE__*/</script>
 <script>/*__SHARED__*/</script>
 <script>/*__STORE__*/</script>
@@ -267,7 +268,7 @@ tr.lrow{cursor:pointer}
   let SS = LS.load(LS.local.get), L = null, rosters = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
   let me = null, base = null, state = null, zmap = new Map(), scorer = TV.createScorer(), outs = [], ins = [], log = [], tickSeq = 0;
 
-  const FXC = FxCache.create({});   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  const FXC = FxCache.create({ manual: LeagueStore.manualHook(LeagueStore.local.get, () => SCHED) });   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
   let fxChecking = false;
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
   async function loadStats() {

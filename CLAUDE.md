@@ -85,7 +85,10 @@ They work alongside the routing above; this file takes precedence over them. Siz
 ## The user's working rules
 
 - Change files with the Edit/Write tools, not `python - <<EOF` or `sed -i` patch scripts, and run commands from the repo
-  root without a `cd` prefix; both trigger permission prompts the user is tired of (user, 2026-10-26).
+  root without a `cd` prefix; both trigger permission prompts the user is tired of (user, 2026-10-26). Enforced by the
+  `before-bash.mjs` hook (it blocks `cd` prefixes, `sed -i`, `cat > f <<EOF` and heredoc patch scripts); don't work around it.
+- A branch's handoff note covers only that branch (state, Next, and hazards it created for others). Other branches' status
+  is read from `branches.mjs`, not copied into notes (user, 2026-10-26).
 - Push, merge or deploy only when the user says "push" or types /release (the ask prompt above is the backstop).
 - Keep running plan tasks back to back unless something needs the user's input; the exception is the context limit
   above (user, 2026-10-20).
@@ -108,7 +111,7 @@ They work alongside the routing above; this file takes precedence over them. Siz
 3. **Test first.** Write the failing test, watch it fail, then make it pass.
    - Unit tests: `node --test 'src/tests/*.test.js'` from the repo root.
    - Browser checks: `src/tests/browser/*.mjs`. They need Playwright, run from a folder where it is installed, with the
-     repo root served by `python3 -m http.server 8765`.
+     repo root served by `python3 -m http.server 8765` (`python` on the Windows PC, which has no `python3`).
 4. **Build.** The site serves the repo root, so built pages are committed:
    `node .claude/scripts/build.mjs` (runs `gen.py` and `build_site.py` in `src/`, then replaces `assets/` and copies the six
    pages to the repo root; it deletes nothing else).

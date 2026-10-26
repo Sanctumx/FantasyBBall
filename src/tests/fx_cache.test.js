@@ -126,3 +126,20 @@ test('fxFetch builds the same URL as before', async () => {
   await FX.fxFetch('players', null, async (u) => { urls.push(u); return resp(200, {}); });
   assert.deepStrictEqual(urls, [['api/fantrax?what=rosters&leagueId=a%20b', 'no-store'], 'api/fantrax?what=players']);
 });
+
+test('a manual league answers from its own data: no fetch, nothing stored, no draw from cache', async () => {
+  const st = mem(), log = [], out = {}, ans = { league: { teamInfo: { t1: {} } }, rosters: { rosters: {} }, players: { 'm:a': { name: 'A' } } };
+  const man = (what, id) => id === 'm-1' ? ans[what] || null : null;
+  const c = FX.create({ storage: st, fetcher: fake({}, log), now: () => 7, manual: man });
+  await c.swr([['league', 'm-1'], ['rosters', 'm-1'], ['players']], H(out));
+  assert.deepStrictEqual(log, []);                                    // players got the league id of its siblings
+  assert.deepStrictEqual(out.fresh, { b: [ans.league, ans.rosters, ans.players], at: 7, ch: false });   // already drawn from the same data
+  assert.deepStrictEqual(out.cached.b, [ans.league, ans.rosters, ans.players]);   // drawn at once, offline
+  assert.deepStrictEqual(st.keys(), []);
+  assert.deepStrictEqual(await c.live('rosters', 'm-1'), ans.rosters);
+});
+test('a Fantrax league still fetches and caches when a manual hook is present', async () => {
+  const st = mem(), log = [], c = FX.create({ storage: st, fetcher: fake({ league: { a: 1 } }, log), now: () => 1, manual: () => null });
+  await c.swr([['league', 'L1']], H());
+  assert.deepStrictEqual(log, ['league:L1']); assert.strictEqual(st.keys().length, 1);
+});

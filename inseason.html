@@ -336,12 +336,13 @@ tr.click{cursor:pointer}
   </div>
 </main>
 
-<script src="assets/players.af9cbf9f.js"></script>
+<script src="assets/players.f8db9ca9.js"></script>
 <script src="assets/sched_days.72a6a842.js"></script>
-<script src="assets/engine.95e53a1b.js"></script>
+<script src="assets/sched.42cc8c3b.js"></script>
+<script src="assets/engine.00768e2b.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.f6a996f6.js"></script>
-<script src="assets/fxcache.b51ac615.js"></script>
+<script src="assets/store.22818a7e.js"></script>
+<script src="assets/fxcache.3a003ffb.js"></script>
 <script src="assets/inseason_mods.520fd1df.js"></script>
 <script>
 (function () {
@@ -380,7 +381,7 @@ tr.click{cursor:pointer}
 
   let staleAge = 0;   // seconds old of the oldest answer the Worker served from memory because Fantrax was busy
   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
-  const FXC = FxCache.create({ onResponse: r => { const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age); } });
+  const FXC = FxCache.create({ manual: LeagueStore.manualHook(LeagueStore.local.get, () => SCHED), onResponse: r => { const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age); } });
   let fxChecking = false;
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
