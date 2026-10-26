@@ -418,6 +418,8 @@
   // Easy 10 ADP / 2 sharp / 1 punter; Average 5 / 4 / 2 + 2 kit-style (the backtest league, = 4 kit users);
   // Strong 2 / 6 / 2 + 3; Very strong 0 / 6 / 2 + 5. Labelled guesses until fitted on a real draft against that day's ADP.
   // Plays % by roster rank (#140): with 10 active of 12 the 11th and 12th best players of a team play 98.5% / 96% of their games.
+  // Off by default and Rejected (#141). Hard-coded to 10 active of 12 (ignores cfg.roster and the league's active limit; every rank
+  // past 12 gets 0.96). The punt pass (puntMode other than 'off') builds my team without this scaling, so turn the flag on only with punt off.
   const PLAYS_RANK = [0.985, 0.96], ACTIVE_CAP = 10;
   const playsF = r => r < ACTIVE_CAP ? 1 : PLAYS_RANK[Math.min(PLAYS_RANK.length - 1, r - ACTIVE_CAP)];
   // Sum entries {val, x, v} into mu / v, ranked by val (ties keep input order); extra is one more entry competing for a rank.

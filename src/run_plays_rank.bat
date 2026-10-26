@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-echo #141 Plays % by roster rank: arm 65 vs arm 23. Leave this window open.
+echo #141 Plays %% by roster rank: arm 65 vs arm 23.
 echo == 1. parity: 2024-25 seeds 145-147
 node bt_real.js 2024-25 23 145 147
 node bt_real.js 2024-25 65 145 147
@@ -16,4 +16,3 @@ python prize_equity.py 65:23 > results_plays_rank.txt
 type results_plays_rank.txt
 echo.
 echo Done. Send results_plays_rank.txt back.
-pause

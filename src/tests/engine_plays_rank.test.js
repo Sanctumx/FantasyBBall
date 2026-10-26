@@ -30,7 +30,7 @@ test('finished draft: each team is its top 10 plus 98.5% and 96% of the 11th and
   });
 });
 
-test('flag off leaves the forecast untouched, a 10-man roster is not affected', () => {
+test('flag on changes a 12-man roster forecast, a 10-man roster is not affected', () => {
   const a = setup(30), b = setup(30, { playsRank: true });
   const o1 = a.evalWith(a.cfg), o2 = b.evalWith(b.cfg);
   assert.notDeepStrictEqual(Array.from(o1.teams[0].mu), Array.from(o2.teams[0].mu));
