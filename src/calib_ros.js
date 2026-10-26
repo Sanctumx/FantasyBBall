@@ -18,6 +18,7 @@ const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || '2025-26,2
 const gauss = r => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
 const SRC = ['W', 'G', 'PM'];   // whole games, g82 games, pairMatchup (whole games, gVar 1.87)
 const K_MATCH = 0.72, K_CAT = 0.82, T0 = Date.now();
+let done = 0;
 
 function build(season) {
   const { P, ctx, cfg: cfg0 } = B.setup(season, { proj: 'avg', realAdp: true });
@@ -27,7 +28,7 @@ function build(season) {
   const cols = { p: { W: [], G: [], PM: [] }, y: [], wk: [], cat: [], ck: [] }, pairWeeks = CKS.map(() => 0);
   let checks = 0;
   for (let seed = 1; seed <= SEEDS; seed++) {
-    if (seed % 5 === 1 || seed === SEEDS) console.log(`  ${season}: seed ${seed} of ${SEEDS}, ${Math.round((Date.now() - T0) / 1000)} s elapsed`);
+    done++; if (done > 1) { const el = (Date.now() - T0) / 1000, left = Math.round(el / (done - 1) * (SEEDS * SEASONS.length - done + 1)); process.stdout.write(`Estimated time remaining: ${Math.floor(left / 60)} min ${String(left % 60).padStart(2, '0')} s   `); }
     const r = S.rng(seed * 7919);
     const T = P.map(p => p.adpUse + gauss(r) * p.sd), order = P.map((_, i) => i).sort((a, b) => T[a] - T[b]), picks = order.slice(0, N * R);
     const res = E.evaluate(P, ctx, cfg, { picks });
@@ -74,7 +75,7 @@ function build(season) {
 }
 
 const f = (x, d = 4) => (x < 0 ? '' : ' ') + x.toFixed(d);
-const OUT = []; const log = s => { OUT.push(s); console.log(s); };
+const OUT = []; const log = s => { OUT.push(s); };
 const A = (src, kM, kC) => ({ src, kM, kC });
 const BASE = A('W', 1, 1);
 
@@ -153,13 +154,11 @@ function verdict(R_, results) {
 }
 
 if (require.main === module) {
-  const R_ = SEASONS.map(s => { const r = build(s); console.log(`built ${s}: ${r.D.n} rows`); return r; });
+  const R_ = SEASONS.map(s => { const r = build(s); return r; });
   const results = report(R_);
   log('\n== Verdict (rule fixed before the results)');
   const V = verdict(R_, results); V.forEach(log);
   fs.writeFileSync('results_calib_ros.txt', OUT.join('\n') + '\n');
-  console.log(`
-*** FINISHED in ${Math.round((Date.now() - T0) / 1000)} s: results_calib_ros.txt is written ***`);
   fs.writeFileSync('calib_ros.json', JSON.stringify({ seeds: SEEDS, results, verdict: V }));
 }
 module.exports = { build, verdict };
