@@ -125,7 +125,9 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 .sync-status.live .dot{background:var(--good)}
 .sync-status.err{color:var(--bad)}
 .sync-status.err .dot{background:var(--bad)}
+#mn-text{width:100%;box-sizing:border-box;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font:.82rem var(--f-data);color:var(--ink);resize:vertical}
 .note{margin:0;font-size:.88rem;color:var(--ink)}
+.note.bad{color:var(--bad)}
 .note:empty,.hint:empty{display:none}
 .hint.warn{color:var(--warn)}
 </style>
@@ -156,6 +158,20 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     <div class="sync-status" id="fx-status"><span class="dot"></span><span id="fx-text">No league loaded. Paste your league ID and press Load.</span></div>
     <p class="note" id="fx-note" role="status"></p>
     <p class="hint">Load fills teams, roster size and lineup slots from Fantrax. Scoring, categories, IL spots and the playoffs aren't in Fantrax's public data, so set those below.</p>
+  </section>
+
+  <section class="panel" id="mn-panel" aria-label="Manual league">
+    <h2>Manual league <span class="meta">For leagues that can't sync (Yahoo): paste the rosters yourself</span></h2>
+    <div class="sync-row"><input type="text" id="mn-name" placeholder="League name" aria-label="Manual league name" maxlength="60"></div>
+    <textarea id="mn-text" rows="5" aria-label="Pasted Yahoo Starting Rosters page" placeholder="On Yahoo open Team › Starting Rosters, press Ctrl+A, copy, and paste the whole page here"></textarea>
+    <div class="sync-row">
+      <button class="btn primary" type="button" id="mn-create">Create league</button>
+      <button class="btn" type="button" id="mn-update" title="Replace the rosters of the league selected in the saved list with this paste">Update rosters of the selected league</button>
+      <button class="btn" type="button" id="mn-export" title="Save the selected manual league as a file">Export file</button>
+      <label class="btn" for="mn-file" title="Load a league file saved with Export">Import file</label><input type="file" id="mn-file" accept=".json,application/json" hidden>
+    </div>
+    <p class="note" id="mn-note" role="status"></p>
+    <p class="hint">Teams, players, the starting slots, bench and IL come from the paste. Set scoring and categories below. A manual league has no live standings or schedule, and nothing syncs between devices: use Export file as the backup.</p>
   </section>
 
   <section class="panel" id="setup" aria-label="League settings">
@@ -189,9 +205,9 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 </main>
 
 <script src="assets/sched.42cc8c3b.js"></script>
-<script src="assets/store.f6a996f6.js"></script>
+<script src="assets/store.22818a7e.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/fxcache.b51ac615.js"></script>
+<script src="assets/fxcache.3a003ffb.js"></script>
 <script>
 (function () {
   'use strict';
@@ -199,7 +215,12 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('settings');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   let state = LS.load(get);
-  const persist = () => { LS.save(set, state); if (state.league) LS.setLeagueScoring(get, set, state.league.id, state.settings); };
+  const persist = () => {
+    LS.save(set, state);
+    if (!state.league) return;
+    LS.setLeagueScoring(get, set, state.league.id, state.settings);
+    const ML = LS.manualLeague(get, state.league.id); if (ML) LS.saveManual(get, set, Object.assign({}, ML, { settings: state.settings }));   // a manual league keeps its own settings
+  };
   if (state.migrated) persist();   // the first visit writes the store built from the old keys
 
   const fmtDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -272,6 +293,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   }
   const errText = e => e.message === 'nohost' ? 'Loading runs on the hosted site (courtside-basketball on Cloudflare).' : e.message === 'offline' ? 'Couldn\'t reach the sync service. Check your connection.' : e.message;
   async function load(id) {
+    if (LS.manualLeague(get, id)) { loadManual(id); return; }
     const mine = ++seq; clearTimeout(retryT);
     status('Loading league ' + id + '…');
     try {
@@ -297,14 +319,64 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     if (!/^[A-Za-z0-9]{4,40}$/.test(id)) { status('Paste the league ID, the letters and numbers after /league/ in your Fantrax URL.', 'err'); return; }
     load(id);
   });
-  $('fx-team').addEventListener('change', e => { if (state.league && e.target.value) LS.rememberLeague(get, set, state.league.id, null, e.target.value); });
+  $('fx-team').addEventListener('change', e => {
+    if (!state.league || !e.target.value) return;
+    LS.rememberLeague(get, set, state.league.id, null, e.target.value);
+    const ML = LS.manualLeague(get, state.league.id); if (ML) LS.saveManual(get, set, Object.assign({}, ML, { myTeam: e.target.value }));
+  });
+
+  // ---- manual league (Yahoo and anything else without a sync) ----
+  function loadManual(id) {
+    const ML = LS.manualLeague(get, id); if (!ML) return;
+    seq++; clearTimeout(retryT); wait = 0;
+    const league = LS.manualAnswers(ML).league;
+    state = { settings: ML.settings, league: { id, name: ML.name, teams: LS.teamsOf(league, []), loadedAt: Date.now() }, note: 'Manual league: rosters, lineup and IL come from what you pasted.' };
+    persist(); renderAll(); status('Loaded ' + ML.name + ' · ' + state.league.teams.length + ' teams (manual)', 'live');
+  }
+  const mnNote = (t, bad) => { const n = $('mn-note'); n.textContent = t; n.classList.toggle('bad', !!bad); };
+  function mnParse() {
+    const p = LS.parseYahooRosters($('mn-text').value);
+    if (p.teams.length < 2) { mnNote('Found ' + p.teams.length + ' team' + (p.teams.length === 1 ? '' : 's') + '. On Yahoo open Team › Starting Rosters, press Ctrl+A, copy, and paste the whole page.', true); return null; }
+    return p;
+  }
+  const mnSummary = p => p.teams.length + ' teams, ' + p.teams.reduce((n, t) => n + t.players.length, 0) + ' players, lineup ' + p.luFx.map(LS.slotName).join(' ') + ' + ' + p.bn + ' bench + ' + p.il + ' IL';
+  $('mn-create').addEventListener('click', () => {
+    const p = mnParse(); if (!p) return;
+    const ML = LS.makeManual($('mn-name').value.trim() || 'Yahoo league', p, 0, state.settings);
+    LS.saveManual(get, set, ML); loadManual(ML.id); $('mn-text').value = ''; mnNote('Created "' + ML.name + '": ' + mnSummary(p) + '. Pick your team below.');
+  });
+  $('mn-update').addEventListener('click', () => {
+    const id = $('lg-sel').value, old = id && LS.manualLeague(get, id);
+    if (!old) { mnNote('Pick a manual league in the saved list first.', true); return; }
+    const p = mnParse(); if (!p) return;
+    const was = (old.teams.find(t => t.id === old.myTeam) || {}).name, fresh = LS.makeManual(old.name, p, 0, old.settings);
+    const mine = fresh.teams.find(t => was && t.name.toLowerCase() === was.toLowerCase());
+    const ML = Object.assign({}, fresh, { id, settings: Object.assign({}, old.settings, { teams: fresh.settings.teams }), myTeam: mine ? mine.id : 't1', updatedAt: Date.now() });
+    LS.saveManual(get, set, ML);
+    if (state.league && state.league.id === id) loadManual(id); else renderLeagues();
+    $('mn-text').value = ''; mnNote('Updated "' + ML.name + '": ' + mnSummary(p) + '.');
+  });
+  $('mn-export').addEventListener('click', () => {
+    const ML = LS.manualLeague(get, $('lg-sel').value); if (!ML) { mnNote('Pick a manual league in the saved list first.', true); return; }
+    const a = document.createElement('a'), url = URL.createObjectURL(new Blob([LS.exportLeague(ML)], { type: 'application/json' }));
+    a.href = url; a.download = (ML.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'league') + '.courtside-league.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); mnNote('Saved ' + a.download + '.');
+  });
+  $('mn-file').addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    const r = LS.parseLeagueImport(await f.text(), LS.savedLeagues(get).filter(x => x.manual).map(x => x.id));
+    if (r.error) { mnNote(r.error, true); return; }
+    let ML = r.league;
+    if (r.exists && !confirm('"' + ML.name + '" is already saved. OK replaces the saved copy; Cancel keeps both.')) ML = LS.copyLeague(ML);
+    LS.saveManual(get, set, ML); loadManual(ML.id); mnNote('Imported "' + ML.name + '": ' + ML.teams.length + ' teams.');
+  });
   $('fx-off').addEventListener('click', () => { seq++; clearTimeout(retryT); state.league = null; state.note = ''; persist(); renderAll(); status('League unloaded. Draft keeps working on the settings above.'); });
 
   // saved leagues
   function renderLeagues() {
     const l = LS.savedLeagues(get); $('lg-row').hidden = !l.length;
     const sel = $('lg-sel'); sel.innerHTML = '';
-    l.forEach(x => sel.add(new Option(x.name + (x.name.includes(x.id) ? '' : ' · ' + x.id), x.id)));
+    l.forEach(x => sel.add(new Option(x.manual ? x.name + ' (manual)' : x.name + (x.name.includes(x.id) ? '' : ' · ' + x.id), x.id)));
     if (state.league && l.some(x => x.id === state.league.id)) sel.value = state.league.id;
   }
   $('lg-go').addEventListener('click', () => { const id = $('lg-sel').value; if (id) { $('fx-league').value = id; load(id); } });
@@ -331,9 +403,11 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     const id = $('lg-sel').value; if (!id) return;
     if (armed !== id) { armed = id; e.currentTarget.textContent = 'Sure?'; setTimeout(() => { armed = null; $('lg-del').textContent = 'Remove'; }, 3000); return; }
     armed = null; $('lg-del').textContent = 'Remove';
+    const wasManual = !!LS.manualLeague(get, id);
     LS.forgetLeague(get, set, id);
     if (state.league && state.league.id === id) { seq++; state.league = null; state.note = ''; persist(); }   // removing the loaded league unloads it
     renderAll(); status('Removed league ' + id + ' from the saved list.');
+    if (wasManual) mnNote('A manual league only exists in this browser. Import its file to bring it back.');
   });
 
   function renderAll() {

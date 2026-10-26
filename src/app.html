@@ -850,14 +850,15 @@ function matchFantrax(fid) {
   return added;
 }
 const fxLeague = () => SS.league && SS.league.id ? SS.league : null;   // the league loaded in Settings
+const fxManual = lg => !!lg && !!LS.manualLeague(LS.local.get, lg.id);   // a pasted league has no draft to import; its rosters never reach the Model pick
 function renderFxLeague() {
   const lg = fxLeague();
-  $('fx-import').disabled = !lg;
-  $('fx-lg').innerHTML = lg ? 'League: ' + esc(lg.name || lg.id) : LS.NO_LEAGUE_HTML;
+  $('fx-import').disabled = !lg || fxManual(lg);
+  $('fx-lg').innerHTML = lg ? 'League: ' + esc(lg.name || lg.id) + (fxManual(lg) ? ' (manual: no draft to import)' : '') : LS.NO_LEAGUE_HTML;
 }
 // Imports the draft of the league loaded in Settings: picks go onto the board, then it stays in sync. League settings are not touched.
 async function fxImport() {
-  const lg = fxLeague(); if (!lg) return;
+  const lg = fxLeague(); if (!lg || fxManual(lg)) return;
   const id = lg.id, prev = fx && fx.leagueId === id ? fx.myTeam : LS.defaultTeam(LS.local.get, id);
   clearTimeout(fxRetryT);   // a manual Import replaces a pending retry (the wait keeps growing until an answer comes)
   fx = { leagueId: id, myTeam: prev };

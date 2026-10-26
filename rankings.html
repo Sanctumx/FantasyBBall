@@ -130,9 +130,9 @@ tbody tr.mine:hover td{background:var(--sunk)}
 <script src="assets/sched.42cc8c3b.js"></script>
 <script src="assets/engine.00768e2b.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.f6a996f6.js"></script>
-<script src="assets/fxcache.b51ac615.js"></script>
-<script src="assets/rankings_mods.19f5dd3d.js"></script>
+<script src="assets/store.22818a7e.js"></script>
+<script src="assets/fxcache.3a003ffb.js"></script>
+<script src="assets/rankings_mods.73c3d81d.js"></script>
 <script>
 (function () {
   'use strict';
@@ -156,19 +156,10 @@ tbody tr.mine:hover td{background:var(--sunk)}
   let SS = LS.load(LS.local.get), box = [], fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
   const cache = new Map();   // source rows and tables, by key
 
-  const FXC = FxCache.create({});   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  const FXC = FxCache.create({ manual: LeagueStore.manualHook(LeagueStore.local.get, () => SCHED) });   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
 
-  // monthly box-score files (stats/box-YYYY-MM.json) from the season's first month to this month; missing months are skipped
-  async function loadBox() {
-    const out = [], now = new Date(); let y = 2026, m = 10;
-    while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
-      try { const r = await fetch('stats/box-' + y + '-' + String(m).padStart(2, '0') + '.json', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); if (j && j.games) out.push(j); } } catch (e) {}
-      if (++m > 12) { m = 1; y++; }
-    }
-    return out;
-  }
-  const WINDAYS = { season: 400, w7: 7, w14: 14, w30: 30 };
+  const loadBox = () => R.loadBox(fetch), WINDAYS = R.WINDAYS;   // the monthly box-score files; the window lengths of the box sources
 
   // the league loaded in Settings: owners come from its current rosters; the table works without it
   async function loadLeague() {
