@@ -25,7 +25,7 @@ D1 Team roster bottom row keeps "Team average (per slot)" with the points averag
    - `src/points_core.js` (~162): `pgVar` hands the raw line to `Eng.perGameVar`; a window row with `pts` undefined gives NaN variance and NaN Win M for the whole source. Pass the `statsOf` values (`Object.assign({}, l, s, {fgp, ftp})`) and test it.
    - `src/points_core.js` (~230): Season uses gp, Mix uses g (scaled to 80 games), so early in the season Mix shows ~7x Season. Scale Mix by gp/g or say so in the note.
    - `src/rankings.html` (~310): in points mode the note still opens "Win C / Win M are season-long" and the playoff-boost sentence says it scales Zscore and each category; reword both for points.
-2. Ledger (not done yet, ledger worktree): edit IDEAS #137 in place, add the new Open row for the points Win M calibration (`node .claude/scripts/ledger.mjs next`), archive entry at the top of "Entries after 2026-10-18", handoff line; land only on the user's "push".
+2. Ledger: done and committed in the ledger worktree (`../FantasyBBall-ledger`, commit 5fda80b: IDEAS #137 row edited, new Open row #143, archive entry 137b, handoff line), NOT landed. If the reviewer fixes change the story, amend those there; land with `node .claude/scripts/ledger.mjs land` only on the user's "push".
 3. On "push": `git push -u origin yahoo-points-pr2`, PR against main (summary, tests, decisions), merge only on the user's word. Then Yahoo link (part 2) when Yahoo approves the API app.
 
 ## PC commands
