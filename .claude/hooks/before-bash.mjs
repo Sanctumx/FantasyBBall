@@ -14,7 +14,11 @@ let input = {};
 try { input = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { process.exit(0); }
 const cmd = input.tool_input && input.tool_input.command;
 if (!cmd || process.env.ALLOW_BASH_PATTERNS === '1') process.exit(0);
-const hit = RULES.find(([re]) => re.test(cmd));
+// A commit message may name a blocked pattern; drop its quoted text (and heredoc body) so only the command itself is checked.
+const text = /\bgit\s+commit\b/.test(cmd)
+  ? cmd.replace(/<<-?\s*'?(\w+)'?[\s\S]*?\n\s*\1\b/g, '').replace(/"[^"]*"|'[^']*'/g, '""')
+  : cmd;
+const hit = RULES.find(([re]) => re.test(text));
 if (!hit) process.exit(0);
 process.stderr.write(`Blocked: ${hit[1]} (the user's rule, CLAUDE.md "The user's working rules"; each of these raises a permission prompt). Rewrite the command without it.\n`);
 process.exit(2);

@@ -1,16 +1,17 @@
-# block-bash-prompts (the no-permission-prompt rule, enforced)
+# block-bash-prompts (the no-permission-prompt rule, enforced; branch hygiene)
 
-Branch `block-bash-prompts` from origin/main (2026-10-26), committed locally, not pushed, not reviewed.
+Branch `block-bash-prompts` from origin/main (2026-10-26). PR #39 open (first two commits pushed); later commits local until the user says push.
 
 ## State
-- `.claude/hooks/before-bash.mjs` (PreToolUse, Bash): blocks a `cd` prefix, in-place `sed`, `cat > f <<EOF` and interpreter heredocs that write; read-only snippets pass; `ALLOW_BASH_PATTERNS=1` overrides. Registered in `.claude/settings.json`; CLAUDE.md "working rules" says it is enforced. Test: `src/tests/before_bash_hook.test.js` (2 tests pass).
-- Known quirk: it matches the command text, so a commit message that names a blocked pattern is blocked too (reword it).
-- `/fewer-permission-prompts` scan (50 sessions) found nothing safe to add to the allowlist: the prompts came from `cd` prefixes, python / `node -e` / heredoc scripts, `sed -i` and `cp`.
+
+- `.claude/hooks/before-bash.mjs` (PreToolUse, Bash): blocks a `cd` prefix, in-place `sed`, `cat > f <<EOF` and interpreter heredocs that write; read-only snippets pass; `ALLOW_BASH_PATTERNS=1` overrides. For `git commit` commands the quoted message and heredoc body are ignored, so a message may name a blocked pattern (a chained `cd` after it is still blocked). A PR body written as a heredoc is still blocked: use `gh pr create --body-file`.
+- `.claude/scripts/branches.mjs` (session-start report): flags STALE branches (merged or landed; more than 20 behind main and idle over 7 days; no handoff file) and warns when the main checkout is on a branch other than main (another session may switch it under you; use one worktree per branch).
+- Tests: `before_bash_hook.test.js`, `branches_script.test.js`; 363 unit tests pass.
+- `/fewer-permission-prompts` scan (50 sessions) found nothing safe to add to the allowlist.
 
 ## Next
-1. Ask the user to push, then PR (small change: reviewer on sonnet or skip).
-2. The user's rule: generalize workflow changes into `Sanctumx/Claude-Workflow` (template + GUIDELINES); not done, ask first.
 
-## Other work this session (records elsewhere)
-- Ledger landed on main (#139-#147, including the points-shrink point on #143, #146 plan, Model-pick rule on #147).
-- PR #37 `calib-ros` (#139 shrink) open, reviewed, ready; PR #38 `manual-league` open, three reviewer MUSTs fixed (6b9a2ce), SHOULDs still open (see `src/handoffs/manual-league.md` on that branch). Neither merged.
+1. Ask the user to push (PR #39 gets the later commits), then merge. After the merge every branch picks the hook up by rebasing onto origin/main.
+2. Delete the merged branches and their worktrees (allow-rules, handoff-workstreams, wrangler-previews, yahoo-points-137); the user decides on the other stale-looking ones.
+3. The user's rule: generalize workflow changes into `Sanctumx/Claude-Workflow` (template + GUIDELINES); not done, ask first.
+4. Handoff rule to add to CLAUDE.md or the handoff skill: a branch's note covers only that branch (state, Next, hazards it created); other branches are read from `branches.mjs`.

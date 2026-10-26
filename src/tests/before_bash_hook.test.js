@@ -13,3 +13,9 @@ test('before-bash lets ordinary and read-only commands through', () => {
     "node - <<'EOF'\nconsole.log(require('./a.json').length)\nEOF", 'echo "cd is a word"',
   ].forEach(c => assert.strictEqual(run(c), 0, c));
 });
+
+test('before-bash ignores a blocked pattern named inside a commit message, but not one chained after it', () => {
+  assert.strictEqual(run('git commit -m "chore: hook blocks cd prefixes and sed -i"'), 0);
+  assert.strictEqual(run("git commit -m \"$(cat <<'EOF'\nfix: no sed -i, no cd src && x\nEOF\n)\""), 0);
+  assert.strictEqual(run('git commit -m "x" && cd src && ls'), 2);
+});
