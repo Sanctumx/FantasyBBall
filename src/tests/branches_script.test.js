@@ -19,6 +19,11 @@ function setup() {
   put('a.txt', '1\n'); git('add', '-A'); git('commit', '-q', '-m', 'base'); git('push', '-q', '-u', 'origin', 'main');
   return { root, dir, git, put };
 }
+// A commit whose author and committer dates are both `date` (--date alone sets only the author date).
+const commitDated = (git, msg, date) => {
+  process.env.GIT_COMMITTER_DATE = date;
+  try { git('commit', '-q', '-m', msg, '--date', date); } finally { delete process.env.GIT_COMMITTER_DATE; }
+};
 const report = dir => spawnSync('node', [script, '--no-fetch'], { cwd: dir, encoding: 'utf8' }).stdout;
 const lineOf = (out, name) => out.split('\n').find(l => l.startsWith(name + ' ')) || '';
 
@@ -69,7 +74,7 @@ test('stale branches are flagged: merged, far behind main, or with no handoff', 
   git('checkout', '-q', '-b', 'old'); put('src/handoffs/old.md', '## Next\n\nx\n'); git('add', '-A'); git('commit', '-q', '-m', 'w');
   git('checkout', '-q', 'main'); git('merge', '-q', '--no-ff', 'old', '-m', 'merge old');
   git('checkout', '-q', '-b', 'quick'); put('q.txt', '1\n'); git('add', '-A'); git('commit', '-q', '-m', 'q');
-  git('checkout', '-q', '-b', 'lag', 'HEAD~1'); put('src/handoffs/lag.md', '## Next\n\nx\n'); put('l.txt', '1\n'); git('add', '-A'); git('commit', '-q', '-m', 'l', '--date', '2020-01-01T00:00:00');
+  git('checkout', '-q', '-b', 'lag', 'HEAD~1'); put('src/handoffs/lag.md', '## Next\n\nx\n'); put('l.txt', '1\n'); git('add', '-A'); commitDated(git, 'l', '2020-01-01T00:00:00');
   git('checkout', '-q', 'main');
   for (let i = 0; i < 21; i++) { put(`m${i}.txt`, 'x\n'); git('add', '-A'); git('commit', '-q', '-m', `m${i}`); }
   git('push', '-q');
@@ -86,6 +91,27 @@ test('a branch far behind main but committed on recently is not flagged stale', 
   git('push', '-q');
   assert.match(lineOf(report(dir), 'active'), /behind 21/);
   assert.doesNotMatch(report(dir), /STALE/);
+});
+
+test('a rebased branch (old author date, fresh commit date) far behind main is not flagged idle', () => {
+  const { dir, git, put } = setup();
+  git('checkout', '-q', '-b', 'rebased'); put('src/handoffs/rebased.md', '## Next\n\nx\n'); put('r.txt', '1\n'); git('add', '-A');
+  git('commit', '-q', '-m', 'w', '--date', '2020-01-01T00:00:00'); git('checkout', '-q', 'main');
+  for (let i = 0; i < 21; i++) { put(`m${i}.txt`, 'x\n'); git('add', '-A'); git('commit', '-q', '-m', `m${i}`); }
+  git('push', '-q');
+  assert.doesNotMatch(report(dir), /STALE/);
+});
+
+test('a branch just created from main and checked out in a worktree is not flagged merged', () => {
+  const { root, dir, git } = setup();
+  git('worktree', 'add', '-q', '-b', 'fresh', path.join(root, 'fresh-wt'));
+  assert.doesNotMatch(report(dir), /STALE/);
+});
+
+test('a main checkout on a detached HEAD is called out', () => {
+  const { dir, git } = setup();
+  git('checkout', '-q', '--detach');
+  assert.match(report(dir), /main checkout[^\n]*detached/i);
 });
 
 test('a live, current branch with a handoff is not flagged stale', () => {

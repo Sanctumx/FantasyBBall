@@ -14,6 +14,18 @@ test('before-bash lets ordinary and read-only commands through', () => {
   ].forEach(c => assert.strictEqual(run(c), 0, c));
 });
 
+test('before-bash also blocks the other shapes of the same prompts', () => {
+  ["python3 <<'EOF'\nopen('f','w').write('x')\nEOF", "cat <<'EOF' > f.txt\nhi\nEOF",
+    "python3 <<'EOF'\nfrom pathlib import Path\nPath('f').write_text('x')\nEOF",
+    'ls\ncd src', 'echo a & cd x', 'ls | cd x', 'git commit -m x; bash -c "sed -i s/a/b/ f"',
+  ].forEach(c => assert.strictEqual(run(c), 2, c));
+});
+
+test('before-bash lets read-only heredoc snippets that transform text through', () => {
+  ["node - <<'EOF'\nconsole.log('a-b'.replace('-', ' '))\nEOF", "python3 <<'EOF'\nimport re\nprint(re.sub('a','b','abc'))\nEOF",
+  ].forEach(c => assert.strictEqual(run(c), 0, c));
+});
+
 test('before-bash ignores a blocked pattern named inside a commit message, but not one chained after it', () => {
   assert.strictEqual(run('git commit -m "chore: hook blocks cd prefixes and sed -i"'), 0);
   assert.strictEqual(run("git commit -m \"$(cat <<'EOF'\nfix: no sed -i, no cd src && x\nEOF\n)\""), 0);
