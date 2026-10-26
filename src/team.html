@@ -1,0 +1,396 @@
+<title>Team · Courtside Draft Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Team tab (#131): my roster as a preview, with stats, Plays %, Win C / Win M and a matrix against every other team. */
+:root{
+  --bg:#EFF1EE; --surface:#FFFFFF; --sunk:#F6F7F5; --ink:#15191B; --muted:#5D666B; --line:#D8DCD7;
+  --accent:#C24E1B; --mine:#1F5FA8; --mine-soft:#DFE9F6; --good:#1A7F45; --bad:#C2372F; --warn:#A85A0D; --r:6px;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1214; --surface:#171B1E; --sunk:#13171A; --ink:#E6E9E5; --muted:#99A2A7; --line:#2A3135;
+  --accent:#EC7840; --mine:#76A9EA; --mine-soft:#1B2A3D; --good:#4BBE7C; --bad:#E86D62; --warn:#EE9A45; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
+header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0}
+header.top h1 .logo{width:.9em;height:.9em;flex:none}
+header.top .top-r{margin-right:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-radius:6px}
+@media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}header.top #how-open{padding:8px 14px}}
+main{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ctl{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:flex-end}
+.f{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
+.f select,.f input[type=text]{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:9em;max-width:100%;font-size:.92rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+.f[hidden]{display:none}
+label.chk{display:inline-flex;gap:6px;align-items:center;font-size:.9rem;cursor:pointer}
+.msg{margin:0;font-size:.9rem;color:var(--muted)}
+.msg:empty{display:none}
+.msg.err{color:var(--bad)}
+.msgrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.msgrow:has(.msg:empty):has(.retry[hidden]){display:none}
+.retry{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:5px 12px;cursor:pointer;font-weight:600}
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:6px;color:var(--muted);font-weight:600;font-size:.86rem;cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+h2{font:600 1.15rem/1.1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;margin:0;display:flex;gap:4px 12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+h2 .meta{font:400 .8rem var(--f-body);letter-spacing:0;text-transform:none;color:var(--muted)}
+.scroll{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;font:12.5px/1.3 var(--f-data);font-variant-numeric:tabular-nums;white-space:nowrap;width:100%}
+th,td{padding:3px 5px;text-align:center;border-bottom:1px solid var(--line)}
+th{font:600 .72rem/1.15 var(--f-body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-block:7px;border-bottom:1px solid var(--ink)}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover,th[aria-sort]{color:var(--ink)}
+th[aria-sort="descending"]::after{content:" ▼";font-size:.6rem}
+td.l,th.l{text-align:left}
+td.l{font:13px var(--f-body);padding-right:10px}
+td.l small{color:var(--muted);font-size:.72rem;margin-left:6px}
+tbody tr:hover td{background:var(--sunk)}
+tr.grp td{text-align:left;background:var(--sunk);font:600 .78rem var(--f-body);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+tr.tot td{font-weight:600;border-top:1px solid var(--ink)}
+td.dim,tr.hypo td.hy{opacity:.5}
+.chip{display:inline-block;min-width:3.4em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
+.pos-n{color:var(--good)}.neg-n{color:var(--bad)}
+.hint{color:var(--muted);font-size:.82rem;margin:0}
+.btn{border:1px solid var(--line);background:var(--sunk);border-radius:4px;padding:6px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.fresh{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:.8rem;color:var(--muted)}
+.fresh .warn{color:var(--warn);font-weight:600}
+.swap{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.swapbox{display:flex;flex-direction:column;gap:6px;min-width:0}
+.swapbox input[type=text]{width:100%;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:.92rem}
+.suggest{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.suggest:empty{display:none}
+.suggest button{width:100%;text-align:left;border:0;background:none;padding:5px 8px;cursor:pointer;font-size:.88rem}
+.suggest button:hover,.suggest button.top{background:var(--sunk)}
+.suggest small{color:var(--muted);margin-left:6px}
+.chiplist{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;min-height:1.6rem}
+.chiplist li{display:inline-flex;align-items:center;gap:6px;background:var(--sunk);border:1px solid var(--line);border-radius:14px;padding:2px 4px 2px 10px;font-size:.86rem}
+.chiplist button{border:0;background:none;cursor:pointer;color:var(--muted);font-size:1rem;line-height:1}
+.chiplist button:hover{color:var(--bad)}
+details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 16px;margin-top:10px}
+.wgrid label{display:flex;flex-direction:column;gap:2px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.wgrid output{font:500 .8rem var(--f-data);color:var(--ink)}
+/* How it works dialog: same look as the Draft Kit's, with this tab's own text */
+.how{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:0;width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+.how::backdrop{background:rgba(0,0,0,.45)}
+.how-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);padding:14px 20px 10px;border-bottom:1px solid var(--line)}
+.how h2{font:700 1.5rem/1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin:0}
+.how .how-intro{margin:12px 20px 0;max-width:none;color:var(--muted);font-size:.9rem}
+.how-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;padding:12px 20px 20px;align-items:start}
+.how-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.how-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px 10px}
+.how h3{font:700 1.2rem/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.how h4{font:600 .82rem/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:12px 0 3px}
+.how p{margin:0 0 4px;max-width:70ch;color:var(--ink);font-size:.9rem;line-height:1.45}
+</style>
+
+<header class="top">
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg><span>Team</span></h1>
+  <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
+</header>
+
+<dialog class="how" id="how" aria-labelledby="how-title">
+  <div class="how-head"><h2 id="how-title">How the Team tab works</h2><button class="btn" type="button" id="how-close">Close</button></div>
+  <p class="how-intro">Everything here is a preview of your roster. Nothing is saved or sent to Fantrax; Reset roster puts back the saved team.</p>
+  <div class="how-grid">
+   <div class="how-col">
+    <section class="how-card">
+      <h3>The roster table</h3>
+      <h4>Projected games left (GL)</h4>
+      <p>The games the player is projected to play from now to the end of the regular season: his team's remaining games times his projected games over 82. That already covers injuries and rest, so Plays % is not applied to it.</p>
+      <h4>Plays %</h4>
+      <p>A measure of your team's makeup, not of the player's health. Each night only as many players as the league's active limit can start, so with more players than slots the best per-game players take the slots and the rest sit. Plays % is the share of his team's remaining games he gets a slot for: your best players are near 100%, your worst get the least. Bench players get the nights the active players leave open. IL and Reserve rows are dimmed: they show what the player would get as one more bench player, and they count for nothing until moved.</p>
+      <h4>Stats and the Plays % box</h4>
+      <p>Per game shows each player's projected line. Rest of season multiplies it by his projected games left. With "Adjust player stats by Plays %" checked, every player's stats and Z are also multiplied by his Plays %. Unchecked, the player rows are untouched and only the team values use Plays %.</p>
+      <h4>Team average and total</h4>
+      <p>These always use Plays %: a player adds his line in proportion to how often he plays. The average is per lineup slot; the total is the whole lineup per night. Reserve and IL players add nothing.</p>
+     </section>
+    </div>
+    <div class="how-col">
+    <section class="how-card">
+      <h3>Win C, Win M and the matrix</h3>
+      <p>The matrix is your previewed team against every other team in the league, one column each. A category cell is your chance to win that category, Win C is the expected number of categories won and Win M is the chance to win the match.</p>
+      <h4>An average week</h4>
+      <p>Each cell is one average remaining week: every player's games are his remaining Plays % games divided by the weeks left. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ. Chances use the Matchup Analyzer's games variance and are shrunk toward 50%.</p>
+      <h4>Win C and Win M per player</h4>
+      <p>The change in your Win C (hundredths) and Win M (points) from having him on the team: your team minus your team with him moved to Reserve. For IL and Reserve rows it is what moving him to the bench would add.</p>
+     </section>
+    <section class="how-card">
+      <h3>Z and category weights</h3>
+      <p>Z is the Rankings Zscore (Standard, per game). The weights are a punt lens: 1 counts a category fully, 0 leaves it out of the Z total. They only change Z and the Z order; Win C, Win M and the matrix always count every category.</p>
+      <h3 style="margin-top:14px">Swapping players</h3>
+      <p>Type part of a name in Send out (your roster) and Bring in (every other player), press Enter or click to add chips, then Apply swap. Any number can go out and in. Incoming players land on the bench. Accents and capitals don't matter.</p>
+    </section>
+   </div>
+  </div>
+</dialog>
+
+<main>
+  <section class="panel" aria-label="League and team">
+    <div class="ctl">
+      <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
+      <label class="f" for="team">Your team<select id="team"></select></label>
+    </div>
+    <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
+    <div class="fresh" id="fresh"></div>
+  </section>
+
+  <div id="body" hidden>
+    <section class="panel">
+      <h2>Roster <span class="meta" id="rost-meta"></span></h2>
+      <div class="ctl">
+        <span class="seg" id="view" role="group" aria-label="Stat view"><button type="button" data-v="game">Per game</button><button type="button" data-v="ros">Rest of season</button></span>
+        <label class="chk" for="adj" title="Multiply each player's stats and Z by his Plays %"><input type="checkbox" id="adj"> Adjust player stats by Plays %</label>
+        <button class="btn" type="button" id="reset">Reset roster</button>
+      </div>
+      <details class="wts"><summary>Category weights (punt lens)</summary>
+        <div class="wgrid" id="wgrid"></div>
+        <p class="hint">Weights change Z and the Z order only, never Win C or Win M.</p>
+        <button class="btn" type="button" id="wreset" style="margin-top:8px">Reset weights</button>
+      </details>
+      <div class="scroll"><table id="roster"></table></div>
+      <p class="hint" id="rost-note"></p>
+    </section>
+
+    <section class="panel" aria-label="Swap players">
+      <h2>Swap players <span class="meta">Preview only</span></h2>
+      <div class="swap">
+        <div class="swapbox"><label class="f" for="out-in">Send out<input type="text" id="out-in" placeholder="Type a name" autocomplete="off"></label><ul class="suggest" id="out-sug"></ul><ul class="chiplist" id="out-chips"></ul></div>
+        <div class="swapbox"><label class="f" for="in-in">Bring in<input type="text" id="in-in" placeholder="Type a name" autocomplete="off"></label><ul class="suggest" id="in-sug"></ul><ul class="chiplist" id="in-chips"></ul></div>
+      </div>
+      <div class="ctl"><button class="btn primary" type="button" id="apply" disabled>Apply swap</button></div>
+      <p class="msg" id="swap-msg" role="status"></p>
+    </section>
+
+    <section class="panel" aria-label="Matchup matrix">
+      <h2>Matchup matrix <span class="meta" id="mx-meta">Your chance against every other team, one average remaining week</span></h2>
+      <div class="scroll"><table id="matrix"></table></div>
+    </section>
+
+    <!-- PR 4: the player list module goes here -->
+    <section class="panel" id="list-slot" hidden></section>
+  </div>
+</main>
+
+<script>/*__DATA__*/
+/*__DAYS__*/</script>
+<script>/*__ENGINE__*/</script>
+<script>/*__SHARED__*/</script>
+<script>/*__STORE__*/</script>
+<script>/*__TEAM__*/</script>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id), LS = LeagueStore, InL = InLeague, InP = InPlayers, R = Rankings, TV = TeamView, TC = Team;
+  const CATN = ['FG%', 'FT%', '3PM', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TO'], RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+  const SLOT_NAME = { active: 'Active', bench: 'Bench', il: 'IL', reserve: 'Reserve' };
+  const WIN = { mode: 'avg' };   // the one place the Win M basis is chosen ('avg' = an average remaining week); TeamWin.matrix takes it
+  $('sitenav').outerHTML = Shared.TOOLBAR_HTML('team');
+  { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
+  const KEY = 'courtside-team-v1';
+  let ui = { view: 'game', adjust: false, weights: null, sortZ: false, team: null };
+  try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+  ui.view = ui.view === 'ros' ? 'ros' : 'game'; ui.adjust = !!ui.adjust; ui.sortZ = !!ui.sortZ; ui.team = typeof ui.team === 'string' ? ui.team : null;
+  ui.weights = Array.isArray(ui.weights) && ui.weights.length === 9 && ui.weights.every(v => v >= 0 && v <= 1) ? ui.weights.map(Number) : new Array(9).fill(1);
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); };
+  const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
+  const signed = (v, d) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(d == null ? 1 : d);
+  const sgn = v => v > 0.005 ? 'pos-n' : v < -0.005 ? 'neg-n' : '';
+  const chip = (q, txt) => { const d = q - .5, t = Math.min(1, Math.abs(d) / .25);
+    const bg = Math.abs(d) < .015 ? 'transparent' : 'color-mix(in oklab, var(' + (d > 0 ? '--good' : '--bad') + ') ' + Math.round(12 + 58 * t) + '%, var(--surface))';
+    return '<span class="chip" style="background:' + bg + '">' + txt + '</span>'; };
+
+  let SS = LS.load(LS.local.get), L = null, rosters = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
+  let me = null, base = null, state = null, zmap = new Map(), scorer = TV.createScorer(), outs = [], ins = [], tickJob = null, tickSeq = 0;
+
+  async function fxGet(what, id) {
+    let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    return body;
+  }
+  const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
+  async function loadStats() {
+    try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
+  }
+  async function load() {
+    const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer);
+    $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; pool = null; ctx = null;
+    $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
+    say('Loading the league from Fantrax…');
+    try {
+      const league = await fxGet('league', lg.id), ros = await fxGet('rosters', lg.id);
+      if (!fxPlayers) fxPlayers = await fxGet('players');
+      const stats = await loadStats();
+      if (seq !== loadSeq) return;
+      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); espn = stats; fetchedAt = new Date();
+      pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
+      fxWait = 0; say(''); start();
+    } catch (e) {
+      if (seq !== loadSeq) return;
+      $('retry').hidden = false;
+      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
+      if (transient(e)) {
+        fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
+        say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
+        fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
+      }
+      say(e.message, true);
+    }
+  }
+
+  const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
+  const winOpts = () => ({ mode: WIN.mode, cats: nCats() });
+  const teamName = id => { const t = L.teams.find(q => q.id === id); return t ? t.name : id; };
+  const zCats = pp => (pp.pid != null && zmap.has(pp.pid) ? zmap.get(pp.pid) : null);
+
+  function start() {
+    const s = SS.settings || {};
+    const tab = R.table(R.projSource(PLAYERS, 'avg'), { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: 'pergame' });
+    zmap = new Map(); tab.forEach(x => { if (x.cats) zmap.set(x.pid, x.cats); });
+    const ids = L.teams.map(t => t.id);
+    $('team').innerHTML = ids.map(id => '<option value="' + esc(id) + '">' + esc(teamName(id)) + '</option>').join('');
+    me = LS.pickTeam(ui.team, ids, LS.defaultTeam(LS.local.get, SS.league.id)); $('team').value = me;
+    freshness(); setTeam(me); $('body').hidden = false;
+  }
+  function freshness() {
+    const parts = [];
+    parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
+    parts.push(espn ? '<span>Stats: ESPN ' + esc(espn.label) + '</span>' : '<span class="warn">No actual stats loaded</span>');
+    parts.push('<span>Projections: BBM + Hashtag average</span>');
+    $('fresh').innerHTML = parts.join('');
+  }
+  // a new team or Reset: a fresh context (never mutated afterwards), the saved roster as the preview
+  function setTeam(id) {
+    me = id; ui.team = id; save();
+    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [] });
+    scorer = TV.createScorer(); base = TC.initState(rosters[me] || []); state = base; outs = []; ins = [];
+    $('swap-msg').textContent = ''; render();
+  }
+
+  const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? String(Math.round(v)) : v.toFixed(1));
+  const statCells = s => RAWK.map((k, c) => '<td>' + fmtStat(s[k], c) + '</td>').join('');
+  const pctTxt = p => p == null ? '–' : Math.round(p * 100) + '%';
+
+  function rosterHtml(r, job) {
+    const head = '<thead><tr><th class="l">Player</th><th title="Projected games left">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th>' + c + '</th>').join('') +
+      '<th class="sortable" id="th-z" title="Zscore, weighted by the category weights; click to sort by it"' + (ui.sortZ ? ' aria-sort="descending"' : '') + '>Z</th><th title="Change in your Win C (hundredths) from having him">Win C</th><th title="Change in your Win M (points) from having him">Win M</th></tr></thead>';
+    const nc = nCats(), cols = 3 + nc + 3, body = [];
+    r.groups.forEach(g => {
+      if (!g.rows.length) return;
+      body.push('<tr class="grp"><td colspan="' + cols + '">' + SLOT_NAME[g.slot] + ' (' + g.rows.length + ')</td></tr>');
+      (ui.sortZ ? g.rows.slice().sort((a, b) => (b.z == null ? -1e9 : b.z) - (a.z == null ? -1e9 : a.z)) : g.rows).forEach(x => {
+        const w = job.players[x.key], dim = x.hypo ? ' class="hy"' : '';
+        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + '</small></td><td>' + x.gl.toFixed(0) + '</td>' +
+          '<td' + (x.hypo ? ' class="dim" title="What he would get as one more bench player"' : '') + '>' + pctTxt(x.pct) + '</td>' +
+          RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo ? ' class="dim"' : '') + '>' + fmtStat(x.stat[k], c) + '</td>').join('') +
+          '<td>' + (x.z == null ? '–' : signed(x.z, 2)) + '</td>' +
+          (w ? '<td' + dim + '><span class="' + sgn(w.c) + '">' + signed(w.c) + '</span></td><td' + dim + '><span class="' + sgn(w.m) + '">' + signed(w.m) + '</span></td>' : '<td>…</td><td>…</td>') + '</tr>');
+      });
+    });
+    const tot = (label, s) => '<tr class="tot"><td class="l">' + label + '</td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td>' + fmtStat(s[k], c) + '</td>').join('') + '<td></td><td></td><td></td></tr>';
+    body.push(tot('Team average (per slot)', r.avg), tot('Team total (per night)', r.total));
+    return head + '<tbody>' + body.join('') + '</tbody>';
+  }
+  function matrixHtml(job) {
+    const m = job.matrix, nc = nCats();
+    if (!job.matrix) return '<tbody><tr><td class="l">Scoring…</td></tr></tbody>';
+    if (!m.mean) return '<tbody><tr><td class="l">No regular-season weeks are left.</td></tr></tbody>';
+    const cell = p => p == null ? '–' : chip(p, (p * 100).toFixed(0) + '%');
+    let h = '<thead><tr><th class="l"></th>' + m.teams.map(t => '<th title="' + esc(teamName(t.id)) + '">' + esc(teamName(t.id).slice(0, 12)) + '</th>').join('') + '<th>Average</th></tr></thead><tbody>';
+    for (let c = 0; c < nc; c++) h += '<tr><td class="l">' + CATN[c] + '</td>' + m.teams.map(t => '<td>' + cell(t.cat[c]) + '</td>').join('') + '<td>' + cell(m.mean.cat[c]) + '</td></tr>';
+    h += '<tr class="tot"><td class="l">Win C (categories)</td>' + m.teams.map(t => '<td>' + t.winC.toFixed(1) + '</td>').join('') + '<td>' + m.mean.winC.toFixed(1) + '</td></tr>';
+    h += '<tr class="tot"><td class="l">Win M</td>' + m.teams.map(t => '<td>' + cell(t.match) + '</td>').join('') + '<td>' + cell(m.mean.match) + '</td></tr></tbody>';
+    return h;
+  }
+
+  function draw() {
+    if (!ctx) return;
+    const job = scorer.get(ctx, state, winOpts());
+    const r = TV.rows(ctx, state, { zCats, weights: ui.weights, cats: nCats(), adjust: ui.adjust, view: ui.view });
+    $('roster').innerHTML = rosterHtml(r, job);
+    $('matrix').innerHTML = matrixHtml(job);
+    $('rost-meta').textContent = job.done ? '' : 'Scoring Win C / Win M…';
+    $('rost-note').textContent = (ui.view === 'ros' ? 'Rest of season: per-game line × projected games left' + (ui.adjust ? ' × Plays %' : '') : 'Per game' + (ui.adjust ? ', × Plays %' : '')) + '. The team rows always use Plays %.';
+    $('th-z').onclick = () => { ui.sortZ = !ui.sortZ; save(); draw(); };
+    return job;
+  }
+  // scoring runs a piece at a time; a newer roster cancels the older run (its half-done job stays cached for a return to that roster)
+  function ensureTick(job) {
+    if (!job || job.done || tickJob === job) return;
+    tickJob = job; const seq = ++tickSeq;
+    const tick = () => { if (seq !== tickSeq) return; if (job.step()) { draw(); setTimeout(tick, 0); } else { draw(); if (tickJob === job) tickJob = null; } };
+    setTimeout(tick, 0);
+  }
+  function render() { renderSwap(); ensureTick(draw()); }
+
+  // ---- swap boxes ----
+  function sug(which) {
+    const box = which === 'out' ? $('out-in') : $('in-in'), list = which === 'out' ? TV.sendOutList(ctx, state) : TV.bringInList(ctx, state), chips = which === 'out' ? outs : ins;
+    const hits = TV.search(list.filter(x => !chips.some(c => c.key === x.key)), box.value, 6);
+    const ul = $(which + '-sug');
+    ul.innerHTML = hits.map((x, i) => '<li><button type="button" data-i="' + i + '"' + (i === 0 ? ' class="top"' : '') + '>' + esc(x.n) + '<small>' + esc(x.t || '') + ' · ' + esc(x.owner ? teamName(x.owner) : 'Free agent') + '</small></button></li>').join('');
+    ul._hits = hits;
+  }
+  function pickFrom(which, item) {
+    if (!item) return;
+    if (which === 'out') outs = TV.pick(outs, item); else ins = TV.pick(ins, item);
+    $(which + '-in').value = ''; $(which + '-sug').innerHTML = ''; renderSwap();
+  }
+  function renderSwap() {
+    [['out', outs], ['in', ins]].forEach(([w, chips]) => {
+      $(w + '-chips').innerHTML = chips.map(c => '<li>' + esc(c.n) + '<button type="button" data-k="' + esc(c.key) + '" aria-label="Remove ' + esc(c.n) + '">×</button></li>').join('');
+    });
+    $('apply').disabled = !(outs.length || ins.length);
+  }
+  ['out', 'in'].forEach(w => {
+    $(w + '-in').addEventListener('input', () => sug(w));
+    $(w + '-in').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sug(w); pickFrom(w, $(w + '-sug')._hits && $(w + '-sug')._hits[0]); } });
+    $(w + '-sug').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) pickFrom(w, $(w + '-sug')._hits[+b.dataset.i]); });
+    $(w + '-chips').addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if (!b) return; if (w === 'out') outs = outs.filter(c => c.key !== b.dataset.k); else ins = ins.filter(c => c.key !== b.dataset.k); renderSwap(); });
+  });
+  $('apply').addEventListener('click', () => {
+    try { state = TV.apply(state, outs, ins); outs = []; ins = []; $('swap-msg').textContent = ''; render(); }
+    catch (e) { $('swap-msg').textContent = e.message; $('swap-msg').className = 'msg err'; }
+  });
+  $('reset').addEventListener('click', () => { state = base; outs = []; ins = []; $('swap-msg').textContent = ''; render(); });
+
+  // ---- controls ----
+  function viewButtons() { document.querySelectorAll('#view button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.view)); }
+  $('view').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (!b) return; ui.view = b.dataset.v; save(); viewButtons(); draw(); });
+  $('adj').checked = ui.adjust; viewButtons();
+  $('adj').addEventListener('change', () => { ui.adjust = $('adj').checked; save(); draw(); });
+  function weightsHtml() {
+    $('wgrid').innerHTML = CATN.map((c, i) => '<label>' + c + ' <output id="wo' + i + '">' + ui.weights[i].toFixed(2) + '</output><input type="range" min="0" max="1" step="0.05" value="' + ui.weights[i] + '" data-c="' + i + '" aria-label="' + c + ' weight"></label>').join('');
+  }
+  weightsHtml();
+  $('wgrid').addEventListener('input', e => { const i = e.target.dataset.c; if (i == null) return; ui.weights[+i] = +e.target.value; $('wo' + i).textContent = (+e.target.value).toFixed(2); save(); draw(); });
+  $('wreset').addEventListener('click', () => { ui.weights = new Array(9).fill(1); save(); weightsHtml(); draw(); });
+  $('team').addEventListener('change', () => setTeam($('team').value));
+  $('retry').addEventListener('click', () => { fxWait = 0; load(); });
+  $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
+  $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
+  load();
+})();
+</script>

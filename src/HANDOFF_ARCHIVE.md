@@ -12,6 +12,20 @@ Never edit old entries; add a new one that supersedes them.
 
 ## Entries after 2026-10-18
 
+Handoff text moved here unchanged on 2026-10-25 (to make room for the Team tab PR 3 state):
+
+> **Merged to main (PR #24, 2026-10-21; Cloudflare deploys it):** ideas 122-129 (Waiver adds panel, Team schedule, keep list,
+> Hashtag refresh, 68 Hashtag-only players, box-score scoring of adds, Fantrax period dates, review fixes: saved extras carry
+> `base`, a save without one counts as 234 players). 192 unit tests pass. Board artifact republished (v166). First step: refit
+> the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
+> #130 done and released (Rankings: MPG, Order by, my players highlighted).
+>
+> Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
+> Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess
+> (#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against
+> drops 2-5; `matchup_core` addPlan day list still runs to per.end (an extra empty day). Offered, unanswered: a "Team games left"
+> column. 126 leftovers: `ftx` of the 234 BBM rows not refreshed from the Fantrax snapshot; Hashtag-only rows carry Hashtag ADP, BBM rows BBM ADP.
+
 136. **ESPN collector retry/backoff (2026-10-25, done, branch `fix-136-espn-retry`, not pushed).** New `src/collect/espn_fetch.mjs` (`fetchJsonRetry`): retries 429, 403, 5xx and network errors up to 3 times, waiting 1, 2, 4 s; other statuses fail at once. Both collectors use it; `espn_stats` also waits 500 ms between pages. Tests in `src/tests/espn_fetch.test.js`.
 
 135. **Rankings Edge column (2026-10-22, done, branch `rankings-edge`, commit d556309, not pushed).** `src/rankings.html`: `wmr` ranks the players that have a Win M (descending, ties by Zscore); `edge(x)` = Order by rank minus that rank (positive: Win M likes him more; 0 when Order by is Win M; dash if no Win M). Sortable header `edge` (added to the saved sort whitelist), column right after #. `src/tests/browser/rankings_page.mjs`: three Edge checks, and the Raw FG% check moved to column 12. All pass except one timing check that flaked once ("Zscore type changes are quick"). Earlier the same day: #134 order and #132 tighter tabs merged as PR #27 (a first version that stretched the nav was dropped).

@@ -53,6 +53,19 @@ test('matrix: one whole period left reproduces Matchup.scoreSegments for every o
   assert.strictEqual(m.teams.length, ids.length - 1);
 });
 
+test('matrix: mode "avg" is the default, any other mode throws, and playerWin passes the mode on', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf();
+  assert.deepStrictEqual(W.matrix(ctx, st, { mode: 'avg' }), W.matrix(ctx, st));
+  assert.throws(() => W.matrix(ctx, st, { mode: 'actual' }), /mode/);
+  assert.throws(() => W.playerWin(ctx, st, { mode: 'actual' }), /mode/);
+  assert.throws(() => W.moduleScores(ctx, st, { mode: 'actual' }), /mode/);
+});
+
+test('playerGain one player at a time equals playerWin', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), base = W.matrix(ctx, st), all = W.playerWin(ctx, st);
+  st.order.forEach(k => assert.deepStrictEqual(W.playerGain(ctx, st, k, base), all[k]));
+});
+
 test('matrix: two identical periods give the same cell as one', () => {
   const L2 = Object.assign({}, L, { maxActive: 100 }), p14 = per(L.lastRegular - 1);
   const g = games(p14.start, last.end).games;   // every other day across both periods

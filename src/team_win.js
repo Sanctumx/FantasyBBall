@@ -42,10 +42,13 @@
   }
 
   // my previewed roster against every other team. -> { weeks, teams: [{ id, cat[9], match, winC }], mean: { cat, match, winC } }
-  // (cat entries beyond the league's category count are null). opts: cats 9 | 8, k { match, cat } (default K_MATCH, K_CAT).
+  // (cat entries beyond the league's category count are null). opts: cats 9 | 8, k { match, cat } (default K_MATCH, K_CAT),
+  // mode (only 'avg', the average week, exists; a per-week 'actual' mode would be one more branch here).
   // Players I hold leave their old team's side.
   function matrix(ctx, state, opts) {
-    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, km = o.k && o.k.match != null ? o.k.match : Matchup.K_MATCH, kc = o.k && o.k.cat != null ? o.k.cat : Matchup.K_CAT;
+    const o = opts || {};
+    if (o.mode != null && o.mode !== 'avg') throw new Error('unknown Win M mode: ' + o.mode);
+    const nc = o.cats === 8 ? 8 : 9, km = o.k && o.k.match != null ? o.k.match : Matchup.K_MATCH, kc = o.k && o.k.cat != null ? o.k.cat : Matchup.K_CAT;
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
     const exclude = new Set(state.order), mine = side(ctx, state, W);
@@ -62,14 +65,17 @@
 
   // each roster player's contribution to my Win C / Win M: active and bench = the team minus the team without him (the bench
   // refills his nights); IL and reserve = the team with him on the bench minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
+  // one player's contribution given the current roster's matrix `base` (playerWin's per-player step, so a page can score one at a time)
+  function playerGain(ctx, state, k, base, opts) {
+    if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };
+    const s = state.slots[k];
+    if (s === 'active' || s === 'bench') return gain(base, matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts));
+    return Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'bench'), opts), base), { hypo: true });
+  }
+
   function playerWin(ctx, state, opts) {
     const base = matrix(ctx, state, opts), res = {};
-    if (!base.mean) { state.order.forEach(k => { res[k] = { c: 0, m: 0, dCat: new Array(9).fill(0) }; }); return res; }
-    state.order.forEach(k => {
-      const s = state.slots[k];
-      if (s === 'active' || s === 'bench') res[k] = gain(base, matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts));
-      else res[k] = Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'bench'), opts), base), { hypo: true });
-    });
+    state.order.forEach(k => { res[k] = playerGain(ctx, state, k, base, opts); });
     return res;
   }
 
@@ -89,7 +95,7 @@
   // opts: baseline 'rep' | 'avg', weights, cats, k, candidates (keys; default every pool player, my own included)
   // -> [{ key, owner, dM, dC, dCat[], sort }] sorted by sort, highest first (ties keep candidate order)
   function moduleScores(ctx, state, opts) {
-    const o = opts || {}, mo = { cats: o.cats, k: o.k }, base = matrix(ctx, state, mo);
+    const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, base = matrix(ctx, state, mo);
     if (!base.mean) return [];
     const pw = playerWin(ctx, state, mo), counted = state.order.filter(k => state.slots[k] === 'active' || state.slots[k] === 'bench');
     if (!counted.length) return [];
@@ -121,6 +127,6 @@
     return rows;
   }
 
-  const api = { AVG_KEY, weeksLeft, oppState, side, matrix, playerWin, moduleScores };
+  const api = { AVG_KEY, weeksLeft, oppState, side, matrix, playerGain, playerWin, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
