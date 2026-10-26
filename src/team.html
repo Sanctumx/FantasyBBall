@@ -340,7 +340,11 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   function ensureTick(job) {
     if (!job || job.done || tickJob === job) return;
     tickJob = job; const seq = ++tickSeq;
-    const tick = () => { if (seq !== tickSeq) return; if (job.step()) { draw(); setTimeout(tick, 0); } else { draw(); if (tickJob === job) tickJob = null; } };
+    const tick = () => {
+      if (seq !== tickSeq) return;
+      try { if (job.step()) { draw(); setTimeout(tick, 0); } else { draw(); if (tickJob === job) tickJob = null; } }
+      catch (e) { if (tickJob === job) tickJob = null; $('rost-meta').textContent = 'Scoring failed: ' + (e && e.message || e); }
+    };
     setTimeout(tick, 0);
   }
   function render() { renderSwap(); ensureTick(draw()); }

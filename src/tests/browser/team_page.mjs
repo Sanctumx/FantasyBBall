@@ -66,7 +66,7 @@ const before = {};
   ok(Math.max(...(await col(p, 3 + 4)).map(parseFloat)) > 100, 'Rest of season multiplies by games left');
   await p.click('#view button[data-v="game"]');
   // dimmed Plays % for IL / Reserve rows
-  ok((await p.$$eval('#roster tr.hypo td.dim', t => t.length)) >= 0, 'IL / Reserve Plays % cells use the dim class');
+  ok((await p.$$eval('#roster tr.hypo td.dim', t => t.length)) > 0, 'IL / Reserve Plays % cells use the dim class');
 
   // weights change Z and the order, never the Win numbers
   await p.click('details.wts summary');

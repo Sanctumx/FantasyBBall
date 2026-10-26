@@ -44,7 +44,7 @@ test('rows: weights of 1 give the plain Zscore sum, 0 removes a category, 0.5 ha
 test('rows: the Plays % checkbox scales stats and Z; off leaves them per game', () => {
   const ctx = mk(), st = stateOf(), off = V.rows(ctx, st, { zCats }), on = V.rows(ctx, st, { zCats, adjust: true });
   off.rows.forEach(a => {
-    const b = find(on, a.key), pp = pool.byKey.get(a.key), f = a.pct == null ? 1 : a.pct;
+    const b = find(on, a.key), pp = pool.byKey.get(a.key), f = a.pct == null ? 0 : a.pct;   // no games left counts as 0, like the team rows
     assert.ok(near(a.stat.pts, pp.line.pts), a.key);
     assert.ok(near(b.stat.pts, pp.line.pts * f), a.key);
     assert.ok(near(b.stat.fgp, pp.line.fgp), a.key);
@@ -97,6 +97,12 @@ test('scorer: the same ctx and roster reuse the finished job; a swap scores agai
   const b = sc.get(ctx, T.moveSlot(st, st.order[0], 'reserve'));
   assert.notStrictEqual(b, a);
   assert.ok(!b.done);
+});
+
+test('scorer: the win options (cats, mode) are part of the cache key', () => {
+  const ctx = mk(), st = stateOf(), sc = V.createScorer();
+  assert.notStrictEqual(sc.get(ctx, st, { cats: 9 }), sc.get(ctx, st, { cats: 8 }));
+  assert.strictEqual(sc.get(ctx, st, { cats: 9 }), sc.get(ctx, st, { cats: 9 }));
 });
 
 test('swap boxes: Send out sees only my roster, Bring in never does, accents and partial names match', () => {

@@ -26,7 +26,7 @@
   function rows(ctx, state, opts) {
     const o = opts || {}, plays = Team.playsPct(ctx, state), nc = o.cats === 8 ? 8 : 9, slots = ctx.L.maxActive;
     const all = state.order.map(key => {
-      const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust && p.pct != null ? p.pct : 1;
+      const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust ? (p.pct == null ? 0 : p.pct) : 1;
       const cats = o.zCats ? o.zCats(pp) : null;
       return { key, n: pp.n, t: pp.t, pos: pp.pos, slot: state.slots[key], gl, pct: p.pct, hypo: !!p.hypo,
         stat: scaled(pp.line, (o.view === 'ros' ? gl : 1) * f),
@@ -57,12 +57,12 @@
 
   const signature = state => state.order.map(k => k + ':' + state.slots[k]).join('|');
 
-  // finished and half-finished jobs by ctx object and roster; the weights are not an input, so moving a slider never rescores
+  // finished and half-finished jobs by ctx object, roster and win options (cats, mode); the weights are not an input, so moving a slider never rescores
   function createScorer() {
     const by = new WeakMap();
     return { get(ctx, state, opts) {
       let m = by.get(ctx); if (!m) by.set(ctx, m = new Map());
-      const sig = signature(state);
+      const o = opts || {}, sig = signature(state) + '#' + (o.cats || '') + '#' + (o.mode || '');
       if (!m.has(sig)) m.set(sig, winJob(ctx, state, opts));
       return m.get(sig);
     } };
