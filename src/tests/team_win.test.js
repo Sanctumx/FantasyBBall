@@ -39,7 +39,7 @@ test('side: only active and reserve players become entries', () => {
 });
 
 // every team's forecast = the sum of its players' Engine.entryVec at (Plays % games per average week x WEEKS), then one Engine.evaluate run
-test('matrix: every cell equals a hand-built Engine.evaluate run over the same entries (no shrink)', () => {
+test('matrix: every cell equals a hand-built Engine.evaluate run over the same entries, shrunk toward 50% by W.SHRINK (#139)', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), m = W.matrix(ctx, st), Wk = W.weeksLeft(ctx);
   const adp = p => p.adp == null ? 1e9 : p.adp, list = ctx.pool.players.filter(p => p.g > 0).sort((a, b) => (a.owner ? 0 : 1) - (b.owner ? 0 : 1) || adp(a) - adp(b));
   const cfg = { teams: ids.length, roster: ctx.L.maxActive, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 0, field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '',
@@ -49,9 +49,10 @@ test('matrix: every cell equals a hand-built Engine.evaluate run over the same e
   const tv = [vecOf(W.side(ctx, st, Wk))].concat(m.teams.map(t => vecOf(W.side(ctx, W.oppState(ctx, t.id, new Set(st.order)), Wk))));
   const pl = tv.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
   const out = Eng.evaluate(pl, ec, Object.assign({}, cfg, { teams: pl.length, roster: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
+  const sh = (p, k) => 0.5 + k * (p - 0.5);
   m.teams.forEach((cell, i) => {
-    assert.ok(near(cell.match, out.pairProb(out.teams[0], out.teams[i + 1]), 1e-12), cell.id);
-    cell.cat.forEach((p, c) => assert.ok(near(p, out.catProb(out.teams[0], out.teams[i + 1], c), 1e-12), cell.id + ' cat ' + c));
+    assert.ok(near(cell.match, sh(out.pairProb(out.teams[0], out.teams[i + 1]), W.SHRINK.match), 1e-12), cell.id);
+    cell.cat.forEach((p, c) => assert.ok(near(p, sh(out.catProb(out.teams[0], out.teams[i + 1], c), W.SHRINK.cat), 1e-12), cell.id + ' cat ' + c));
   });
   assert.strictEqual(m.teams.length, ids.length - 1);
 });
@@ -237,7 +238,18 @@ test('engCtxFrom / evalVecs: the pieces calib_ros.js reuses give the matrix numb
   assert.strictEqual(typeof W.engCtxFrom, 'function'); assert.strictEqual(typeof W.evalVecs, 'function'); assert.strictEqual(typeof W.teamVec, 'function');
   const e = W.engCtxFrom(ctx.pool.players.filter(p => p.g > 0).map(p => Object.assign({}, p.line, { g: p.g })), Object.keys(ctx.roster).length, ctx.L.maxActive, 9);
   const vecs = [W.teamVec(e, W.side(ctx, st, Wk))].concat(Object.keys(ctx.roster).filter(t => t !== ctx.me).map(t => W.teamVec(e, W.side(ctx, W.oppState(ctx, t, new Set(st.order)), Wk))));
-  const out = W.evalVecs(e, vecs), m = W.matrix(ctx, st, {});
+  const out = W.evalVecs(e, vecs), m = W.matrix(ctx, st, { shrink: { match: 1, cat: 1 } });
   assert.ok(Math.abs(out.pairProb(out.teams[0], out.teams[1]) - m.teams[0].match) < 0.02);   // a different pool order gives a nearby context, not an identical one
   assert.ok(Math.abs(out.catProb(out.teams[0], out.teams[1], 0) + out.catProb(out.teams[1], out.teams[0], 0) - 1) < 1e-9);
+});
+
+test('matrix: opts.shrink overrides the constants, {match:1, cat:1} gives the raw engine chances; winC and the means follow the shrunk cells (#139)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), s = W.matrix(ctx, st), r = W.matrix(ctx, st, { shrink: { match: 1, cat: 1 } });
+  assert.ok(W.SHRINK.match < 1 && W.SHRINK.cat < 1 && W.SHRINK.match > 0 && W.SHRINK.cat > 0);
+  s.teams.forEach((t, i) => {
+    assert.ok(near(t.match, 0.5 + W.SHRINK.match * (r.teams[i].match - 0.5), 1e-12));
+    assert.ok(near(t.winC, t.cat.reduce((a, v) => a + (v == null ? 0 : v), 0), 1e-12));
+  });
+  assert.ok(near(s.mean.match, s.teams.reduce((a, t) => a + t.match, 0) / s.teams.length, 1e-12));
+  assert.ok(Math.abs(s.mean.match - 0.5) < Math.abs(r.mean.match - 0.5) || near(r.mean.match, 0.5, 1e-9));
 });

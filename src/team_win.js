@@ -3,7 +3,7 @@
 // Node. Nothing here changes the saved league, ctx or the pool. Every team's players get their remaining Plays % games per
 // average week (mine and every opponent's, with the nightly cap), turned into season-equivalent games (x WEEKS) and summed into
 // one forecast per team with Engine.entryVec; Engine.evaluate then gives every pairing's category and match chances, with the
-// engine's own noise (SIGMA_G2 games variance) and no shrink toward 0.5.
+// engine's own noise (SIGMA_G2 games variance); the chances are then pulled toward 0.5 by SHRINK (#139).
 // Units follow Rankings: m = Win M points (100 x the change in the match chance), c = Win C hundredths (100 x the change in
 // the summed category chances, averaged over the opponents).
 (function (root) {
@@ -83,13 +83,18 @@
 
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
   // their old team's side (everyone on my roster, and a candidate I bring in)
+  // Shrink toward 50%, fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (#139, calib_ros_k.js): pooled k 0.43 match,
+  // 0.65 per category (one k per category did not beat one k); unshrunk was about twice too confident. opts.shrink overrides.
+  const SHRINK = { match: 0.45, cat: 0.65 };
+  const shr = (p, k) => 0.5 + k * (p - 0.5);
   function matrixOf(ctx, mine, exclude, W, o) {
     const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
     const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W)));
     const out = evalVecs(e, tv);
+    const k = (o && o.shrink) || SHRINK;
     const teams = ids.map((id, i) => {
-      const A = out.teams[0], B = out.teams[i + 1], cat = Array.from({ length: 9 }, (_, c) => c >= nc ? null : out.catProb(A, B, c));
-      return { id, cat, match: out.pairProb(A, B), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
+      const A = out.teams[0], B = out.teams[i + 1], cat = Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(A, B, c), k.cat));
+      return { id, cat, match: shr(out.pairProb(A, B), k.match), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
     });
     const avg = f => teams.reduce((s, t) => s + f(t), 0) / (teams.length || 1);
     return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
@@ -205,6 +210,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { engCtxFrom, teamVec, evalVecs, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);

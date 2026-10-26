@@ -17,15 +17,16 @@ const DATA = require('./bt_data.json'), SCHED = require('./bt_sched.json'), DAIL
 const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || '2025-26,2024-25').split(','), N = 14, R = 12, CKS = [3, 7, 11, 15];
 const gauss = r => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
 const SRC = ['W', 'G', 'PM'];   // whole games, g82 games, pairMatchup (whole games, gVar 1.87)
+const PSRC = { '2025-26': 'bbm', '2024-25': 'bbm', '2023-24': 'hs' };   // one source per season (the only one 2025-26 and 2023-24 have)
 const K_MATCH = 0.72, K_CAT = 0.82, T0 = Date.now();
 let done = 0;
 
 function build(season) {
-  const { P, ctx, cfg: cfg0 } = B.setup(season, { proj: 'avg', realAdp: true });
+  const { P, ctx, cfg: cfg0 } = B.setup(season, { proj: PSRC[season] || 'avg', realAdp: true });
   const cfg = Object.assign({}, cfg0, { ilSpots: 0, scoring: 'h2h', order: 'snake', slot: 1 });
   const { weekly, nweeks } = DATA[season], G = SCHED[season].games, daily = DAILY[season].daily;
   const cats = s => [s[1] ? s[0] / s[1] : 0, s[3] ? s[2] / s[3] : 0, s[4], s[5], s[6], s[7], s[8], s[9], -s[10]];
-  const cols = { p: { W: [], G: [], PM: [] }, y: [], wk: [], cat: [], ck: [] }, pairWeeks = CKS.map(() => 0);
+  const cols = { p: { W: [], G: [], PM: [] }, y: [], wk: [], sd: [], cat: [], ck: [] }, pairWeeks = CKS.map(() => 0);
   let checks = 0;
   for (let seed = 1; seed <= SEEDS; seed++) {
     done++; if (done > 1) { const el = (Date.now() - T0) / 1000, left = Math.round(el / (done - 1) * (SEEDS * SEASONS.length - done + 1)); process.stdout.write(`Estimated time remaining: ${Math.floor(left / 60)} min ${String(left % 60).padStart(2, '0')} s   `); }
@@ -61,15 +62,15 @@ function build(season) {
           const ci2 = cats(tot[i][w]), cj = cats(tot[j][w]); let wi = 0, wj = 0;
           for (let c = 0; c < 9; c++) {
             const v = ci2[c] > cj[c] ? 1 : ci2[c] < cj[c] ? 0 : 0.5; if (v === 1) wi++; else if (v === 0) wj++;
-            SRC.forEach(s => cols.p[s].push(fc[s][c])); cols.y.push(v); cols.wk.push(w); cols.cat.push(c); cols.ck.push(ci);
+            SRC.forEach(s => cols.p[s].push(fc[s][c])); cols.y.push(v); cols.wk.push(w); cols.sd.push(seed); cols.cat.push(c); cols.ck.push(ci);
           }
-          SRC.forEach(s => cols.p[s].push(fc[s][9])); cols.y.push(wi > wj ? 1 : wi < wj ? 0 : 0.5); cols.wk.push(w); cols.cat.push(9); cols.ck.push(ci);
+          SRC.forEach(s => cols.p[s].push(fc[s][9])); cols.y.push(wi > wj ? 1 : wi < wj ? 0 : 0.5); cols.wk.push(w); cols.sd.push(seed); cols.cat.push(9); cols.ck.push(ci);
           pairWeeks[ci]++;
         }
       }
     });
   }
-  const n = cols.y.length, D = { n, y: Float32Array.from(cols.y), wk: Uint8Array.from(cols.wk), cat: Uint8Array.from(cols.cat), ck: Uint8Array.from(cols.ck), p: {} };
+  const n = cols.y.length, D = { n, y: Float32Array.from(cols.y), wk: Uint8Array.from(cols.wk), sd: Uint8Array.from(cols.sd), cat: Uint8Array.from(cols.cat), ck: Uint8Array.from(cols.ck), p: {} };
   SRC.forEach(s => { D.p[s] = Float32Array.from(cols.p[s]); });
   return { D, pairWeeks, checks, season };
 }
