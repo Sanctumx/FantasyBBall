@@ -84,8 +84,9 @@
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
   // their old team's side (everyone on my roster, and a candidate I bring in)
   // Shrink toward 50%, fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (#139, calib_ros_k.js): pooled k 0.43 match,
-  // 0.65 per category (one k per category did not beat one k); unshrunk was about twice too confident. opts.shrink overrides.
-  const SHRINK = { match: 0.45, cat: 0.65 };
+  // 0.65 per category (one k per category did not beat one k); unshrunk was about twice too confident. Shipped at 0.6 / 0.75 (user, 2026-10-26):
+  // the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident. opts.shrink overrides.
+  const SHRINK = { match: 0.6, cat: 0.75 };
   const shr = (p, k) => 0.5 + k * (p - 0.5);
   function matrixOf(ctx, mine, exclude, W, o) {
     const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);

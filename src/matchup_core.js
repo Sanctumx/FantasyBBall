@@ -5,7 +5,8 @@
   'use strict';
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
-  const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82;
+  // K_MATCH / K_CAT: fractional games (Trade Analyzer, rest of season): same as TeamWin.SHRINK, fitted on rest-of-season forecasts (#139)
+  const GVAR = 1.87, K_MATCH = 0.6, K_CAT = 0.75;
   // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
   const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);

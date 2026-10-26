@@ -233,7 +233,7 @@ tr.click{cursor:pointer}
       <h4>Rankings</h4>
       <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, as the gain over a replacement-level player (Win vs: Average player subtracts an average player on your roster instead, or an average pool player when no team is saved in Settings). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
       <h4>Shrinkage and missing projections</h4>
-      <p>Chances are pulled toward 50% (matchup by 0.72, each category by 0.82) because backtests on 2024-26 weeks showed projections alone are overconfident. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
+      <p>Chances are pulled toward 50% because backtests showed projections alone are overconfident: in the Matchup Analyzer (one week) the matchup by 0.83 and each category by 0.85; in the Trade Analyzer and the Team tab (the weeks still to come) by 0.6 and 0.75, a stronger pull because errors in a player's projection last all season. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
     </section>
    </div>
   </div>
@@ -1700,7 +1700,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   'use strict';
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
-  const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82;
+  // K_MATCH / K_CAT: fractional games (Trade Analyzer, rest of season): same as TeamWin.SHRINK, fitted on rest-of-season forecasts (#139)
+  const GVAR = 1.87, K_MATCH = 0.6, K_CAT = 0.75;
   // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
   const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);

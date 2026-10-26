@@ -160,7 +160,7 @@ tr.lrow{cursor:pointer}
       <h3>Win C, Win M and the matrix</h3>
       <p>The matrix is your previewed team against every other team in the league, one column each. A category cell is your chance to win that category, Win C is the expected number of categories won and Win M is the chance to win the match.</p>
       <h4>How the chances are computed</h4>
-      <p>The same engine as the Rankings and Draft tabs, with no shrink toward 50%. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ.</p>
+      <p>The same engine as the Rankings and Draft tabs. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ. The chances are then pulled toward 50% (by 0.6 for the match, 0.75 for each category). In backtests of three seasons the raw rest-of-season odds were about twice too confident: matchups called 85% were won only 63-72% of the time. The backtest keeps draft rosters and preseason lines, so the true correction in a live league is probably a little smaller. Player gains scale by the same factors; the order of the lists does not change.</p>
       <h4>Win C and Win M per player</h4>
       <p>What he adds to your Win C (hundredths) and Win M (points) over an average player: your team minus a made-up average player plus him. The average player is the Plays %-weighted mean line of your Active and Reserve players with your team's total games divided by your Active spots, so he is one slot's worth of your team; the incoming player's games are his own remaining games times the share of schedulable games your lineup gets. For a player already on your Active or Reserve it is what you lose if an average-line player with his games stood in his place; for IL it is what he would add. Same as Vs average in the player list.</p>
      </section>
@@ -1623,7 +1623,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   'use strict';
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
-  const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82;
+  // K_MATCH / K_CAT: fractional games (Trade Analyzer, rest of season): same as TeamWin.SHRINK, fitted on rest-of-season forecasts (#139)
+  const GVAR = 1.87, K_MATCH = 0.6, K_CAT = 0.75;
   // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
   const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
@@ -2274,8 +2275,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
   // their old team's side (everyone on my roster, and a candidate I bring in)
   // Shrink toward 50%, fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (#139, calib_ros_k.js): pooled k 0.43 match,
-  // 0.65 per category (one k per category did not beat one k); unshrunk was about twice too confident. opts.shrink overrides.
-  const SHRINK = { match: 0.45, cat: 0.65 };
+  // 0.65 per category (one k per category did not beat one k); unshrunk was about twice too confident. Shipped at 0.6 / 0.75 (user, 2026-10-26):
+  // the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident. opts.shrink overrides.
+  const SHRINK = { match: 0.6, cat: 0.75 };
   const shr = (p, k) => 0.5 + k * (p - 0.5);
   function matrixOf(ctx, mine, exclude, W, o) {
     const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
