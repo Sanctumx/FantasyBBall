@@ -49,8 +49,8 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 Run `node .claude/scripts/branches.mjs` (every branch, ahead/behind main, pushed, landed, worktree, its Next line); notes are
 `src/handoffs/<branch>.md`. Shared records (this file, IDEAS, archive) change only in the ledger worktree: `docs/release-handoff.md`, "Parallel sessions".
-Pushing needs the user's word. Branches known on 2026-10-26: calib-ros (#139 shrink 0.6 / 0.75 shipped on the branch, unmerged),
-plays-rank (#141 Rejected, unmerged), yahoo-points-pr2 (#137 PR 2 built, unpushed, review pending; PR #30 merged), team-tab-next (not started), fix-136-espn-retry, data-hashtag-1025.
+Pushing needs the user's word. Branches known on 2026-10-26: calib-ros (#139 shrink 0.6 / 0.75 on the branch, merged with main 2026-10-26, reviewer running, unpushed; follow-ups #144-#146 Open),
+plays-rank (#141 Rejected, unmerged), yahoo-points-pr2 (merged, PR #36), team-tab-next (not started), fix-136-espn-retry, data-hashtag-1025.
 
 ## This PC
 
