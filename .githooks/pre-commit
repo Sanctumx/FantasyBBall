@@ -1,0 +1,22 @@
+#!/bin/sh
+# Refuses a commit that changes a shared file (handoff, ideas ledger, archive) off main and off the ledger branch:
+# a branch keeps its notes in src/handoffs/<branch>.md, and shared records go through the ledger worktree.
+# Compares the staged file with the branch's merge-base with origin/main, so any way of editing it is caught and
+# the resume step (git checkout <merge-base> -- <file>) passes.
+# Enable once per clone: git config core.hooksPath .githooks. Override once: ALLOW_HANDOFF_EDIT=1 git commit ...
+FILES="src/SESSION_HANDOFF.md src/IDEAS.md src/HANDOFF_ARCHIVE.md"
+BRANCH=$(git branch --show-current)
+case "$BRANCH" in main|ledger|handoff-workstreams) exit 0 ;; esac
+[ "$ALLOW_HANDOFF_EDIT" = "1" ] && exit 0
+# finishing a merge of main: the shared files legitimately carry main's changes
+git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null) || exit 0
+BAD=""
+for F in $FILES; do
+  git diff --cached --quiet "$BASE" -- "$F" || BAD="$BAD $F"
+done
+[ -z "$BAD" ] && exit 0
+echo "Blocked:$BAD changed on ${BRANCH:-detached}; shared files change on main only, through the ledger worktree." >&2
+echo "Write src/handoffs/$BRANCH.md instead, or restore: git checkout $BASE --$BAD. See docs/release-handoff.md." >&2
+echo "Override once: ALLOW_HANDOFF_EDIT=1." >&2
+exit 1
