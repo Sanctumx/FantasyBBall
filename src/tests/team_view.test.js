@@ -402,6 +402,36 @@ test('gamesLeft: plain = team games x min(1, g/82); Team tab Per game = full tea
   assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'mix' }), pp), tg * 0.75));
 });
 
+test('apply with a ctx: the list dM of a candidate equals the Win M change after Apply swap, also when the worst counted player is in IL (Rest of season)', () => {
+  const ctx = V.sourceCtx(baseArgs(), 'avg', [], FXP, { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const il = st.order.find(k => st.slots[k] === 'il'), pp = ctx.pool.byKey.get(il), g0 = pp.g, full = st.order.filter(k => st.slots[k] === 'active').length;
+  try {
+    pp.g = 3;   // a long-term IL player: his share of the games is tiny, so he is the worst counted player
+    const su = W.moduleSetup(ctx, st, { baseline: 'rep' });
+    assert.strictEqual(su.worst, il, 'premise: the IL player is the worst counted player');
+    const cands = ctx.pool.players.filter(p => !p.owner && p.g > 40 && p.t).slice(0, 5).map(p => p.key);
+    cands.forEach(c => {
+      const row = W.moduleRow(ctx, st, su, c), s2 = V.apply(st, [{ key: il }], [{ key: c }], full, ctx), m2 = W.matrix(ctx, s2, su.mo);
+      assert.ok(near(row.dM, 100 * (m2.mean.match - su.base.mean.match), 1e-6), c + ': list dM ' + row.dM + ' vs after apply ' + 100 * (m2.mean.match - su.base.mean.match));
+    });
+  } finally { pp.g = g0; }
+});
+
+test('rows on the Team tab: the team line and avgZ weight each counted player by Plays % x availability (Rest of season: a g=3 IL player is ~4% of a slot); Per game and plain ctx unchanged', () => {
+  const st = T.tabState(ROS[me]), il = st.order.find(k => st.slots[k] === 'il'), mkTab = basis => V.sourceCtx(baseArgs(), 'avg', [], FXP, { teamTab: true, basis });
+  const ctxT = mkTab('total'), pp = ctxT.pool.byKey.get(il), g0 = pp.g, z = p => p.line.pts;
+  const zc = p => Array.from({ length: 9 }, (_, c) => c === 1 ? z(p) : 0);
+  try {
+    pp.g = 3;
+    const r = V.rows(ctxT, st, { zCats: zc }), pl = T.playsPct(ctxT, st), slots = ctxT.L.maxActive;
+    const want = st.order.reduce((s, k) => { const q = ctxT.pool.byKey.get(k); return s + (pl[k].pct || 0) * T.avail(ctxT, q) * q.line.pts; }, 0) / slots;
+    assert.ok(near(r.avg.pts, want, 1e-9), 'team pts ' + r.avg.pts + ' vs ' + want);
+    assert.ok(near(r.avgCats[1], want, 1e-9), 'avgCats ' + r.avgCats[1]);
+    const pg = mkTab('pergame'), rp = V.rows(pg, st, { zCats: zc }), pp2 = T.playsPct(pg, st);
+    assert.ok(near(rp.avg.pts, st.order.reduce((s, k) => s + (pp2[k].pct || 0) * pg.pool.byKey.get(k).line.pts, 0) / slots, 1e-9));
+  } finally { pp.g = g0; }
+});
+
 test('move / dropIn with an IL cap: a move into a full IL throws, Active/Reserve moves and a player already in IL do not; no cap = as before', () => {
   const st = T.tabState(ROS[me]), act = st.order.filter(k => st.slots[k] === 'active'), il = st.order.filter(k => st.slots[k] === 'il'), nIl = il.length;
   assert.ok(act.length > 1);
