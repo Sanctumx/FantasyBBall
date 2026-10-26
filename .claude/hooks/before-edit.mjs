@@ -1,14 +1,16 @@
-// PreToolUse hook (Edit|Write): the session handoff is edited on main only; a branch keeps its notes in
-// src/work/<branch>.md. Blocks (exit 2, message shown to Claude) an edit to the handoff when the checkout being
-// edited is not on main. Override: ALLOW_HANDOFF_EDIT=1, or add the branch to CONFIG.allowBranches.
+// PreToolUse hook (Edit|Write): the shared records (session handoff, ideas ledger, archive) are edited on main only,
+// in practice in the ledger worktree; a branch keeps its notes in src/handoffs/<branch>.md. Blocks (exit 2, message
+// shown to Claude) an edit to one of them when the checkout being edited is not on main or the ledger branch.
+// Override: ALLOW_HANDOFF_EDIT=1, or add the branch to CONFIG.allowBranches.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const CONFIG = {
-  handoff: 'src/SESSION_HANDOFF.md',
+  shared: ['src/SESSION_HANDOFF.md', 'src/IDEAS.md', 'src/HANDOFF_ARCHIVE.md'],
+  notesDir: 'src/handoffs',
   mainBranch: 'main',
-  allowBranches: ['handoff-workstreams'],  // the branch that introduces the rule edits the handoff once
+  allowBranches: ['ledger', 'handoff-workstreams'],  // ledger = the worktree for shared records; the second introduces the rule
 };
 
 let input = {};
@@ -23,11 +25,13 @@ const git = (dir, ...args) => {
 };
 const root = git(path.dirname(abs), 'rev-parse', '--show-toplevel');
 if (!root) process.exit(0);
-if (path.relative(root, abs).split(path.sep).join('/') !== CONFIG.handoff) process.exit(0);
+const rel = path.relative(root, abs).split(path.sep).join('/');
+if (!CONFIG.shared.includes(rel)) process.exit(0);
 const branch = git(root, 'branch', '--show-current') || '(detached)';
 if (branch === CONFIG.mainBranch || CONFIG.allowBranches.includes(branch)) process.exit(0);
 process.stderr.write(
-  `Blocked: ${CONFIG.handoff} is edited on ${CONFIG.mainBranch} only (this checkout is on ${branch}). ` +
-  `Write src/work/${branch}.md instead; see docs/release-handoff.md "Reading the handoff and branch notes". ` +
+  `Blocked: ${rel} is edited on ${CONFIG.mainBranch} only (this checkout is on ${branch}). ` +
+  `Write ${CONFIG.notesDir}/${branch}.md for this branch's notes; for a shared record edit it in the ledger worktree ` +
+  `(node .claude/scripts/ledger.mjs setup; see docs/release-handoff.md "Parallel sessions"). ` +
   `To override once, set ALLOW_HANDOFF_EDIT=1.\n`);
 process.exit(2);

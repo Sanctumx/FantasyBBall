@@ -21,7 +21,7 @@ function run(dir, rel, env = {}) {
 test('handoff edit is blocked on a feature branch and points to the notes file', () => {
   const r = run(repoOn('some-task'), 'src/SESSION_HANDOFF.md');
   assert.strictEqual(r.status, 2);
-  assert.match(r.stderr, /src\/work\/some-task\.md/);
+  assert.match(r.stderr, /src\/handoffs\/some-task\.md/);
 });
 
 test('handoff edit is allowed on main', () => {
@@ -33,8 +33,19 @@ test('handoff edit is allowed on the migration branch and with the override', ()
   assert.strictEqual(run(repoOn('some-task'), 'src/SESSION_HANDOFF.md', { ALLOW_HANDOFF_EDIT: '1' }).status, 0);
 });
 
-test('other files and notes files are never blocked', () => {
+test('ideas ledger and archive are blocked on a feature branch too, allowed on main and ledger', () => {
+  for (const f of ['src/IDEAS.md', 'src/HANDOFF_ARCHIVE.md']) {
+    const r = run(repoOn('some-task'), f);
+    assert.strictEqual(r.status, 2);
+    assert.match(r.stderr, /ledger/);
+    assert.strictEqual(run(repoOn('main'), f).status, 0);
+    assert.strictEqual(run(repoOn('ledger'), f).status, 0);
+  }
+  assert.strictEqual(run(repoOn('ledger'), 'src/SESSION_HANDOFF.md').status, 0);
+});
+
+test('notes files and other files are never blocked', () => {
   const dir = repoOn('some-task');
-  assert.strictEqual(run(dir, 'src/work/some-task.md').status, 0);
-  assert.strictEqual(run(dir, 'src/IDEAS.md').status, 0);
+  assert.strictEqual(run(dir, 'src/handoffs/some-task.md').status, 0);
+  assert.strictEqual(run(dir, 'src/engine.js').status, 0);
 });

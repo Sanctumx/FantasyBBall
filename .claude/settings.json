@@ -27,7 +27,8 @@
     "ask": [
       "Bash(git push:*)",
       "Bash(gh pr merge:*)",
-      "Bash(gh api:*merge*)"
+      "Bash(gh api:*merge*)",
+      "Bash(node .claude/scripts/ledger.mjs land:*)"
     ],
     "deny": [
       "Edit(/index.html)",
@@ -53,6 +54,17 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/branches.mjs\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Edit|Write",

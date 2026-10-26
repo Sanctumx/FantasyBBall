@@ -232,6 +232,8 @@ tr.click{cursor:pointer}
       <p>Trade Win M is your average chance over the remaining regular-season matchups against the real opponents, with both rosters changed; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
       <h4>Rankings</h4>
       <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, as the gain over a replacement-level player (Win vs: Average player subtracts an average player on your roster instead, or an average pool player when no team is saved in Settings). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
+      <h4>Points leagues</h4>
+      <p>Settings can score a league in fantasy points (a value per stat). Draft, League, Matchup, Trade and Rankings don't value points leagues yet and say so; nothing is calculated from the category model for a points league.</p>
       <h4>Shrinkage and missing projections</h4>
       <p>Chances are pulled toward 50% (matchup by 0.72, each category by 0.82) because backtests on 2024-26 weeks showed projections alone are overconfident. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
     </section>
@@ -1297,8 +1299,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   'use strict';
   const KEYS = { settings: 'courtside-settings-v1', board: 'courtside-board-v1', leagues: 'courtside-leagues-v1', inseason: 'courtside-inseason-v1' };
   // league settings only; slot, order and draft field belong to a draft and stay on the Draft page
-  const LEAGUE_DEF = { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2 };
-  const LEAGUE_KEYS = Object.keys(LEAGUE_DEF).concat('luFx');
+  // Points leagues (2026-10-26, #137): fantasy points per stat, kept with the other league settings; a draft never stores them
+  const POINT_STATS = ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'tpm', 'fgm', 'fga', 'ftm', 'fta'];
+  const POINT_LABELS = { pts: 'Points', reb: 'Rebounds', ast: 'Assists', stl: 'Steals', blk: 'Blocks', to: 'Turnovers', tpm: '3-pointers made', fgm: 'FG made', fga: 'FG attempted', ftm: 'FT made', fta: 'FT attempted' };
+  const PT_MAX = 100;
+  const LEAGUE_DEF = { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2,
+    pointVals: POINT_STATS.reduce((o, k) => { o[k] = 0; return o; }, {}) };
+  const LEAGUE_KEYS = Object.keys(LEAGUE_DEF).filter(k => k !== 'pointVals').concat('luFx');
   const LU_MAX = { luC: 4, luG: 6, luF: 6, luGC: 3, luFC: 3, luU: 10 };
   // Lineup slots: which positions each starting slot takes (U = Util, anyone)
   const SLOT_OK = { PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'], G: ['PG', 'SG'], F: ['SF', 'PF'], U: ['PG', 'SG', 'SF', 'PF', 'C'] };
@@ -1323,10 +1330,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     s = s || {};
     const o = {
       teams: intIn(s.teams, 4, 20, LEAGUE_DEF.teams), roster: intIn(s.roster, 8, 25, LEAGUE_DEF.roster),
-      scoring: oneOf(s.scoring, ['roto', 'h2h', 'most'], LEAGUE_DEF.scoring), cats: oneOf(s.cats, [8, 9], LEAGUE_DEF.cats),
+      scoring: oneOf(s.scoring, ['roto', 'h2h', 'most', 'points'], LEAGUE_DEF.scoring), cats: oneOf(s.cats, [8, 9], LEAGUE_DEF.cats),
       asb: oneOf(s.asb, ['merged', 'separate'], LEAGUE_DEF.asb), poStart: intIn(s.poStart, 10, 25, LEAGUE_DEF.poStart),
       poFmt: oneOf(s.poFmt, ['1-1-1', '1-1-2', '1-2-2', '2-2-2'], LEAGUE_DEF.poFmt), ilSpots: intIn(s.ilSpots, 0, 4, LEAGUE_DEF.ilSpots),
-      luSplit: typeof s.luSplit === 'boolean' ? s.luSplit : LEAGUE_DEF.luSplit };
+      luSplit: typeof s.luSplit === 'boolean' ? s.luSplit : LEAGUE_DEF.luSplit, pointVals: {} };
+    const pv = s.pointVals && typeof s.pointVals === 'object' ? s.pointVals : {};
+    POINT_STATS.forEach(k => { o.pointVals[k] = typeof pv[k] === 'number' && isFinite(pv[k]) && Math.abs(pv[k]) <= PT_MAX ? pv[k] : 0; });
     Object.keys(LU_MAX).forEach(k => { o[k] = intIn(s[k], 0, LU_MAX[k], LEAGUE_DEF[k]); });
     if (Array.isArray(s.luFx) && s.luFx.length && s.luFx.every(x => typeof x === 'string' && slotElig(x).length)) o.luFx = s.luFx.slice();
     return o;
@@ -1349,6 +1358,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     // a name the user typed (custom) is kept when Fantrax sends its own on reconnect
     const keep = i >= 0 && l[i].custom;
     const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
+    if (i >= 0 && l[i].scoring) { entry.scoring = l[i].scoring; entry.pointVals = l[i].pointVals; }
     if (i >= 0) l[i] = entry; else l.push(entry);
     set(KEYS.leagues, JSON.stringify(l));
   }
@@ -1357,6 +1367,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     l[i] = Object.assign({}, l[i], { name, custom: true }); set(KEYS.leagues, JSON.stringify(l));
   }
   const forgetLeague = (get, set, id) => set(KEYS.leagues, JSON.stringify(readLeagues(get).filter(x => x.id !== id)));
+  // scoring and point values belong to the league: kept on its saved record, restored on Load (a record from before this is category scoring)
+  function leagueScoring(get, id) {
+    const x = readLeagues(get).find(y => y.id === id); if (!x) return null;
+    const n = normalize(Object.assign({}, LEAGUE_DEF, { scoring: x.scoring, pointVals: x.pointVals }));
+    return { scoring: n.scoring, pointVals: n.pointVals };
+  }
+  function setLeagueScoring(get, set, id, settings) {
+    const l = readLeagues(get), i = l.findIndex(x => x.id === id); if (i < 0) return;
+    l[i] = Object.assign({}, l[i], { scoring: settings.scoring, pointVals: settings.pointVals }); set(KEYS.leagues, JSON.stringify(l));
+  }
   const defaultTeam = (get, id) => { const x = readLeagues(get).find(y => y.id === id); return x && x.myTeam != null ? x.myTeam : null; };
   // the team a tab shows: its own remembered pick, else the Settings default, else the first team
   const pickTeam = (remembered, ids, fallback) => ids.includes(remembered) ? remembered : ids.includes(fallback) ? fallback : ids[0];
@@ -1454,11 +1474,84 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { order, items, skipped, error: null };
   }
 
+  const isPoints = s => !!s && s.scoring === 'points';
+  // a saved draft's league keys over the defaults; the point values stay the league's
+  const draftSettings = (current, cfg) => normalize(Object.assign({}, LEAGUE_DEF, LEAGUE_KEYS.reduce((o, k) => { if (cfg && k in cfg) o[k] = cfg[k]; return o; }, {}), { pointVals: current && current.pointVals }));
+  const POINTS_NOTE_HTML = 'Points leagues aren\'t supported on this tab yet. Scoring is set to points in <a href="settings.html">Settings</a>.';
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
-  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local,
+  const api = { leagueScoring, setLeagueScoring, KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
     fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
+})(this);
+</script>
+<script>// Fantrax answers, cached in the browser (2026-10-26): a page draws at once from the last answers it saved, then asks Fantrax
+// again in the background and redraws only if something changed. One copy for every page (it replaced the per-page fxGet).
+// Draft data is never cached: it feeds the picks and so the Model pick. Pure over a storage and a fetcher, so Node can test it.
+(function (root) {
+  'use strict';
+  const PREFIX = 'courtside-fx-v1:', DAY = 864e5;
+  const MAX_AGE = { players: 7 * DAY }, DEF_AGE = DAY, NEVER = { draft: 1 };
+
+  // One Fantrax call through the sync service. Errors: 'offline' (no answer), 'nohost' (not the hosted site), else Fantrax's own.
+  async function fxFetch(what, id, fetchFn, onResponse) {
+    const f = fetchFn || ((u, o) => fetch(u, o));
+    let r; try { r = await f('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    if (onResponse) onResponse(r);
+    return body;
+  }
+
+  const local = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => localStorage.setItem(k, v),
+    remove: k => { try { localStorage.removeItem(k); } catch (e) {} },
+    keys: () => { try { return Object.keys(localStorage); } catch (e) { return []; } } };
+
+  function create(opts) {
+    const st = opts.storage || local, fetcher = opts.fetcher || ((w, id) => fxFetch(w, id, null, opts.onResponse)), now = opts.now || Date.now;
+    const key = (what, id) => PREFIX + what + ':' + (id || '');
+
+    // the saved answer, or null when there is none, it is unreadable or it is too old to show
+    function peek(what, id) {
+      if (NEVER[what]) return null;
+      let e; try { e = JSON.parse(st.get(key(what, id)) || 'null'); } catch (x) { return null; }
+      if (!e || typeof e.at !== 'number' || typeof e.json !== 'string' || now() - e.at > (MAX_AGE[what] || DEF_AGE)) return null;
+      let body; try { body = JSON.parse(e.json); } catch (x) { return null; }
+      return { body, at: e.at, json: e.json };
+    }
+    // keep one league per kind of answer; a full or blocked storage just means no cache
+    function store(what, id, json) {
+      const k = key(what, id), lead = PREFIX + what + ':';
+      try { st.keys().forEach(x => { if (x.startsWith(lead) && x !== k) st.remove(x); }); } catch (e) {}
+      try { st.set(k, JSON.stringify({ at: now(), json })); } catch (e) {}
+    }
+    async function fetchOne(what, id) {
+      const body = await fetcher(what, id);
+      if (NEVER[what]) return { body };
+      const json = JSON.stringify(body);
+      store(what, id, json);
+      return { body, json };
+    }
+    const live = async (what, id) => (await fetchOne(what, id)).body;
+
+    // specs = [[what, leagueId?], ...]. onCached(bodies, at) only if every piece is saved; onFresh(bodies, at, changed) after
+    // the live answers; onError(error, hadCached) if a live call fails (the cached view stays).
+    async function swr(specs, hooks) {
+      const hit = specs.map(s => peek(s[0], s[1])), had = hit.every(Boolean);
+      const fresh = Promise.all(specs.map(s => fetchOne(s[0], s[1]))); fresh.catch(() => {});   // started before drawing; handled below
+      if (had) await hooks.onCached(hit.map(h => h.body), Math.min.apply(null, hit.map(h => h.at)));
+      let res; try { res = await fresh; } catch (e) { await hooks.onError(e, had); return; }
+      await hooks.onFresh(res.map(r => r.body), now(), !had || res.some((r, i) => r.json !== hit[i].json));   // against what the page drew, not what storage holds now
+    }
+    return { peek, live, swr };
+  }
+
+  const api = { PREFIX, fxFetch, create };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FxCache = api;
 })(this);
 </script>
 <script>// In-season league calendar (2026-10-20): Fantrax league/roster/standings parsing, matchup periods, team-code mapping and
@@ -2122,15 +2215,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
 
   let staleAge = 0;   // seconds old of the oldest answer the Worker served from memory because Fantrax was busy
-  async function fxGet(what, id) {
-    let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
-    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
-    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
-    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
-    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
-    const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age);
-    return body;
-  }
+  // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  const FXC = FxCache.create({ onResponse: r => { const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age); } });
+  let fxChecking = false;
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
   async function loadStats() {
@@ -2146,30 +2233,47 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
     memo.clear(); memoGen++; $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (LS.isPoints(SS.settings)) { ui.leagueId = null; sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { ui.leagueId = null; sayHtml(LS.NO_LEAGUE_HTML); return; }
     const id = ui.leagueId = lg.id;
     say('Loading the league from Fantrax…');
-    try {
-      const league = await fxGet('league', id), ros = await fxGet('rosters', id), st = await fxGet('standings', id);
-      if (!fxPlayers) fxPlayers = await fxGet('players');
-      const stats = await loadStats();
-      const boxes = await loadBox(InL.parseLeague(league));
-      if (seq !== loadSeq) return;
-      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; box = boxes; fetchedAt = new Date();
+    const stats = loadStats(); let shown = false;
+    // draws the page from [league, rosters, standings, players] fetched at `at`
+    const build = async (b, at) => {
+      const lgn = InL.parseLeague(b[0]), sp = await stats, boxes = await loadBox(lgn); if (seq !== loadSeq) return false;
+      L = lgn; rosters = InL.parseRosters(b[1]); standings = InL.parseStandings(b[2]); fxPlayers = b[3]; espn = sp; box = boxes; fetchedAt = new Date(at);
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
-      Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
-      fxWait = 0; say(''); start();
-    } catch (e) {
-      if (seq !== loadSeq) return;
-      $('retry').hidden = false;
-      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
-      if (transient(e)) {
-        fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
-        say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
-        fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
-      }
-      say(e.message, true);
-    }
+      memo.clear(); memoGen++; Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
+      fxWait = 0; say(''); start(); return true;
+    };
+    await FXC.swr([['league', id], ['rosters', id], ['standings', id], ['players']], {
+      onCached: async (b, at) => { try { fxChecking = true; shown = await build(b, at); } catch (e) { shown = false; } },
+      onFresh: async (b, at, changed) => {
+        if (seq !== loadSeq) return;
+        fxChecking = false;
+        try {
+          if (!shown) { shown = await build(b, at); return; }
+          if (!changed) { fetchedAt = new Date(at); freshness(); return; }
+          if (bd && (bd.aGets.length || bd.bGets.length)) {   // keep the trade being built; the new data waits for a click
+            fetchedAt = new Date(at); freshness();
+            sayHtml('New Fantrax data is in. Your trade is kept. <button type="button" class="retry" id="applynew">Update</button>'); return;
+          }
+          await build(b, at);
+        } catch (e) { say(e.message, true); }
+      },
+      onError: e => {
+        if (seq !== loadSeq) return;
+        fxChecking = false;
+        if (shown) { freshness(); say('Couldn\'t refresh from Fantrax; showing the saved data.', true); $('retry').hidden = false; return; }
+        $('retry').hidden = false;
+        if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
+        if (transient(e)) {
+          fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
+          say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
+          fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
+        }
+        say(e.message, true);
+      } });
   }
 
   function teamLabel(t) {
@@ -2192,7 +2296,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function freshness() {
     const want = L.season + '-' + String(L.season + 1).slice(2), parts = [];
     if (staleAge) parts.push('<span class="warn">Fantrax is busy: rosters are about ' + (staleAge >= 3600 ? Math.round(staleAge / 3600) + ' h' : Math.max(1, Math.round(staleAge / 60)) + ' min') + ' old</span>');
-    else parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
+    else parts.push('<span>' + (fxChecking ? 'Rosters from ' + fetchedAt.toTimeString().slice(0, 5) + ', checking Fantrax…' : 'Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5)) + '</span>');
     if (!espn) parts.push('<span class="warn">No actual stats: perceived value uses projection and ADP only</span>');
     else parts.push('<span>Stats: ESPN ' + esc(espn.label) + ', fetched ' + esc(String(espn.fetchedAt).slice(0, 10)) + (espn.label !== want ? ' <span class="warn">last season</span>' : '') + '</span>');
     parts.push('<span>Projections: BBM + Hashtag average (players.json)</span>');
@@ -2467,14 +2571,15 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $(id).addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const th = e.target.closest('thead th'); if (th) { e.preventDefault(); go(th); } } }); }
 
   $('retry').addEventListener('click', () => { fxWait = 0; load(); });
+  $('msg').addEventListener('click', e => { if (e.target.id === 'applynew') load(); });   // the pending Fantrax update replaces the view (and the trade)
   $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
   // Settings changed in another tab (a different league, or other settings): load again
   window.addEventListener('storage', e => {   // reload only for another league or other settings
     if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
-    const was = SS.league && SS.league.id; SS = LS.load(LS.local.get);
-    if ((SS.league && SS.league.id) !== was) load();
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings); SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) load();
   });
   $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });
