@@ -4,7 +4,8 @@
 
 Branch `team-tab-next`, worktree `C:/Users/Fefe/Documents/FantasyBBall-tabnext`, created 2026-10-26 from `team-d3-swap` (not main), because step 3 edits the same Team tab code. **PR #45** (`team-d3-swap`: D3 trades, Source switch, Rankings D2, review fixes; 417 unit tests; pushed on the user's word, not yet merged) must merge first; then `git fetch && git rebase origin/main` here (the d3 commits drop out) and rebuild. The `FantasyBBall-d3` worktree is removed; the branch is on origin.
 
-## Review result (Opus, effort high, 2026-10-26): no must-fix; no plain-ctx behaviour change. Fix these test-first, then rebuild
+## Review fixes: ALL DONE 2026-10-26 (7a37a86..b1784fe, 443 unit tests; browser: team_page, inseason_page, rankings_team_parity pass, rankings_page only the known 302 vs 303)
+User decision on item 4: IL is capped at the league's IL spots (`Settings.ilSpots`, `TV.move/dropIn(.., max, ilMax)`), not by Fantrax-IR status. Item 3: a candidate takes Active while it has room, else the IL slot the worst vacated on the seasonal bases (`TeamWin.swapSlot`, `TV.apply(.., max, ctx)`). Item 5: the team line / avgZ weight is Plays % x `Team.avail`. Item 2 (Rankings "…" in Vs replacement) has no browser assertion yet. Remaining before the PR: rebase after PR #45 merges (rebuild), ledger rows, user's word to push. The original list, for reference:
 
 1. `make_category_golden.js` ~l.337: `playsPctMoved` pin is a no-op (`forEach` discards `T.moveSlot`'s new state); use `reduce`, regenerate from the pre-flag code (a09193e) so the plain Reserve path is really pinned.
 2. `rankings.html` ~l.297/323: with a team and Vs replacement, unscored players show "—" not "…"; `wTd` should use `dd ? dd.todo.has(pid) : wn.rep.has(pid)`.
