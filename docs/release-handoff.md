@@ -5,7 +5,7 @@ with every request.
 
 ## Release and handoff specifics (read by /release and /handoff)
 
-- **Files:** `src/SESSION_HANDOFF.md`, `src/IDEAS.md`, `src/HANDOFF_ARCHIVE.md` (new write-ups at the top of "Entries
+- **Files:** `src/SESSION_HANDOFF.md` (main only), `src/work/<branch>.md` (one per branch), `src/IDEAS.md`, `src/HANDOFF_ARCHIVE.md` (new write-ups at the top of "Entries
   after 2026-10-18").
 - **Results metric:** prize equity (`python3 src/prize_equity.py <arm>:<baseline> ...`).
 - **Mirror the handoff:** none. The repo copy is the only one (the claude.ai Project copy was dropped, 2026-10-20).
@@ -17,6 +17,22 @@ with every request.
 - **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`, the only host (the Netlify site
   was deleted, 2026-10-20).
 - **Never during /release or /handoff:** use the user's computer.
+
+## Reading the handoff and branch notes
+
+- **"read handoff":** run `git branch --show-current` and `git rev-parse --show-toplevel`. Read main's `src/SESSION_HANDOFF.md`
+  (short) plus `src/work/<current branch>.md`: from the working tree, else `git show <branch>:src/work/<branch>.md`, else
+  `git show main:src/work/<branch>.md`. On main, with no notes file, or in an unknown folder: show the Workstreams table and
+  ask which task. Don't read other notes files, and don't create a worktree just to read.
+- **/handoff on a branch:** write only that branch's notes file (State / Decisions / Next / PC commands), plus IDEAS.md and the
+  archive as usual. Never edit `SESSION_HANDOFF.md` on a branch and never push; if the branch is unmerged and unpushed, ask
+  the user whether to push. **On main:** update the Workstreams table rows. When a branch merges, its row becomes done and
+  its notes file stays; done rows move to the archive later.
+- **New branch:** create its notes file in the first commit, even three lines. Name it exactly like the branch.
+- **Worktrees:** at most two (the main checkout plus one task). Finishing a task removes its worktree after `git status -sb`
+  confirms the branch is pushed (or the user accepts it staying local). Keep branches until their PR merges.
+- **Resuming a branch cut before this rule:** `git checkout $(git merge-base HEAD origin/main) -- src/SESSION_HANDOFF.md`
+  (drops its handoff edits after moving them into its notes file), then merge `origin/main`.
 
 ## In Claude Code cloud sessions
 

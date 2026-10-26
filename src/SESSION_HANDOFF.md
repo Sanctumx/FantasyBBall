@@ -50,11 +50,22 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 8. **#136** done 2026-10-25: `src/collect/espn_fetch.mjs` retries the ESPN collectors with backoff (429/403/5xx/network, 3
    retries) and `espn_stats` pauses 500 ms between pages.
 
-## Next session starts with
+## Workstreams
 
-**Model pick and Plays % (#140 Measured, #141 Open, 2026-10-26):** the draft Model pick fills unfilled slots with a typical player at that pick (Gaussian window around the j-th best available by adpE, `engine.js:445-463`), not the end-of-draft average (that is only the Gain baseline `rep`). Plays % by roster rank (10 of 12 cap): ranks 1-10 play 99.5-100%, 11th 97.6-99.2%, 12th 94.3-97.9%, ~0.2% of team games (#80 confirmed). User wants it in the Model pick on principle: **#141** = rank-based games factor in `Engine.evaluate` for slots 11-12 (planner brief first, arm-23 parity, paired backtest expected inside noise). `stream_sim.js` gained an opt-in `opts.rankLog` (committed 2026-10-26). Do this before or after the Team tab steps: ask the user.
+How to read this and the notes files: `docs/release-handoff.md` § Reading the handoff and branch notes. Branches never edit this file; each keeps `src/work/<branch>.md`.
 
-**Team tab (#131, branch team-core, released 2026-10-26 with the logo wordmark; unreviewed since #138; spec docs/superpowers/specs/2026-10-25-team-tab-design.md, archive 131-131g and 138).** 2026-10-26 (#138): Win C / Win M now come from `Engine.evaluate` (no shrink, `Engine.entryVec` + one entry per team) with Plays % games for every team; Vs average = team - average player + him (average = Plays %-weighted mean line, games = total / 12; user spec). 272 unit + 78 browser checks pass; code and rebuilt pages committed on team-core. **Next, in order (user decisions 2026-10-26):** (1) D3 swap: a candidate from an opponent leaves that team and that opponent receives the player I send out (for Vs average the average player; for a typed swap the sent-out players, into the vacated slots); (2) Rankings Vs average from the same TeamWin code when a league is loaded (D2; Vs replacement and the no-league path unchanged; adapter in `rankings_core.js`, `rankings.html` needs SCHED_DAYS and L; test: same roster gives the same Vs average on both tabs); (3) the user's other requests: toggle per-game / season stats on the Team tab, auto-fill the top 12 into Active (decide by what: recommend Win M or Zscore, and how it treats Reserve / IL); (4) browser check, reviewer pass, then the PR (push only when the user says). **#139** (rest-of-season calibration of the shrink, analyst designs it) is for the user to start on the PC; the Team tab shows absolute Win M unshrunk until then, say so in How it works. **#137** (Yahoo / points leagues) is being brainstormed in a separate chat in a worktree off origin/main; no code yet. Browser check: copy src/tests/browser/team_page.mjs to the Playwright folder (`$TEMP/claude/.../17acf9ec-.../scratchpad/pw`), `REPO=C:/Users/Fefe/Documents/FantasyBBall node team_page.mjs`, repo root served on :8765 (`python -m http.server 8765`). Run unit tests as `node --test src/tests/*.test.js`. Tab overhaul, the rest: Rankings left of Draft, a collapsible How it works panel on every tab, hover tooltips like the Draft tab. #116 and #112 are merged. Best adds/plan on remaining games.
+| # | Branch | Worktree | State | Notes file |
+| --- | --- | --- | --- | --- |
+| 142 tab speed | fx-cache-assets | main checkout | committed, unpushed, review next | `src/work/fx-cache-assets.md` (on the branch, not yet written) |
+| 137 points leagues | yahoo-points-137 | ../FantasyBBall-137 | open PR #30 | `src/work/yahoo-points-137.md` (on the branch, not yet written) |
+| 131/138 Team tab next | team-tab-next | none | not started | `src/work/team-tab-next.md` |
+| 139 shrink calibration (+142-144 follow-ups) | calib-ros | none | unmerged, local only | `src/work/calib-ros.md` |
+| 141 Plays % by rank | plays-rank | none | done, Rejected, pushed, unmerged | `src/work/plays-rank.md` |
+| 136 ESPN retry | fix-136-espn-retry | none | unmerged, local only | `src/work/fix-136-espn-retry.md` |
+| Hashtag 1025 data | data-hashtag-1025 | none | unmerged, local only | `src/work/data-hashtag-1025.md` |
+| handoff restructure | handoff-workstreams | ../FantasyBBall-handoff | unmerged | `src/work/handoff-workstreams.md` |
+
+**Next, in order:** (1) finish and PR `fx-cache-assets` (review first); (2) review `calib-ros` (the 0.6 / 0.75 shrink is in code but not on main) and PR it; (3) Team tab next steps (`team-tab-next.md`, D3 swap first). Pushing needs the user's word. The idea-number collision (#142 twice) is noted in `calib-ros.md`.
 
 ## This PC
 

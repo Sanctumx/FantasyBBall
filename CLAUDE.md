@@ -1,6 +1,6 @@
 # Working on this repo
 
-Project state, decisions and the user's standing rules live in `src/SESSION_HANDOFF.md`. Read it first; this file only
+Project state, decisions and the user's standing rules live in `src/SESSION_HANDOFF.md`. Read it first, with your branch's notes as in `docs/release-handoff.md`; this file only
 covers how changes get made.
 
 Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are in `src/HANDOFF_ARCHIVE.md`. Search them
@@ -108,7 +108,7 @@ They work alongside the routing above; this file takes precedence over them. Siz
 4. **Build.** The site serves the repo root, so built pages are committed:
    `cd src && python3 gen.py && python3 build_site.py && cp site/index.html ../index.html && cp site/league.html ../league.html && cp site/inseason.html ../inseason.html && cp site/settings.html ../settings.html && cp site/rankings.html ../rankings.html && cp site/team.html ../team.html`.
 5. **Commit** in small steps with a type prefix: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Record ideas and results in
-   `src/IDEAS.md` (and the archive), and current-state changes in `src/SESSION_HANDOFF.md` (keep it under ~150 lines).
+   `src/IDEAS.md` (and the archive), and current-state changes in `src/SESSION_HANDOFF.md` on main (keep it under ~150 lines); a branch writes `src/work/<branch>.md` instead.
 6. **Review.** Before merging a feature, the `reviewer` subagent reads the whole branch diff. Fix what matters, each fix with a
    test that failed first.
 7. **Pull request.** `git push -u origin <branch>`, then open a PR against main with a summary, the tests run and the
