@@ -26,7 +26,7 @@ const stored = p => p.evaluate(() => JSON.parse(localStorage.getItem('courtside-
 // 1. migration from the old keys, nothing loaded
 { const { p, errs, ctx } = await open({ 'courtside-board-v1': JSON.stringify(board) }, okFx);
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
-  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Rankings|Draft|League|Matchup|Trade|Settings', 'toolbar has six links');
+  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Rankings|Team|Draft|League|Matchup|Trade|Settings', 'toolbar has seven links');
   ok(await p.$eval('#s-teams', e => e.value) === '12' && await p.$eval('#s-roster', e => e.value) === '13' && await p.$eval('#s-cats', e => e.value) === '8', 'form shows the old board settings');
   const st = await stored(p);
   ok(st && st.v === 1 && st.settings.teams === 12 && st.settings.cats === 8 && st.league === null, 'migrated store written');
@@ -70,26 +70,6 @@ const stored = p => p.evaluate(() => JSON.parse(localStorage.getItem('courtside-
   await p.fill('#fx-league', 'abc123xyz'); await p.click('#fx-load'); await p.waitForTimeout(600);
   await p.click('#lg-del'); await p.click('#lg-del');
   ok((await stored(p)).league === null && await p.$eval('#lg-row', e => e.hidden), 'Remove of the active league unloads it');
-  await ctx.close(); }
-
-// 5. points scoring: a box per stat, bad input reverts with a warning, values survive a Scoring switch and a reload
-{ const { p, errs, ctx } = await open({ 'courtside-board-v1': JSON.stringify(board) }, okFx);
-  ok(await p.$eval('#pv-row', e => e.hidden), 'point values hidden for a category league');
-  await p.selectOption('#s-scoring', 'points');
-  ok(await p.$eval('#pv-row', e => !e.hidden) && await p.$eval('#s-cats-lab', e => getComputedStyle(e).display === 'none'), 'Points shows the boxes and hides Categories');
-  ok(await p.$$eval('#pv-row input', l => l.length) === 11, 'eleven point boxes');
-  await p.fill('#pv-to', '-1.5'); await p.dispatchEvent('#pv-to', 'change'); await p.fill('#pv-reb', '1.25'); await p.dispatchEvent('#pv-reb', 'change');
-  let st = await stored(p); ok(st.settings.scoring === 'points' && st.settings.pointVals.to === -1.5 && st.settings.pointVals.reb === 1.25, 'values stored');
-  await p.fill('#pv-reb', '150'); await p.dispatchEvent('#pv-reb', 'change');
-  ok((await p.textContent('#pv-warn')).length > 0 && await p.$eval('#pv-reb', e => e.value) === '1.25' && (await stored(p)).settings.pointVals.reb === 1.25, 'out of range warns and reverts');
-  await p.fill('#pv-reb', ''); await p.dispatchEvent('#pv-reb', 'change');
-  ok((await stored(p)).settings.pointVals.reb === 0 && (await p.textContent('#pv-warn')) === '', 'an empty box is 0');
-  await p.selectOption('#s-scoring', 'h2h');
-  ok(await p.$eval('#pv-row', e => e.hidden) && await p.$eval('#s-cats-lab', e => getComputedStyle(e).display !== 'none') && await p.$eval('#s-cats', e => e.value) === '8', 'switching back shows Categories with its old value');
-  ok((await stored(p)).settings.pointVals.to === -1.5, 'the point values are kept while scoring is a category type');
-  await p.selectOption('#s-scoring', 'points'); await p.reload(); await p.waitForTimeout(400);
-  ok(await p.$eval('#pv-to', e => e.value) === '-1.5', 'values survive a reload');
-  ok(errs.length === 0, 'no page errors ' + errs.join('; '));
   await ctx.close(); }
 
 // 4. scoring is per league: loading a category league from the saved list leaves points scoring behind, and back

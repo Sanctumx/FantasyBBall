@@ -21,7 +21,7 @@ async function page(seed, opts = {}) {
 { const { p, errs, ctx } = await page(M.seed());
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
   ok(!(await p.$('#src')) && /Home/.test(await p.textContent('#lgname')), 'no league picker; league name shown: ' + await p.textContent('#lgname'));
-  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Rankings|Draft|League|Matchup|Trade|Settings', 'toolbar Rankings | Draft | League | Matchup | Trade | Settings');
+  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Rankings|Team|Draft|League|Matchup|Trade|Settings', 'toolbar Rankings | Team | Draft | League | Matchup | Trade | Settings');
   const mx = await p.$$eval('#mx tbody tr', rows => rows.map(r => [...r.querySelectorAll('td.v')].map(td => td.textContent)));
   ok(mx.length === 14 && mx.every(r => r.length === 14), 'matrix 14 × 14 (' + mx.length + ')');
   ok(/Club 0 \(you\)/.test(await p.textContent('#focusName')), 'focus team is the saved league team: ' + await p.textContent('#focusName'));

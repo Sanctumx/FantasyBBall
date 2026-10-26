@@ -39,7 +39,7 @@ async function open(opts = {}) {
 { const { p, errs, ctx } = await open();
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
   ok(/^Matchup Analyzer/.test(await p.title()), 'title says Matchup Analyzer');
-  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Rankings|Draft|League|Matchup|Trade|Settings', 'toolbar Rankings | Draft | League | Matchup | Trade | Settings');
+  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Rankings|Team|Draft|League|Matchup|Trade|Settings', 'toolbar Rankings | Team | Draft | League | Matchup | Trade | Settings');
   ok(!(await p.$('#src')) && (await p.textContent('#lgname')) === 'Home', 'no league picker; league name shown');
   ok(await p.$eval('#team', s => s.value) === TEAMS[0], 'team defaults to the saved league team');
   ok((await p.$$eval('#team option', o => o.length)) === 14, 'team select has 14 options');
