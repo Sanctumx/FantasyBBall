@@ -51,6 +51,8 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 ## Next session starts with
 
+**Points leagues (#137 part 1), worktree `C:\Users\Fefe\Documents\FantasyBBall-137`, branch `yahoo-points-137` (off origin/main, 3 docs commits, not pushed; `team-core` is a separate checkout).** Design approved and plan written (user, 2026-10-26): `docs/superpowers/specs/2026-10-26-points-leagues-design.md`, `docs/superpowers/plans/2026-10-26-points-leagues.md`; archive 137. The user chose **native** execution (executing-plans inline, then one reviewer at effort high). Answers to the plan's six decisions: (1) scoring is per league, so keep the point values with the other league settings and don't compute across leagues; (2) and (3) the user didn't follow the question, so use the plan's recommendations (the "not supported yet" notes on Draft, League, Matchup, Trade and Rankings in PR 1; projection error combined with the measured stat correlations) and tell the user plainly in the PR text; (4) ship without the Win M calibration; (5) do not hide Rankings Basis "Mix" (the plan hides it: handle Mix in points mode instead, e.g. as the engine's mix of games); (6) PR 2 waits until `team-core` (#131) has merged. **First step: build PR 1 (plan Tasks 1-4) test first.** Yahoo link (#137 part 2) waits for Yahoo to approve an API app (the user hasn't applied yet).
+
 **Merged to main (PR #24, 2026-10-21; Cloudflare deploys it):** ideas 122-129 (Waiver adds panel, Team schedule, keep list,
 Hashtag refresh, 68 Hashtag-only players, box-score scoring of adds, Fantrax period dates, review fixes: saved extras carry
 `base`, a save without one counts as 234 players). 192 unit tests pass. Board artifact republished (v166). First step:
