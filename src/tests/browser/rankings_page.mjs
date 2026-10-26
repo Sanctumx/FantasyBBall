@@ -160,5 +160,30 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(3)', t => t.map(e => e.t
   ok(await p.$eval('.scroll', e => e.scrollWidth > e.clientWidth), 'phone: table scrolls inside its panel');
   await ctx.close(); }
 
+// 5. points league (#137): Points column in place of Zscore, no Win C, Win M and Edge present, follows a change made in another tab
+{ const YAHOO = { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 };
+  const seed = vals => ({ 'courtside-settings-v1': JSON.stringify({ v: 1, settings: { teams: 14, roster: 12, scoring: 'points', cats: 9, ilSpots: 3, pointVals: vals }, league: null, note: '' }), 'courtside-rankings-v1': JSON.stringify({ src: 'avg', basis: 'pergame' }) });
+  const { p, errs, ctx } = await open(seed(YAHOO));
+  await p.waitForTimeout(3000);
+  const heads = await p.$$eval('#tbl thead th', t => t.map(e => e.textContent));
+  ok(heads.includes('Pts/g') && !heads.includes('Zscore') && !heads.includes('Win C') && heads.includes('Win M') && heads.includes('Edge'), 'points: Pts/g, Win M and Edge headers, no Zscore or Win C: ' + heads.join('|'));
+  ok(!(await p.$$eval('#orderby option', o => o.some(e => e.textContent === 'Win C' && !e.hidden))), 'points: Order by has no Win C');
+  const col = heads.indexOf('Pts/g') + 1, vals = await p.$$eval('#tbl tbody tr td:nth-child(' + col + ')', t => t.map(e => parseFloat(e.textContent)).filter(v => !isNaN(v)));
+  ok(vals.length > 100 && vals.every((v, i) => i === 0 || vals[i - 1] >= v), 'points: Pts/g in descending order');
+  const wm = await p.$$eval('#tbl tbody tr td:nth-child(' + (heads.indexOf('Win M') + 1) + ')', t => t.slice(0, 30).map(e => e.textContent));
+  ok(wm.filter(x => /\d/.test(x)).length > 20, 'points: Win M values appear');
+  const first = vals[0], w = await ctx.newPage(); await w.goto('http://localhost:8765/robots.txt');
+  await w.evaluate(() => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.pointVals.pts = 2; localStorage.setItem(k, JSON.stringify(o)); }); await p.waitForTimeout(2500);
+  const after = await p.$eval('#tbl tbody tr td:nth-child(' + col + ')', e => parseFloat(e.textContent));
+  ok(after > first, 'points: a point value changed in another tab changes the top value: ' + first + ' -> ' + after);
+  ok(errs.length === 0, 'points: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+{ const { p, errs, ctx } = await open({ 'courtside-settings-v1': JSON.stringify({ v: 1, settings: { teams: 14, roster: 12, scoring: 'points', cats: 9, ilSpots: 3, pointVals: {} }, league: null, note: '' }), 'courtside-rankings-v1': JSON.stringify({ src: 'avg' }) });
+  await p.waitForTimeout(2500);
+  ok((await p.$eval('#note', e => e.textContent)).includes('All point values are 0'), 'points: all zeros shows the hint');
+  ok(!(await p.evaluate(() => document.getElementById('tbl').innerText)).includes('NaN'), 'points: all zeros shows no NaN');
+  ok(errs.length === 0, 'points zeros: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+
 await b.close();
 console.log(fails.length ? fails.length + ' FAILED' : 'all passed'); process.exit(fails.length ? 1 : 0);
