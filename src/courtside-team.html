@@ -2715,6 +2715,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { recv, gone };
   }
   const received = (ctx, state) => trade(ctx, state).recv;
+  const goneKeys = (ctx, state) => [...trade(ctx, state).gone].sort();
 
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
   function side(ctx, state, W) {
@@ -2740,8 +2741,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function matrix(ctx, state, opts) {
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
-    const recv = received(ctx, state), keys = [].concat(...Object.values(recv)).map(r => r.key);
-    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat(keys)), W, Object.assign({}, opts, { recv }));
+    const t = trade(ctx, state);
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat([...t.gone])), W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
@@ -2918,7 +2919,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -3033,7 +3034,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // ctx given: the players the opponents received count too (the same roster reached by different trades scores differently)
-  const signature = (state, ctx) => state.order.map(k => k + ':' + state.slots[k]).join('|') + (ctx ? '>' + Object.entries(TeamWin.received(ctx, state)).map(([t, r]) => t + ':' + r.map(x => x.key + x.slot).join(',')).sort().join(';') : '');
+  const signature = (state, ctx) => state.order.map(k => k + ':' + state.slots[k]).join('|') + (ctx ? '>' + Object.entries(TeamWin.received(ctx, state)).map(([t, r]) => t + ':' + r.map(x => x.key + x.slot).join(',')).sort().join(';') + '~' + TeamWin.goneKeys(ctx, state).join(',') : '');
 
   // finished and half-finished jobs by ctx object, roster and win options (cats); the weights are not an input, so moving a slider never rescores
   function createScorer() {
@@ -3204,14 +3205,23 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // sources (2026-10-26): the monthly box-score files load only when a box-score source is picked; rows and Zscore tables are kept per source
   let box = null, boxP = null;
   const needBox = () => R.WINDAYS[ui.src] ? (boxP = boxP || R.loadBox(fetch).then(b => (box = b))) : Promise.resolve();
-  const srcCache = new Map(), srcWin = src => { const k = 'win:' + src; if (!srcCache.has(k)) srcCache.set(k, R.windowSource(box || [], R.WINDAYS[src], PLAYERS)); return srcCache.get(k); };
-  const srcRows = src => { const k = 'rows:' + src; if (!srcCache.has(k)) srcCache.set(k, R.WINDAYS[src] ? srcWin(src).rows : R.projSource(PLAYERS, src)); return srcCache.get(k); };
+  // a window built before the box files arrive (box === null) is empty: use it, but never keep it
+  const srcCache = new Map(), srcWin = src => { const k = 'win:' + src; if (srcCache.has(k)) return srcCache.get(k); const w = R.windowSource(box || [], R.WINDAYS[src], PLAYERS); if (box) srcCache.set(k, w); return w; };
+  const srcRows = src => { const k = 'rows:' + src; if (srcCache.has(k)) return srcCache.get(k); const r = R.WINDAYS[src] ? srcWin(src).rows : R.projSource(PLAYERS, src); if (!R.WINDAYS[src] || box) srcCache.set(k, r); return r; };
   const SRC_NAME = { season: 'Season to date', w7: 'Last week', w14: 'Last 2 weeks', w30: 'Last month', avg: 'BBM + Hashtag average', bbm: 'BBM', hs: 'Hashtag' };
   // the category Zscores of the roster table: the source's own table; a player with no game in it keeps his projection Zscore
+  const zCache = new WeakMap();
   function mkZ() {
     zmap = new Map(); if (pw()) return;
     const s = SS.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: 'pergame' };
-    const add = (src, over) => { const rows = srcRows(src), byPid = R.matchRows(src, rows, pool, fxPlayers).byPid; R.table(rows, opt).forEach(x => { if (!x.cats) return; const k = byPid.get(x.pid); if (k && (over || !zmap.has(k))) zmap.set(k, x.cats); }); };
+    // one table per source rows and settings (R.table + matchRows cost about 90 ms): kept until the rows, pool or Fantrax players change
+    const ck = [s.teams, s.roster, s.cats].join('|');
+    const tableOf = (src, rows) => {
+      let c = zCache.get(rows); if (!c || c.pool !== pool || c.fx !== fxPlayers) zCache.set(rows, c = { pool, fx: fxPlayers, by: new Map() });
+      if (!c.by.has(ck)) { const byPid = R.matchRows(src, rows, pool, fxPlayers).byPid; c.by.set(ck, R.table(rows, opt).map(x => x.cats && byPid.get(x.pid) ? [byPid.get(x.pid), x.cats] : null).filter(Boolean)); }
+      return c.by.get(ck);
+    };
+    const add = (src, over) => tableOf(src, srcRows(src)).forEach(([k, cats]) => { if (over || !zmap.has(k)) zmap.set(k, cats); });
     add(ui.src, true); if (ui.src !== 'avg') add('avg', false);
   }
 
@@ -3282,7 +3292,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       body.push('<tr class="grp" data-slot="' + g.slot + '"><td colspan="' + cols + '"' + (c.over ? ' class="over" title="More Active players than the roster allows"' : ' title="Drop a player here to move him to ' + SLOT_NAME[g.slot] + '"') + '>' + SLOT_NAME[g.slot] + ' (' + g.rows.length + lim + ')' + (c.over ? ' · over the limit' : '') + '</td></tr>');
       sortedRows(g.rows, job, zv, parts).forEach(x => {
         const w = job.players[x.key], dim = x.hypo ? ' class="hy"' : '';
-        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + (fb(x.key) ? ' <b title="No game in this source; his projection line is used">proj</b>' : '') + '</small>' +
+        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + (fb(x.key) ? ' <b title="Not in this source; his projection line is used">proj</b>' : '') + '</small>' +
           '<select class="slot" data-key="' + esc(x.key) + '" aria-label="Slot for ' + esc(x.n) + '" title="Move ' + esc(x.n) + ' to another slot (or drag the row onto a group header)">' + Object.keys(SLOT_NAME).map(sl => '<option value="' + sl + '"' + (sl === x.slot ? ' selected' : '') + '>' + SLOT_NAME[sl] + '</option>').join('') + '</select></td><td>' + x.gl.toFixed(0) + '</td>' +
           '<td' + (x.hypo ? ' class="dim" title="What he would get as one more reserve player"' : '') + '>' + pctTxt(x.pct) + '</td><td>' + (x.mpg == null ? '–' : x.mpg.toFixed(1)) + '</td>' +
           RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo || (zv && wts[c] === 0) ? ' class="dim"' : '') + '>' + (zv ? (x.cats ? signed(parts(x)[c], 2) : '–') : fmtStat(x.stat[k], c)) + '</td>').join('') +

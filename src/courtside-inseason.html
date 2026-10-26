@@ -231,7 +231,7 @@ tr.click{cursor:pointer}
       <h4>Trade Analyzer</h4>
       <p>Trade Win M is your average chance against every other team over the rest of the regular season (the Team tab's forecast, opponents weighted equally), with both rosters changed; an IL player counts as healthy, with the games his projection leaves him (it already includes the time he is expected to miss) and the reserve refilling the rest; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
       <h4>Rankings</h4>
-      <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, pulled toward 50% by the same factors as the Team tab in category leagues (0.75 for Win C, 0.6 for Win M; the order and Edge do not change), as the gain over a replacement-level player (Win vs: Average player gives the Team tab's Vs average for the team picked in My team, scored in the background and already shrunk, so the two tabs agree for the same Source; with no team it subtracts an average pool player). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
+      <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, pulled toward 50% by the same factors as the Team tab in category leagues (0.75 for Win C, 0.6 for Win M; the order and Edge do not change), as the gain over a replacement-level player (Win vs: Average player gives the Team tab's Vs average for the team picked in My team, scored in the background and shrunk the same way in category leagues (points leagues are not shrunk), so the two tabs agree for the same Source; with no team it subtracts an average pool player). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
       <h4>Points leagues</h4>
       <p>Settings can score a league in fantasy points (a value per stat). Draft, League, Matchup, Trade and Rankings don't value points leagues yet and say so; nothing is calculated from the category model for a points league.</p>
       <h4>Shrinkage and missing projections</h4>
@@ -2574,6 +2574,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { recv, gone };
   }
   const received = (ctx, state) => trade(ctx, state).recv;
+  const goneKeys = (ctx, state) => [...trade(ctx, state).gone].sort();
 
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
   function side(ctx, state, W) {
@@ -2599,8 +2600,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function matrix(ctx, state, opts) {
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
-    const recv = received(ctx, state), keys = [].concat(...Object.values(recv)).map(r => r.key);
-    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat(keys)), W, Object.assign({}, opts, { recv }));
+    const t = trade(ctx, state);
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat([...t.gone])), W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
@@ -2777,7 +2778,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 

@@ -88,6 +88,7 @@
     return { recv, gone };
   }
   const received = (ctx, state) => trade(ctx, state).recv;
+  const goneKeys = (ctx, state) => [...trade(ctx, state).gone].sort();
 
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
   function side(ctx, state, W) {
@@ -113,8 +114,8 @@
   function matrix(ctx, state, opts) {
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
-    const recv = received(ctx, state), keys = [].concat(...Object.values(recv)).map(r => r.key);
-    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat(keys)), W, Object.assign({}, opts, { recv }));
+    const t = trade(ctx, state);
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat([...t.gone])), W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
@@ -291,6 +292,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -260,7 +260,7 @@ tr.lrow{cursor:pointer}
 <script src="assets/shared.9f9a6a1b.js"></script>
 <script src="assets/store.22818a7e.js"></script>
 <script src="assets/fxcache.3a003ffb.js"></script>
-<script src="assets/team_mods.1358c227.js"></script>
+<script src="assets/team_mods.5490d5f2.js"></script>
 <script>
 (function () {
   'use strict';
@@ -356,14 +356,23 @@ tr.lrow{cursor:pointer}
   // sources (2026-10-26): the monthly box-score files load only when a box-score source is picked; rows and Zscore tables are kept per source
   let box = null, boxP = null;
   const needBox = () => R.WINDAYS[ui.src] ? (boxP = boxP || R.loadBox(fetch).then(b => (box = b))) : Promise.resolve();
-  const srcCache = new Map(), srcWin = src => { const k = 'win:' + src; if (!srcCache.has(k)) srcCache.set(k, R.windowSource(box || [], R.WINDAYS[src], PLAYERS)); return srcCache.get(k); };
-  const srcRows = src => { const k = 'rows:' + src; if (!srcCache.has(k)) srcCache.set(k, R.WINDAYS[src] ? srcWin(src).rows : R.projSource(PLAYERS, src)); return srcCache.get(k); };
+  // a window built before the box files arrive (box === null) is empty: use it, but never keep it
+  const srcCache = new Map(), srcWin = src => { const k = 'win:' + src; if (srcCache.has(k)) return srcCache.get(k); const w = R.windowSource(box || [], R.WINDAYS[src], PLAYERS); if (box) srcCache.set(k, w); return w; };
+  const srcRows = src => { const k = 'rows:' + src; if (srcCache.has(k)) return srcCache.get(k); const r = R.WINDAYS[src] ? srcWin(src).rows : R.projSource(PLAYERS, src); if (!R.WINDAYS[src] || box) srcCache.set(k, r); return r; };
   const SRC_NAME = { season: 'Season to date', w7: 'Last week', w14: 'Last 2 weeks', w30: 'Last month', avg: 'BBM + Hashtag average', bbm: 'BBM', hs: 'Hashtag' };
   // the category Zscores of the roster table: the source's own table; a player with no game in it keeps his projection Zscore
+  const zCache = new WeakMap();
   function mkZ() {
     zmap = new Map(); if (pw()) return;
     const s = SS.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: 'pergame' };
-    const add = (src, over) => { const rows = srcRows(src), byPid = R.matchRows(src, rows, pool, fxPlayers).byPid; R.table(rows, opt).forEach(x => { if (!x.cats) return; const k = byPid.get(x.pid); if (k && (over || !zmap.has(k))) zmap.set(k, x.cats); }); };
+    // one table per source rows and settings (R.table + matchRows cost about 90 ms): kept until the rows, pool or Fantrax players change
+    const ck = [s.teams, s.roster, s.cats].join('|');
+    const tableOf = (src, rows) => {
+      let c = zCache.get(rows); if (!c || c.pool !== pool || c.fx !== fxPlayers) zCache.set(rows, c = { pool, fx: fxPlayers, by: new Map() });
+      if (!c.by.has(ck)) { const byPid = R.matchRows(src, rows, pool, fxPlayers).byPid; c.by.set(ck, R.table(rows, opt).map(x => x.cats && byPid.get(x.pid) ? [byPid.get(x.pid), x.cats] : null).filter(Boolean)); }
+      return c.by.get(ck);
+    };
+    const add = (src, over) => tableOf(src, srcRows(src)).forEach(([k, cats]) => { if (over || !zmap.has(k)) zmap.set(k, cats); });
     add(ui.src, true); if (ui.src !== 'avg') add('avg', false);
   }
 
@@ -434,7 +443,7 @@ tr.lrow{cursor:pointer}
       body.push('<tr class="grp" data-slot="' + g.slot + '"><td colspan="' + cols + '"' + (c.over ? ' class="over" title="More Active players than the roster allows"' : ' title="Drop a player here to move him to ' + SLOT_NAME[g.slot] + '"') + '>' + SLOT_NAME[g.slot] + ' (' + g.rows.length + lim + ')' + (c.over ? ' · over the limit' : '') + '</td></tr>');
       sortedRows(g.rows, job, zv, parts).forEach(x => {
         const w = job.players[x.key], dim = x.hypo ? ' class="hy"' : '';
-        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + (fb(x.key) ? ' <b title="No game in this source; his projection line is used">proj</b>' : '') + '</small>' +
+        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + (fb(x.key) ? ' <b title="Not in this source; his projection line is used">proj</b>' : '') + '</small>' +
           '<select class="slot" data-key="' + esc(x.key) + '" aria-label="Slot for ' + esc(x.n) + '" title="Move ' + esc(x.n) + ' to another slot (or drag the row onto a group header)">' + Object.keys(SLOT_NAME).map(sl => '<option value="' + sl + '"' + (sl === x.slot ? ' selected' : '') + '>' + SLOT_NAME[sl] + '</option>').join('') + '</select></td><td>' + x.gl.toFixed(0) + '</td>' +
           '<td' + (x.hypo ? ' class="dim" title="What he would get as one more reserve player"' : '') + '>' + pctTxt(x.pct) + '</td><td>' + (x.mpg == null ? '–' : x.mpg.toFixed(1)) + '</td>' +
           RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo || (zv && wts[c] === 0) ? ' class="dim"' : '') + '>' + (zv ? (x.cats ? signed(parts(x)[c], 2) : '–') : fmtStat(x.stat[k], c)) + '</td>').join('') +

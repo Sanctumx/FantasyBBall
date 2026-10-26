@@ -109,7 +109,7 @@
   }
 
   // ctx given: the players the opponents received count too (the same roster reached by different trades scores differently)
-  const signature = (state, ctx) => state.order.map(k => k + ':' + state.slots[k]).join('|') + (ctx ? '>' + Object.entries(TeamWin.received(ctx, state)).map(([t, r]) => t + ':' + r.map(x => x.key + x.slot).join(',')).sort().join(';') : '');
+  const signature = (state, ctx) => state.order.map(k => k + ':' + state.slots[k]).join('|') + (ctx ? '>' + Object.entries(TeamWin.received(ctx, state)).map(([t, r]) => t + ':' + r.map(x => x.key + x.slot).join(',')).sort().join(';') + '~' + TeamWin.goneKeys(ctx, state).join(',') : '');
 
   // finished and half-finished jobs by ctx object, roster and win options (cats); the weights are not an input, so moving a slider never rescores
   function createScorer() {

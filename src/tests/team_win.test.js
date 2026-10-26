@@ -324,6 +324,14 @@ test('avg: after a trade the Vs average rows use the same opponents as the matri
   assert.ok(near(rc.dM, 100 * (handC.mean.match - su.base.mean.match), 1e-9));
 });
 
+test('matrix: an opponent player brought in and then swapped out for a free agent stays off his old team, like the Vs average rows', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), a = oppActive(other), fa = pool.players.find(p => !p.owner && p.g > 0).key;
+  const s1 = T.applySwap(st, [], [a]), s2 = T.applySwap(s1, [a], [fa]), W0 = W.weeksLeft(ctx);
+  const hand = W.matrixOf(ctx, W.side(ctx, s2, W0), new Set(s2.order.concat([a])), W0, { recv: {} });
+  assert.deepStrictEqual(W.matrix(ctx, s2), hand);
+  assert.notStrictEqual(require('../team_view.js').signature(s2, ctx), require('../team_view.js').signature(T.applySwap(st, [], [fa]), ctx));
+});
+
 test('engCtxFrom / evalVecs: the pieces calib_ros.js reuses give the matrix numbers', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), Wk = W.weeksLeft(ctx);
   assert.strictEqual(typeof W.engCtxFrom, 'function'); assert.strictEqual(typeof W.evalVecs, 'function'); assert.strictEqual(typeof W.teamVec, 'function');

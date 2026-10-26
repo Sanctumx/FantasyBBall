@@ -10,7 +10,9 @@ Branch `team-d3-swap`, worktree `C:/Users/Fefe/Documents/FantasyBBall-d3`. Pushe
 - **Team tab Source switch** (e1bc49e): `#src` after Your team, `ui.src` in `courtside-team-v1` (default `avg`), box files load only when a box-score source is picked, one ctx per source (`ctxs`, dropped on team / points / Fantrax change; the scorer is keyed by ctx so switching back reuses jobs), `zmap` keyed by pool key from the source's own table with the projection Zscore for players with no game (`lineFb`), "proj" marker in the roster table, freshness names the source and window dates plus an "uncalibrated" warning, How it works "Source" paragraph. Swaps, chips and the Changes log stay. Browser check in `team_page.mjs`.
 - **Rankings D2** (5423ba5, 12919a4): the page uses the TEAM bundle and `SCHED_DAYS`, loads `stats/espn.json`; with Win vs Average player, a league and a team picked, `d2For` builds the pool (`InP.buildPool`), `TV.sourceCtx` and a `TV.moduleJob` (baseline avg) over `matchRows(...).byKey`, steps 30 ms at a time and redraws about every 250 ms; the maps replace winStart's `avg` (no `shrink` passed: TeamWin already shrinks, so no double shrink). Players with no Fantrax match show "—"; a job with no rows (no games left) falls back to winStart's average. Cache key: `dataVer`, source, team, point values, cats. Browser check `rankings_team_parity.mjs` (same source + team -> same Win M on both tabs, sources avg and w7). Help text in `rankings.html` and `app.html` updated.
 
-## Review (done 2026-10-26, effort high; nothing fixed yet; 416 unit tests pass, browser checks not run by the reviewer)
+## Review fixes (2026-10-26): all applied, 417 unit tests pass; browser checks team_page, inseason_page, rankings_team_parity pass, rankings_page only the known 302 vs 303
+
+Fixed: MUST (box-score window not cached while `box` is null, `srcWin`/`srcRows`; no browser test for the race, checked by reading), `matrix()` now excludes `trade().gone` and `TeamView.signature` carries `goneKeys` (test added), `d2For` setup and tick wrapped in try/catch (`d2.failed`), d2note wording (no season-long text while D2 is active, trailing space), app.html help text, proj tooltip, `mkZ` caches the source table (`zCache`). Not yet done: unit-level test for the d2For failure path (browser only). The text below is the review as written.
 
 - **MUST** `team.html` `srcWin` / `srcRows` (~346): an empty box-score window is cached for good when `box` is still null (changing Your team, a storage event with new point values, or an unchanged Fantrax answer while the box files load). Scenario: pick Last week, change Your team before the box files finish: every player shows proj and "No games in the box-score files yet" until reload. Fix: don't cache window rows while `box === null`, or have `srcCtx` wait on `needBox()`. Test first.
 - **SHOULD** `team_win.js` `matrix()` (~113) leaves out `trade().gone` but `avgCandidate` / `avgOwn` use it, and `TeamView.signature(state, ctx)` keys only on `received`. Scenario: bring in opponent X's player A with nothing out, then swap A out for a free agent: matrix puts A back on X, the avg rows keep him off; the signature equals "just the free agent in", so the scorer can serve the wrong job (avg dM -5.118 vs -5.138). Fix: exclude `gone` in `matrix()` and put `gone` into `signature`.
@@ -20,8 +22,7 @@ Branch `team-d3-swap`, worktree `C:/Users/Fefe/Documents/FantasyBBall-d3`. Pushe
 
 ## Next
 
-1. Fix the review findings above test-first (MUST first), rebuild with `node .claude/scripts/build.mjs`.
-2. Rebuild, run unit + browser (`team_page`, `inseason_page`, `rankings_page` [known: 302 vs 303], `rankings_team_parity`), push and open the PR only on the user's word.
+1. Rebase onto origin/main (behind: manual-league, handoff-paste-message merged), rebuild, rerun tests; push and open the PR only on the user's word.
 3. Then team-tab-next step 3: per-game / season toggle and auto-fill the top 12.
 
 ## Hazards / housekeeping

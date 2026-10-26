@@ -2588,6 +2588,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { recv, gone };
   }
   const received = (ctx, state) => trade(ctx, state).recv;
+  const goneKeys = (ctx, state) => [...trade(ctx, state).gone].sort();
 
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
   function side(ctx, state, W) {
@@ -2613,8 +2614,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function matrix(ctx, state, opts) {
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
-    const recv = received(ctx, state), keys = [].concat(...Object.values(recv)).map(r => r.key);
-    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat(keys)), W, Object.assign({}, opts, { recv }));
+    const t = trade(ctx, state);
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat([...t.gone])), W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
@@ -2791,7 +2792,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2906,7 +2907,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // ctx given: the players the opponents received count too (the same roster reached by different trades scores differently)
-  const signature = (state, ctx) => state.order.map(k => k + ':' + state.slots[k]).join('|') + (ctx ? '>' + Object.entries(TeamWin.received(ctx, state)).map(([t, r]) => t + ':' + r.map(x => x.key + x.slot).join(',')).sort().join(';') : '');
+  const signature = (state, ctx) => state.order.map(k => k + ':' + state.slots[k]).join('|') + (ctx ? '>' + Object.entries(TeamWin.received(ctx, state)).map(([t, r]) => t + ':' + r.map(x => x.key + x.slot).join(',')).sort().join(';') + '~' + TeamWin.goneKeys(ctx, state).join(',') : '');
 
   // finished and half-finished jobs by ctx object, roster and win options (cats); the weights are not an input, so moving a slider never rescores
   function createScorer() {
@@ -3096,14 +3097,20 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const key = ['d2', dataVer, ui.src, me, ptKey(), s.cats].join('|');
     if (d2.key === key) return d2.failed ? null : d2;
     d2.key = key; d2.map = new Map(); d2.failed = false; d2.n = 0; const seq = ++d2.seq, w = pw();
-    const pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L: Lg, rosters }), m = R.matchRows(ui.src, rows, pool, fxPlayers);
-    const ctx = TV.sourceCtx({ L: Lg, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [], nightOf: w ? pp => Points.perGame(pp.line, w) : undefined }, ui.src, rows, fxPlayers);
-    d2.todo = new Set([...m.byKey.values()].map(r => r.pid));
-    d2.job = TV.moduleJob(ctx, Team.initState(rosters[me]), { baseline: 'avg', cats: s.cats === 8 ? 8 : 9, points: w }, [...m.byKey.keys()]);
+    let m;
+    try {
+      const pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L: Lg, rosters });
+      m = R.matchRows(ui.src, rows, pool, fxPlayers);
+      const ctx = TV.sourceCtx({ L: Lg, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [], nightOf: w ? pp => Points.perGame(pp.line, w) : undefined }, ui.src, rows, fxPlayers);
+      d2.todo = new Set([...m.byKey.values()].map(r => r.pid));
+      d2.job = TV.moduleJob(ctx, Team.initState(rosters[me]), { baseline: 'avg', cats: s.cats === 8 ? 8 : 9, points: w }, [...m.byKey.keys()]);
+    } catch (err) { console.error('Win vs Average player', err); d2.failed = true; d2.todo = new Set(); return null; }
     const tick = () => {
       if (seq !== d2.seq) return;
-      d2.job.step(30);
-      for (; d2.n < d2.job.rows.length; d2.n++) { const r = d2.job.rows[d2.n], pid = m.byKey.get(r.key).pid; d2.map.set(pid, { c: r.dC, m: r.dM }); d2.todo.delete(pid); }
+      try {
+        d2.job.step(30);
+        for (; d2.n < d2.job.rows.length; d2.n++) { const r = d2.job.rows[d2.n], pid = m.byKey.get(r.key).pid; d2.map.set(pid, { c: r.dC, m: r.dM }); d2.todo.delete(pid); }
+      } catch (err) { console.error('Win vs Average player', err); d2.failed = true; draw(); return; }
       if (d2.job.done) { if (!d2.job.rows.length) d2.failed = true; draw(); return; }
       if (Date.now() - d2.last > 250) { d2.last = Date.now(); draw(); }
       setTimeout(tick, 0);
@@ -3185,8 +3192,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
     const zeroPts = P_ && Object.values(P_).every(v => !v);
-    const d2note = dd ? ' Win vs Average player is the Team tab\'s number for your team (your team minus an average player plus him; ' + (dd.todo.size ? dd.todo.size + ' players still scoring' : 'all scored') + '); players with no Fantrax match show —.' + (WINDAYS[ui.src] ? ' From recent games it is uncalibrated.' : '') : '';
-    n.textContent = d2note + (zeroPts ? 'All point values are 0: enter your league\'s values in Settings. ' : '') + (matched < tab.length ? matched + ' players match. ' : '') + (P_ ? 'Win M is season-long, as on the Draft tab, against' : 'Win C / Win M are season-long, as on the Draft tab, against') + ' simulated league teams' + (P_ ? '' : ', pulled toward 50% as on the Team tab (Win M by 0.6, Win C by 0.75)') + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. ' + (P_ ? 'Points are your Settings point values times each stat; Season multiplies by games played, Mix by the midpoint of his games and the top ' + K + ' players\' average (scaled to games played). Win M treats each team\'s week as one points total, with the engine\'s own stat noise plus measured correlations between stats (a high-scoring night is usually also a high-FG night).' : 'Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).') + (ui.poboost !== 'off' ? (P_ ? ' Playoff boost scales the Points value by 1 + strength' : ' Playoff boost scales Zscore and each category by 1 + strength') + ' × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    const d2note = dd ? ' Win vs Average player is the Team tab\'s number for your team (your team minus an average player plus him; ' + (dd.todo.size ? dd.todo.size + ' players still scoring' : 'all scored') + '); players with no Fantrax match show —.' + (WINDAYS[ui.src] ? ' From recent games it is uncalibrated.' : '') + ' ' : '';
+    const winTxt = dd ? '' : (P_ ? 'Win M is season-long, as on the Draft tab, against' : 'Win C / Win M are season-long, as on the Draft tab, against') + ' simulated league teams' + (P_ ? '' : ', pulled toward 50% as on the Team tab (Win M by 0.6, Win C by 0.75)') + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ';
+    n.textContent = d2note + (zeroPts ? 'All point values are 0: enter your league\'s values in Settings. ' : '') + (matched < tab.length ? matched + ' players match. ' : '') + winTxt + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. ' + (P_ ? 'Points are your Settings point values times each stat; Season multiplies by games played, Mix by the midpoint of his games and the top ' + K + ' players\' average (scaled to games played). Win M treats each team\'s week as one points total, with the engine\'s own stat noise plus measured correlations between stats (a high-scoring night is usually also a high-FG night).' : 'Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).') + (ui.poboost !== 'off' ? (P_ ? ' Playoff boost scales the Points value by 1 + strength' : ' Playoff boost scales Zscore and each category by 1 + strength') + ' × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
     prewarm();
   }
 
