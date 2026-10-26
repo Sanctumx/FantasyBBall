@@ -118,7 +118,7 @@ test('scorer: the same ctx and roster reuse the finished job; a swap scores agai
   assert.ok(!b.done);
 });
 
-test('scorer: the win options (cats, mode) are part of the cache key', () => {
+test('scorer: the win options (cats) are part of the cache key', () => {
   const ctx = mk(), st = stateOf(), sc = V.createScorer();
   assert.notStrictEqual(sc.get(ctx, st, { cats: 9 }), sc.get(ctx, st, { cats: 8 }));
   assert.strictEqual(sc.get(ctx, st, { cats: 9 }), sc.get(ctx, st, { cats: 9 }));
@@ -142,7 +142,7 @@ test('moduleJob: steps of a time budget, rows equal moduleScores, finished jobs 
   while (over.step(12)); assert.ok(over.done); assert.deepStrictEqual(over.rows, []);
 });
 
-test('scorer.getModule: cached by roster, cats, mode and baseline, never the weights; nextJob picks the first unfinished', () => {
+test('scorer.getModule: cached by roster, cats and baseline, never the weights; nextJob picks the first unfinished', () => {
   const ctx = mk(), st = stateOf(), sc = V.createScorer(), a = sc.getModule(ctx, st, { baseline: 'rep' });
   assert.strictEqual(sc.getModule(ctx, T.initState(ROS[me]), { baseline: 'rep', weights: [0, 1, 1, 1, 1, 1, 1, 1, 1] }), a);
   assert.notStrictEqual(sc.getModule(ctx, st, { baseline: 'avg' }), a);

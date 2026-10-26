@@ -160,7 +160,7 @@ const before = {};
   // How it works is this tab's own
   await p.click('#how-open'); await p.waitForTimeout(100);
   const how = await p.textContent('#how');
-  ok(/Plays %/.test(how) && /average week|An average week/.test(how) && !/Model pick/.test(how), 'How it works text is specific to the Team tab');
+  ok(/Plays %/.test(how) && /How the chances are computed/.test(how) && !/Model pick/.test(how), 'How it works text is specific to the Team tab');
   await ctx.close(); }
 
 // the player list (#131 PR 4b): scoring, filters, click to add, drag to swap, weights re-sort, layout

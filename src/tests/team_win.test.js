@@ -1,6 +1,6 @@
 // Team tab win numbers: matrix, player Win, module scores (#131 PR 2, 2026-10-25)
 const test = require('node:test'), assert = require('node:assert');
-const I = require('../inseason_league.js'), T = require('../team_core.js'), W = require('../team_win.js'), M = require('../matchup_core.js'), Pl = require('../inseason_players.js');
+const I = require('../inseason_league.js'), T = require('../team_core.js'), W = require('../team_win.js'), M = require('../matchup_core.js'), Pl = require('../inseason_players.js'), Eng = require('../engine.js');
 const fx = n => require('./fixtures/' + n), PLAYERS = require('../players.json');
 const L = I.parseLeague(fx('fx_league.json')), ROS = I.parseRosters(fx('fx_rosters.json'));
 const me = L.teams[0].id, ids = L.teams.map(t => t.id), other = ids[1];
@@ -38,28 +38,24 @@ test('side: only active and reserve players become entries', () => {
   assert.strictEqual(W.side(ctx, moved, 1).length, n - (['active', 'reserve'].includes(st.slots[st.order[0]]) ? 1 : 0));
 });
 
-// with no crowded nights, one whole period left equals the calibrated whole-games path (Matchup.scoreSegments)
-test('matrix: one whole period left reproduces Matchup.scoreSegments for every opponent', () => {
-  const L2 = Object.assign({}, L, { maxActive: 100 }), ctx = mk(last.start, games(last.start, last.end), L2), st = stateOf();
-  const m = W.matrix(ctx, st, { k: { match: M.KW_MATCH, cat: M.KW_CAT } });
-  assert.ok(near(m.weeks, 1));
-  const segs = (keys) => keys.map(key => ({ key, from: last.start, to: last.end }));
-  const mine = segs(st.order.filter(k => ['active', 'reserve'].includes(st.slots[k])));
-  m.teams.forEach(cell => {
-    const os = W.oppState(ctx, cell.id, new Set(st.order)), r = M.scoreSegments(ctx, mine, segs(os.order), true);
-    assert.ok(near(cell.match, r.match, 1e-12), cell.id);
-    r.cat.forEach((p, c) => assert.ok(near(cell.cat[c], p, 1e-12), cell.id + ' cat ' + c));
+// every team's forecast = the sum of its players' Engine.entryVec at (Plays % games per average week x WEEKS), then one Engine.evaluate run
+test('matrix: every cell equals a hand-built Engine.evaluate run over the same entries (no shrink)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), m = W.matrix(ctx, st), Wk = W.weeksLeft(ctx);
+  const adp = p => p.adp == null ? 1e9 : p.adp, list = ctx.pool.players.filter(p => p.g > 0).sort((a, b) => (a.owner ? 0 : 1) - (b.owner ? 0 : 1) || adp(a) - adp(b));
+  const cfg = { teams: ids.length, roster: ctx.L.maxActive, slot: 1, order: '3rr', scoring: 'h2h', cats: 9, ilSpots: 0, field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '',
+    catW: Pl.WEIGHTS.slice(), adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0, basis: 'total' };
+  const ec = Eng.buildContext(Eng.prepPlayers(list.map((p, i) => Object.assign({}, p.line, { g: p.g, ftx: i + 1 }))), cfg);
+  const vecOf = entries => { const mu = new Float64Array(Eng.NC), v = new Float64Array(Eng.NC); entries.forEach(e => { const q = Eng.entryVec(e.p, ec, e.games * Eng.WEEKS); for (let c = 0; c < Eng.NC; c++) { mu[c] += q.x[c]; v[c] += q.pv[c]; } }); return { mu, v }; };
+  const tv = [vecOf(W.side(ctx, st, Wk))].concat(m.teams.map(t => vecOf(W.side(ctx, W.oppState(ctx, t.id, new Set(st.order)), Wk))));
+  const pl = tv.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
+  const out = Eng.evaluate(pl, ec, Object.assign({}, cfg, { teams: pl.length, roster: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
+  m.teams.forEach((cell, i) => {
+    assert.ok(near(cell.match, out.pairProb(out.teams[0], out.teams[i + 1]), 1e-12), cell.id);
+    cell.cat.forEach((p, c) => assert.ok(near(p, out.catProb(out.teams[0], out.teams[i + 1], c), 1e-12), cell.id + ' cat ' + c));
   });
   assert.strictEqual(m.teams.length, ids.length - 1);
 });
 
-test('matrix: mode "avg" is the default, any other mode throws, and playerWin passes the mode on', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf();
-  assert.deepStrictEqual(W.matrix(ctx, st, { mode: 'avg' }), W.matrix(ctx, st));
-  assert.throws(() => W.matrix(ctx, st, { mode: 'actual' }), /mode/);
-  assert.throws(() => W.playerWin(ctx, st, { mode: 'actual' }), /mode/);
-  assert.throws(() => W.moduleScores(ctx, st, { mode: 'actual' }), /mode/);
-});
 
 test('playerGain one player at a time equals playerWin', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), base = W.matrix(ctx, st), all = W.playerWin(ctx, st);
@@ -163,10 +159,6 @@ test('moduleScores: my own rows carry per-category changes, so weighted sorts an
     assert.ok(near(r.dCat.reduce((a, v) => a + v, 0), r.dC, 1e-9), r.key);
   });
   assert.ok(W.moduleScores(ctx, st, {}).some(r => r.key === own[0]));   // default list includes my roster
-  // default shrink: the cell is the raw pairMatchup chance pulled toward 0.5 by K
-  const raw = W.matrix(ctx, st, { k: { match: 1, cat: 1 } }), def = W.matrix(ctx, st);
-  assert.ok(near(def.teams[0].match, 0.5 + M.K_MATCH * (raw.teams[0].match - 0.5), 1e-12));
-  assert.ok(near(def.teams[0].cat[0], 0.5 + M.K_CAT * (raw.teams[0].cat[0] - 0.5), 1e-12));
   // two previews on one ctx (cache warm) equal the same previews on fresh ctxs
   const sw = T.applySwap(st, [st.order[0]], [ROS[other][1].fid]), g = games(last.start, last.end);
   W.matrix(ctx, st);
@@ -174,19 +166,19 @@ test('moduleScores: my own rows carry per-category changes, so weighted sorts an
   assert.deepStrictEqual(a.teams.map(t => t.match), b.teams.map(t => t.match));
 });
 
-// ---- Vs average (user 2026-10-25): he replaces a fictional average player of my team; my games are scaled by (n-1)/n to take that player out ----
+// ---- Vs average (user 2026-10-26): current team - the average player + him; the average player = the games-weighted mean line with total games / Active spots ----
 const sideOf = (ctx, st) => W.side(ctx, st, W.weeksLeft(ctx));
 const sumG = es => es.reduce((a, e) => a + e.games, 0);
-const meanEntry = mine => ({ p: T.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), sumG(mine)), games: sumG(mine) / mine.length, gVar: M.GVAR });
+const meanEntry = (mine, ctx) => ({ p: T.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), sumG(mine)), games: sumG(mine) / ctx.L.maxActive });
 const allowedOf = (ctx, st) => T.counted(st).reduce((a, k) => a + T.windowGames(ctx, [k], null)[0], 0);   // each player's own team games, no nightly cap
 const candEntry = (ctx, st, mine, key) => {
   const w = W.weeksLeft(ctx), share = sumG(mine) * w / allowedOf(ctx, st);
-  return { p: ctx.pool.byKey.get(key).line, games: T.windowGames(ctx, [key], null)[0] / w * share, gVar: M.GVAR };
+  return { p: ctx.pool.byKey.get(key).line, games: T.windowGames(ctx, [key], null)[0] / w * share };
 };
 
-test('avg: a candidate is my team scaled by (n-1)/n (games and games variance) plus him', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), n = mine.length, c = ROS[other].find(x => x.slot === 'ACTIVE').fid;
-  const base = W.matrix(ctx, st), entries = mine.map(e => ({ p: e.p, games: e.games * (n - 1) / n, gVar: e.gVar * (n - 1) / n })).concat(candEntry(ctx, st, mine, c));
+test('avg: a candidate is my team minus the average player plus him', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), c = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  const base = W.matrix(ctx, st), entries = mine.concat(Object.assign(meanEntry(mine, ctx), { sign: -1 }), candEntry(ctx, st, mine, c));
   const m = W.matrixOf(ctx, entries, new Set(st.order.concat(c)), w);
   const row = W.moduleScores(ctx, st, { baseline: 'avg', candidates: [c] })[0];
   assert.ok(near(row.dM, 100 * (m.mean.match - base.mean.match), 1e-9));
@@ -196,26 +188,23 @@ test('avg: a candidate is my team scaled by (n-1)/n (games and games variance) p
 
 test('avg: my own counted player replaces nobody; he is scored against an average-line entry with his own games', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), x = st.order.find(k => st.slots[k] === 'active');
-  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(Object.assign(meanEntry(mine), { games: mine.find(e => e.key === x).games })), new Set(st.order), w);
+  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(Object.assign(meanEntry(mine, ctx), { games: mine.find(e => e.key === x).games })), new Set(st.order), w);
   const row = W.moduleScores(ctx, st, { baseline: 'avg', candidates: [x] })[0];
   assert.ok(near(row.dM, 100 * (base.mean.match - m.mean.match), 1e-9));
   assert.ok(near(row.new, 100 * base.mean.match, 1e-9) && near(row.old, 100 * m.mean.match, 1e-9));
 });
 
-test('avg: an average player scores about 0 (the projection-variance bias stays under 0.1 points)', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), n = mine.length, base = W.matrix(ctx, st);
-  const avg = meanEntry(mine), entries = mine.map(e => ({ p: e.p, games: e.games * (n - 1) / n, gVar: e.gVar * (n - 1) / n })).concat(avg);
-  const m = W.matrixOf(ctx, entries, new Set(st.order), w);
-  assert.ok(Math.abs(100 * (m.mean.match - base.mean.match)) < 0.1, String(100 * (m.mean.match - base.mean.match)));
+test('avg: taking the average player out and putting him back leaves the team unchanged; the divisor is the Active spots', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), base = W.matrix(ctx, st), avg = meanEntry(mine, ctx);
+  const m = W.matrixOf(ctx, mine.concat(Object.assign({}, avg, { sign: -1 }), avg), new Set(st.order), w);
+  assert.ok(near(m.mean.match, base.mean.match, 1e-12) && near(m.mean.winC, base.mean.winC, 1e-12));
+  assert.ok(near(W.avgParts(ctx, st, w).mean.games, sumG(mine) / ctx.L.maxActive, 1e-12));
 });
 
-test('avg: a candidate with my average line and my average games scores about 0 (the lineup share is taken from the uncapped schedule)', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), mine = sideOf(ctx, st), t = teamsAll[0];
-  assert.ok(sumG(mine) * W.weeksLeft(ctx) < allowedOf(ctx, st) - 1e-9, 'a crowded schedule leaves share below 1');
-  const ent = { key: 'MEAN', t, owner: null, line: meanEntry(mine).p };
-  const byKey = new Map(ctx.pool.byKey).set('MEAN', ent), cx = Object.assign({}, ctx, { pool: Object.assign({}, ctx.pool, { byKey }) });
-  const row = W.moduleScores(cx, st, { baseline: 'avg', candidates: ['MEAN'] })[0];
-  assert.ok(Math.abs(row.dM) < 0.1, String(row.dM));
+test('avg: an average-line player with an average player\'s games scores the same as taking nobody out, minus the variance only', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), base = W.matrix(ctx, st);
+  const m = W.matrixOf(ctx, mine.concat(Object.assign({}, meanEntry(mine, ctx), { sign: -1 }), meanEntry(mine, ctx)), new Set(st.order), w);
+  assert.ok(Math.abs(100 * (m.mean.match - base.mean.match)) < 1e-9);
 });
 
 test('rep: when the worst player is in Reserve a candidate is scored as an Active player, not with the Reserve leftovers', () => {

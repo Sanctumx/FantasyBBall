@@ -145,10 +145,10 @@ tr.lrow{cursor:pointer}
     <section class="how-card">
       <h3>Win C, Win M and the matrix</h3>
       <p>The matrix is your previewed team against every other team in the league, one column each. A category cell is your chance to win that category, Win C is the expected number of categories won and Win M is the chance to win the match.</p>
-      <h4>An average week</h4>
-      <p>Each cell is one average remaining week: every player's games are his remaining Plays % games divided by the weeks left. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ. Chances use the Matchup Analyzer's games variance and are shrunk toward 50%.</p>
+      <h4>How the chances are computed</h4>
+      <p>The same engine as the Rankings and Draft tabs, with no shrink toward 50%. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ.</p>
       <h4>Win C and Win M per player</h4>
-      <p>What he adds to your Win C (hundredths) and Win M (points) over an average player: the change in your team if he took the place of a made-up average player of your team (the games-weighted mean of your Active and Reserve lines), with the rest of your team scaled down to make room for him. For a player already on your Active or Reserve it is what you lose if an average player stood in his place; for IL it is what he would add. Same as Vs average in the player list.</p>
+      <p>What he adds to your Win C (hundredths) and Win M (points) over an average player: your team minus a made-up average player plus him. The average player is the Plays %-weighted mean line of your Active and Reserve players with your team's total games divided by your Active spots, so he is one slot's worth of your team; the incoming player's games are his own remaining games times the share of schedulable games your lineup gets. For a player already on your Active or Reserve it is what you lose if an average-line player with his games stood in his place; for IL it is what he would add. Same as Vs average in the player list.</p>
      </section>
     <section class="how-card">
       <h3>Z and category weights</h3>
@@ -158,7 +158,7 @@ tr.lrow{cursor:pointer}
     </section>
     <section class="how-card">
       <h3>Player list</h3>
-      <p>Every player, sorted by what he does to your Win M. The Change column is the real change in your Win M (points). Vs replacement: he takes the place of your own worst Active or Reserve player (this is not the replacement level of the Rankings tab). Vs average: he takes the place of a made-up average player of your team, and your team's games are scaled down by one player's share to compensate (for your own players: an average player stands in his place). Win M is your chance after the change. All players are listed; use Show and Search to narrow it. The roster table above always uses Vs average.</p>
+      <p>Every player, sorted by what he does to your Win M. The Change column is the real change in your Win M (points). Vs replacement: he takes the place of your own worst Active or Reserve player (this is not the replacement level of the Rankings tab). Vs average: he takes the place of a made-up average player of your team, one Active slot's worth (for your own players: an average-line player with his games stands in his place). Win M is your chance after the change. All players are listed; use Show and Search to narrow it. The roster table above always uses Vs average.</p>
       <p>A player already on your roster shows his gain over your worst player (the worst shows 0); his Win M after is that gain on top of your current Win M, an approximation. Click a row to bring him in (your own players go to Send out), or drag him onto a roster row to swap him into that slot, or onto a group header to add him there with no one going out. Category weights only re-sort the list, by the weighted change in category chances; the numbers shown stay real.</p>
     </section>
    </div>
@@ -212,7 +212,7 @@ tr.lrow{cursor:pointer}
     </section>
 
     <section class="panel" aria-label="Matchup matrix">
-      <h2>Matchup matrix <span class="meta" id="mx-meta">Your chance against every other team, one average remaining week</span></h2>
+      <h2>Matchup matrix <span class="meta" id="mx-meta">Your chance against every other team, from the games left</span></h2>
       <div class="scroll"><table id="matrix"></table></div>
     </section>
 
@@ -242,7 +242,6 @@ tr.lrow{cursor:pointer}
   const $ = id => document.getElementById(id), LS = LeagueStore, InL = InLeague, InP = InPlayers, R = Rankings, TV = TeamView, TW = TeamWin, TC = Team;
   const CATN = ['FG%', 'FT%', '3PM', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TO'], RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
   const SLOT_NAME = { active: 'Active', reserve: 'Reserve', il: 'IL' };
-  const WIN = { mode: 'avg' };   // the one place the Win M basis is chosen ('avg' = an average remaining week); TeamWin.matrix takes it
   $('sitenav').outerHTML = Shared.TOOLBAR_HTML('team');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-team-v1';
@@ -304,7 +303,7 @@ tr.lrow{cursor:pointer}
   }
 
   const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
-  const winOpts = () => ({ mode: WIN.mode, cats: nCats(), baseline: 'avg' });
+  const winOpts = () => ({ cats: nCats(), baseline: 'avg' });
   const teamName = id => { const t = L.teams.find(q => q.id === id); return t ? t.name : id; };
   const zCats = pp => (pp.pid != null && zmap.has(pp.pid) ? zmap.get(pp.pid) : null);
 
@@ -421,12 +420,12 @@ tr.lrow{cursor:pointer}
     const z = v => v.toFixed(1), c = v => v.toFixed(1), m = v => Math.round(v * 100) + '%';
     const ok = bj.done && job.done && mean && bm;
     return card('Team Zscore', 'Weighted Z per lineup slot, with Plays %', r.avgZ, br.avgZ, r.avgZ - br.avgZ, z, 1) +
-      card('Win C (of ' + nCats() + ')', 'Expected categories won in an average remaining week', ok ? mean.winC : null, ok ? bm.winC : null, ok ? mean.winC - bm.winC : 0, c, 1) +
+      card('Win C (of ' + nCats() + ')', 'Expected categories won in a typical week, from the games left', ok ? mean.winC : null, ok ? bm.winC : null, ok ? mean.winC - bm.winC : 0, c, 1) +
       card('Win M (season)', 'Your average chance to win a match; change in points', ok ? mean.match : null, ok ? bm.match : null, ok ? 100 * (mean.match - bm.match) : 0, m, 1);
   }
 
   // ---- the player list ----
-  const listOpts = () => ({ mode: WIN.mode, cats: nCats(), baseline: ui.listVs });
+  const listOpts = () => ({ cats: nCats(), baseline: ui.listVs });
   function drawList() {
     if (!ctx) return;
     const job = scorer.getModule(ctx, state, listOpts());

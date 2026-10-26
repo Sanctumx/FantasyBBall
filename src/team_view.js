@@ -68,10 +68,10 @@
 
   // ---- player list scoring (the Team tab module), in pieces of about `budgetMs` so the page stays responsive ----
   // pieces: the matrix, one raw gain per counted player ('rep' only), the setup, then one candidate row each.
-  // opts: baseline 'rep' | 'avg', cats, k, mode (weights are not an input: they only re-sort, TeamWin.moduleSort). candidates default to the whole pool.
+  // opts: baseline 'rep' | 'avg', cats (weights are not an input: they only re-sort, TeamWin.moduleSort). candidates default to the whole pool.
   // -> { done, rows (unsorted, in candidate order), n, total, step(budgetMs, clock) }; step() returns true while it did work
   function moduleJob(ctx, state, opts, candidates) {
-    const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, cand = candidates || ctx.pool.players.map(p => p.key);
+    const o = opts || {}, mo = { cats: o.cats }, cand = candidates || ctx.pool.players.map(p => p.key);
     const counted = Team.counted(state);
     let base = null, pw = {}, su = null;
     const job = { done: false, rows: [], n: 0, total: cand.length, step(budgetMs, clock) {
@@ -108,11 +108,11 @@
 
   const signature = state => state.order.map(k => k + ':' + state.slots[k]).join('|');
 
-  // finished and half-finished jobs by ctx object, roster and win options (cats, mode); the weights are not an input, so moving a slider never rescores
+  // finished and half-finished jobs by ctx object, roster and win options (cats); the weights are not an input, so moving a slider never rescores
   function createScorer() {
     const by = new WeakMap();
     const bucket = ctx => { let m = by.get(ctx); if (!m) by.set(ctx, m = new Map()); return m; };
-    const keyOf = (state, o) => signature(state) + '#' + (o.cats || '') + '#' + (o.mode || '') + '#' + (o.baseline || '');
+    const keyOf = (state, o) => signature(state) + '#' + (o.cats || '') + '#' + (o.baseline || '');
     return {
       get(ctx, state, opts) {
         const m = bucket(ctx), sig = keyOf(state, opts || {});

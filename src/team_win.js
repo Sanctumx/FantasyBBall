@@ -1,14 +1,42 @@
-// Team tab win numbers (#131 PR 2, 2026-10-25): the matchup matrix of the previewed roster against every other team, each
-// player's Win C / Win M contribution, and the player-list module scores. Pure; browser and Node. Nothing here changes the
-// saved league, ctx or the pool. One matrix cell is one AVERAGE remaining week (decision D1): every player's games are his
-// remaining Plays % games divided by the weeks left, so it is not the Trade Analyzer's per-week Win M. Chances come from
-// Engine.pairMatchup with the Matchup Analyzer's games variance, shrunk toward 0.5 (K_CAT / K_MATCH, user 2026-10-25).
+// Team tab win numbers (#131 PR 2, 2026-10-25; moved onto the Rankings / Draft-tab engine 2026-10-26): the matrix of the previewed
+// roster against every other team, each player's Win C / Win M contribution, and the player-list module scores. Pure; browser and
+// Node. Nothing here changes the saved league, ctx or the pool. Every team's players get their remaining Plays % games per
+// average week (mine and every opponent's, with the nightly cap), turned into season-equivalent games (x WEEKS) and summed into
+// one forecast per team with Engine.entryVec; Engine.evaluate then gives every pairing's category and match chances, with the
+// engine's own noise (SIGMA_G2 games variance) and no shrink toward 0.5.
 // Units follow Rankings: m = Win M points (100 x the change in the match chance), c = Win C hundredths (100 x the change in
 // the summed category chances, averaged over the opponents).
 (function (root) {
   'use strict';
-  const Eng = root.Engine || require('./engine.js'), Matchup = root.Matchup || require('./matchup_core.js'), Team = root.Team || require('./team_core.js');
-  const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
+  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Team = root.Team || require('./team_core.js');
+  const NC = Eng.NC;
+
+  // the engine context of a ctx's player pool: noise and pool averages from simulated drafts of the real league (rostered players
+  // first), IL fill off because Plays % already counts the games a player misses. Built once per ctx and category count.
+  const ectxs = new WeakMap();
+  function engCtx(ctx, nc) {
+    let by = ectxs.get(ctx); if (!by) ectxs.set(ctx, by = {});
+    if (!by[nc]) {
+      const N = Object.keys(ctx.roster).length, R = ctx.L.maxActive, adp = p => p.adp == null ? 1e9 : p.adp;
+      const list = ctx.pool.players.filter(p => p.g > 0).sort((a, b) => (a.owner ? 0 : 1) - (b.owner ? 0 : 1) || adp(a) - adp(b));
+      const P = Eng.prepPlayers(list.map((p, i) => Object.assign({}, p.line, { g: p.g, ftx: i + 1 })));
+      const cfg = { teams: N, roster: R, slot: 1, order: '3rr', scoring: 'h2h', cats: nc, ilSpots: 0, field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '',
+        catW: InPlayers.WEIGHTS.slice(), adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0, basis: 'total' };
+      by[nc] = { ctx: Eng.buildContext(P, cfg), cfg };
+    }
+    return by[nc];
+  }
+
+  // one team's forecast: the sum of its entries' category vectors and projection variances. Entries are { p: stat line, games per
+  // average week, sign? } (sign -1 takes an entry out of the team).
+  function teamVec(e, entries) {
+    const mu = new Float64Array(NC), v = new Float64Array(NC);
+    entries.forEach(en => {
+      const s = en.sign || 1, ev = Eng.entryVec(en.p, e.ctx, en.games * Eng.WEEKS);
+      for (let c = 0; c < NC; c++) { mu[c] += s * ev.x[c]; v[c] += s * ev.pv[c]; }
+    });
+    return { mu, v };
+  }
 
   // remaining regular-season weeks: each period counts the share of it that lies in the Team.window
   function weeksLeft(ctx) {
@@ -26,39 +54,38 @@
   function side(ctx, state, W) {
     const r = Team.playsPct(ctx, state);
     return state.order.filter(k => Team.COUNTED.includes(state.slots[k]) && !r[k].hypo)
-      .map(k => ({ key: k, p: ctx.pool.byKey.get(k).line, games: r[k].played / W, gVar: Matchup.GVAR }));
+      .map(k => ({ key: k, p: ctx.pool.byKey.get(k).line, games: r[k].played / W }));
   }
 
   // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
-  // opponents' sides are the same for every previewed roster that removes the same players from them, so they are cached per ctx
+  // opponents' forecasts are the same for every previewed roster that removes the same players from them, so they are cached per ctx
   const memos = new WeakMap();
-  function oppSide(ctx, tid, exclude, W) {
+  function oppTeam(ctx, e, nc, tid, exclude, W) {
     let memo = memos.get(ctx);
     if (!memo) { memo = new Map(); memos.set(ctx, memo); }
-    const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + W;
-    if (!memo.has(id)) memo.set(id, side(ctx, oppState(ctx, tid, exclude), W));
+    const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + W + '|' + nc;
+    if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude), W)));
     return memo.get(id);
   }
 
   // my previewed roster against every other team. -> { weeks, teams: [{ id, cat[9], match, winC }], mean: { cat, match, winC } }
-  // (cat entries beyond the league's category count are null). opts: cats 9 | 8, k { match, cat } (default K_MATCH, K_CAT),
-  // mode (only 'avg', the average week, exists; a per-week 'actual' mode would be one more branch here).
-  // Players I hold leave their old team's side.
+  // (cat entries beyond the league's category count are null). opts: cats 9 | 8. Players I hold leave their old team's side.
   function matrix(ctx, state, opts) {
-    const o = opts || {};
-    if (o.mode != null && o.mode !== 'avg') throw new Error('unknown Win M mode: ' + o.mode);
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
-    return matrixOf(ctx, side(ctx, state, W), new Set(state.order), W, o);
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order), W, opts);
   }
 
-  // the matrix for any set of my entries [{ p, games, gVar }] (games per average week, W = weeks left); `exclude` = the keys that left
+  // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
   // their old team's side (everyone on my roster, and a candidate I bring in)
   function matrixOf(ctx, mine, exclude, W, o) {
-    const nc = o && o.cats === 8 ? 8 : 9, km = o && o.k && o.k.match != null ? o.k.match : Matchup.K_MATCH, kc = o && o.k && o.k.cat != null ? o.k.cat : Matchup.K_CAT;
-    const teams = Object.keys(ctx.roster).filter(t => t !== ctx.me).map(id => {
-      const r = Eng.pairMatchup(mine, oppSide(ctx, id, exclude, W), { cats: nc }), cat = r.cat.map(p => shrink(p, kc));
-      return { id, cat, match: shrink(r.match, km), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
+    const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
+    const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W)));
+    const pl = tv.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
+    const out = Eng.evaluate(pl, e.ctx, Object.assign({}, e.cfg, { teams: pl.length, roster: 1, slot: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
+    const teams = ids.map((id, i) => {
+      const A = out.teams[0], B = out.teams[i + 1], cat = Array.from({ length: 9 }, (_, c) => c >= nc ? null : out.catProb(A, B, c));
+      return { id, cat, match: out.pairProb(A, B), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
     });
     const avg = f => teams.reduce((s, t) => s + f(t), 0) / (teams.length || 1);
     return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
@@ -82,21 +109,21 @@
     return counted ? gain(base, matrix(ctx, without, opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts), base), { hypo: true });
   }
 
-  // the made-up average player of Vs average. n = my counted players, tot = their games per week, mean = the games-weighted mean line with
-  // the mean games, share = the games my counted players get out of the games their own team schedules allow, with no nightly cap (the team's average lineup share).
-  // Taking an average player out of the team in expectation = scaling every entry's games and games variance by (n-1)/n (a percentage
-  // stays the same, a total loses 1/n). -> null with no counted player or no games
+  // the made-up average player of Vs average (user 2026-10-26). n = my counted players, tot = their games per week, M = the Active spots
+  // (ctx.L.maxActive), mean = the games-weighted mean line with tot / M games (so his totals are one M-th of the team's), share = the games my
+  // counted players get out of the games their own team schedules allow, with no nightly cap (the team's average lineup share).
+  // -> null with no counted player or no games
   function avgParts(ctx, state, W) {
-    const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0);
+    const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
     const allowed = Team.counted(state).reduce((a, k) => a + Team.windowGames(ctx, [k], null)[0], 0);   // each player alone: no nightly cap
     if (!n || !(tot > 0) || !(allowed > 0)) return null;
-    return { W, mine, n, tot, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / n, gVar: Matchup.GVAR } };
+    return { W, mine, n, tot, M, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
   }
 
-  // a player not counted on my team replaces the average player: the team scaled by (n-1)/n plus him, with his games times the share
+  // a player not counted on my team replaces the average player: current team - average + him, his games times the share
   function avgCandidate(ctx, state, ap, key, opts) {
-    const f = (ap.n - 1) / ap.n, g = Team.windowGames(ctx, [key], null)[0] / ap.W * ap.share;
-    const mine = ap.mine.map(e => ({ p: e.p, games: e.games * f, gVar: e.gVar * f })).concat({ p: ctx.pool.byKey.get(key).line, games: g, gVar: Matchup.GVAR });
+    const g = Team.windowGames(ctx, [key], null)[0] / ap.W * ap.share;
+    const mine = ap.mine.concat(Object.assign({}, ap.mean, { sign: -1 }), { p: ctx.pool.byKey.get(key).line, games: g });
     return matrixOf(ctx, mine, new Set(state.order).add(key), ap.W, opts);
   }
 
