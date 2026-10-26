@@ -30,6 +30,7 @@
       .map(k => ({ p: ctx.pool.byKey.get(k).line, games: r[k].played / W, gVar: Matchup.GVAR }));
   }
 
+  // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
   // opponents' sides are the same for every previewed roster that removes the same players from them, so they are cached per ctx
   const memos = new WeakMap();
   function oppSide(ctx, tid, exclude, W) {
@@ -56,13 +57,14 @@
     return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
   }
 
-  const gain = (a, b) => ({ c: 100 * (a.mean.winC - b.mean.winC), m: 100 * (a.mean.match - b.mean.match) });
+  const dCats = (a, b) => a.mean.cat.map((v, c) => v == null ? 0 : 100 * (v - b.mean.cat[c]));
+  const gain = (a, b) => ({ c: 100 * (a.mean.winC - b.mean.winC), m: 100 * (a.mean.match - b.mean.match), dCat: dCats(a, b) });
 
   // each roster player's contribution to my Win C / Win M: active and bench = the team minus the team without him (the bench
-  // refills his nights); IL and reserve = the team with him on the bench minus the team (hypo: true). -> { key: { c, m, hypo? } }
+  // refills his nights); IL and reserve = the team with him on the bench minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
   function playerWin(ctx, state, opts) {
     const base = matrix(ctx, state, opts), res = {};
-    if (!base.mean) { state.order.forEach(k => { res[k] = { c: 0, m: 0 }; }); return res; }
+    if (!base.mean) { state.order.forEach(k => { res[k] = { c: 0, m: 0, dCat: new Array(9).fill(0) }; }); return res; }
     state.order.forEach(k => {
       const s = state.slots[k];
       if (s === 'active' || s === 'bench') res[k] = gain(base, matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts));
@@ -84,7 +86,7 @@
   // Win M (points) / Win C (hundredths); weights (0-1 per category) only change the sort: by dM when all are 1, else by the weighted
   // sum of the change in each category's chance. My own Active / Bench players are their contribution minus the worst player's (the
   // worst shows 0); my IL / Reserve players are a swap for the worst, like a candidate.
-  // opts: baseline 'rep' | 'avg', weights, cats, k, candidates (keys; default every pool player not on my roster)
+  // opts: baseline 'rep' | 'avg', weights, cats, k, candidates (keys; default every pool player, my own included)
   // -> [{ key, owner, dM, dC, dCat[], sort }] sorted by sort, highest first (ties keep candidate order)
   function moduleScores(ctx, state, opts) {
     const o = opts || {}, mo = { cats: o.cats, k: o.k }, base = matrix(ctx, state, mo);
@@ -95,7 +97,7 @@
     // the preview with `key` in the worst player's slot, scored against the current team
     const swapScore = (cx, key) => {
       const s0 = key in state.slots ? Team.applySwap(state, [worst], []) : Team.applySwap(state, [worst], [key]), m = matrix(cx, Team.moveSlot(s0, key, wSlot), mo);
-      return Object.assign(gain(m, base), { dCat: m.mean.cat.map((v, c) => v == null ? 0 : 100 * (v - base.mean.cat[c])) });
+      return gain(m, base);
     };
     let off = { c: 0, m: 0, dCat: zero() };
     if (o.baseline === 'avg') {
@@ -103,13 +105,13 @@
       const actx = withPlayer(ctx, { key: AVG_KEY, n: 'Average player', t: wPlayer.t, line, g: wPlayer.g, slot: null, owner: null });
       off = swapScore(actx, AVG_KEY);
     }
-    const cand = o.candidates || ctx.pool.players.filter(p => !(p.key in state.slots)).map(p => p.key);
+    const cand = o.candidates || ctx.pool.players.map(p => p.key);
     const weighted = o.weights && o.weights.some(w => w != null && w !== 1);
     const rows = cand.map((key, i) => {
       const own = key in state.slots, s = own ? state.slots[key] : null;
       let r;
       if (key === worst) r = { c: 0, m: 0, dCat: zero() };
-      else if (own && (s === 'active' || s === 'bench')) r = { c: pw[key].c - pw[worst].c, m: pw[key].m - pw[worst].m, dCat: zero() };
+      else if (own && (s === 'active' || s === 'bench')) r = { c: pw[key].c - pw[worst].c, m: pw[key].m - pw[worst].m, dCat: pw[key].dCat.map((v, c) => v - pw[worst].dCat[c]) };
       else r = swapScore(ctx, key);
       const dCat = r.dCat.map((v, c) => v - off.dCat[c]), dM = r.m - off.m;
       return { key, owner: own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), dM, dC: r.c - off.c, dCat, sort: weighted ? dCat.reduce((a, v, c) => a + v * (o.weights[c] == null ? 1 : o.weights[c]), 0) : dM, i };

@@ -127,3 +127,22 @@ test('moduleScores works on a 2-for-1 preview state', () => {
   assert.strictEqual(rows.length, 3);
   rows.forEach(r => assert.ok(Number.isFinite(r.dM)));
 });
+
+test('moduleScores: my own rows carry per-category changes, so weighted sorts and dCat sums hold; default shrink is K; cache matches a fresh ctx', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), own = st.order.filter(k => ['active', 'bench', 'il'].includes(st.slots[k]));
+  const w = [1, 1, 1, 0, 1, 1, 1, 1, 1], rows = W.moduleScores(ctx, st, { candidates: own.concat(ROS[other][0].fid), weights: w });
+  rows.forEach(r => {
+    assert.ok(near(r.sort, r.dCat.reduce((a, v, i) => a + v * w[i], 0), 1e-9), r.key);
+    assert.ok(near(r.dCat.reduce((a, v) => a + v, 0), r.dC, 1e-9), r.key);
+  });
+  assert.ok(W.moduleScores(ctx, st, {}).some(r => r.key === own[0]));   // default list includes my roster
+  // default shrink: the cell is the raw pairMatchup chance pulled toward 0.5 by K
+  const raw = W.matrix(ctx, st, { k: { match: 1, cat: 1 } }), def = W.matrix(ctx, st);
+  assert.ok(near(def.teams[0].match, 0.5 + M.K_MATCH * (raw.teams[0].match - 0.5), 1e-12));
+  assert.ok(near(def.teams[0].cat[0], 0.5 + M.K_CAT * (raw.teams[0].cat[0] - 0.5), 1e-12));
+  // two previews on one ctx (cache warm) equal the same previews on fresh ctxs
+  const sw = T.applySwap(st, [st.order[0]], [ROS[other][1].fid]), g = games(last.start, last.end);
+  W.matrix(ctx, st);
+  const a = W.matrix(ctx, sw), b = W.matrix(mk(last.start, g), sw);
+  assert.deepStrictEqual(a.teams.map(t => t.match), b.teams.map(t => t.match));
+});
