@@ -14,7 +14,7 @@ In the ledger worktree (commit c447469, committed, NOT landed): the #139 row (Ad
 
 ## Next
 
-1. Browser check of the Team page (`team_page.mjs` on :8767), then the `reviewer` (effort high: Team numbers), fixes test-first.
+1. Team browser check passed (merged state, :8767). Reviewer (effort high, Team numbers) was dispatched; get its result (re-dispatch if the chat was cleared first).
 2. Reviewer result is pending (agent running when this was written); fix findings test-first, amend the ledger if the story changes.
 3. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`).
 4. On "push": push, PR, merge only on the user's word, then `ledger.mjs land`.
