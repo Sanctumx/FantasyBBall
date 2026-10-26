@@ -82,6 +82,22 @@
     return { x, pv };
   }
 
-  const api = { FP_SLOT, noise, engineView, entry, STATS, RHO, DISP, statsOf, perGame, pgVar, projVar, weekVar, key };
+  // ---------- Rankings table in points ----------
+  // rows as Rankings.projSource gives them ({pid, g, gp?, line}). Per game: FP per game. Season: FP per game x games (gp when the
+  // source has it). Mix: FP per game x the midpoint of g and G0, where G0 is the mean g of the top teams x roster players by Season
+  // points: the same halfway point the engine uses (every stat is linear in games). Rows with no games go last with z null.
+  function table(rows, w, o) {
+    const N = o.teams || 14, R = o.roster || 12, K = N * R, basis = ['pergame', 'total', 'mix'].includes(o.basis) ? o.basis : 'total';
+    const live = rows.filter(r => r.g > 0).map(r => ({ pid: r.pid, fpg: perGame(r.line, w), g: r.g, gp: r.gp != null ? r.gp : r.g }));
+    const dead = rows.filter(r => !(r.g > 0));
+    const season = live.slice().sort((a, b) => b.fpg * b.gp - a.fpg * a.gp || a.pid - b.pid).slice(0, K);
+    const G0 = season.length ? season.reduce((t, r) => t + r.g, 0) / season.length : 0;
+    const zOf = r => basis === 'pergame' ? r.fpg : basis === 'mix' ? r.fpg * (r.g + G0) / 2 : r.fpg * r.gp;
+    const out = live.map(r => ({ pid: r.pid, z: zOf(r), fpg: r.fpg, cats: null, inPool: false })).sort((a, b) => b.z - a.z || a.pid - b.pid);
+    out.slice(0, K).forEach(r => { r.inPool = true; });
+    return out.concat(dead.map(r => ({ pid: r.pid, z: null, fpg: null, cats: null, inPool: false })));
+  }
+
+  const api = { table, FP_SLOT, noise, engineView, entry, STATS, RHO, DISP, statsOf, perGame, pgVar, projVar, weekVar, key };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Points = api;
 })(this);

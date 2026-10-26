@@ -227,3 +227,41 @@ test('winStart (league): Average player is the average player on my roster', () 
   assert.ok(Math.abs(v.m) < 0.35 * Math.max(0.01, Math.abs(w.rep.get(fakePid).m - w.avg.get(fakePid).m)) + 0.02, 'a roster-average player has ~0 vs the roster average: ' + v.m + ' ' + w.rep.get(fakePid).m);
   assert.ok(isFinite(top.m));
 });
+
+// ---- points mode (#137) ----
+const Pts = require('../points_core.js'), GOLD = require('./fixtures/golden_players.json');
+const grows = R.projSource(GOLD, 'avg'), YW = { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 };
+
+test('points table: per game, season and mix values, order, pool and dead rows', () => {
+  const rs = [{ pid: 0, g: 80, line: { pts: 20, reb: 5, ast: 5, stl: 1, blk: 1, to: 2, tpm: 2, fgp: 0.5, fga: 14, ftp: 0.8, fta: 4 } },
+    { pid: 1, g: 40, line: { pts: 30, reb: 8, ast: 2, stl: 1, blk: 1, to: 3, tpm: 1, fgp: 0.5, fga: 20, ftp: 0.8, fta: 6 } },
+    { pid: 2, g: 0, line: { pts: 9, reb: 9, ast: 9, stl: 9, blk: 9, to: 0, tpm: 0, fgp: 0.5, fga: 5, ftp: 0.8, fta: 1 } }];
+  const w = { pts: 1, reb: 1, to: -1 }, fpg0 = 20 - 2 + 5, fpg1 = 30 - 3 + 8;
+  const pg = Pts.table(rs, w, { teams: 1, roster: 1, basis: 'pergame' });
+  assert.deepStrictEqual(pg.map(r => r.pid), [1, 0, 2]); assert.ok(near(pg[0].z, fpg1) && near(pg[1].z, fpg0)); assert.strictEqual(pg[2].z, null);
+  const se = Pts.table(rs, w, { teams: 1, roster: 1, basis: 'total' });
+  assert.ok(near(se[0].z, fpg0 * 80) && se[0].pid === 0 && near(se[1].z, fpg1 * 40));
+  assert.deepStrictEqual(se.map(r => r.inPool), [true, false, false]);
+  const mx = Pts.table(rs, w, { teams: 2, roster: 1, basis: 'mix' }), G0 = 60;
+  assert.ok(near(mx.find(r => r.pid === 0).z, fpg0 * (80 + G0) / 2) && near(mx.find(r => r.pid === 1).z, fpg1 * (40 + G0) / 2));
+  assert.ok(pg.every(r => r.cats === null));
+});
+
+test('points winStart: m equals a direct engine view and evaluate, c is null, with and without lists', () => {
+  const base = { teams: 14, roster: 12, basis: 'pergame', cats: 9, points: YW };
+  const tab = Pts.table(grows, YW, base);
+  const byAdp = grows.slice().sort((a, b) => (a.adp == null ? 999 : a.adp) - (b.adp == null ? 999 : b.adp)).map(r => r.pid);
+  const lists = Array.from({ length: 14 }, (_, t) => byAdp.slice(0, 168).filter((_, j) => j % 14 === t).slice(0, 12));
+  for (const o of [base, Object.assign({ lists }, base)]) {
+    const ws = R.winStart(grows, tab, o); while (ws.step() != null);
+    assert.strictEqual(ws.hasAvg, true);
+    for (const v of ws.rep.values()) assert.strictEqual(v.c, null);
+    for (const v of ws.avg.values()) { assert.strictEqual(v.c, null); assert.ok(Number.isFinite(v.m)); }
+  }
+  // direct run for the no-list case
+  const ws = R.winStart(grows, tab, base), cfg = R.cfgFor(base), live = grows.filter(r => r.g > 0).sort((a, b) => a.pid - b.pid);
+  const rank = new Map(tab.filter(t => t.z != null).map((t, i) => [t.pid, i + 1]));
+  const P = Eng.prepPlayers(live.map(r => Object.assign({}, r.line, { g: r.g, ftx: r.ftx !== undefined ? r.ftx : (rank.get(r.pid) || null) }))), ctx = Eng.buildContext(P, cfg), v = Pts.engineView(P, ctx, cfg, YW);
+  const picks = new Array(168).fill(null); Eng.evaluate(v.P, v.ctx, cfg, { picks, owner: undefined });
+  live.forEach((r, i) => assert.ok(near(ws.rep.get(r.pid).m, v.P[i].gainC[Pts.FP_SLOT] * 100, 1e-9), 'pid ' + r.pid));
+});
