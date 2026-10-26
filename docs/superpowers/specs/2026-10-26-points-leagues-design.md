@@ -17,9 +17,15 @@ rosters by hand, the same manual path the kit already supports.
   per saved league. The 8-cat / 9-cat choice is hidden in points mode.
 - **Points only (Rankings and Team tabs):** in points mode the one number is a player's projected fantasy points. With
   the per-game view it is points per game; with the season view it is points per game × games (the season / rest-of-season
-  total the tab already shows). Players rank by it, and the Team tab sums it over the roster. There is no Zscore, no Vs
-  replacement, no Vs average, no Win C and no Win M in points mode (user, 2026-10-26); those columns and cards are hidden,
-  not computed.
+  total the tab already shows). Players rank by it, and the Team tab sums it over the roster. Zscore is replaced by points
+  and Win C is not shown in points mode (user, 2026-10-26); those columns are hidden, not computed.
+- **Vs replacement and Vs average stay (user, 2026-10-26):** they work exactly as they do for category leagues (same
+  replacement level, same average player, same swap logic), with every stat translated into fantasy points first. The
+  builder reads the category-mode definitions and reuses them; only the unit changes.
+- **Win M stays, in points (user, 2026-10-26):** the same measured variances as today (game-to-game noise, projection
+  error, games per week, and the existing shrink toward 0.5), with every stat translated into fantasy points first. A
+  team's week is one total with a mean and a variance, and Win M is the normal-distribution chance that one team's total
+  beats the other's. The user's rule: nothing about how variance is measured changes, only the unit.
 - Two pull requests: (1) Settings, store and validation, nothing downstream reads them yet; (2) points in Rankings and
   Team.
 
@@ -30,7 +36,7 @@ rosters by hand, the same manual path the kit already supports.
 - Season-long total-points (non-head-to-head) leagues: a later small addition; the valuation is the same.
 - The Draft tab's Model pick (hard area; needs a backtest). Until then Draft in points mode shows a "not supported yet"
   note and does not silently fall back to categories.
-- Any win chance, Vs replacement or Vs average in points mode (user: points only).
+- Win C and Zscore in points mode (user).
 - The Matchup and Trade Analyzers in points mode (follow-up unless the planner finds it free).
 
 ## Anti-goals
@@ -74,6 +80,10 @@ rosters by hand, the same manual path the kit already supports.
 
 ## Left to the builder
 
+- How each variance in `weekVar` / `projVar` / `perGameVar` combines across stats into a variance of fantasy points
+  (stats are correlated within a player; the builder should measure the covariance from game logs if available rather than
+  assume independence), and whether the shrink constants (K_MATCH) carry over or need refitting. Hard area: planner at
+  effort high, reviewer at effort high.
 - The `settings` field names and the `normalize` ranges for the point values.
 - Which Rankings columns (Zscore, Win C, Edge) are replaced, hidden or relabeled in points mode.
 - How the Team tab's swap panel, Changes list and Old vs New cards show a points change (instead of category and Win
