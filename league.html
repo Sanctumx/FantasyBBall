@@ -249,8 +249,8 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 <script src="assets/sched.42cc8c3b.js"></script>
 <script src="assets/engine.00768e2b.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.f6a996f6.js"></script>
-<script src="assets/fxcache.b51ac615.js"></script>
+<script src="assets/store.0a99aeac.js"></script>
+<script src="assets/fxcache.3a003ffb.js"></script>
 <script src="assets/league_core.0e384530.js"></script>
 <script>
 (function () {
@@ -281,7 +281,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   if (ui.basis !== 'pergame') ui.basis = 'total';
   $('basis').value = ui.basis;
 
-  const FXC = FxCache.create({});   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  const FXC = FxCache.create({ manual: LeagueStore.manualHook(LeagueStore.local.get, () => SCHED) });   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
   // the league loaded in Settings: its current rosters, standings and player list from Fantrax

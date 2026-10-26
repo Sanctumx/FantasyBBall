@@ -130,8 +130,8 @@ tbody tr.mine:hover td{background:var(--sunk)}
 <script src="assets/sched.42cc8c3b.js"></script>
 <script src="assets/engine.00768e2b.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.f6a996f6.js"></script>
-<script src="assets/fxcache.b51ac615.js"></script>
+<script src="assets/store.0a99aeac.js"></script>
+<script src="assets/fxcache.3a003ffb.js"></script>
 <script src="assets/rankings_mods.19f5dd3d.js"></script>
 <script>
 (function () {
@@ -156,7 +156,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
   let SS = LS.load(LS.local.get), box = [], fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
   const cache = new Map();   // source rows and tables, by key
 
-  const FXC = FxCache.create({});   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  const FXC = FxCache.create({ manual: LeagueStore.manualHook(LeagueStore.local.get, () => SCHED) });   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
 
   // monthly box-score files (stats/box-YYYY-MM.json) from the season's first month to this month; missing months are skipped

@@ -77,3 +77,43 @@ test('export and import round trip, with every check', () => {
   const foreign = JSON.parse(file); foreign.league.id = 'abc123'; assert.ok(/^m-/.test(S.parseLeagueImport(JSON.stringify(foreign), []).league.id));
   const copy = S.copyLeague(ML); assert.notStrictEqual(copy.id, ML.id); assert.strictEqual(copy.name, 'Yahoo (2)');
 });
+
+test('manualHook answers for a saved manual league only', () => {
+  const st = mem(), ML = S.makeManual('Yahoo', S.parseYahooRosters(YAHOO), 0); S.saveManual(st.get, st.set, ML);
+  const h = S.manualHook(st.get);
+  assert.strictEqual(h('league', ML.id).teamInfo.t2.name, 'Droppin’Dimes');
+  assert.ok(h('players', ML.id)['m:egor demin']); assert.deepStrictEqual(h('standings', ML.id), []);
+  assert.strictEqual(h('league', 'abc123'), null); assert.strictEqual(h('players', undefined), null); assert.strictEqual(h('draft', ML.id), null);
+});
+test('changing the loaded manual league settings and team is kept with the league', () => {
+  const st = mem(), ML = S.makeManual('Yahoo', S.parseYahooRosters(YAHOO), 0); S.saveManual(st.get, st.set, ML);
+  S.saveManual(st.get, st.set, Object.assign({}, ML, { settings: S.normalize(Object.assign({}, ML.settings, { scoring: 'roto' })), myTeam: 't2' }));
+  assert.strictEqual(S.manualLeague(st.get, ML.id).settings.scoring, 'roto');
+  assert.strictEqual(S.defaultTeam(st.get, ML.id), 't2');
+});
+
+test('a manual league gets an estimated round-robin schedule from the season weeks', () => {
+  const SCHED = require('../sched.json'), IL = require('../inseason_league.js');
+  const ML = S.makeManual('Y', S.parseYahooRosters(YAHOO), 0); ML.teams = ['a', 'b', 'c', 'd'].map((n, i) => ({ id: 't' + (i + 1), name: n, players: [] }));
+  const a = S.manualAnswers(ML, SCHED), L = IL.parseLeague(a.league), po = ML.settings.poStart;
+  assert.strictEqual(L.periods.length, S.weekPlan(SCHED, ML.settings.asb).count);
+  assert.deepStrictEqual([L.periods[0].n, L.lastRegular, a.league.playoffs.lastRegularSeasonPeriod], [1, po - 1, po - 1]);
+  assert.ok(L.periods[0].start < L.periods[0].end && L.periods[0].end <= L.periods[1].start);
+  assert.strictEqual(new Date(L.periods[0].start).toISOString().slice(0, 10), SCHED.weeks[0]);
+  const seen = {};
+  for (let n = 1; n <= po - 1; n++) {
+    const ids = L.matchups[n].flat().sort(); assert.deepStrictEqual(ids, ['t1', 't2', 't3', 't4']);
+    if (n <= 3) L.matchups[n].forEach(p => { seen[p.slice().sort().join('-')] = 1; });
+    assert.strictEqual(IL.opponentOf(L, 't1', n) !== null, true);
+  }
+  assert.strictEqual(Object.keys(seen).length, 6);          // three rounds: everyone meets everyone once
+  assert.strictEqual(a.league.matchups.length, po - 1);
+  assert.deepStrictEqual(S.manualAnswers(ML).league.matchups, []);   // no schedule given: none
+});
+test('an odd number of teams rests one team each week', () => {
+  const SCHED = require('../sched.json'), IL = require('../inseason_league.js');
+  const ML = S.makeManual('Y', S.parseYahooRosters(YAHOO), 0); ML.teams = ['a', 'b', 'c'].map((n, i) => ({ id: 't' + (i + 1), name: n, players: [] }));
+  const L = IL.parseLeague(S.manualAnswers(ML, SCHED).league);
+  assert.ok(L.matchups[1].length === 1 && L.matchups[2].length === 1);
+  assert.notDeepStrictEqual(L.matchups[1].flat().sort(), L.matchups[2].flat().sort());
+});

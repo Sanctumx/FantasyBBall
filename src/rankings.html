@@ -143,7 +143,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
   let SS = LS.load(LS.local.get), box = [], fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
   const cache = new Map();   // source rows and tables, by key
 
-  const FXC = FxCache.create({});   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  const FXC = FxCache.create({ manual: LeagueStore.manualHook(LeagueStore.local.get, () => SCHED) });   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
 
   // monthly box-score files (stats/box-YYYY-MM.json) from the season's first month to this month; missing months are skipped

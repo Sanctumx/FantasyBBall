@@ -209,16 +209,42 @@
       teams: parsed.teams.map((t, i) => ({ id: 't' + (i + 1), name: t.name, players: t.players.map(p => ({ n: p.n, t: p.t || '', p: p.p || '', il: !!p.il })) })) };
   }
   const manualPid = n => 'm:' + normName(n);
+  // the circle method: every team meets every other once per N − 1 rounds (an odd league rests one team a round)
+  function roundRobin(ids) {
+    const a = ids.slice(), rounds = []; if (a.length % 2) a.push(null);
+    for (let r = 0; r < a.length - 1; r++) {
+      const pairs = []; for (let i = 0; i < a.length / 2; i++) if (a[i] && a[a.length - 1 - i]) pairs.push([a[i], a[a.length - 1 - i]]);
+      rounds.push(pairs); a.splice(1, 0, a.pop());
+    }
+    return rounds;
+  }
+  // Without a Fantrax schedule: the season's weeks as scoring periods (days end at local midnight, UTC−6 as elsewhere) and the
+  // regular season up to the playoff start as a round robin in team order. Estimated; the pages say so.
+  function manualSchedule(ML, SCHED) {
+    const plan = weekPlan(SCHED, ML.settings.asb), day = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+    const iso = ms => new Date(ms).toISOString().slice(0, 10), last = Math.max(1, Math.min(plan.count, ML.settings.poStart - 1));
+    const scoringPeriods = plan.starts.slice(0, plan.count).map((s, i) => {
+      const next = i + 1 < plan.count ? day(plan.starts[i + 1]) : day(s) + 7 * 864e5;
+      return { number: i + 1, startDate: s + 'T00:00:00.0-0600', endDate: iso(next - 864e5) + 'T23:59:59.0-0600' };
+    });
+    const rounds = roundRobin(ML.teams.map(t => t.id)), nm = {}; ML.teams.forEach(t => { nm[t.id] = { name: t.name, id: t.id, shortName: t.name.slice(0, 3) }; });
+    const matchups = [];
+    for (let n = 1; n <= last; n++) matchups.push({ period: n, matchupList: rounds[(n - 1) % rounds.length].map(p => ({ away: nm[p[0]], home: nm[p[1]] })) });
+    return { scoringPeriods, matchups, playoffs: { lastRegularSeasonPeriod: last } };
+  }
   // the league as the Worker would answer: what=league, rosters, standings and the player list (never cached; see fx_cache)
-  function manualAnswers(ML) {
+  function manualAnswers(ML, SCHED) {
     const teamInfo = {}, rosters = {}, players = {};
     ML.teams.forEach(t => {
       teamInfo[t.id] = { division: 'Manual', name: t.name, id: t.id, shortName: t.name.slice(0, 3) };
       rosters[t.id] = { teamName: t.name, rosterItems: t.players.map(p => { players[manualPid(p.n)] = { name: p.n, team: p.t, position: p.p }; return { id: manualPid(p.n), position: p.p, status: p.il ? 'INJURED_RESERVE' : 'ACTIVE' }; }) };
     });
-    return { league: { teamInfo, rosterInfo: { maxTotalPlayers: ML.settings.roster }, playerInfo: {}, matchups: [], scoringPeriods: [] },
+    const sch = SCHED ? manualSchedule(ML, SCHED) : { scoringPeriods: [], matchups: [] };
+    return { league: Object.assign({ teamInfo, rosterInfo: { maxTotalPlayers: ML.settings.roster }, playerInfo: {} }, sch),
       rosters: { period: 1, rosters }, standings: [], players };
   }
+  // for FxCache.create({ manual }): the answers of a saved manual league, null for anything else
+  const manualHook = (get, sched) => (what, id) => { const ML = id ? manualLeague(get, id) : null; return ML ? manualAnswers(ML, sched ? sched() : null)[what] || null : null; };
   function saveManual(get, set, ML) {
     const m = readManual(get); m[ML.id] = ML; set(KEYS.manual, JSON.stringify(m));
     rememberLeague(get, set, ML.id, ML.name, ML.myTeam);
@@ -293,7 +319,7 @@
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
   const api = { leagueScoring, setLeagueScoring, KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
-    manualLeague, saveManual, parseSlotList, slotSettings, parseYahooRosters, makeManual, manualAnswers, exportLeague, parseLeagueImport, copyLeague,
+    manualLeague, saveManual, manualHook, parseSlotList, slotSettings, parseYahooRosters, makeManual, manualAnswers, exportLeague, parseLeagueImport, copyLeague,
     fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
 })(this);
