@@ -19,6 +19,9 @@ with every request.
   `curl -I <site>/assets/<file>` (immutable) and `curl -I <site>/team.html` (must not be immutable).
 - **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`, the only host (the Netlify site
   was deleted, 2026-10-20).
+- **Handoff report ends with a paste message** (user, 2026-10-26): after the "Next session starts with" line, give a fenced block
+  (about 8 lines) to paste into the fresh chat after `/clear`: the first step, the branch or worktree, what is waiting on the
+  user, and to run `node .claude/scripts/branches.mjs` and read the handoff first.
 - **Never during /release or /handoff:** use the user's computer.
 
 ## Parallel sessions (several areas at once)
