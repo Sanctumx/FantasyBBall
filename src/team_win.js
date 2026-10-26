@@ -9,7 +9,6 @@
   'use strict';
   const Eng = root.Engine || require('./engine.js'), Matchup = root.Matchup || require('./matchup_core.js'), Team = root.Team || require('./team_core.js');
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
-  const AVG_KEY = '__avg__';
 
   // remaining regular-season weeks: each period counts the share of it that lies in the Team.window
   function weeksLeft(ctx) {
@@ -23,11 +22,11 @@
     return Team.initState(rows);
   }
 
-  // pairMatchup entries for the active and bench players: games = Plays % games per average week (hypothetical rows never count)
+  // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
   function side(ctx, state, W) {
     const r = Team.playsPct(ctx, state);
-    return state.order.filter(k => (state.slots[k] === 'active' || state.slots[k] === 'bench') && !r[k].hypo)
-      .map(k => ({ p: ctx.pool.byKey.get(k).line, games: r[k].played / W, gVar: Matchup.GVAR }));
+    return state.order.filter(k => Team.COUNTED.includes(state.slots[k]) && !r[k].hypo)
+      .map(k => ({ key: k, p: ctx.pool.byKey.get(k).line, games: r[k].played / W, gVar: Matchup.GVAR }));
   }
 
   // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
@@ -48,10 +47,15 @@
   function matrix(ctx, state, opts) {
     const o = opts || {};
     if (o.mode != null && o.mode !== 'avg') throw new Error('unknown Win M mode: ' + o.mode);
-    const nc = o.cats === 8 ? 8 : 9, km = o.k && o.k.match != null ? o.k.match : Matchup.K_MATCH, kc = o.k && o.k.cat != null ? o.k.cat : Matchup.K_CAT;
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
-    const exclude = new Set(state.order), mine = side(ctx, state, W);
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order), W, o);
+  }
+
+  // the matrix for any set of my entries [{ p, games, gVar }] (games per average week, W = weeks left); `exclude` = the keys that left
+  // their old team's side (everyone on my roster, and a candidate I bring in)
+  function matrixOf(ctx, mine, exclude, W, o) {
+    const nc = o && o.cats === 8 ? 8 : 9, km = o && o.k && o.k.match != null ? o.k.match : Matchup.K_MATCH, kc = o && o.k && o.k.cat != null ? o.k.cat : Matchup.K_CAT;
     const teams = Object.keys(ctx.roster).filter(t => t !== ctx.me).map(id => {
       const r = Eng.pairMatchup(mine, oppSide(ctx, id, exclude, W), { cats: nc }), cat = r.cat.map(p => shrink(p, kc));
       return { id, cat, match: shrink(r.match, km), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
@@ -63,22 +67,42 @@
   const dCats = (a, b) => a.mean.cat.map((v, c) => v == null ? 0 : 100 * (v - b.mean.cat[c]));
   const gain = (a, b) => ({ c: 100 * (a.mean.winC - b.mean.winC), m: 100 * (a.mean.match - b.mean.match), dCat: dCats(a, b) });
 
-  // each roster player's contribution to my Win C / Win M: active and bench = the team minus the team without him (the bench
-  // refills his nights); IL and reserve = the team with him on the bench minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
+  // each roster player's contribution to my Win C / Win M: active and reserve = the team minus the team without him (the reserve
+  // refills his nights); IL = the team with him in the reserve minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
   // one player's contribution given the current roster's matrix `base` (playerWin's per-player step, so a page can score one at a time)
-  // opts.baseline 'avg' (as on Rankings) subtracts what an average-player entry in his place would give: the mean per-game line of my
-  // Active and Bench players with his team's schedule; his slot, or the bench for IL and reserve players. Default 'rep' = the raw contribution.
+  // opts.baseline 'avg' (Vs average): see avgParts; my own Active / Reserve player X = the team minus (the team with X replaced by an average
+  // player); my IL player = a candidate. Default 'rep' = the raw contribution.
   function playerGain(ctx, state, k, base, opts) {
     if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };
-    const s = state.slots[k], counted = s === 'active' || s === 'bench';
-    const raw = counted ? gain(base, matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'bench'), opts), base), { hypo: true });
-    if (!opts || opts.baseline !== 'avg') return raw;
-    const pp = ctx.pool.byKey.get(k), inTeam = state.order.filter(x => state.slots[x] === 'active' || state.slots[x] === 'bench');
-    if (!inTeam.length) return raw;
-    const actx = withPlayer(ctx, { key: AVG_KEY, n: 'Average player', t: pp.t, line: Team.teamLine(inTeam.map(x => ({ line: ctx.pool.byKey.get(x).line, pct: 1 })), inTeam.length), g: pp.g, slot: null, owner: null });
-    const s0 = counted ? Team.applySwap(state, [k], [AVG_KEY]) : Team.applySwap(state, [], [AVG_KEY]);
-    const off = counted ? gain(matrix(actx, Team.moveSlot(s0, AVG_KEY, s), opts), matrix(actx, Team.moveSlot(state, k, 'reserve'), opts)) : gain(matrix(actx, Team.moveSlot(s0, AVG_KEY, 'bench'), opts), base);
-    return Object.assign({}, raw, { c: raw.c - off.c, m: raw.m - off.m, dCat: raw.dCat.map((v, c) => v - off.dCat[c]) });
+    if (opts && opts.baseline === 'avg') {
+      const ap = (opts.ap) || avgParts(ctx, state, base.weeks);
+      if (ap) { const own = Team.COUNTED.includes(state.slots[k]); return own ? gain(base, avgOwn(ctx, state, ap, k, opts)) : Object.assign(gain(avgCandidate(ctx, state, ap, k, opts), base), { hypo: true }); }
+    }
+    const s = state.slots[k], counted = Team.COUNTED.includes(s), without = Team.applySwap(state, [k], []);
+    return counted ? gain(base, matrix(ctx, without, opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts), base), { hypo: true });
+  }
+
+  // the made-up average player of Vs average. n = my counted players, tot = their games per week, mean = the games-weighted mean line with
+  // the mean games, share = the games my counted players get out of the games their schedules allow (the team's average lineup share).
+  // Taking an average player out of the team in expectation = scaling every entry's games and games variance by (n-1)/n (a percentage
+  // stays the same, a total loses 1/n). -> null with no counted player or no games
+  function avgParts(ctx, state, W) {
+    const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0);
+    const allowed = Team.windowGames(ctx, Team.counted(state), null).reduce((a, b) => a + b, 0);
+    if (!n || !(tot > 0) || !(allowed > 0)) return null;
+    return { W, mine, n, tot, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / n, gVar: Matchup.GVAR } };
+  }
+
+  // a player not counted on my team replaces the average player: the team scaled by (n-1)/n plus him, with his games times the share
+  function avgCandidate(ctx, state, ap, key, opts) {
+    const f = (ap.n - 1) / ap.n, g = Team.windowGames(ctx, [key], null)[0] / ap.W * ap.share;
+    const mine = ap.mine.map(e => ({ p: e.p, games: e.games * f, gVar: e.gVar * f })).concat({ p: ctx.pool.byKey.get(key).line, games: g, gVar: Matchup.GVAR });
+    return matrixOf(ctx, mine, new Set(state.order).add(key), ap.W, opts);
+  }
+
+  // my counted player replaced by the average player
+  function avgOwn(ctx, state, ap, key, opts) {
+    return matrixOf(ctx, ap.mine.filter(e => e.key !== key).concat(ap.mean), new Set(state.order), ap.W, opts);
   }
 
   function playerWin(ctx, state, opts) {
@@ -87,18 +111,11 @@
     return res;
   }
 
-  // ctx with one made-up player in the pool (ctx.pool itself is never touched)
-  function withPlayer(ctx, pp) {
-    const byKey = new Map(ctx.pool.byKey);
-    byKey.set(pp.key, pp);
-    return Object.assign({}, ctx, { pool: Object.assign({}, ctx.pool, { byKey }) });
-  }
-
-  // Player-list scores for the Team tab module. Baselines: 'rep' = the player replaces my worst Active / Bench player (lowest Win M
+  // Player-list scores for the Team tab module. Baselines: 'rep' = the player replaces my worst Active / Reserve player (lowest Win M
   // contribution); 'avg' = the same minus what an average-player entry in his place would give, as on the Rankings tab (the entry is
-  // the mean per-game line of my Active and Bench players, with the worst player's team schedule). dM / dC are the real changes in my
+  // the mean per-game line of my Active and Reserve players, with the worst player's team schedule). dM / dC are the real changes in my
   // Win M (points) / Win C (hundredths); weights (0-1 per category) only change the sort: by dM when all are 1, else by the weighted
-  // sum of the change in each category's chance. My own Active / Bench players are their contribution minus the worst player's (the
+  // sum of the change in each category's chance. My own Active / Reserve players are their contribution minus the worst player's (the
   // worst shows 0); my IL / Reserve players are a swap for the worst, like a candidate.
   // opts: baseline 'rep' | 'avg', weights, cats, k, candidates (keys; default every pool player, my own included)
   // -> [{ key, owner, dM, dC, dCat[], sort }] sorted by sort, highest first (ties keep candidate order)
@@ -111,15 +128,11 @@
   function moduleSetup(ctx, state, opts) {
     const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, base = o.base || matrix(ctx, state, mo);
     if (!base.mean) return null;
-    const pw = o.pw || playerWin(ctx, state, mo), counted = state.order.filter(k => state.slots[k] === 'active' || state.slots[k] === 'bench');
+    if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks); return ap ? { base, ap, mo, avg: true } : null; }
+    const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state);
     if (!counted.length) return null;
-    const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst], wPlayer = ctx.pool.byKey.get(worst);
-    const su = { base, pw, worst, wSlot, mo, off: { c: 0, m: 0, dCat: new Array(9).fill(0) }, avg: o.baseline === 'avg' };
-    if (su.avg) {
-      const line = Team.teamLine(counted.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: 1 })), counted.length);
-      su.off = swapScore(ctx, state, su, withPlayer(ctx, { key: AVG_KEY, n: 'Average player', t: wPlayer.t, line, g: wPlayer.g, slot: null, owner: null }), AVG_KEY);
-    }
-    return su;
+    const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst];
+    return { base, pw, worst, wSlot, mo, off: { c: 0, m: 0, dCat: new Array(9).fill(0) }, avg: false };
   }
 
   // the preview with `key` in the worst player's slot, scored against the current team
@@ -129,13 +142,17 @@
   }
 
   function moduleRow(ctx, state, su, key) {
-    const own = key in state.slots, s = own ? state.slots[key] : null, pw = su.pw, zero = () => new Array(9).fill(0);
+    const own = key in state.slots, s = own ? state.slots[key] : null, owner = own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), cur = 100 * su.base.mean.match;
+    if (su.avg) {
+      const counted = own && Team.COUNTED.includes(s), a = counted ? avgOwn(ctx, state, su.ap, key, su.mo) : avgCandidate(ctx, state, su.ap, key, su.mo), g = counted ? gain(su.base, a) : gain(a, su.base);
+      return { key, owner, dM: g.m, dC: g.c, dCat: g.dCat, old: counted ? cur - g.m : cur, new: counted ? cur : cur + g.m };
+    }
+    const pw = su.pw, zero = () => new Array(9).fill(0);
     let r;
     if (key === su.worst) r = { c: 0, m: 0, dCat: zero() };
-    else if (own && (s === 'active' || s === 'bench')) r = { c: pw[key].c - pw[su.worst].c, m: pw[key].m - pw[su.worst].m, dCat: pw[key].dCat.map((v, c) => v - pw[su.worst].dCat[c]) };
+    else if (own && Team.COUNTED.includes(s)) r = { c: pw[key].c - pw[su.worst].c, m: pw[key].m - pw[su.worst].m, dCat: pw[key].dCat.map((v, c) => v - pw[su.worst].dCat[c]) };
     else r = swapScore(ctx, state, su, ctx, key);
-    const cur = 100 * su.base.mean.match;
-    return { key, owner: own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), dM: r.m - su.off.m, dC: r.c - su.off.c, dCat: r.dCat.map((v, c) => v - su.off.dCat[c]), old: cur + su.off.m, new: cur + r.m };
+    return { key, owner, dM: r.m - su.off.m, dC: r.c - su.off.c, dCat: r.dCat.map((v, c) => v - su.off.dCat[c]), old: cur + su.off.m, new: cur + r.m };
   }
 
   function moduleSort(rows, weights) {
@@ -150,6 +167,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { AVG_KEY, weeksLeft, oppState, side, matrix, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);

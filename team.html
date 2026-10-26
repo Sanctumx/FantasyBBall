@@ -78,6 +78,7 @@ tr.drop td{outline:2px dashed var(--accent);outline-offset:-2px}
 tr[draggable=true]{cursor:grab}
 select.slot{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:1px 2px;font-size:.78rem;margin-left:6px;color:var(--ink)}
 td.dim,tr.hypo td.hy{opacity:.5}
+#log{margin:6px 0 0;padding-left:22px;font-size:.85rem}#log li{margin:3px 0}#log small{color:var(--muted)}
 .chip{display:inline-block;min-width:3.4em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
 .pos-n{color:var(--good)}.neg-n{color:var(--bad)}
 .hint{color:var(--muted);font-size:.82rem;margin:0}
@@ -144,13 +145,13 @@ tr.lrow{cursor:pointer}
       <h4>Projected remaining games (GL)</h4>
       <p>The games the player is projected to play from now to the end of the NBA season (not just the league's last regular week): his team's remaining games times his projected games over 82. That already covers injuries and rest, so Plays % is not applied to it.</p>
       <h4>Plays %</h4>
-      <p>A measure of your team's makeup, not of the player's health. Each night only as many players as the league's active limit can start, so with more players than slots the best per-game players take the slots and the rest sit. Plays % is the share of his team's remaining games he gets a slot for: your best players are near 100%, your worst get the least. Bench players get the nights the active players leave open. IL and Reserve rows are dimmed: they show what the player would get as one more bench player, and they count for nothing until moved.</p>
+      <p>A measure of your team's makeup, not of the player's health. Each night only as many players as the league's active limit can start, so with more players than slots the best per-game players take the slots and the rest sit. Plays % is the share of his team's remaining games he gets a slot for: your best players are near 100%, your worst get the least. Reserve players get the nights the active players leave open. IL rows are dimmed: they show what the player would get as one more reserve player, and they count for nothing until moved.</p>
       <h4>Stats and the Plays % box</h4>
       <p>Per game shows each player's projected line. Rest of season multiplies it by his projected games left. With "Adjust player stats by Plays %" checked, every player's stats and Z are also multiplied by his Plays %. Unchecked, the player rows are untouched and only the team values use Plays %.</p>
       <h4>Moving players</h4>
-      <p>Each row has a slot select (Active, Bench, IL, Reserve); you can also drag a row onto another group's header. Moves are a preview, and Plays %, the team average, Win C, Win M and the matrix all follow. Active may go over the league's limit: the header turns orange ("Active (11 / 10)") and the extra players simply sit some nights, as Plays % shows.</p>
+      <p>Click any column header to sort inside each group (click again to reverse, a third time to clear). MPG is his projected minutes per game. Each row has a slot select (Active, Reserve, IL); you can also drag a row onto another group's header. Moves are a preview, and Plays %, the team average, Win C, Win M and the matrix all follow. Active may go over the league's limit: the header turns orange ("Active (11 / 10)") and the extra players simply sit some nights, as Plays % shows.</p>
       <h4>Team average</h4>
-      <p>The last row of the table. It always uses Plays %: a player adds his line in proportion to how often he plays, per lineup slot. Its Z is the same Plays %-weighted average of the players' Z; its Win C and Win M are your average over all opponents (the Average column of the matrix). Reserve and IL players add nothing.</p>
+      <p>The last row of the table. It always uses Plays %: a player adds his line in proportion to how often he plays, per lineup slot. Its Z is the same Plays %-weighted average of the players' Z; its Win C and Win M are your average over all opponents (the Average column of the matrix). IL players add nothing.</p>
      </section>
     </div>
     <div class="how-col">
@@ -160,17 +161,17 @@ tr.lrow{cursor:pointer}
       <h4>An average week</h4>
       <p>Each cell is one average remaining week: every player's games are his remaining Plays % games divided by the weeks left. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ. Chances use the Matchup Analyzer's games variance and are shrunk toward 50%.</p>
       <h4>Win C and Win M per player</h4>
-      <p>What he adds to your Win C (hundredths) and Win M (points) over an average player in his place, as on the Rankings tab: your team minus your team with him moved to Reserve, minus the same for an average-player entry (the mean line of your Active and Bench players, with his team's schedule). For IL and Reserve rows it is what moving him to the bench would add, again minus the average player's.</p>
+      <p>What he adds to your Win C (hundredths) and Win M (points) over an average player: the change in your team if he took the place of a made-up average player of your team (the games-weighted mean of your Active and Reserve lines), with the rest of your team scaled down to make room for him. For a player already on your Active or Reserve it is what you lose if an average player stood in his place; for IL it is what he would add. Same as Vs average in the player list.</p>
      </section>
     <section class="how-card">
       <h3>Z and category weights</h3>
       <p>Z is the Rankings Zscore (Standard, per game). The Z button above the table swaps the stat columns for each category's weighted Z, which add up to the Z column. The weights are a punt lens: 1 counts a category fully, 0 leaves it out of the Z total. They only change Z and the Z order; Win C, Win M and the matrix always count every category.</p>
       <h3 style="margin-top:14px">Swapping players</h3>
-      <p>Type part of a name in Send out (your roster) and Bring in (every other player), press Enter or click to add chips, then Apply swap. Any number can go out and in. Incoming players land on the bench. Accents and capitals don't matter. The three cards under the boxes show your team now against the saved roster: Team Zscore, Win C and Win M, each with what it was and the change.</p>
+      <p>Type part of a name in Send out (your roster) and Bring in (every other player), press Enter or click to add chips, then Apply swap. Any number can go out and in. Incoming players land in the reserve. Accents and capitals don't matter. Every change (a swap, a slot move, a drag) is listed under the cards as Changes with its effect on Win M; Undo last steps back one change and Clear list empties the list. The three cards under the boxes show your team now against the saved roster: Team Zscore, Win C and Win M, each with what it was and the change.</p>
     </section>
     <section class="how-card">
       <h3>Player list</h3>
-      <p>Every player, sorted by what he does to your Win M. The Change column is the real change in your Win M (points) if he takes the place of your worst Active or Bench player (Vs replacement) or of an average player in that spot (Vs average); Win M is your chance after it. This "replacement" is your own worst player, not the replacement level on the Rankings tab. The roster table above always uses an average player.</p>
+      <p>Every player, sorted by what he does to your Win M. The Change column is the real change in your Win M (points). Vs replacement: he takes the place of your own worst Active or Reserve player (this is not the replacement level of the Rankings tab). Vs average: he takes the place of a made-up average player of your team, and your team's games are scaled down by one player's share to compensate (for your own players: an average player stands in his place). Win M is your chance after the change. All players are listed; use Show and Search to narrow it. The roster table above always uses Vs average.</p>
       <p>A player already on your roster shows his gain over your worst player (the worst shows 0); his Win M after is that gain on top of your current Win M, an approximation. Click a row to bring him in (your own players go to Send out), or drag him onto a roster row to swap him into that slot, or onto a group header to add him there with no one going out. Category weights only re-sort the list, by the weighted change in category chances; the numbers shown stay real.</p>
     </section>
    </div>
@@ -193,7 +194,7 @@ tr.lrow{cursor:pointer}
       <h2>Roster <span class="meta" id="rost-meta"></span></h2>
       <div class="ctl">
         <span class="seg" id="view" role="group" aria-label="Stat view"><button type="button" data-v="game">Per game</button><button type="button" data-v="ros">Rest of season</button></span>
-        <span class="seg" id="zview" role="group" aria-label="Columns show"><button type="button" data-z="stats" title="Show each player's projected stats">Stats</button><button type="button" data-z="z" title="Show each category's Z score, weighted, adding up to the Z column">Z</button></span>
+        <span class="seg" id="zview" role="group" aria-label="Columns show"><button type="button" data-z="stats" title="Show each player's projected stats">Stats</button><button type="button" data-z="z" title="Show each category's Zscore, weighted, adding up to the Zscore column">Zscore</button></span>
         <label class="chk" for="adj" title="Multiply each player's stats and Z by his Plays %"><input type="checkbox" id="adj"> Adjust player stats by Plays %</label>
         <button class="btn" type="button" id="reset" title="Put back the roster saved on Fantrax">Reset roster</button>
       </div>
@@ -215,6 +216,12 @@ tr.lrow{cursor:pointer}
       <div class="ctl"><button class="btn primary" type="button" id="apply" disabled title="Make the swap in the preview (nothing is sent to Fantrax)">Apply swap</button></div>
       <p class="msg" id="swap-msg" role="status"></p>
       <div class="cards" id="cards" aria-label="Your team before and after the swap"></div>
+      <div id="logbox" hidden>
+        <div class="ctl"><strong>Changes</strong> <span class="meta" id="log-n"></span>
+          <button class="btn" type="button" id="undo" title="Go back to the roster before the last change">Undo last</button>
+          <button class="btn" type="button" id="logclear" title="Empty the list; the roster stays as it is">Clear list</button></div>
+        <ol id="log" aria-label="Changes made to the preview roster"></ol>
+      </div>
     </section>
 
     <section class="panel" aria-label="Matchup matrix">
@@ -226,13 +233,12 @@ tr.lrow{cursor:pointer}
     <section class="panel" id="list" aria-label="Player list">
       <h2>Player list <span class="meta" id="lmeta"></span></h2>
       <div class="ctl">
-        <label class="f" for="lvs">Win M vs<select id="lvs" title="What a player is compared with: your worst Active or Bench player, or an average player in that spot"><option value="rep">Vs replacement</option><option value="avg">Vs average</option></select></label>
+        <label class="f" for="lvs">Win M vs<select id="lvs" title="What a player is compared with: your worst Active or Reserve player, or a made-up average player of your team"><option value="rep">Vs replacement</option><option value="avg">Vs average</option></select></label>
         <label class="f" for="lown">Show<select id="lown" title="Whose players to list"></select></label>
         <label class="f" for="lq">Search<input type="text" id="lq" placeholder="Type a name" autocomplete="off" title="Filters the list; the Win M order stays"></label>
       </div>
       <p class="hint" id="lhint"></p>
       <div class="scroll"><table id="ltable"></table></div>
-      <div class="ctl"><button class="btn" type="button" id="lmore" hidden>Show 50 more</button></div>
     </section>
   </div>
 </main>
@@ -1497,7 +1503,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function projLines(PLAYERS, proj) {
     return PLAYERS.map((r, i) => {
       const q = Shared.projOf(r, proj || 'avg');
-      return { id: i, n: r.n, t: r.t, pos: r.p, g: q.g, line: lineOf(q), adp: r.ftx != null ? r.ftx : (r.adp != null ? r.adp : null), rk: r.rk, src: r.src };
+      return { id: i, n: r.n, t: r.t, pos: r.p, g: q.g, m: q.m, line: lineOf(q), adp: r.ftx != null ? r.ftx : (r.adp != null ? r.adp : null), rk: r.rk, src: r.src };
     });
   }
 
@@ -1535,15 +1541,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       });
     });
     matches.forEach(({ fid, info, pm, es }) => {
-      const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row) } : null;
-      let src, line, g, pos, n, t, adp, pid = null;
-      if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; pid = pm.id; }
+      const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row), min: es.row.min } : null;
+      let src, line, g, pos, n, t, adp, mpg = null, pid = null;
+      if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; pid = pm.id; mpg = q.m == null ? null : q.m; }
       else {
         src = actual ? 'actual' : 'waiver'; line = actual ? actual.line : wl.line; g = wl.g;
         pos = String(info.position || '').replace(/,/g, '/'); n = swapName(info.name); t = InLeague.toProjTeam(info.team); adp = null;
+        mpg = actual && actual.min != null ? actual.min : null;
       }
       if (!(fid in owner) && src === 'waiver') return;   // available players with no line at all are not worth listing
-      const pp = { key: fid, n, t, pos, line, g, src, actual, adp, pid, owner: owner[fid] || null, slot: slot[fid] || null, fxStatus: L.fxStatus[fid] || (fid in owner ? 'T' : null) };
+      const pp = { key: fid, n, t, pos, line, g, mpg, src, actual, adp, pid, owner: owner[fid] || null, slot: slot[fid] || null, fxStatus: L.fxStatus[fid] || (fid in owner ? 'T' : null) };
       players.push(pp); byKey.set(fid, pp);
       if (fid in owner && src !== 'proj') noProj.push(pp);
     });
@@ -2052,18 +2059,21 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 })(this);
 
 // Team tab core (#131, 2026-10-25): preview roster state and swaps. Pure; browser and Node. Nothing here touches the saved league.
-// Slots: active, bench, il, reserve. Fantrax RESERVE is the bench; "reserve" is the Team tab's own uncounted slot.
+// Slots: active, reserve, il. Fantrax RESERVE is the reserve (it fills the nights Active leaves open, so it counts); IL does not count.
 (function (root) {
   'use strict';
   const InLeague = root.InLeague || require('./inseason_league.js'), Matchup = root.Matchup || require('./matchup_core.js'),
     Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Shared = root.Shared || require('./shared.js');
-  const SLOTS =['active', 'bench', 'il', 'reserve'];
-  const FROM_FANTRAX = { ACTIVE: 'active', RESERVE: 'bench', IR: 'il' };
+  const SLOTS = ['active', 'reserve', 'il'];
+  const FROM_FANTRAX = { ACTIVE: 'active', RESERVE: 'reserve', IR: 'il' };
+  // the slots that count in the team's stats, Win C and Win M
+  const COUNTED = ['active', 'reserve'];
+  const counted = state => state.order.filter(k => COUNTED.includes(state.slots[k]));
 
   // rows: parseRosters entries [{ fid, slot }] for my team
   function initState(rows) {
     const slots = {}, order = [];
-    rows.forEach(x => { slots[x.fid] = FROM_FANTRAX[x.slot] || 'bench'; order.push(x.fid); });
+    rows.forEach(x => { slots[x.fid] = FROM_FANTRAX[x.slot] || 'reserve'; order.push(x.fid); });
     return { slots, order };
   }
 
@@ -2073,14 +2083,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { slots: Object.assign({}, state.slots, { [key]: slot }), order: state.order.slice() };
   }
 
-  // any number of players out and in; incoming players start on the bench
+  // any number of players out and in; incoming players start in the reserve
   function applySwap(state, outKeys, inKeys) {
     outKeys.forEach(k => { if (!(k in state.slots)) throw new Error('player not on the preview roster: ' + k); });
     if (new Set(outKeys).size !== outKeys.length || new Set(inKeys).size !== inKeys.length) throw new Error('duplicate player in swap');
     inKeys.forEach(k => { if (k in state.slots && !outKeys.includes(k)) throw new Error('player already on the roster: ' + k); });
     const slots = Object.assign({}, state.slots), out = new Set(outKeys);
     outKeys.forEach(k => { delete slots[k]; });
-    inKeys.forEach(k => { slots[k] = 'bench'; });
+    inKeys.forEach(k => { slots[k] = 'reserve'; });
     return { slots, order: state.order.filter(k => !out.has(k)).concat(inKeys.filter(k => !state.order.includes(k) || out.has(k))) };
   }
 
@@ -2112,12 +2122,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
-  // bench takes what is left; IL and reserve rows show what they would get as one more bench player (hypo: true, so teamLine
+  // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
   function playsPct(ctx, state) {
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
-    const act = by('active'), bench = by('bench'), res = {};
+    const act = by('active'), bench = by('reserve'), res = {};
     const done = (k, played, hypo) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; };
     const gA = windowGames(ctx, act, null), count = {}, used = {};
     act.forEach((k, i) => {
@@ -2128,7 +2138,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     Object.keys(count).forEach(d => { used[d] = Math.min(max, count[d]); });
     const gB = windowGames(ctx, bench, used);
     bench.forEach((k, i) => done(k, gB[i]));
-    state.order.filter(k => state.slots[k] === 'il' || state.slots[k] === 'reserve').forEach(k => {
+    by('il').forEach(k => {
       const g = windowGames(ctx, bench.concat(k), used);
       done(k, g[g.length - 1], true);
     });
@@ -2171,7 +2181,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, COUNTED, counted, windowGames, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2186,7 +2196,6 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   'use strict';
   const Eng = root.Engine || require('./engine.js'), Matchup = root.Matchup || require('./matchup_core.js'), Team = root.Team || require('./team_core.js');
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
-  const AVG_KEY = '__avg__';
 
   // remaining regular-season weeks: each period counts the share of it that lies in the Team.window
   function weeksLeft(ctx) {
@@ -2200,11 +2209,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return Team.initState(rows);
   }
 
-  // pairMatchup entries for the active and bench players: games = Plays % games per average week (hypothetical rows never count)
+  // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
   function side(ctx, state, W) {
     const r = Team.playsPct(ctx, state);
-    return state.order.filter(k => (state.slots[k] === 'active' || state.slots[k] === 'bench') && !r[k].hypo)
-      .map(k => ({ p: ctx.pool.byKey.get(k).line, games: r[k].played / W, gVar: Matchup.GVAR }));
+    return state.order.filter(k => Team.COUNTED.includes(state.slots[k]) && !r[k].hypo)
+      .map(k => ({ key: k, p: ctx.pool.byKey.get(k).line, games: r[k].played / W, gVar: Matchup.GVAR }));
   }
 
   // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
@@ -2225,10 +2234,15 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function matrix(ctx, state, opts) {
     const o = opts || {};
     if (o.mode != null && o.mode !== 'avg') throw new Error('unknown Win M mode: ' + o.mode);
-    const nc = o.cats === 8 ? 8 : 9, km = o.k && o.k.match != null ? o.k.match : Matchup.K_MATCH, kc = o.k && o.k.cat != null ? o.k.cat : Matchup.K_CAT;
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
-    const exclude = new Set(state.order), mine = side(ctx, state, W);
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order), W, o);
+  }
+
+  // the matrix for any set of my entries [{ p, games, gVar }] (games per average week, W = weeks left); `exclude` = the keys that left
+  // their old team's side (everyone on my roster, and a candidate I bring in)
+  function matrixOf(ctx, mine, exclude, W, o) {
+    const nc = o && o.cats === 8 ? 8 : 9, km = o && o.k && o.k.match != null ? o.k.match : Matchup.K_MATCH, kc = o && o.k && o.k.cat != null ? o.k.cat : Matchup.K_CAT;
     const teams = Object.keys(ctx.roster).filter(t => t !== ctx.me).map(id => {
       const r = Eng.pairMatchup(mine, oppSide(ctx, id, exclude, W), { cats: nc }), cat = r.cat.map(p => shrink(p, kc));
       return { id, cat, match: shrink(r.match, km), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
@@ -2240,22 +2254,42 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const dCats = (a, b) => a.mean.cat.map((v, c) => v == null ? 0 : 100 * (v - b.mean.cat[c]));
   const gain = (a, b) => ({ c: 100 * (a.mean.winC - b.mean.winC), m: 100 * (a.mean.match - b.mean.match), dCat: dCats(a, b) });
 
-  // each roster player's contribution to my Win C / Win M: active and bench = the team minus the team without him (the bench
-  // refills his nights); IL and reserve = the team with him on the bench minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
+  // each roster player's contribution to my Win C / Win M: active and reserve = the team minus the team without him (the reserve
+  // refills his nights); IL = the team with him in the reserve minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
   // one player's contribution given the current roster's matrix `base` (playerWin's per-player step, so a page can score one at a time)
-  // opts.baseline 'avg' (as on Rankings) subtracts what an average-player entry in his place would give: the mean per-game line of my
-  // Active and Bench players with his team's schedule; his slot, or the bench for IL and reserve players. Default 'rep' = the raw contribution.
+  // opts.baseline 'avg' (Vs average): see avgParts; my own Active / Reserve player X = the team minus (the team with X replaced by an average
+  // player); my IL player = a candidate. Default 'rep' = the raw contribution.
   function playerGain(ctx, state, k, base, opts) {
     if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };
-    const s = state.slots[k], counted = s === 'active' || s === 'bench';
-    const raw = counted ? gain(base, matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'bench'), opts), base), { hypo: true });
-    if (!opts || opts.baseline !== 'avg') return raw;
-    const pp = ctx.pool.byKey.get(k), inTeam = state.order.filter(x => state.slots[x] === 'active' || state.slots[x] === 'bench');
-    if (!inTeam.length) return raw;
-    const actx = withPlayer(ctx, { key: AVG_KEY, n: 'Average player', t: pp.t, line: Team.teamLine(inTeam.map(x => ({ line: ctx.pool.byKey.get(x).line, pct: 1 })), inTeam.length), g: pp.g, slot: null, owner: null });
-    const s0 = counted ? Team.applySwap(state, [k], [AVG_KEY]) : Team.applySwap(state, [], [AVG_KEY]);
-    const off = counted ? gain(matrix(actx, Team.moveSlot(s0, AVG_KEY, s), opts), matrix(actx, Team.moveSlot(state, k, 'reserve'), opts)) : gain(matrix(actx, Team.moveSlot(s0, AVG_KEY, 'bench'), opts), base);
-    return Object.assign({}, raw, { c: raw.c - off.c, m: raw.m - off.m, dCat: raw.dCat.map((v, c) => v - off.dCat[c]) });
+    if (opts && opts.baseline === 'avg') {
+      const ap = (opts.ap) || avgParts(ctx, state, base.weeks);
+      if (ap) { const own = Team.COUNTED.includes(state.slots[k]); return own ? gain(base, avgOwn(ctx, state, ap, k, opts)) : Object.assign(gain(avgCandidate(ctx, state, ap, k, opts), base), { hypo: true }); }
+    }
+    const s = state.slots[k], counted = Team.COUNTED.includes(s), without = Team.applySwap(state, [k], []);
+    return counted ? gain(base, matrix(ctx, without, opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts), base), { hypo: true });
+  }
+
+  // the made-up average player of Vs average. n = my counted players, tot = their games per week, mean = the games-weighted mean line with
+  // the mean games, share = the games my counted players get out of the games their schedules allow (the team's average lineup share).
+  // Taking an average player out of the team in expectation = scaling every entry's games and games variance by (n-1)/n (a percentage
+  // stays the same, a total loses 1/n). -> null with no counted player or no games
+  function avgParts(ctx, state, W) {
+    const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0);
+    const allowed = Team.windowGames(ctx, Team.counted(state), null).reduce((a, b) => a + b, 0);
+    if (!n || !(tot > 0) || !(allowed > 0)) return null;
+    return { W, mine, n, tot, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / n, gVar: Matchup.GVAR } };
+  }
+
+  // a player not counted on my team replaces the average player: the team scaled by (n-1)/n plus him, with his games times the share
+  function avgCandidate(ctx, state, ap, key, opts) {
+    const f = (ap.n - 1) / ap.n, g = Team.windowGames(ctx, [key], null)[0] / ap.W * ap.share;
+    const mine = ap.mine.map(e => ({ p: e.p, games: e.games * f, gVar: e.gVar * f })).concat({ p: ctx.pool.byKey.get(key).line, games: g, gVar: Matchup.GVAR });
+    return matrixOf(ctx, mine, new Set(state.order).add(key), ap.W, opts);
+  }
+
+  // my counted player replaced by the average player
+  function avgOwn(ctx, state, ap, key, opts) {
+    return matrixOf(ctx, ap.mine.filter(e => e.key !== key).concat(ap.mean), new Set(state.order), ap.W, opts);
   }
 
   function playerWin(ctx, state, opts) {
@@ -2264,18 +2298,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return res;
   }
 
-  // ctx with one made-up player in the pool (ctx.pool itself is never touched)
-  function withPlayer(ctx, pp) {
-    const byKey = new Map(ctx.pool.byKey);
-    byKey.set(pp.key, pp);
-    return Object.assign({}, ctx, { pool: Object.assign({}, ctx.pool, { byKey }) });
-  }
-
-  // Player-list scores for the Team tab module. Baselines: 'rep' = the player replaces my worst Active / Bench player (lowest Win M
+  // Player-list scores for the Team tab module. Baselines: 'rep' = the player replaces my worst Active / Reserve player (lowest Win M
   // contribution); 'avg' = the same minus what an average-player entry in his place would give, as on the Rankings tab (the entry is
-  // the mean per-game line of my Active and Bench players, with the worst player's team schedule). dM / dC are the real changes in my
+  // the mean per-game line of my Active and Reserve players, with the worst player's team schedule). dM / dC are the real changes in my
   // Win M (points) / Win C (hundredths); weights (0-1 per category) only change the sort: by dM when all are 1, else by the weighted
-  // sum of the change in each category's chance. My own Active / Bench players are their contribution minus the worst player's (the
+  // sum of the change in each category's chance. My own Active / Reserve players are their contribution minus the worst player's (the
   // worst shows 0); my IL / Reserve players are a swap for the worst, like a candidate.
   // opts: baseline 'rep' | 'avg', weights, cats, k, candidates (keys; default every pool player, my own included)
   // -> [{ key, owner, dM, dC, dCat[], sort }] sorted by sort, highest first (ties keep candidate order)
@@ -2288,15 +2315,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function moduleSetup(ctx, state, opts) {
     const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, base = o.base || matrix(ctx, state, mo);
     if (!base.mean) return null;
-    const pw = o.pw || playerWin(ctx, state, mo), counted = state.order.filter(k => state.slots[k] === 'active' || state.slots[k] === 'bench');
+    if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks); return ap ? { base, ap, mo, avg: true } : null; }
+    const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state);
     if (!counted.length) return null;
-    const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst], wPlayer = ctx.pool.byKey.get(worst);
-    const su = { base, pw, worst, wSlot, mo, off: { c: 0, m: 0, dCat: new Array(9).fill(0) }, avg: o.baseline === 'avg' };
-    if (su.avg) {
-      const line = Team.teamLine(counted.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: 1 })), counted.length);
-      su.off = swapScore(ctx, state, su, withPlayer(ctx, { key: AVG_KEY, n: 'Average player', t: wPlayer.t, line, g: wPlayer.g, slot: null, owner: null }), AVG_KEY);
-    }
-    return su;
+    const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst];
+    return { base, pw, worst, wSlot, mo, off: { c: 0, m: 0, dCat: new Array(9).fill(0) }, avg: false };
   }
 
   // the preview with `key` in the worst player's slot, scored against the current team
@@ -2306,13 +2329,17 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   function moduleRow(ctx, state, su, key) {
-    const own = key in state.slots, s = own ? state.slots[key] : null, pw = su.pw, zero = () => new Array(9).fill(0);
+    const own = key in state.slots, s = own ? state.slots[key] : null, owner = own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), cur = 100 * su.base.mean.match;
+    if (su.avg) {
+      const counted = own && Team.COUNTED.includes(s), a = counted ? avgOwn(ctx, state, su.ap, key, su.mo) : avgCandidate(ctx, state, su.ap, key, su.mo), g = counted ? gain(su.base, a) : gain(a, su.base);
+      return { key, owner, dM: g.m, dC: g.c, dCat: g.dCat, old: counted ? cur - g.m : cur, new: counted ? cur : cur + g.m };
+    }
+    const pw = su.pw, zero = () => new Array(9).fill(0);
     let r;
     if (key === su.worst) r = { c: 0, m: 0, dCat: zero() };
-    else if (own && (s === 'active' || s === 'bench')) r = { c: pw[key].c - pw[su.worst].c, m: pw[key].m - pw[su.worst].m, dCat: pw[key].dCat.map((v, c) => v - pw[su.worst].dCat[c]) };
+    else if (own && Team.COUNTED.includes(s)) r = { c: pw[key].c - pw[su.worst].c, m: pw[key].m - pw[su.worst].m, dCat: pw[key].dCat.map((v, c) => v - pw[su.worst].dCat[c]) };
     else r = swapScore(ctx, state, su, ctx, key);
-    const cur = 100 * su.base.mean.match;
-    return { key, owner: own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), dM: r.m - su.off.m, dC: r.c - su.off.c, dCat: r.dCat.map((v, c) => v - su.off.dCat[c]), old: cur + su.off.m, new: cur + r.m };
+    return { key, owner, dM: r.m - su.off.m, dC: r.c - su.off.c, dCat: r.dCat.map((v, c) => v - su.off.dCat[c]), old: cur + su.off.m, new: cur + r.m };
   }
 
   function moduleSort(rows, weights) {
@@ -2327,7 +2354,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { AVG_KEY, weeksLeft, oppState, side, matrix, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2354,14 +2381,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   // opts: zCats (pool player -> per-game category Zs[9], or null), weights (0-1 per category), cats (9 | 8), adjust (bool),
   // view 'game' (per game) | 'ros' (per game x GL). -> { groups: [{ slot, rows }], rows, avg, avgZ }
-  // row: { key, n, t, pos, slot, gl, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
+  // row: { key, n, t, pos, slot, gl, mpg, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
   // avgZ is the Plays % weighted Z per lineup slot (null without zCats)
   function rows(ctx, state, opts) {
     const o = opts || {}, plays = Team.playsPct(ctx, state), nc = o.cats === 8 ? 8 : 9, slots = ctx.L.maxActive;
     const all = state.order.map(key => {
       const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust ? (p.pct == null ? 0 : p.pct) : 1;
       const cats = o.zCats ? o.zCats(pp) : null;
-      return { key, n: pp.n, t: pp.t, pos: pp.pos, slot: state.slots[key], gl, pct: p.pct, hypo: !!p.hypo,
+      return { key, n: pp.n, t: pp.t, pos: pp.pos, slot: state.slots[key], gl, mpg: pp.mpg == null ? null : pp.mpg, pct: p.pct, hypo: !!p.hypo,
         stat: scaled(pp.line, (o.view === 'ros' ? gl : 1) * f),
         cats: cats && cats.map(v => v * f), z: cats ? Team.weightedZ(cats.map(v => v * f), o.weights, nc) : null };
     });
@@ -2384,12 +2411,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // ---- Win scoring, one piece per step() so the page stays responsive: the matrix first, then one roster player per step ----
   // -> { done, matrix, players, step() }; step() returns true while there is more to do. players: { key: { c, m, dCat[9], hypo? } }
   function winJob(ctx, state, opts) {
-    const keys = state.order.slice(), job = { done: false, matrix: null, players: {}, step() {
+    const keys = state.order.slice();
+    let po = opts;   // for 'avg' the average player is built once, not per roster player
+    const job = { done: false, matrix: null, players: {}, step() {
       if (job.done) return false;
-      if (!job.matrix) job.matrix = TeamWin.matrix(ctx, state, opts);
+      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks) }); }
       else {
         const k = keys[Object.keys(job.players).length];
-        job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, opts);
+        job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, po);
       }
       if (job.matrix && Object.keys(job.players).length === keys.length) job.done = true;
       return true;
@@ -2398,19 +2427,19 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // ---- player list scoring (the Team tab module), in pieces of about `budgetMs` so the page stays responsive ----
-  // pieces: the matrix, one raw gain per counted player, the setup (the average-entry offset for 'avg'), then one candidate row each.
+  // pieces: the matrix, one raw gain per counted player ('rep' only), the setup, then one candidate row each.
   // opts: baseline 'rep' | 'avg', cats, k, mode (weights are not an input: they only re-sort, TeamWin.moduleSort). candidates default to the whole pool.
   // -> { done, rows (unsorted, in candidate order), n, total, step(budgetMs, clock) }; step() returns true while it did work
   function moduleJob(ctx, state, opts, candidates) {
     const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, cand = candidates || ctx.pool.players.map(p => p.key);
-    const counted = state.order.filter(k => state.slots[k] === 'active' || state.slots[k] === 'bench');
+    const counted = Team.counted(state);
     let base = null, pw = {}, su = null;
     const job = { done: false, rows: [], n: 0, total: cand.length, step(budgetMs, clock) {
       if (job.done) return false;
       const now = clock || Date.now, t0 = now();
       do {
         if (!base) { base = TeamWin.matrix(ctx, state, mo); if (!base.mean || !counted.length) { job.done = true; break; } }
-        else if (Object.keys(pw).length < state.order.length) { const k = state.order[Object.keys(pw).length]; pw[k] = TeamWin.playerGain(ctx, state, k, base, mo); }
+        else if (o.baseline !== 'avg' && Object.keys(pw).length < state.order.length) { const k = state.order[Object.keys(pw).length]; pw[k] = TeamWin.playerGain(ctx, state, k, base, mo); }
         else if (!su) { su = TeamWin.moduleSetup(ctx, state, Object.assign({}, o, { base, pw })); if (!su) { job.done = true; break; } }
         else { job.rows.push(TeamWin.moduleRow(ctx, state, su, cand[job.n++])); if (job.n >= cand.length) job.done = true; }
       } while (!job.done && now() - t0 < budgetMs);
@@ -2421,6 +2450,21 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   // the first job that is not done, or null (the page steps one job per tick: roster Win first, then the list)
   const nextJob = jobs => jobs.find(j => j && !j.done) || null;
+
+  // what a change did to the preview roster: keys out, keys in, and slot moves of players who stayed
+  function diff(before, after) {
+    return { out: before.order.filter(k => !(k in after.slots)), in: after.order.filter(k => !(k in before.slots)),
+      moves: after.order.filter(k => k in before.slots && before.slots[k] !== after.slots[k]).map(k => ({ key: k, from: before.slots[k], to: after.slots[k] })) };
+  }
+
+  // rows ordered by `val(row)` (a number or a string; null / undefined / NaN = missing, always last), 'asc' or 'desc'; ties keep the input order. A copy.
+  function sortRows(rows, val, dir) {
+    const sg = dir === 'asc' ? 1 : -1, miss = v => v == null || v !== v;
+    return rows.map((r, i) => ({ r, i, v: val(r) })).sort((a, b) => {
+      if (miss(a.v) || miss(b.v)) return miss(a.v) - miss(b.v) || a.i - b.i;
+      return (a.v < b.v ? -1 : a.v > b.v ? 1 : 0) * sg || a.i - b.i;
+    }).map(x => x.r);
+  }
 
   const signature = state => state.order.map(k => k + ':' + state.slots[k]).join('|');
 
@@ -2443,9 +2487,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // ---- the list as drawn ----
-  const SLOT_LABEL = { active: 'Active', bench: 'Bench', il: 'IL', reserve: 'Reserve' };
-  // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query, limit (default 50).
-  // -> { rows: [{ ...row, n, t, pos, label }], total (after the filters), more (not shown) }. My players sent out of the preview are
+  const SLOT_LABEL = { active: 'Active', reserve: 'Reserve', il: 'IL' };
+  // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query.
+  // -> { rows: [{ ...row, n, t, pos, label }], total (after the filters) }; every row is returned. My players sent out of the preview are
   // free agents here ("Sent out"). The search only filters (Team.search would reorder by name match), so the Win M order stays.
   function moduleView(rows, ctx, state, opts) {
     const o = opts || {}, me = ctx.me, teamName = id => ((ctx.L.teams || []).find(t => t.id === id) || {}).name || String(id);
@@ -2456,8 +2500,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     if (o.owner && o.owner !== 'all') list = list.filter(r => r._own === o.owner);
     if (o.query) { const hit = new Set(Team.search(list, o.query, Infinity).map(r => r.key)); list = list.filter(r => hit.has(r.key)); }
-    const limit = o.limit || 50;
-    return { rows: list.slice(0, limit).map(r => { const x = Object.assign({}, r); delete x._own; return x; }), total: list.length, more: Math.max(0, list.length - limit) };
+    return { rows: list.map(r => { const x = Object.assign({}, r); delete x._own; return x; }), total: list.length };
   }
 
   // ---- drops from the list ----
@@ -2484,7 +2527,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
   const apply = (state, outs, ins) => Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
 
-  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, dropSwap, dropIn, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2494,14 +2537,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   'use strict';
   const $ = id => document.getElementById(id), LS = LeagueStore, InL = InLeague, InP = InPlayers, R = Rankings, TV = TeamView, TW = TeamWin, TC = Team;
   const CATN = ['FG%', 'FT%', '3PM', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TO'], RAWK = ['fgp', 'ftp', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
-  const SLOT_NAME = { active: 'Active', bench: 'Bench', il: 'IL', reserve: 'Reserve' };
+  const SLOT_NAME = { active: 'Active', reserve: 'Reserve', il: 'IL' };
   const WIN = { mode: 'avg' };   // the one place the Win M basis is chosen ('avg' = an average remaining week); TeamWin.matrix takes it
   $('sitenav').outerHTML = Shared.TOOLBAR_HTML('team');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-team-v1';
-  let ui = { view: 'game', zview: 'stats', adjust: false, weights: null, sortZ: false, team: null, listVs: 'rep', lown: 'all' };
+  let ui = { view: 'game', zview: 'stats', adjust: false, weights: null, sort: null, team: null, listVs: 'rep', lown: 'all' };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
-  ui.view = ui.view === 'ros' ? 'ros' : 'game'; ui.zview = ui.zview === 'z' ? 'z' : 'stats'; ui.adjust = !!ui.adjust; ui.sortZ = !!ui.sortZ; ui.team = typeof ui.team === 'string' ? ui.team : null;
+  ui.view = ui.view === 'ros' ? 'ros' : 'game'; ui.zview = ui.zview === 'z' ? 'z' : 'stats'; ui.adjust = !!ui.adjust; if (ui.sortZ) ui.sort = { col: 'z', dir: 'desc' }; delete ui.sortZ; ui.sort = ui.sort && /^(n|gl|pct|mpg|z|wc|wm|c[0-8])$/.test(ui.sort.col) ? { col: ui.sort.col, dir: ui.sort.dir === 'asc' ? 'asc' : 'desc' } : null; ui.team = typeof ui.team === 'string' ? ui.team : null;
   ui.listVs = ui.listVs === 'avg' ? 'avg' : 'rep'; ui.lown = typeof ui.lown === 'string' ? ui.lown : 'all';
   ui.weights = Array.isArray(ui.weights) && ui.weights.length === 9 && ui.weights.every(v => v >= 0 && v <= 1) ? ui.weights.map(Number) : new Array(9).fill(1);
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
@@ -2515,7 +2558,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return '<span class="chip" style="background:' + bg + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + txt + '</span>'; };
 
   let SS = LS.load(LS.local.get), L = null, rosters = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
-  let me = null, base = null, state = null, zmap = new Map(), scorer = TV.createScorer(), outs = [], ins = [], tickSeq = 0, llimit = 50;
+  let me = null, base = null, state = null, zmap = new Map(), scorer = TV.createScorer(), outs = [], ins = [], log = [], tickSeq = 0;
 
   async function fxGet(what, id) {
     let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
@@ -2587,7 +2630,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function setTeam(id) {
     me = id; ui.team = id; save();
     ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [] });
-    scorer = TV.createScorer(); base = TC.initState(rosters[me] || []); state = base; outs = []; ins = []; llimit = 50;
+    scorer = TV.createScorer(); base = TC.initState(rosters[me] || []); state = base; outs = []; ins = []; log = [];
     ownerOptions(); $('swap-msg').textContent = ''; render();
   }
 
@@ -2595,19 +2638,29 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const statCells = s => RAWK.map((k, c) => '<td>' + fmtStat(s[k], c) + '</td>').join('');
   const pctTxt = p => p == null ? '–' : Math.round(p * 100) + '%';
 
+  // the roster table's click-to-sort: first click = the column's natural order (names A-Z, numbers high first), second flips it, third clears
+  function sortedRows(rows, job, zv, parts) {
+    if (!ui.sort) return rows;
+    const c = ui.sort.col, w = x => job.players[x.key];
+    const val = c === 'n' ? x => x.n : c === 'gl' ? x => x.gl : c === 'pct' ? x => x.pct : c === 'mpg' ? x => x.mpg : c === 'z' ? x => x.z : c === 'wc' ? x => w(x) && w(x).c : c === 'wm' ? x => w(x) && w(x).m
+      : x => zv ? (x.cats ? parts(x)[+c.slice(1)] : null) : x.stat[RAWK[+c.slice(1)]];
+    return TV.sortRows(rows, val, ui.sort.dir);
+  }
   function rosterHtml(r, job) {
-    const head = '<thead><tr><th class="l">Player</th><th title="Projected remaining games">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th title="' + (ui.zview === 'z' ? c + ': his weighted Z in this category' : c + ': projected ' + (ui.view === 'ros' ? 'rest-of-season total' : 'per-game value')) + '">' + c + '</th>').join('') +
-      '<th class="sortable" id="th-z" title="Zscore, weighted by the category weights; click to sort by it"' + (ui.sortZ ? ' aria-sort="descending"' : '') + '>Z</th><th title="Win C (hundredths) he adds over an average player in his place">Win C</th><th title="Win M (points) he adds over an average player in his place">Win M</th></tr></thead>';
-    const nc = nCats(), cols = 3 + nc + 3, body = [], zv = ui.zview === 'z', wts = ui.weights, parts = x => TV.zParts(x.cats, wts, nc);
+    const th = (col, label, title, cls) => '<th class="sortable' + (cls ? ' ' + cls : '') + '" data-col="' + col + '" title="' + esc(title) + ' (click to sort)"' + (ui.sort && ui.sort.col === col ? ' aria-sort="' + (ui.sort.dir === 'asc' ? 'ascending' : 'descending') + '"' : '') + '>' + label + (ui.sort && ui.sort.col === col ? (ui.sort.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</th>';
+    const head = '<thead><tr>' + th('n', 'Player', 'Player name', 'l') + th('gl', 'GL', 'Projected remaining games') + th('pct', 'Plays %', 'Share of his team games he gets a lineup slot for') + th('mpg', 'MPG', 'Projected minutes per game') +
+      CATN.slice(0, nCats()).map((c, i) => th('c' + i, c, ui.zview === 'z' ? c + ': his weighted Zscore in this category' : c + ': projected ' + (ui.view === 'ros' ? 'rest-of-season total' : 'per-game value'))).join('') +
+      th('z', 'Zscore', 'Zscore, weighted by the category weights') + th('wc', 'Win C', 'Win C (hundredths) he adds over an average player in his place') + th('wm', 'Win M', 'Win M (points) he adds over an average player in his place') + '</tr></thead>';
+    const nc = nCats(), cols = 4 + nc + 3, body = [], zv = ui.zview === 'z', wts = ui.weights, parts = x => TV.zParts(x.cats, wts, nc);
     const cnt = TV.slotCounts(state, ctx.L.maxActive);
     r.groups.forEach(g => {
       const c = cnt[g.slot], lim = g.slot === 'active' ? ' / ' + ctx.L.maxActive : '';
       body.push('<tr class="grp" data-slot="' + g.slot + '"><td colspan="' + cols + '"' + (c.over ? ' class="over" title="More Active players than the league allows each night; the extra ones sit some nights"' : ' title="Drop a player here to move him to ' + SLOT_NAME[g.slot] + '"') + '>' + SLOT_NAME[g.slot] + ' (' + g.rows.length + lim + ')' + (c.over ? ' · over the limit' : '') + '</td></tr>');
-      (ui.sortZ ? g.rows.slice().sort((a, b) => (b.z == null ? -1e9 : b.z) - (a.z == null ? -1e9 : a.z)) : g.rows).forEach(x => {
+      sortedRows(g.rows, job, zv, parts).forEach(x => {
         const w = job.players[x.key], dim = x.hypo ? ' class="hy"' : '';
         body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + '</small>' +
           '<select class="slot" data-key="' + esc(x.key) + '" aria-label="Slot for ' + esc(x.n) + '" title="Move ' + esc(x.n) + ' to another slot (or drag the row onto a group header)">' + Object.keys(SLOT_NAME).map(sl => '<option value="' + sl + '"' + (sl === x.slot ? ' selected' : '') + '>' + SLOT_NAME[sl] + '</option>').join('') + '</select></td><td>' + x.gl.toFixed(0) + '</td>' +
-          '<td' + (x.hypo ? ' class="dim" title="What he would get as one more bench player"' : '') + '>' + pctTxt(x.pct) + '</td>' +
+          '<td' + (x.hypo ? ' class="dim" title="What he would get as one more reserve player"' : '') + '>' + pctTxt(x.pct) + '</td><td>' + (x.mpg == null ? '–' : x.mpg.toFixed(1)) + '</td>' +
           RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo || (zv && wts[c] === 0) ? ' class="dim"' : '') + '>' + (zv ? (x.cats ? signed(parts(x)[c], 2) : '–') : fmtStat(x.stat[k], c)) + '</td>').join('') +
           '<td>' + (x.z == null ? '–' : signed(x.z, 2)) + '</td>' +
           (w ? '<td' + dim + '><span class="' + sgn(w.c) + '">' + signed(w.c) + '</span></td><td' + dim + '><span class="' + sgn(w.m) + '">' + signed(w.m) + '</span></td>' : '<td>…</td><td>…</td>') + '</tr>');
@@ -2615,7 +2668,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     const mean = job.matrix && job.matrix.mean;
     const avgParts = zv && r.avgCats ? TV.zParts(r.avgCats, ui.weights, nc) : null;
-    body.push('<tr class="tot"><td class="l">Team average (per slot)</td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td' + (zv && wts[c] === 0 ? ' class="dim"' : '') + '>' + (zv ? (avgParts ? signed(avgParts[c], 2) : '–') : fmtStat(r.avg[k], c)) + '</td>').join('') +
+    body.push('<tr class="tot"><td class="l">Team average (per slot)</td><td></td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td' + (zv && wts[c] === 0 ? ' class="dim"' : '') + '>' + (zv ? (avgParts ? signed(avgParts[c], 2) : '–') : fmtStat(r.avg[k], c)) + '</td>').join('') +
       '<td>' + (r.avgZ == null ? '–' : signed(r.avgZ, 2)) + '</td><td>' + (mean ? mean.winC.toFixed(1) : '…') + '</td><td>' + (mean && mean.match != null ? Math.round(mean.match * 100) + '%' : '…') + '</td></tr>');
     return head + '<tbody>' + body.join('') + '</tbody>';
   }
@@ -2637,10 +2690,24 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $('roster').innerHTML = rosterHtml(r, job);
     $('matrix').innerHTML = matrixHtml(job);
     $('cards').innerHTML = cardsHtml(r, job);
+    drawLog();
     $('rost-meta').textContent = job.done ? '' : 'Scoring Win C / Win M…';
     $('rost-note').textContent = (ui.view === 'ros' ? 'Rest of season: per-game line × projected games left' + (ui.adjust ? ' × Plays %' : '') : 'Per game' + (ui.adjust ? ', × Plays %' : '')) + '. The team rows always use Plays %.';
-    $('th-z').onclick = () => { ui.sortZ = !ui.sortZ; save(); draw(); };
     return job;
+  }
+  // every change to the preview roster goes through commit(), which keeps the list of changes (Undo goes back one, Clear empties it)
+  function commit(next) { if (next === state) return; log.push({ before: state, after: next }); state = next; }
+  function drawLog() {
+    $('logbox').hidden = !log.length; $('log-n').textContent = log.length ? '(' + log.length + ')' : '';
+    const nm = k => esc((ctx.pool.byKey.get(k) || {}).n || k), mm = job => job.done && job.matrix && job.matrix.mean ? job.matrix.mean.match : null;
+    $('log').innerHTML = log.map(e => {
+      const d = TV.diff(e.before, e.after), parts = [];
+      if (d.out.length) parts.push('Out ' + d.out.map(nm).join(', '));
+      if (d.in.length) parts.push('In ' + d.in.map(k => nm(k) + ' (' + SLOT_NAME[e.after.slots[k]] + ')').join(', '));
+      d.moves.forEach(m => parts.push(nm(m.key) + ' ' + SLOT_NAME[m.from] + ' → ' + SLOT_NAME[m.to]));
+      const a = mm(scorer.get(ctx, e.before, winOpts())), b = mm(scorer.get(ctx, e.after, winOpts()));
+      return '<li>' + parts.join(' · ') + (a != null && b != null ? ' <small class="' + sgn(b - a) + '">Win M ' + signed(100 * (b - a)) + '</small>' : '') + '</li>';
+    }).join('');
   }
   // Old vs New for the swap: the saved roster against the preview (Team Z, Win C, Win M)
   function cardsHtml(r, job) {
@@ -2659,17 +2726,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function drawList() {
     if (!ctx) return;
     const job = scorer.getModule(ctx, state, listOpts());
-    if (!job.done) { $('lmeta').textContent = 'Scoring ' + job.n + ' / ' + job.total + '…'; $('lmore').hidden = true; return; }
-    if (!job.rows.length) { $('lmeta').textContent = ''; $('ltable').innerHTML = '<tbody><tr><td class="l">No regular-season weeks are left.</td></tr></tbody>'; $('lmore').hidden = true; return; }
+    if (!job.done) { $('lmeta').textContent = 'Scoring ' + job.n + ' / ' + job.total + '…'; return; }
+    if (!job.rows.length) { $('lmeta').textContent = ''; $('ltable').innerHTML = '<tbody><tr><td class="l">No regular-season weeks are left.</td></tr></tbody>'; return; }
     const weighted = ui.weights.some(w => w !== 1), rows = TW.moduleSort(job.rows, weighted ? ui.weights : null);
-    const v = TV.moduleView(rows, ctx, state, { owner: ui.lown, query: $('lq').value, limit: llimit });
+    const v = TV.moduleView(rows, ctx, state, { owner: ui.lown, query: $('lq').value });
     $('lmeta').textContent = v.total + ' players · Win M now ' + Math.round(job.rows[0].old) + '%';
-    $('lhint').textContent = (ui.listVs === 'avg' ? 'Change in your Win M if he replaces an average player in your worst player\'s spot.' : 'Change in your Win M if he replaces your worst Active or Bench player.') + (weighted ? ' Sorted by the weighted change in category chances; the change shown is the real Win M change.' : '') + ' Click to bring him in (yours go to Send out); drag onto a roster row to swap.';
+    $('lhint').textContent = (ui.listVs === 'avg' ? 'Change in your Win M if he replaces a made-up average player of your team (your team games scaled down to make room).' : 'Change in your Win M if he replaces your worst Active or Reserve player.') + (weighted ? ' Sorted by the weighted change in category chances; the change shown is the real Win M change.' : '') + ' Click to bring him in (yours go to Send out); drag onto a roster row to swap.';
     const mine = r => r.label.indexOf('You') === 0;
     $('ltable').innerHTML = '<thead><tr><th class="l">Player</th><th class="l">Owner</th><th title="Your Win M after the swap">Win M</th><th title="Change in your Win M, in points">Change</th></tr></thead><tbody>' +
       v.rows.map(r => '<tr class="lrow" data-key="' + esc(r.key) + '" data-own="' + (mine(r) ? '1' : '') + '" draggable="true" title="Click to ' + (mine(r) ? 'send ' + esc(r.n) + ' out' : 'bring ' + esc(r.n) + ' in') + '; drag onto a roster row to swap"><td class="l">' + esc(r.n) + '<small>' + esc(r.t || '') + ' ' + esc(r.pos || '') + '</small></td><td class="l">' + esc(r.label) + '</td><td>' + Math.round(r.new) + '%</td><td><span class="' + sgn(r.dM) + '">' + signed(r.dM) + '</span></td></tr>').join('') +
       (v.rows.length ? '' : '<tr><td class="l" colspan="4">No players match.</td></tr>') + '</tbody>';
-    $('lmore').hidden = !v.more; $('lmore').textContent = 'Show ' + Math.min(50, v.more) + ' more (' + v.more + ' left)';
   }
   // scoring runs a piece at a time: this roster's Win, the saved roster's (for "was"), then the list; a newer roster cancels the older
   // run (its half-done jobs stay cached for a return to that roster)
@@ -2713,13 +2779,22 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $(w + '-chips').addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if (!b) return; if (w === 'out') outs = outs.filter(c => c.key !== b.dataset.k); else ins = ins.filter(c => c.key !== b.dataset.k); renderSwap(); });
   });
   $('apply').addEventListener('click', () => {
-    try { state = TV.apply(state, outs, ins); outs = []; ins = []; $('swap-msg').textContent = ''; render(); }
+    try { commit(TV.apply(state, outs, ins)); outs = []; ins = []; $('swap-msg').textContent = ''; render(); }
     catch (e) { $('swap-msg').textContent = e.message; $('swap-msg').className = 'msg err'; }
   });
-  $('reset').addEventListener('click', () => { state = base; outs = []; ins = []; $('swap-msg').textContent = ''; render(); });
+  $('reset').addEventListener('click', () => { state = base; log = []; outs = []; ins = []; $('swap-msg').textContent = ''; render(); });
+
+  $('undo').addEventListener('click', () => { const e = log.pop(); if (!e) return; state = e.before; outs = []; ins = []; $('swap-msg').textContent = ''; render(); });
+  $('logclear').addEventListener('click', () => { log = []; drawLog(); });
 
   // ---- moving players between slots: the row's select, or drag the row onto a group header ----
-  const moveTo = (key, slot) => { if (!(key in state.slots) || !SLOT_NAME[slot]) return; const s2 = TV.move(state, key, slot); if (s2 !== state) { state = s2; render(); } };
+  const moveTo = (key, slot) => { if (!(key in state.slots) || !SLOT_NAME[slot]) return; const s2 = TV.move(state, key, slot); if (s2 !== state) { commit(s2); render(); } };
+  $('roster').addEventListener('click', e => {
+    const h = e.target.closest('th[data-col]'); if (!h) return;
+    const col = h.dataset.col;
+    ui.sort = !ui.sort || ui.sort.col !== col ? { col, dir: col === 'n' ? 'asc' : 'desc' } : ui.sort.dir === (col === 'n' ? 'asc' : 'desc') ? { col, dir: col === 'n' ? 'desc' : 'asc' } : null;
+    save(); draw();
+  });
   $('roster').addEventListener('change', e => { const s = e.target.closest('select.slot'); if (s) moveTo(s.dataset.key, s.value); });
   $('roster').addEventListener('dragstart', e => { const tr = e.target.closest && e.target.closest('tr[data-key]'); if (!tr) return; e.dataTransfer.setData('text/plain', tr.dataset.key); e.dataTransfer.effectAllowed = 'move'; });
   const dropTarget = e => e.target.closest('tr.grp, tr[data-key]');
@@ -2729,7 +2804,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const t = dropTarget(e); if (!t) return; e.preventDefault(); t.classList.remove('drop');
     const d = e.dataTransfer.getData('text/plain');
     if (d.indexOf('list:') === 0) {   // a list player: onto a row he takes that player's slot, onto a header he joins the group
-      try { const k = d.slice(5); state = t.dataset.slot ? TV.dropIn(state, k, t.dataset.slot) : TV.dropSwap(state, k, t.dataset.key); outs = outs.filter(c => c.key in state.slots); ins = ins.filter(c => !(c.key in state.slots)); $('swap-msg').textContent = ''; render(); }
+      try { const k = d.slice(5); commit(t.dataset.slot ? TV.dropIn(state, k, t.dataset.slot) : TV.dropSwap(state, k, t.dataset.key)); outs = outs.filter(c => c.key in state.slots); ins = ins.filter(c => !(c.key in state.slots)); $('swap-msg').textContent = ''; render(); }
       catch (er) { $('swap-msg').textContent = er.message; $('swap-msg').className = 'msg err'; }
     } else if (t.dataset.slot) moveTo(d, t.dataset.slot);
   });
@@ -2737,10 +2812,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // ---- the list: click adds him to the swap boxes, drag swaps him in, the selects and search filter ----
   $('ltable').addEventListener('click', e => { const tr = e.target.closest('tr[data-key]'); if (!tr) return; pickFrom(tr.dataset.own ? 'out' : 'in', ctx.pool.byKey.get(tr.dataset.key)); });
   $('ltable').addEventListener('dragstart', e => { const tr = e.target.closest && e.target.closest('tr[data-key]'); if (!tr) return; e.dataTransfer.setData('text/plain', 'list:' + tr.dataset.key); e.dataTransfer.effectAllowed = 'move'; });
-  $('lvs').addEventListener('change', () => { ui.listVs = $('lvs').value; save(); llimit = 50; drawList(); pump(); });
-  $('lown').addEventListener('change', () => { ui.lown = $('lown').value; save(); llimit = 50; drawList(); });
-  $('lq').addEventListener('input', () => { llimit = 50; drawList(); });
-  $('lmore').addEventListener('click', () => { llimit += 50; drawList(); });
+  $('lvs').addEventListener('change', () => { ui.listVs = $('lvs').value; save(); drawList(); pump(); });
+  $('lown').addEventListener('change', () => { ui.lown = $('lown').value; save(); drawList(); });
+  $('lq').addEventListener('input', () => drawList());
 
   // ---- controls ----
   function viewButtons() { document.querySelectorAll('#view button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.view)); document.querySelectorAll('#zview button').forEach(b => b.classList.toggle('on', b.dataset.z === ui.zview)); }

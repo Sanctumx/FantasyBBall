@@ -21,14 +21,14 @@
 
   // opts: zCats (pool player -> per-game category Zs[9], or null), weights (0-1 per category), cats (9 | 8), adjust (bool),
   // view 'game' (per game) | 'ros' (per game x GL). -> { groups: [{ slot, rows }], rows, avg, avgZ }
-  // row: { key, n, t, pos, slot, gl, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
+  // row: { key, n, t, pos, slot, gl, mpg, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
   // avgZ is the Plays % weighted Z per lineup slot (null without zCats)
   function rows(ctx, state, opts) {
     const o = opts || {}, plays = Team.playsPct(ctx, state), nc = o.cats === 8 ? 8 : 9, slots = ctx.L.maxActive;
     const all = state.order.map(key => {
       const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust ? (p.pct == null ? 0 : p.pct) : 1;
       const cats = o.zCats ? o.zCats(pp) : null;
-      return { key, n: pp.n, t: pp.t, pos: pp.pos, slot: state.slots[key], gl, pct: p.pct, hypo: !!p.hypo,
+      return { key, n: pp.n, t: pp.t, pos: pp.pos, slot: state.slots[key], gl, mpg: pp.mpg == null ? null : pp.mpg, pct: p.pct, hypo: !!p.hypo,
         stat: scaled(pp.line, (o.view === 'ros' ? gl : 1) * f),
         cats: cats && cats.map(v => v * f), z: cats ? Team.weightedZ(cats.map(v => v * f), o.weights, nc) : null };
     });
@@ -51,12 +51,14 @@
   // ---- Win scoring, one piece per step() so the page stays responsive: the matrix first, then one roster player per step ----
   // -> { done, matrix, players, step() }; step() returns true while there is more to do. players: { key: { c, m, dCat[9], hypo? } }
   function winJob(ctx, state, opts) {
-    const keys = state.order.slice(), job = { done: false, matrix: null, players: {}, step() {
+    const keys = state.order.slice();
+    let po = opts;   // for 'avg' the average player is built once, not per roster player
+    const job = { done: false, matrix: null, players: {}, step() {
       if (job.done) return false;
-      if (!job.matrix) job.matrix = TeamWin.matrix(ctx, state, opts);
+      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks) }); }
       else {
         const k = keys[Object.keys(job.players).length];
-        job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, opts);
+        job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, po);
       }
       if (job.matrix && Object.keys(job.players).length === keys.length) job.done = true;
       return true;
@@ -65,19 +67,19 @@
   }
 
   // ---- player list scoring (the Team tab module), in pieces of about `budgetMs` so the page stays responsive ----
-  // pieces: the matrix, one raw gain per counted player, the setup (the average-entry offset for 'avg'), then one candidate row each.
+  // pieces: the matrix, one raw gain per counted player ('rep' only), the setup, then one candidate row each.
   // opts: baseline 'rep' | 'avg', cats, k, mode (weights are not an input: they only re-sort, TeamWin.moduleSort). candidates default to the whole pool.
   // -> { done, rows (unsorted, in candidate order), n, total, step(budgetMs, clock) }; step() returns true while it did work
   function moduleJob(ctx, state, opts, candidates) {
     const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, cand = candidates || ctx.pool.players.map(p => p.key);
-    const counted = state.order.filter(k => state.slots[k] === 'active' || state.slots[k] === 'bench');
+    const counted = Team.counted(state);
     let base = null, pw = {}, su = null;
     const job = { done: false, rows: [], n: 0, total: cand.length, step(budgetMs, clock) {
       if (job.done) return false;
       const now = clock || Date.now, t0 = now();
       do {
         if (!base) { base = TeamWin.matrix(ctx, state, mo); if (!base.mean || !counted.length) { job.done = true; break; } }
-        else if (Object.keys(pw).length < state.order.length) { const k = state.order[Object.keys(pw).length]; pw[k] = TeamWin.playerGain(ctx, state, k, base, mo); }
+        else if (o.baseline !== 'avg' && Object.keys(pw).length < state.order.length) { const k = state.order[Object.keys(pw).length]; pw[k] = TeamWin.playerGain(ctx, state, k, base, mo); }
         else if (!su) { su = TeamWin.moduleSetup(ctx, state, Object.assign({}, o, { base, pw })); if (!su) { job.done = true; break; } }
         else { job.rows.push(TeamWin.moduleRow(ctx, state, su, cand[job.n++])); if (job.n >= cand.length) job.done = true; }
       } while (!job.done && now() - t0 < budgetMs);
@@ -88,6 +90,21 @@
 
   // the first job that is not done, or null (the page steps one job per tick: roster Win first, then the list)
   const nextJob = jobs => jobs.find(j => j && !j.done) || null;
+
+  // what a change did to the preview roster: keys out, keys in, and slot moves of players who stayed
+  function diff(before, after) {
+    return { out: before.order.filter(k => !(k in after.slots)), in: after.order.filter(k => !(k in before.slots)),
+      moves: after.order.filter(k => k in before.slots && before.slots[k] !== after.slots[k]).map(k => ({ key: k, from: before.slots[k], to: after.slots[k] })) };
+  }
+
+  // rows ordered by `val(row)` (a number or a string; null / undefined / NaN = missing, always last), 'asc' or 'desc'; ties keep the input order. A copy.
+  function sortRows(rows, val, dir) {
+    const sg = dir === 'asc' ? 1 : -1, miss = v => v == null || v !== v;
+    return rows.map((r, i) => ({ r, i, v: val(r) })).sort((a, b) => {
+      if (miss(a.v) || miss(b.v)) return miss(a.v) - miss(b.v) || a.i - b.i;
+      return (a.v < b.v ? -1 : a.v > b.v ? 1 : 0) * sg || a.i - b.i;
+    }).map(x => x.r);
+  }
 
   const signature = state => state.order.map(k => k + ':' + state.slots[k]).join('|');
 
@@ -110,9 +127,9 @@
   }
 
   // ---- the list as drawn ----
-  const SLOT_LABEL = { active: 'Active', bench: 'Bench', il: 'IL', reserve: 'Reserve' };
-  // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query, limit (default 50).
-  // -> { rows: [{ ...row, n, t, pos, label }], total (after the filters), more (not shown) }. My players sent out of the preview are
+  const SLOT_LABEL = { active: 'Active', reserve: 'Reserve', il: 'IL' };
+  // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query.
+  // -> { rows: [{ ...row, n, t, pos, label }], total (after the filters) }; every row is returned. My players sent out of the preview are
   // free agents here ("Sent out"). The search only filters (Team.search would reorder by name match), so the Win M order stays.
   function moduleView(rows, ctx, state, opts) {
     const o = opts || {}, me = ctx.me, teamName = id => ((ctx.L.teams || []).find(t => t.id === id) || {}).name || String(id);
@@ -123,8 +140,7 @@
     });
     if (o.owner && o.owner !== 'all') list = list.filter(r => r._own === o.owner);
     if (o.query) { const hit = new Set(Team.search(list, o.query, Infinity).map(r => r.key)); list = list.filter(r => hit.has(r.key)); }
-    const limit = o.limit || 50;
-    return { rows: list.slice(0, limit).map(r => { const x = Object.assign({}, r); delete x._own; return x; }), total: list.length, more: Math.max(0, list.length - limit) };
+    return { rows: list.map(r => { const x = Object.assign({}, r); delete x._own; return x; }), total: list.length };
   }
 
   // ---- drops from the list ----
@@ -151,6 +167,6 @@
   const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
   const apply = (state, outs, ins) => Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
 
-  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, dropSwap, dropIn, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);

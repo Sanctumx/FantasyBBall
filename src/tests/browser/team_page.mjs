@@ -50,20 +50,20 @@ const before = {};
   ok((await p.$$eval('#matrix thead th', r => r.length)) === 15, 'matrix: a column per other team plus the average (' + (await p.$$eval('#matrix thead th', r => r.length)) + ')');
   ok(/%/.test(await p.textContent('#matrix tbody tr:last-child')), 'Win M row shows percentages');
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
-  before.keys = ks; before.win = await winCol(p); before.tot = await totalRow(p); before.z = await col(p, 3 + 9 + 1); before.ls = await p.evaluate(() => localStorage.getItem('courtside-settings-v1') + localStorage.getItem('courtside-leagues-v1'));
+  before.keys = ks; before.win = await winCol(p); before.tot = await totalRow(p); before.z = await col(p, 3 + 9 + 2); before.ls = await p.evaluate(() => localStorage.getItem('courtside-settings-v1') + localStorage.getItem('courtside-leagues-v1'));
 
   // Plays % box: scales player stats, never the team rows
-  const pts0 = await col(p, 3 + 4), plays = (await col(p, 3)).map(t => parseFloat(t));
+  const pts0 = await col(p, 3 + 5), plays = (await col(p, 3)).map(t => parseFloat(t));
   await p.check('#adj'); await p.waitForTimeout(200);
-  const pts1 = await col(p, 3 + 4);
+  const pts1 = await col(p, 3 + 5);
   ok(pts0.some((v, i) => v !== pts1[i]) && (await totalRow(p)).join() === before.tot.join(), 'the Plays % box changes player stats and leaves team rows alone');
   const i0 = plays.findIndex(v => v > 0 && v < 100);
   ok(i0 < 0 || parseFloat(pts1[i0]) < parseFloat(pts0[i0]), 'a player below 100% shows lower stats with the box checked');
   await p.uncheck('#adj'); await p.waitForTimeout(100);
-  ok((await col(p, 3 + 4)).join() === pts0.join(), 'unchecking restores per-game stats');
+  ok((await col(p, 3 + 5)).join() === pts0.join(), 'unchecking restores per-game stats');
   // rest of season view
   await p.click('#view button[data-v="ros"]'); await p.waitForTimeout(100);
-  ok(Math.max(...(await col(p, 3 + 4)).map(parseFloat)) > 100, 'Rest of season multiplies by games left');
+  ok(Math.max(...(await col(p, 3 + 5)).map(parseFloat)) > 100, 'Rest of season multiplies by games left');
   await p.click('#view button[data-v="game"]');
   // dimmed Plays % for IL / Reserve rows
   ok((await p.$$eval('#roster tr.hypo td.dim', t => t.length)) > 0, 'IL / Reserve Plays % cells use the dim class');
@@ -72,11 +72,11 @@ const before = {};
   await p.click('details.wts summary');
   await p.$eval('#wgrid input[data-c="3"]', i => { i.value = '0'; i.dispatchEvent(new Event('input', { bubbles: true })); });
   await p.waitForTimeout(150);
-  const z1 = await col(p, 3 + 9 + 1);
+  const z1 = await col(p, 3 + 9 + 2);
   ok(z1.join() !== before.z.join(), 'a weight of 0 changes the Z column');
   ok((await winCol(p)).join() === before.win.join() && (await matrixText(p)) === m, 'weights leave Win C / Win M and the matrix alone');
   await p.click('#wreset'); await p.waitForTimeout(100);
-  ok((await col(p, 3 + 9 + 1)).join() === before.z.join(), 'Reset weights restores Z');
+  ok((await col(p, 3 + 9 + 2)).join() === before.z.join(), 'Reset weights restores Z');
 
   // typed swap
   const outName = (await p.$$eval('#roster tbody tr[data-key] td.l', t => t.map(e => e.firstChild.textContent)))[0];
@@ -105,15 +105,15 @@ const before = {};
   // moving players: the slot select, drag onto a group header, the over-limit warning
   const grp = async slot => p.$eval('tr.grp[data-slot="' + slot + '"] td', e => e.textContent);
   const nActive = async () => +(/\((\d+)/.exec(await grp('active')) || [])[1];
-  ok((await p.$$eval('tr.grp', g => g.length)) === 4, 'all four slot headers show');
-  const a0 = await nActive(), benchBefore = await grp('bench');
+  ok((await p.$$eval('tr.grp', g => g.length)) === 3, 'the three slot headers show (Active, Reserve, IL; no Bench)');
+  const a0 = await nActive(), benchBefore = await grp('reserve');
   const mv = await p.$eval('tr[data-key] select.slot', s => { const o = [...s.options].find(x => x.value !== s.value); return { key: s.dataset.key, to: o.value, from: s.value }; });
   await p.selectOption('select.slot[data-key="' + mv.key + '"]', mv.to); await scored(p);
   ok((await p.$eval('select.slot[data-key="' + mv.key + '"]', s => s.value)) === mv.to, 'the slot select moves the player');
   ok((await p.$$eval('select.slot', s => s.every(x => x.title && x.getAttribute('aria-label')))), 'every slot select has a tooltip and a label');
   await p.click('#reset'); await scored(p);
-  ok(await nActive() === a0 && (await grp('bench')) === benchBefore, 'Reset restores the slot counts');
-  const benchKey = await p.$eval('tr[data-key] select.slot option[value="bench"]:checked', o => o.parentElement.dataset.key).catch(() => null);
+  ok(await nActive() === a0 && (await grp('reserve')) === benchBefore, 'Reset restores the slot counts');
+  const benchKey = await p.$eval('tr[data-key] select.slot option[value="reserve"]:checked', o => o.parentElement.dataset.key).catch(() => null);
   if (benchKey) {
     await p.dragAndDrop('tr[data-key="' + benchKey + '"]', 'tr.grp[data-slot="active"]'); await scored(p);
     ok((await p.$eval('select.slot[data-key="' + benchKey + '"]', s => s.value)) === 'active' && await nActive() === a0 + 1, 'dragging a row onto a group header moves it');
@@ -124,6 +124,38 @@ const before = {};
   await p.click('#reset'); await scored(p);
   ok(await p.evaluate(() => localStorage.getItem('courtside-settings-v1') + localStorage.getItem('courtside-leagues-v1')) === before.ls, 'the saved league is untouched');
   ok(errs.length === 0, 'no page errors after swaps ' + errs.join('; '));
+
+  // the Changes list: every move or swap adds an entry; Undo goes back one; Clear empties the list and keeps the roster
+  ok(await p.$eval('#logbox', e => e.hidden), 'no Changes list before any change');
+  await p.selectOption('select.slot[data-key="' + mv.key + '"]', mv.to); await scored(p);
+  ok((await p.$$eval('#log li', l => l.length)) === 1 && !(await p.$eval('#logbox', e => e.hidden)), 'a slot move adds an entry to the Changes list');
+  await p.selectOption('select.slot[data-key="' + mv.key + '"]', mv.from); await scored(p);
+  ok((await p.$$eval('#log li', l => l.length)) === 2, 'a second change adds a second entry');
+  await p.click('#undo'); await scored(p);
+  ok((await p.$$eval('#log li', l => l.length)) === 1 && (await p.$eval('select.slot[data-key="' + mv.key + '"]', s => s.value)) === mv.to, 'Undo removes the last entry and restores the roster before it');
+  await p.click('#logclear');
+  ok(await p.$eval('#logbox', e => e.hidden) && (await p.$eval('select.slot[data-key="' + mv.key + '"]', s => s.value)) === mv.to, 'Clear empties the list and leaves the roster');
+  await p.selectOption('select.slot[data-key="' + mv.key + '"]', mv.from); await scored(p);
+  await p.click('#reset'); await scored(p);
+  ok(await p.$eval('#logbox', e => e.hidden), 'Reset roster clears the list');
+
+  // headers: Zscore, MPG after Plays %, click any header to sort inside each slot group
+  const heads = await p.$$eval('#roster thead th', t => t.map(x => x.textContent.replace(/ [▲▼]$/, '')));
+  ok(heads.includes('Zscore') && !heads.includes('Z') && heads[3] === 'MPG', 'headers: Zscore, and MPG right after Plays % (' + heads.slice(0, 5).join('|') + ')');
+  ok((await p.$$eval('#zview button', b => b.map(x => x.textContent))).includes('Zscore'), 'the Stats | Zscore toggle is renamed');
+  ok((await col(p, 4)).some(t => /^\d+\.\d$/.test(t)), 'MPG shows minutes per game');
+  const inGroups = (ci) => p.$$eval('#roster tbody tr', (trs, ci) => { const out = {}; let g = null; trs.forEach(tr => { if (tr.classList.contains('grp')) { g = tr.dataset.slot; out[g] = []; } else if (tr.dataset.key && g) out[g].push(parseFloat(tr.children[ci < 0 ? tr.children.length + ci : ci].textContent.replace('−', '-'))); }); return out; }, ci);
+  const sorted = (a, dir) => a.every((v, i) => i === 0 || isNaN(v) || isNaN(a[i - 1]) || (dir === 'desc' ? a[i - 1] >= v : a[i - 1] <= v));
+  await p.click('#roster th[data-col="wm"]'); await scored(p);
+  ok(Object.values(await inGroups(-1)).every(a => sorted(a, 'desc')) && await p.$eval('#roster th[data-col="wm"]', h => h.getAttribute('aria-sort')) === 'descending', 'clicking Win M sorts each group high to low');
+  await p.click('#roster th[data-col="wm"]'); await scored(p);
+  ok(Object.values(await inGroups(-1)).every(a => sorted(a, 'asc')), 'a second click sorts low to high');
+  await p.click('#roster th[data-col="wm"]'); await scored(p);
+  ok((await keys(p)).join() === before.keys.join(), 'a third click clears the sort (roster order)');
+  await p.click('#roster th[data-col="mpg"]'); await scored(p);
+  ok(Object.values(await inGroups(3)).every(a => sorted(a, 'desc')), 'clicking MPG sorts each group high to low');
+  await p.click('#roster th[data-col="mpg"]'); await p.click('#roster th[data-col="mpg"]'); await scored(p);
+  ok(errs.length === 0, 'no page errors after sorting ' + errs.join('; '));
 
   // How it works is this tab's own
   await p.click('#how-open'); await p.waitForTimeout(100);
@@ -138,11 +170,9 @@ const lchg = p => p.$$eval('#ltable tbody tr[data-key] td:last-child', t => t.ma
 { const { p, errs, ctx } = await open();
   await scored(p); await listReady(p);
   const rows0 = await lkeys(p), chg0 = await lchg(p);
-  ok(rows0.length === 50, 'list shows the top 50 (' + rows0.length + ')');
+  ok(rows0.length > 150 && !(await p.$('#lmore')), 'the list shows every player at once (' + rows0.length + '), no Show more');
+  ok(+/(\d+) players/.exec(await p.textContent('#lmeta'))[1] === rows0.length, 'the count in the list header equals the rows shown');
   ok(chg0.every((v, i) => i === 0 || chg0[i - 1] >= v - 1e-9), 'the Change column never rises down the list');
-  ok(await p.$eval('#lmore', b => !b.hidden), 'Show more is offered');
-  await p.click('#lmore'); await p.waitForTimeout(100);
-  ok((await lkeys(p)).length === 100, 'Show more adds 50 rows');
   ok(await p.$eval('#lvs', s => s.value) === 'rep', 'the list defaults to vs replacement');
   // roster first: its Win cells fill without waiting for the list
   const cards = await p.textContent('#cards');
@@ -162,7 +192,7 @@ const lchg = p => p.$$eval('#ltable tbody tr[data-key] td:last-child', t => t.ma
   const nm = await p.$eval('#ltable tbody tr[data-key] td.l', e => e.firstChild.textContent);
   await p.fill('#lq', nm.slice(0, 5).toUpperCase()); await p.waitForTimeout(100);
   const sk = await lkeys(p);
-  ok(sk.length >= 1 && sk.length < 50 && sk.includes(rows0[0]), 'search narrows the list');
+  ok(sk.length >= 1 && sk.length < rows0.length && sk.includes(rows0[0]), 'search narrows the list');
   await p.fill('#lq', '');
   // a weight of 0 re-sorts the list but leaves each player's change alone
   const byKey = async () => Object.fromEntries((await lkeys(p)).map((k, i) => [k, i])), chgMap = async () => { const k = await lkeys(p), c = await lchg(p); return Object.fromEntries(k.map((x, i) => [x, c[i]])); };
@@ -191,8 +221,8 @@ const lchg = p => p.$$eval('#ltable tbody tr[data-key] td:last-child', t => t.ma
   await listReady(p);
   await p.click('#reset'); await scored(p);
   // drag onto a group header: he joins that group
-  await p.dragAndDrop('#ltable tr[data-key="' + inKey + '"]', 'tr.grp[data-slot="bench"]'); await scored(p);
-  ok((await keys(p)).length === before.keys.length + 1 && (await slotOf(inKey)) === 'bench', 'dropping a list row on a group header brings him in without sending anyone out');
+  await p.dragAndDrop('#ltable tr[data-key="' + inKey + '"]', 'tr.grp[data-slot="reserve"]'); await scored(p);
+  ok((await keys(p)).length === before.keys.length + 1 && (await slotOf(inKey)) === 'reserve', 'dropping a list row on a group header brings him in without sending anyone out');
   await p.click('#reset'); await scored(p);
   ok(errs.length === 0, 'list: no page errors ' + errs.join('; '));
   await ctx.close(); }

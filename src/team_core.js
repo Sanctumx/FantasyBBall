@@ -1,16 +1,19 @@
 // Team tab core (#131, 2026-10-25): preview roster state and swaps. Pure; browser and Node. Nothing here touches the saved league.
-// Slots: active, bench, il, reserve. Fantrax RESERVE is the bench; "reserve" is the Team tab's own uncounted slot.
+// Slots: active, reserve, il. Fantrax RESERVE is the reserve (it fills the nights Active leaves open, so it counts); IL does not count.
 (function (root) {
   'use strict';
   const InLeague = root.InLeague || require('./inseason_league.js'), Matchup = root.Matchup || require('./matchup_core.js'),
     Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Shared = root.Shared || require('./shared.js');
-  const SLOTS =['active', 'bench', 'il', 'reserve'];
-  const FROM_FANTRAX = { ACTIVE: 'active', RESERVE: 'bench', IR: 'il' };
+  const SLOTS = ['active', 'reserve', 'il'];
+  const FROM_FANTRAX = { ACTIVE: 'active', RESERVE: 'reserve', IR: 'il' };
+  // the slots that count in the team's stats, Win C and Win M
+  const COUNTED = ['active', 'reserve'];
+  const counted = state => state.order.filter(k => COUNTED.includes(state.slots[k]));
 
   // rows: parseRosters entries [{ fid, slot }] for my team
   function initState(rows) {
     const slots = {}, order = [];
-    rows.forEach(x => { slots[x.fid] = FROM_FANTRAX[x.slot] || 'bench'; order.push(x.fid); });
+    rows.forEach(x => { slots[x.fid] = FROM_FANTRAX[x.slot] || 'reserve'; order.push(x.fid); });
     return { slots, order };
   }
 
@@ -20,14 +23,14 @@
     return { slots: Object.assign({}, state.slots, { [key]: slot }), order: state.order.slice() };
   }
 
-  // any number of players out and in; incoming players start on the bench
+  // any number of players out and in; incoming players start in the reserve
   function applySwap(state, outKeys, inKeys) {
     outKeys.forEach(k => { if (!(k in state.slots)) throw new Error('player not on the preview roster: ' + k); });
     if (new Set(outKeys).size !== outKeys.length || new Set(inKeys).size !== inKeys.length) throw new Error('duplicate player in swap');
     inKeys.forEach(k => { if (k in state.slots && !outKeys.includes(k)) throw new Error('player already on the roster: ' + k); });
     const slots = Object.assign({}, state.slots), out = new Set(outKeys);
     outKeys.forEach(k => { delete slots[k]; });
-    inKeys.forEach(k => { slots[k] = 'bench'; });
+    inKeys.forEach(k => { slots[k] = 'reserve'; });
     return { slots, order: state.order.filter(k => !out.has(k)).concat(inKeys.filter(k => !state.order.includes(k) || out.has(k))) };
   }
 
@@ -59,12 +62,12 @@
   }
 
   // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
-  // bench takes what is left; IL and reserve rows show what they would get as one more bench player (hypo: true, so teamLine
+  // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
   function playsPct(ctx, state) {
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
-    const act = by('active'), bench = by('bench'), res = {};
+    const act = by('active'), bench = by('reserve'), res = {};
     const done = (k, played, hypo) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; };
     const gA = windowGames(ctx, act, null), count = {}, used = {};
     act.forEach((k, i) => {
@@ -75,7 +78,7 @@
     Object.keys(count).forEach(d => { used[d] = Math.min(max, count[d]); });
     const gB = windowGames(ctx, bench, used);
     bench.forEach((k, i) => done(k, gB[i]));
-    state.order.filter(k => state.slots[k] === 'il' || state.slots[k] === 'reserve').forEach(k => {
+    by('il').forEach(k => {
       const g = windowGames(ctx, bench.concat(k), used);
       done(k, g[g.length - 1], true);
     });
@@ -118,6 +121,6 @@
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, COUNTED, counted, windowGames, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);

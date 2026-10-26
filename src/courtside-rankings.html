@@ -1372,7 +1372,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
   function projLines(PLAYERS, proj) {
     return PLAYERS.map((r, i) => {
       const q = Shared.projOf(r, proj || 'avg');
-      return { id: i, n: r.n, t: r.t, pos: r.p, g: q.g, line: lineOf(q), adp: r.ftx != null ? r.ftx : (r.adp != null ? r.adp : null), rk: r.rk, src: r.src };
+      return { id: i, n: r.n, t: r.t, pos: r.p, g: q.g, m: q.m, line: lineOf(q), adp: r.ftx != null ? r.ftx : (r.adp != null ? r.adp : null), rk: r.rk, src: r.src };
     });
   }
 
@@ -1410,15 +1410,16 @@ tbody tr.mine:hover td{background:var(--sunk)}
       });
     });
     matches.forEach(({ fid, info, pm, es }) => {
-      const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row) } : null;
-      let src, line, g, pos, n, t, adp, pid = null;
-      if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; pid = pm.id; }
+      const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row), min: es.row.min } : null;
+      let src, line, g, pos, n, t, adp, mpg = null, pid = null;
+      if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; pid = pm.id; mpg = q.m == null ? null : q.m; }
       else {
         src = actual ? 'actual' : 'waiver'; line = actual ? actual.line : wl.line; g = wl.g;
         pos = String(info.position || '').replace(/,/g, '/'); n = swapName(info.name); t = InLeague.toProjTeam(info.team); adp = null;
+        mpg = actual && actual.min != null ? actual.min : null;
       }
       if (!(fid in owner) && src === 'waiver') return;   // available players with no line at all are not worth listing
-      const pp = { key: fid, n, t, pos, line, g, src, actual, adp, pid, owner: owner[fid] || null, slot: slot[fid] || null, fxStatus: L.fxStatus[fid] || (fid in owner ? 'T' : null) };
+      const pp = { key: fid, n, t, pos, line, g, mpg, src, actual, adp, pid, owner: owner[fid] || null, slot: slot[fid] || null, fxStatus: L.fxStatus[fid] || (fid in owner ? 'T' : null) };
       players.push(pp); byKey.set(fid, pp);
       if (fid in owner && src !== 'proj') noProj.push(pp);
     });

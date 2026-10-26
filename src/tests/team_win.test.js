@@ -28,14 +28,14 @@ test('oppState: IL players and excluded keys are gone, slots follow Fantrax', ()
   il.forEach(k => assert.ok(!(k in s.slots)));
   assert.ok(!(drop in s.slots));
   assert.strictEqual(s.order.length, keys.length - il.length - 1);
-  s.order.forEach(k => assert.ok(['active', 'bench'].includes(s.slots[k])));
+  s.order.forEach(k => assert.ok(['active', 'reserve'].includes(s.slots[k])));
 });
 
-test('side: only active and bench players become entries', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), n = st.order.filter(k => ['active', 'bench'].includes(st.slots[k])).length;
+test('side: only active and reserve players become entries', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), n = st.order.filter(k => ['active', 'reserve'].includes(st.slots[k])).length;
   assert.strictEqual(W.side(ctx, st, 1).length, n);
-  const moved = T.moveSlot(st, st.order[0], 'reserve');
-  assert.strictEqual(W.side(ctx, moved, 1).length, n - (['active', 'bench'].includes(st.slots[st.order[0]]) ? 1 : 0));
+  const moved = T.moveSlot(st, st.order[0], 'il');
+  assert.strictEqual(W.side(ctx, moved, 1).length, n - (['active', 'reserve'].includes(st.slots[st.order[0]]) ? 1 : 0));
 });
 
 // with no crowded nights, one whole period left equals the calibrated whole-games path (Matchup.scoreSegments)
@@ -44,7 +44,7 @@ test('matrix: one whole period left reproduces Matchup.scoreSegments for every o
   const m = W.matrix(ctx, st, { k: { match: M.KW_MATCH, cat: M.KW_CAT } });
   assert.ok(near(m.weeks, 1));
   const segs = (keys) => keys.map(key => ({ key, from: last.start, to: last.end }));
-  const mine = segs(st.order.filter(k => ['active', 'bench'].includes(st.slots[k])));
+  const mine = segs(st.order.filter(k => ['active', 'reserve'].includes(st.slots[k])));
   m.teams.forEach(cell => {
     const os = W.oppState(ctx, cell.id, new Set(st.order)), r = M.scoreSegments(ctx, mine, segs(os.order), true);
     assert.ok(near(cell.match, r.match, 1e-12), cell.id);
@@ -80,7 +80,7 @@ test('matrix: a player I bring in leaves his old team, and Reserve equals swappe
   const exclude = new Set(sw.order), x = W.matrix(ctx, sw).teams.find(t => t.id === other);
   assert.ok(!W.oppState(ctx, other, exclude).order.includes(inK));
   assert.ok(x.match >= 0 && x.match <= 1);
-  const rsv = W.matrix(ctx, T.moveSlot(st, st.order[0], 'reserve')), out = W.matrix(ctx, T.applySwap(st, [st.order[0]], []));
+  const rsv = W.matrix(ctx, T.moveSlot(st, st.order[0], 'il')), out = W.matrix(ctx, T.applySwap(st, [st.order[0]], []));
   assert.ok(near(rsv.mean.match, out.mean.match, 1e-12) && near(rsv.mean.winC, out.mean.winC, 1e-12));
 });
 
@@ -100,17 +100,17 @@ test('matrix: state, roster and pool are not changed, and no games left gives an
   assert.deepStrictEqual(W.matrix(over, st), { weeks: 0, teams: [], mean: null });
 });
 
-test('playerWin: bench-refill contribution equals the matrix difference; IL rows are hypothetical', () => {
+test('playerWin: reserve-refill contribution equals the matrix difference; IL rows are hypothetical', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), pw = W.playerWin(ctx, st), base = W.matrix(ctx, st);
-  const k = st.order.find(x => st.slots[x] === 'active'), w = W.matrix(ctx, T.moveSlot(st, k, 'reserve'));
+  const k = st.order.find(x => st.slots[x] === 'active'), w = W.matrix(ctx, T.applySwap(st, [k], []));
   assert.ok(near(pw[k].m, 100 * (base.mean.match - w.mean.match), 1e-9) && near(pw[k].c, 100 * (base.mean.winC - w.mean.winC), 1e-9));
   st.order.filter(x => st.slots[x] === 'il').forEach(x => assert.strictEqual(pw[x].hypo, true));
   const best = st.order.filter(x => st.slots[x] === 'active').map(x => ctx.pool.byKey.get(x)).sort((a, b) => Pl.valueZ(b.line, 82, ctx.ref) - Pl.valueZ(a.line, 82, ctx.ref))[0];
   assert.ok(pw[best.key].m > 0);
 });
 
-test('moduleScores: the worst Active/Bench player shows 0, a candidate equals the explicit swap, weights only re-sort', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), pw = W.playerWin(ctx, st), counted = st.order.filter(k => ['active', 'bench'].includes(st.slots[k]));
+test('moduleScores: the worst Active/Reserve player shows 0, a candidate equals the explicit swap, weights only re-sort', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), pw = W.playerWin(ctx, st), counted = st.order.filter(k => ['active', 'reserve'].includes(st.slots[k]));
   const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), cands = ROS[other].map(x => x.fid).slice(0, 6), base = W.matrix(ctx, st);
   const rows = W.moduleScores(ctx, st, { candidates: cands.concat(worst) });
   assert.strictEqual(rows.find(r => r.key === worst).dM, 0);
@@ -125,29 +125,8 @@ test('moduleScores: the worst Active/Bench player shows 0, a candidate equals th
   assert.ok(only3.every((r, i) => i === 0 || only3[i - 1].dCat[3] >= r.dCat[3] - 1e-12));
 });
 
-test('moduleScores vs average: subtracts the average-player entry and never touches the pool', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), cands = ROS[other].map(x => x.fid).slice(0, 4), n = ctx.pool.byKey.size;
-  const rep = W.moduleScores(ctx, st, { candidates: cands }), avg = W.moduleScores(ctx, st, { candidates: cands, baseline: 'avg' });
-  assert.strictEqual(ctx.pool.byKey.has(W.AVG_KEY), false);
-  assert.strictEqual(ctx.pool.byKey.size, n);
-  const off = rep[0].dM - avg.find(r => r.key === rep[0].key).dM;
-  rep.forEach(r => assert.ok(near(r.dM - avg.find(q => q.key === r.key).dM, off, 1e-9)));
-});
-
-test('playerGain baseline avg: subtracts the average-player entry in his place, leaves the pool alone, rep stays the default', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), n = ctx.pool.byKey.size, base = W.matrix(ctx, st);
-  const k = st.order.find(x => st.slots[x] === 'active'), il = st.order.find(x => st.slots[x] === 'il' || st.slots[x] === 'reserve');
-  const rep = W.playerGain(ctx, st, k, base), avg = W.playerGain(ctx, st, k, base, { baseline: 'avg' });
-  assert.deepStrictEqual(W.playerGain(ctx, st, k, base, { baseline: 'rep' }), rep);
-  assert.strictEqual(ctx.pool.byKey.size, n);
-  assert.strictEqual(ctx.pool.byKey.has(W.AVG_KEY), false);
-  const off = rep.m - avg.m;
-  assert.ok(Math.abs(off) > 1e-6 && Number.isFinite(off));
-  if (il) { const h = W.playerGain(ctx, st, il, base, { baseline: 'avg' }); assert.strictEqual(h.hypo, true); assert.ok(Number.isFinite(h.m)); }
-});
-
 test('moduleSetup + moduleRow + moduleSort equal moduleScores in both baselines; new - old = dM; rep old is the matrix mean', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), own = st.order.filter(k => ['active', 'bench', 'il'].includes(st.slots[k]));
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), own = st.order.filter(k => ['active', 'reserve', 'il'].includes(st.slots[k]));
   const cands = own.concat(ROS[other].map(x => x.fid).slice(0, 4)), w = [1, 1, 1, 0, 1, 1, 1, 1, 1];
   ['rep', 'avg'].forEach(baseline => {
     const full = W.moduleScores(ctx, st, { candidates: cands, baseline, weights: w }), su = W.moduleSetup(ctx, st, { baseline });
@@ -177,7 +156,7 @@ test('moduleScores works on a 2-for-1 preview state', () => {
 });
 
 test('moduleScores: my own rows carry per-category changes, so weighted sorts and dCat sums hold; default shrink is K; cache matches a fresh ctx', () => {
-  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), own = st.order.filter(k => ['active', 'bench', 'il'].includes(st.slots[k]));
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), own = st.order.filter(k => ['active', 'reserve', 'il'].includes(st.slots[k]));
   const w = [1, 1, 1, 0, 1, 1, 1, 1, 1], rows = W.moduleScores(ctx, st, { candidates: own.concat(ROS[other][0].fid), weights: w });
   rows.forEach(r => {
     assert.ok(near(r.sort, r.dCat.reduce((a, v, i) => a + v * w[i], 0), 1e-9), r.key);
@@ -193,4 +172,56 @@ test('moduleScores: my own rows carry per-category changes, so weighted sorts an
   W.matrix(ctx, st);
   const a = W.matrix(ctx, sw), b = W.matrix(mk(last.start, g), sw);
   assert.deepStrictEqual(a.teams.map(t => t.match), b.teams.map(t => t.match));
+});
+
+// ---- Vs average (user 2026-10-25): he replaces a fictional average player of my team; my games are scaled by (n-1)/n to take that player out ----
+const sideOf = (ctx, st) => W.side(ctx, st, W.weeksLeft(ctx));
+const sumG = es => es.reduce((a, e) => a + e.games, 0);
+const meanEntry = mine => ({ p: T.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), sumG(mine)), games: sumG(mine) / mine.length, gVar: M.GVAR });
+const candEntry = (ctx, st, mine, key) => {
+  const w = W.weeksLeft(ctx), counted = T.counted(st), share = sumG(mine) * w / T.windowGames(ctx, counted, null).reduce((a, b) => a + b, 0);
+  return { p: ctx.pool.byKey.get(key).line, games: T.windowGames(ctx, [key], null)[0] / w * share, gVar: M.GVAR };
+};
+
+test('avg: a candidate is my team scaled by (n-1)/n (games and games variance) plus him', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), n = mine.length, c = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  const base = W.matrix(ctx, st), entries = mine.map(e => ({ p: e.p, games: e.games * (n - 1) / n, gVar: e.gVar * (n - 1) / n })).concat(candEntry(ctx, st, mine, c));
+  const m = W.matrixOf(ctx, entries, new Set(st.order.concat(c)), w);
+  const row = W.moduleScores(ctx, st, { baseline: 'avg', candidates: [c] })[0];
+  assert.ok(near(row.dM, 100 * (m.mean.match - base.mean.match), 1e-9));
+  assert.ok(near(row.dC, 100 * (m.mean.winC - base.mean.winC), 1e-9));
+  assert.ok(near(row.new - row.old, row.dM, 1e-9) && near(row.old, 100 * base.mean.match, 1e-9));
+});
+
+test('avg: my own counted player replaces nobody; he is scored against an average-player entry in his place', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), x = st.order.find(k => st.slots[k] === 'active');
+  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(meanEntry(mine)), new Set(st.order), w);
+  const row = W.moduleScores(ctx, st, { baseline: 'avg', candidates: [x] })[0];
+  assert.ok(near(row.dM, 100 * (base.mean.match - m.mean.match), 1e-9));
+  assert.ok(near(row.new, 100 * base.mean.match, 1e-9) && near(row.old, 100 * m.mean.match, 1e-9));
+});
+
+test('avg: an average player scores about 0 (the projection-variance bias stays under 0.1 points)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), n = mine.length, base = W.matrix(ctx, st);
+  const avg = meanEntry(mine), entries = mine.map(e => ({ p: e.p, games: e.games * (n - 1) / n, gVar: e.gVar * (n - 1) / n })).concat(avg);
+  const m = W.matrixOf(ctx, entries, new Set(st.order), w);
+  assert.ok(Math.abs(100 * (m.mean.match - base.mean.match)) < 0.1, String(100 * (m.mean.match - base.mean.match)));
+});
+
+test('avg: playerGain equals the module row for every roster player (IL counts as a candidate); the pool is untouched', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), n = ctx.pool.byKey.size, base = W.matrix(ctx, st);
+  const rows = W.moduleScores(ctx, st, { baseline: 'avg', candidates: st.order });
+  st.order.forEach(k => {
+    const g = W.playerGain(ctx, st, k, base, { baseline: 'avg' }), r = rows.find(q => q.key === k);
+    assert.ok(near(g.m, r.dM, 1e-9) && near(g.c, r.dC, 1e-9), k);
+    assert.strictEqual(g.hypo === true, st.slots[k] === 'il');
+  });
+  assert.strictEqual(ctx.pool.byKey.size, n);
+});
+
+test('avg: no worst-player rule (nobody is forced to 0); rep still has one', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), cands = T.counted(st);
+  const avg = W.moduleScores(ctx, st, { baseline: 'avg', candidates: cands }), rep = W.moduleScores(ctx, st, { candidates: cands });
+  assert.ok(avg.every(r => r.dM !== 0));
+  assert.ok(rep.some(r => r.dM === 0));
 });

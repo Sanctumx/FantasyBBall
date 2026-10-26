@@ -6,27 +6,28 @@ const L = I.parseLeague(fx('fx_league.json')), ROS = I.parseRosters(fx('fx_roste
 const me = L.teams[0].id, other = L.teams[1].id;
 const snap = JSON.stringify(ROS);
 
-test('initState maps Fantrax slots: ACTIVE to active, RESERVE to bench, IR to il', () => {
+test('initState maps Fantrax slots: ACTIVE to active, RESERVE to reserve, IR to il', () => {
   const s = T.initState(ROS[me]);
   assert.strictEqual(s.order.length, ROS[me].length);
-  ROS[me].forEach(x => assert.strictEqual(s.slots[x.fid], { ACTIVE: 'active', RESERVE: 'bench', IR: 'il' }[x.slot]));
+  ROS[me].forEach(x => assert.strictEqual(s.slots[x.fid], { ACTIVE: 'active', RESERVE: 'reserve', IR: 'il' }[x.slot]));
 });
 
-test('moveSlot returns a new state and accepts the four slots, including reserve', () => {
+test('moveSlot returns a new state and accepts the three slots; there is no bench', () => {
   const s = T.initState(ROS[me]), k = s.order[0], n = T.moveSlot(s, k, 'reserve');
   assert.strictEqual(n.slots[k], 'reserve');
   assert.notStrictEqual(n, s);
   assert.notStrictEqual(s.slots[k], 'reserve');
-  assert.throws(() => T.moveSlot(s, 'nope', 'bench'));
+  assert.throws(() => T.moveSlot(s, 'nope', 'reserve'));
+  assert.throws(() => T.moveSlot(s, k, 'bench'));
   assert.throws(() => T.moveSlot(s, k, 'elsewhere'));
 });
 
-test('applySwap: 2-for-1 removes the outgoing players, adds the incoming one to the bench, and leaves the saved roster alone', () => {
+test('applySwap: 2-for-1 removes the outgoing players, adds the incoming one to the reserve, and leaves the saved roster alone', () => {
   const s = T.initState(ROS[me]), outK = s.order.slice(0, 2), inK = ROS[other][0].fid;
   const n = T.applySwap(s, outK, [inK]);
   assert.strictEqual(n.order.length, s.order.length - 1);
   outK.forEach(k => assert.ok(!(k in n.slots)));
-  assert.strictEqual(n.slots[inK], 'bench');
+  assert.strictEqual(n.slots[inK], 'reserve');
   assert.strictEqual(JSON.stringify(ROS), snap);
   assert.strictEqual(s.order.length, ROS[me].length);
 });
@@ -53,7 +54,7 @@ const pool = Pl.buildPool({ PLAYERS, fxPlayers: fx('fx_players.json'), espn: fx(
 const NOW = Date.UTC(2026, 9, 21, 12), NIGHT = Math.floor(Date.UTC(2026, 9, 23, 2) / 1000);
 const oneNight = keys => { const g = {}; keys.forEach(k => { g[pool.byKey.get(k).t] = [NIGHT]; }); return { games: g }; };
 const mkCtx = keys => M.makeCtx({ L, pool, DAYS: oneNight(keys), rosters: ROS, me, nowMs: NOW });
-const stateOf = (act, bench, il, reserve) => ({ order: [].concat(act, bench, il || [], reserve || []), slots: Object.assign({}, ...act.map(k => ({ [k]: 'active' })), ...bench.map(k => ({ [k]: 'bench' })), ...(il || []).map(k => ({ [k]: 'il' })), ...(reserve || []).map(k => ({ [k]: 'reserve' }))) });
+const stateOf = (act, reserve, il) => ({ order: [].concat(act, reserve, il || []), slots: Object.assign({}, ...act.map(k => ({ [k]: 'active' })), ...reserve.map(k => ({ [k]: 'reserve' })), ...(il || []).map(k => ({ [k]: 'il' }))) });
 const valueOf = (ctx, k) => Pl.valueZ(pool.byKey.get(k).line, 82, ctx.ref);
 
 test('Plays %: 12 active players with a game on a 10-slot night, the two lowest per-game values sit', () => {
@@ -64,19 +65,23 @@ test('Plays %: 12 active players with a game on a 10-slot night, the two lowest 
   keys.forEach(k => assert.strictEqual(r[k].gl, 1));
 });
 
-test('Plays %: bench players get the slots the active players leave open; IL and reserve rows show what they would get on the bench', () => {
+test('Plays %: reserve players get the slots the active players leave open; IL rows show what they would get as one more reserve player', () => {
   const keys = ROS[me].map(x => x.fid).slice(0, 12), ctx = mkCtx(keys);
   const full = T.playsPct(ctx, stateOf(keys.slice(0, 10), keys.slice(10, 12)));   // 10 active use every slot
   keys.slice(10).forEach(k => assert.strictEqual(full[k].pct, 0));
-  const open = T.playsPct(ctx, stateOf(keys.slice(0, 8), keys.slice(8, 10), [keys[10]], [keys[11]]));   // 8 active leave 2 slots
+  const open = T.playsPct(ctx, stateOf(keys.slice(0, 8), keys.slice(8, 10), [keys[10]]));   // 8 active leave 2 slots
   keys.slice(8, 10).forEach(k => assert.strictEqual(open[k].pct, 1));
-  // IL player + the 2 bench players compete for the 2 open slots: the two best per-game values play
+  assert.ok(!open[keys[8]].hypo && open[keys[10]].hypo);
+  // IL player + the 2 reserve players compete for the 2 open slots: the two best per-game values play
   const top2 = new Set(keys.slice(8, 11).sort((a, b) => valueOf(ctx, b) - valueOf(ctx, a)).slice(0, 2));
   assert.strictEqual(open[keys[10]].pct, top2.has(keys[10]) ? 1 : 0);
-  const top2r = keys.slice(8, 10).concat(keys[11]).sort((a, b) => valueOf(ctx, b) - valueOf(ctx, a)).slice(0, 2);
-  assert.strictEqual(open[keys[11]].pct, top2r.includes(keys[11]) ? 1 : 0);
-  const lone = T.playsPct(ctx, stateOf(keys.slice(0, 8), [], [keys[10]], [keys[11]]));
-  assert.strictEqual(lone[keys[10]].pct, 1); assert.strictEqual(lone[keys[11]].pct, 1);
+  const lone = T.playsPct(ctx, stateOf(keys.slice(0, 8), [], [keys[10]]));
+  assert.strictEqual(lone[keys[10]].pct, 1);
+});
+
+test('counted: active and reserve players in roster order, never IL', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 5), st = stateOf(keys.slice(0, 2), keys.slice(2, 4), [keys[4]]);
+  assert.deepStrictEqual(T.counted(st), keys.slice(0, 4));
 });
 
 test('Plays %: pct is null when the team has no games left', () => {
@@ -141,8 +146,8 @@ test('weightedZ follows the league: in an 8-category league turnovers carry no w
   tab.forEach(r => assert.ok(Math.abs(T.weightedZ(r.cats, null, 8) - r.z) < 1e-12));
 });
 
-test('playsPct marks IL and reserve rows as hypothetical and teamLine leaves them out', () => {
-  const keys = ROS[me].map(x => x.fid).slice(0, 4), ctx = mkCtx(keys), r = T.playsPct(ctx, stateOf(keys.slice(0, 2), [keys[2]], [], [keys[3]]));
+test('playsPct marks IL rows as hypothetical and teamLine leaves them out', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 4), ctx = mkCtx(keys), r = T.playsPct(ctx, stateOf(keys.slice(0, 2), [keys[2]], [keys[3]]));
   assert.ok(!r[keys[0]].hypo && !r[keys[2]].hypo);
   assert.strictEqual(r[keys[3]].hypo, true);
   const line = pool.byKey.get(keys[0]).line;

@@ -18,7 +18,7 @@ const find = (rs, k) => rs.rows.find(r => r.key === k);
 
 test('rows: grouped by slot in roster order, one row per player', () => {
   const ctx = mk(), st = stateOf(), r = V.rows(ctx, st, { zCats });
-  assert.deepStrictEqual(r.groups.map(g => g.slot), ['active', 'bench', 'il', 'reserve']);
+  assert.deepStrictEqual(r.groups.map(g => g.slot), ['active', 'reserve', 'il']);
   assert.strictEqual(r.rows.length, st.order.length);
   r.groups.forEach(g => g.rows.forEach(x => assert.strictEqual(st.slots[x.key], g.slot)));
 });
@@ -76,7 +76,7 @@ test('totals: the checkbox does not change them; Reserve and IL add nothing', ()
   assert.deepStrictEqual(a.avg, b.avg);
   const plays = T.playsPct(ctx, st), exp = T.teamLine(st.order.map(k => ({ line: pool.byKey.get(k).line, pct: plays[k].pct, hypo: plays[k].hypo })), ctx.L.maxActive);
   assert.deepStrictEqual(a.avg, exp);
-  const k = st.order.find(q => st.slots[q] === 'bench' || st.slots[q] === 'active'), gone = V.rows(ctx, T.moveSlot(st, k, 'reserve'), { zCats });
+  const k = st.order.find(q => T.COUNTED.includes(st.slots[q])), gone = V.rows(ctx, T.moveSlot(st, k, 'il'), { zCats });
   assert.notDeepStrictEqual(gone.avg, a.avg);
   assert.deepStrictEqual(gone.avg, V.rows(ctx, T.applySwap(st, [k], []), { zCats }).avg);
   assert.strictEqual(a.total, undefined);
@@ -152,7 +152,7 @@ test('scorer.getModule: cached by roster, cats, mode and baseline, never the wei
   assert.strictEqual(V.nextJob([done]), null);
 });
 
-test('moduleView: owner filters, label, accent-blind search that keeps the Win M order, limit and more', () => {
+test('moduleView: owner filters, label, accent-blind search that keeps the Win M order, shows every row', () => {
   const ctx = mk(), st = T.applySwap(stateOf(), [stateOf().order[0]], []), sentOut = stateOf().order[0], mine = st.order[1];
   const theirs = ROS[other].map(x => x.fid).slice(0, 3), fa = pool.players.find(p => !p.owner && !(p.key in st.slots)).key;
   const rows = [theirs[0], mine, sentOut, fa, theirs[1], theirs[2]].map((key, i) => ({ key, dM: 10 - i, dCat: [], old: 50, new: 60 - i }));
@@ -165,8 +165,8 @@ test('moduleView: owner filters, label, accent-blind search that keeps the Win M
   assert.strictEqual(v.rows.find(x => x.key === sentOut).label, 'Sent out');
   assert.strictEqual(v.rows.find(x => x.key === fa).label, 'Free agent');
   assert.ok(/^You/.test(v.rows.find(x => x.key === mine).label));
-  const lim = V.moduleView(rows, ctx, st, { owner: 'all', limit: 2 });
-  assert.strictEqual(lim.rows.length, 2); assert.strictEqual(lim.total, 6); assert.strictEqual(lim.more, 4);
+  const all = V.moduleView(rows, ctx, st, { owner: 'all' });
+  assert.strictEqual(all.rows.length, 6); assert.strictEqual(all.total, 6); assert.strictEqual(all.more, undefined);
   const nm = ctx.pool.byKey.get(theirs[1]).n, q = V.moduleView(rows, ctx, st, { owner: 'all', query: nm.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '') });
   assert.ok(keys(q).includes(theirs[1]));
   assert.ok(keys(q).every((k, i, a) => i === 0 || rows.findIndex(r => r.key === a[i - 1]) < rows.findIndex(r => r.key === k)));   // Win M order kept
@@ -176,8 +176,8 @@ test('dropSwap: the incoming player takes the outgoing one\'s slot, two of mine 
   const st = stateOf(), out = st.order.find(k => st.slots[k] === 'active'), inK = ROS[other][0].fid;
   const s = V.dropSwap(st, inK, out);
   assert.ok(!(out in s.slots)); assert.strictEqual(s.slots[inK], 'active'); assert.strictEqual(s.order.length, st.order.length);
-  const b = st.order.find(k => st.slots[k] === 'bench'), t = V.dropSwap(st, b, out);
-  assert.strictEqual(t.slots[b], 'active'); assert.strictEqual(t.slots[out], 'bench'); assert.strictEqual(t.order.length, st.order.length);
+  const b = st.order.find(k => st.slots[k] === 'reserve'), t = V.dropSwap(st, b, out);
+  assert.strictEqual(t.slots[b], 'active'); assert.strictEqual(t.slots[out], 'reserve'); assert.strictEqual(t.order.length, st.order.length);
   const d = V.dropIn(st, inK, 'il');
   assert.strictEqual(d.slots[inK], 'il'); assert.strictEqual(d.order.length, st.order.length + 1);
   assert.strictEqual(V.dropIn(st, b, 'il').slots[b], 'il');   // already mine: a plain move
@@ -206,7 +206,7 @@ test('pick: no duplicates, and Enter takes the top match', () => {
 test('apply: wraps applySwap on the picked keys and leaves the old state alone', () => {
   const ctx = mk(), st = stateOf(), out = V.sendOutList(ctx, st)[0], inn = V.bringInList(ctx, st)[0], before = JSON.stringify(st);
   const next = V.apply(st, [out], [inn]);
-  assert.ok(!(out.key in next.slots) && next.slots[inn.key] === 'bench');
+  assert.ok(!(out.key in next.slots) && next.slots[inn.key] === 'reserve');
   assert.strictEqual(JSON.stringify(st), before);
 });
 
@@ -228,9 +228,9 @@ test('avgCats: Plays % weighted per-category Z per slot, parts add up to avgZ', 
   assert.ok(near(V.zParts(r.avgCats, w, 9).reduce((s, v) => s + v, 0), r.avgZ, 1e-9));
 });
 
-test('move: refuses the same slot; IL to Bench adds him to the team average, Bench to Reserve drops him', () => {
-  const ctx = mk(), st = stateOf(), il = st.order.find(k => st.slots[k] === 'il'), bn = st.order.find(k => st.slots[k] === 'bench');
-  assert.strictEqual(V.move(st, bn, 'bench'), st);
+test('move: refuses the same slot; IL to Active adds him to the team average, Reserve to IL drops him', () => {
+  const ctx = mk(), st = stateOf(), il = st.order.find(k => st.slots[k] === 'il'), bn = st.order.find(k => st.slots[k] === 'reserve');
+  assert.strictEqual(V.move(st, bn, 'reserve'), st);
   const a = V.rows(ctx, st, { zCats });
   if (il) {
     const up = V.move(st, il, 'active'), b = V.rows(ctx, up, { zCats });
@@ -239,8 +239,8 @@ test('move: refuses the same slot; IL to Bench adds him to the team average, Ben
     assert.ok(b.avgZ !== a.avgZ || b.avg.pts !== a.avg.pts);
   }
   if (bn) {
-    const down = V.move(st, bn, 'reserve'), c = V.rows(ctx, down, { zCats });
-    assert.strictEqual(down.slots[bn], 'reserve');
+    const down = V.move(st, bn, 'il'), c = V.rows(ctx, down, { zCats });
+    assert.strictEqual(down.slots[bn], 'il');
     assert.deepStrictEqual(c.avg, V.rows(ctx, T.applySwap(st, [bn], []), { zCats }).avg);
   }
 });
@@ -250,4 +250,32 @@ test('slotCounts: players per slot against the active limit', () => {
   assert.strictEqual(n.active.n, st.order.filter(k => st.slots[k] === 'active').length);
   assert.strictEqual(n.active.over, n.active.n > 10);
   assert.strictEqual(n.il.over, false);
+});
+
+test('rows: MPG is the pool player minutes per game and never part of his line', () => {
+  const ctx = mk(), r = V.rows(ctx, stateOf(), { zCats });
+  r.rows.forEach(x => { const pp = pool.byKey.get(x.key); assert.strictEqual(x.mpg, pp.mpg == null ? null : pp.mpg); assert.ok(!('m' in pp.line) && !('mpg' in pp.line)); });
+  assert.ok(r.rows.some(x => x.mpg > 0));
+});
+
+test('moduleView with every player: 500+ rows come back in one piece', () => {
+  const ctx = mk(), st = stateOf(), rows = ctx.pool.players.map((p, i) => ({ key: p.key, dM: i, old: 0, new: 0, dCat: [] }));
+  const v = V.moduleView(rows, ctx, st, {});
+  assert.strictEqual(v.rows.length, rows.length); assert.strictEqual(v.total, rows.length);
+});
+
+test('diff: who went out, who came in, who changed slot', () => {
+  const st = stateOf(), [a, b, c] = st.order, inK = ROS[other][0].fid;
+  const mv = V.move(st, a, st.slots[a] === 'il' ? 'active' : 'il'), sw = V.apply(mv, [{ key: b }], [{ key: inK }]);
+  assert.deepStrictEqual(V.diff(st, st), { out: [], in: [], moves: [] });
+  assert.deepStrictEqual(V.diff(st, mv), { out: [], in: [], moves: [{ key: a, from: st.slots[a], to: mv.slots[a] }] });
+  assert.deepStrictEqual(V.diff(st, sw), { out: [b], in: [inK], moves: [{ key: a, from: st.slots[a], to: mv.slots[a] }] });
+});
+
+test('sortRows: by a value getter, either way, missing last, ties keep roster order, never mutates', () => {
+  const rows = [{ key: 'a', v: 2 }, { key: 'b', v: null }, { key: 'c', v: 5 }, { key: 'd', v: 2 }, { key: 'e', v: 'x' }], snap = JSON.stringify(rows), num = r => typeof r.v === 'number' ? r.v : null;
+  assert.deepStrictEqual(V.sortRows(rows, num, 'desc').map(r => r.key), ['c', 'a', 'd', 'b', 'e']);
+  assert.deepStrictEqual(V.sortRows(rows, num, 'asc').map(r => r.key), ['a', 'd', 'c', 'b', 'e']);
+  assert.deepStrictEqual(V.sortRows(rows, r => r.key, 'desc').map(r => r.key), ['e', 'd', 'c', 'b', 'a']);
+  assert.strictEqual(JSON.stringify(rows), snap);
 });
