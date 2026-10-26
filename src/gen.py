@@ -1,4 +1,4 @@
-import json, hashlib, os, re
+import json, hashlib, os, re, shutil
 # Every page is written twice: courtside-<page>.html with all code inlined (the draft board one is the claude.ai artifact and
 # stays one self-contained file), and site/linked/courtside-<page>.html where each big script (data, Engine, shared modules)
 # is a hashed file site/assets/<name>.<hash>.js, so the browser keeps it between pages (2026-10-26). GEN_OUT redirects both (tests).
@@ -53,5 +53,6 @@ emit('rankings','rankings.html')
 # Team page (2026-10-25, #131): the in-season modules, the rankings core (Zscore) and the Team tab modules; its How it works is its own
 emit('team','team.html')
 # the hashed script files; names are content hashes, so a changed file is a new name and old pages never meet new code
+shutil.rmtree(os.path.join(OUT,'site/assets'),ignore_errors=True)   # only the files this build links; old hashes must not pile up
 for fn,text in ASSET.items():
     f=os.path.join(OUT,'site/assets',fn); os.makedirs(os.path.dirname(f),exist_ok=True); open(f,'wb').write(text.encode(OUTENC))   # bytes, so the file is what the name's hash says on every OS

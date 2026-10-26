@@ -249,7 +249,7 @@ tr.lrow{cursor:pointer}
 <script src="assets/engine.a0107795.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
 <script src="assets/store.eb1e4311.js"></script>
-<script src="assets/fxcache.48f6c5ab.js"></script>
+<script src="assets/fxcache.b51ac615.js"></script>
 <script src="assets/team_mods.57aa11c2.js"></script>
 <script>
 (function () {
@@ -306,7 +306,7 @@ tr.lrow{cursor:pointer}
         try {
           if (!shown) { shown = await build(b, at); return; }
           if (!changed) { fetchedAt = new Date(at); freshness(); return; }
-          if (outs.length || ins.length) {   // keep the swaps being tried; the new data waits for a click
+          if (outs.length || ins.length || log.length) {   // keep the swaps (typed or applied) being tried; the new data waits for a click
             fetchedAt = new Date(at); freshness();
             sayHtml('New Fantrax data is in. Your swaps are kept. <button type="button" class="retry" id="applynew">Update</button>'); return;
           }

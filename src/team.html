@@ -293,7 +293,7 @@ tr.lrow{cursor:pointer}
         try {
           if (!shown) { shown = await build(b, at); return; }
           if (!changed) { fetchedAt = new Date(at); freshness(); return; }
-          if (outs.length || ins.length) {   // keep the swaps being tried; the new data waits for a click
+          if (outs.length || ins.length || log.length) {   // keep the swaps (typed or applied) being tried; the new data waits for a click
             fetchedAt = new Date(at); freshness();
             sayHtml('New Fantrax data is in. Your swaps are kept. <button type="button" class="retry" id="applynew">Update</button>'); return;
           }

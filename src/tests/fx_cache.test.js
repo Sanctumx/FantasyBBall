@@ -36,6 +36,14 @@ test('fresh data that differs is reported as changed and replaces the cache', as
   assert.deepStrictEqual(FX.create({ storage: st, fetcher: fake({}), now: () => 3 }).peek('rosters', 'L1').body, { n: 2 });
 });
 
+test('changed compares with what the page drew, not with what another tab saved meanwhile', async () => {
+  const st = mem(), out = {};
+  await FX.create({ storage: st, fetcher: fake({ rosters: { n: 1 } }), now: () => 1 }).swr([['rosters', 'L1']], H());
+  const other = async () => { st.d['courtside-fx-v1:rosters:L1'] = JSON.stringify({ at: 2, json: JSON.stringify({ n: 2 }) }); return { n: 2 }; };   // another tab saves the new answer first
+  await FX.create({ storage: st, fetcher: other, now: () => 3 }).swr([['rosters', 'L1']], H(out));
+  assert.strictEqual(out.fresh.ch, true);
+});
+
 test('a failed refresh keeps the cached copy and reports the error with had=true', async () => {
   const st = mem(), out = {};
   await FX.create({ storage: st, fetcher: fake({ league: { a: 1 } }), now: () => 1 }).swr([['league', 'L1']], H());

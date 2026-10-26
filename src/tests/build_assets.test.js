@@ -45,6 +45,15 @@ test('a linked page is the inlined page with its scripts moved out (same code, s
   }
 });
 
+test('a rebuild drops asset files no page links any more (old hashes do not pile up)', { skip }, () => {
+  const stale = path.join(OUT, 'site/assets/players.00000000.js');
+  fs.writeFileSync(stale, 'old');
+  const again = spawnSync(py, ['gen.py'], { cwd: SRC, env: Object.assign({}, process.env, { GEN_OUT: OUT }), encoding: 'utf8' });
+  assert.strictEqual(again.status, 0, again.stderr);
+  assert.ok(!fs.existsSync(stale));
+  assert.strictEqual(fs.readdirSync(path.join(OUT, 'site/assets')).filter(f => /^players\./.test(f)).length, 1);
+});
+
 test('a file with a given hash is never rewritten with other content (names are content hashes)', { skip }, () => {
   const names = fs.readdirSync(path.join(OUT, 'site/assets'));
   assert.strictEqual(new Set(names).size, names.length);

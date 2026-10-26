@@ -323,7 +323,7 @@ tr.click{cursor:pointer}
         try {
           if (!shown) { shown = await build(b, at); return; }
           if (!changed) { fetchedAt = new Date(at); freshness(); return; }
-          if (bd) {   // keep the trade being built; the new data waits for a click
+          if (bd && (bd.aGets.length || bd.bGets.length)) {   // keep the trade being built; the new data waits for a click
             fetchedAt = new Date(at); freshness();
             sayHtml('New Fantrax data is in. Your trade is kept. <button type="button" class="retry" id="applynew">Update</button>'); return;
           }

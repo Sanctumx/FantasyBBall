@@ -1507,10 +1507,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     }
     async function fetchOne(what, id) {
       const body = await fetcher(what, id);
-      if (NEVER[what]) return { body, changed: true };
-      const json = JSON.stringify(body), prev = peek(what, id);
+      if (NEVER[what]) return { body };
+      const json = JSON.stringify(body);
       store(what, id, json);
-      return { body, changed: !prev || prev.json !== json };
+      return { body, json };
     }
     const live = async (what, id) => (await fetchOne(what, id)).body;
 
@@ -1521,7 +1521,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       const fresh = Promise.all(specs.map(s => fetchOne(s[0], s[1]))); fresh.catch(() => {});   // started before drawing; handled below
       if (had) await hooks.onCached(hit.map(h => h.body), Math.min.apply(null, hit.map(h => h.at)));
       let res; try { res = await fresh; } catch (e) { await hooks.onError(e, had); return; }
-      await hooks.onFresh(res.map(r => r.body), now(), res.some(r => r.changed));
+      await hooks.onFresh(res.map(r => r.body), now(), !had || res.some((r, i) => r.json !== hit[i].json));   // against what the page drew, not what storage holds now
     }
     return { peek, live, swr };
   }
@@ -2229,7 +2229,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
         try {
           if (!shown) { shown = await build(b, at); return; }
           if (!changed) { fetchedAt = new Date(at); freshness(); return; }
-          if (bd) {   // keep the trade being built; the new data waits for a click
+          if (bd && (bd.aGets.length || bd.bGets.length)) {   // keep the trade being built; the new data waits for a click
             fetchedAt = new Date(at); freshness();
             sayHtml('New Fantrax data is in. Your trade is kept. <button type="button" class="retry" id="applynew">Update</button>'); return;
           }
