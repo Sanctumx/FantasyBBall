@@ -1,24 +1,28 @@
-# team-d3-swap (Team tab D3, step 1 of `team-tab-next.md`)
+# team-d3-swap (Team tab D3 + sources, steps 1-2 of `team-tab-next.md`)
 
-Branch `team-d3-swap` from origin/main, commit 35c62d3, not pushed, not reviewed. 330 unit tests and `team_page.mjs` pass.
+Branch `team-d3-swap`, not pushed; work in the worktree `C:/Users/FefeDocuments/FantasyBBall-d3` (the main checkout was switched to manual-league by another session). 374 unit tests pass. Playwright installed at `$TEMP/pw` (playwright 1.48.2 + chromium) for the browser checks.
 
 ## Done 2026-10-26
 
-D3: in a previewed trade a candidate from an opponent leaves that team and the team receives the player I send out.
-- `src/team_core.js`: `state.moves` records each swap `{ out, in }` (`initState` starts it empty, `moveSlot` keeps it, `applySwap` adds one only when both sides are non-empty).
-- `src/team_win.js`: `received(ctx, state)` -> `{ teamId: [{ key, slot }] }`. One opponent among the incoming players gets every outgoing one (first fill the vacated slots in order, the rest go to the reserve); incoming players from several opponents pair with outgoing ones in order, extras go to nobody. Free agents send nothing, a vacated IL slot becomes reserve, a player back on my roster is not received. `oppState` / `oppTeam` take it (cache key includes the received keys); `matrix` passes it and widens `exclude`.
-- Applies to typed / dragged swaps and to the 'rep' list's worst-player swap (`swapScore`, no code change). **Vs average is unchanged** (user: it is only a different way to measure a player's Win M; candidate leaves, nothing goes back).
-- Decisions taken from the planner's defaults, not asked: several opponents in one Apply pair in chip order; one opponent plus free agents sends all outgoing players to that opponent; IL slot -> opponent's reserve.
-- How it works text on the Team tab has the new sentence; pages rebuilt (7 asset files showed line-ending noise only, reverted).
-- No browser assertion for the opponent row (fixtures can't pick a rostered opponent player reliably); unit tests cover it.
+- **D3** (commit 35c62d3): a candidate from an opponent leaves that team, and the team receives the player I send out. Reviewer pass done (effort high); its three must-fix bugs and the IL point fixed test-first in ed956a8: `TeamWin.trade` replays `state.moves` with each player's current holder (swap-backs, chains, getting my own player back), `TeamView.signature(state, ctx)` includes what opponents received, Vs average (`avgCandidate` / `avgOwn`) uses the same `recv` / `gone` set as the matrix, received IL players stay out of the opponent's side. Not fixed (unchecked): `oppState` keeps the received order while the cache key sorts it (matters only if Plays % breaks ties by order).
+- **Sources, step 1** (e3a4ec2): `rankings_core.js` now has `SOURCES`, `WINDAYS`, `sourceRows(src, PLAYERS, box)`, `loadBox(fetch, now)`, `matchRows(src, rows, pool, fxPlayers)` -> `{byKey, byPid}`, `sourcePool(pool, match)` (only line and mpg change; no usable row keeps the projection line with `lineFb: true`). `rankings.html` uses `R.loadBox` / `R.WINDAYS` (pure refactor). Pages rebuilt for that commit only.
+- **Sources, step 2** (latest commit): `TeamView.sourceCtx(args, src, rows, fxPlayers)`: 'avg' = plain `Matchup.makeCtx(args)`, any other source = source pool + the plain context's `ref`. Tested against a hand-built pool and the unchanged 'avg' numbers. Pages NOT rebuilt since.
 
-## Next
+## User decisions (2026-10-26)
 
-1. `reviewer` on the branch diff (hard-ish area: wrong numbers don't crash; give it effort high), fix findings test-first.
-2. Then `team-tab-next.md` step 2: Rankings Vs average from the same TeamWin code when a league is loaded (D2); step 3: per-game / season toggle and auto-fill top 12; step 4 browser check, PR (push only when the user says).
-3. Ledger: no IDEAS row exists for the Team tab (131/138 are feature numbers); add one through the ledger worktree if wanted. The ledger worktree has an unlanded commit 523cf1e (#142 recorded as released); landing is a push.
+Vs average on Rankings FOLLOWS the Rankings Source (not always projections). The Team tab gets its own Source switch (same 7 options). Each tab keeps its own Source setting (Rankings default Season to date, Team default Projections · Average). A player with no line in the source uses his projection line with a "proj" marker. The MPG column follows the source. No minimum games. Rows with no Fantrax match show "—"; no games left / no counted player falls back to the old `winStart` average with a note. The shrink (#139, calib-ros) was fitted on projections: tooltip must say Win numbers from recent-game sources are uncalibrated.
+
+## Next (planner's plan, in order)
+
+3. **Team tab Source switch** (`src/team.html`, test-first where a unit test fits, then `team_page.mjs`): `#src` select after "Your team" in the top `.ctl`, same options and groups as Rankings (see `rankings.html` line ~89), saved as `ui.src` in `courtside-team-v1` (default 'avg'). The page loads the box files (`R.loadBox(fetch)`), `mkCtx()` (line ~358) uses `TV.sourceCtx({L, pool, DAYS: SCHED_DAYS, rosters, me, nowMs, box: [], nightOf}, ui.src, R.sourceRows(ui.src, PLAYERS, box), fxPlayers)`, cache the ctx per source and drop it on a Fantrax refresh. `zmap` (line ~338, currently `R.projSource(PLAYERS,'avg')` table by pid) must come from `R.table(sourceRows)` mapped through `R.matchRows(...).byPid` to keys (it is looked up by `pp.pid` in `zCats`, line ~333). Show "proj" marker for `lineFb` rows; freshness line names the source and window dates; tooltips and How it works updated (uncalibrated note). A source change keeps state, chips and the Changes log, switching only the ctx and scorer. Browser check: switching to Last week changes a stat cell and a Win M value, switching back restores the exact earlier values, choice survives a reload. Rebuild with the full command.
+4. **Rankings D2** (`src/rankings.html`, `src/gen.py`): the Rankings page uses the TEAM bundle (swap `/*__RANKINGS__*/` for `/*__DAYS__*/` + `/*__TEAM__*/`, drop the RANKINGS SRC entry if unused) and loads `stats/espn.json` so its base pool equals the Team tab's (`InP.buildPool({PLAYERS, fxPlayers, espn, L, rosters})`). With Vs average chosen and a league + team loaded: run `TV.moduleJob(sourceCtx(args, ui.src, rows, fxPlayers), initState(rosters[me]), {baseline:'avg', cats}, candidates = keys of matchRows(...).byPid)`, step ~30 ms, redraw about every 250 ms; each row's pid maps through `byPid` (no key: "—"); `moduleSetup` null -> fall back to `winStart`'s average with a note; win cache key includes source and team. Tests: parity unit test per source (Rankings adapter value == `TeamWin.moduleScores` row, incl. free agent, opponent player, my Active / Reserve / IL), key-change test, `rankings_page.mjs` check, cross-page browser check (same source + team -> same Vs average on both tabs).
+5. `reviewer` at effort high on the whole branch, fix findings test-first, PR (push only on the user's word).
 
 ## Housekeeping
 
+- Step 3's per-game / season toggle and auto-fill top 12 (`team-tab-next.md` step 3) come after D2.
+- Ledger: no IDEAS row exists for the Team tab or for sources; add through the ledger worktree if wanted. The ledger worktree has an unlanded commit 523cf1e (#142 recorded as released); landing is a push.
 - `git stash` still holds "stale handoff note (pre-merge)" from `yahoo-points-137`.
-- Shift+Tab "accept edits" doesn't auto-approve Bash; allow rules in `.claude/settings.json` do. The user may name commands to add.
+- Uncommitted edits in `CLAUDE.md` and `.claude/settings.json`, and an untracked `.claude/scripts/build.mjs`, are not mine (appeared during the session); left alone.
+- Shift+Tab "accept edits" doesn't auto-approve Bash; allow rules in `.claude/settings.json` do.
+- Bash heredocs with apostrophes break: use the Write tool for files; Python patch scripts via a heredoc without apostrophes worked. Built-asset line-ending noise: after a rebuild `git checkout --` the asset files whose name did not change.

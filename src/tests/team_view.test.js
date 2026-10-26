@@ -286,3 +286,35 @@ test('scorer: the same roster reached by different trades is not the same job', 
   assert.notStrictEqual(sc.get(ctx, x, {}), sc.get(ctx, y, {}));
   assert.strictEqual(sc.get(ctx, x, {}), sc.get(ctx, x, {}));
 });
+
+// sources on the Team tab (2026-10-26): one context per source, the TeamWin math untouched
+const Rk = require('../rankings_core.js'), FXP = fx('fx_players.json');
+const baseArgs = () => ({ L, pool, DAYS: games(last.start, last.end), rosters: ROS, me, nowMs: last.start, box: [] });
+const BOXC = ['min', 'fgm', 'fga', 'ftm', 'fta', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+// a week of box games for the first n players of my roster, lines that differ from their projections
+const boxOf = n => {
+  const mine = ROS[me].map(x => pool.byKey.get(x.fid)).filter(p => p && p.pid != null).slice(0, n), names = {}, teams = {};
+  mine.forEach((p, i) => { names[i + 1] = p.n; (teams[p.t] = teams[p.t] || []).push([String(i + 1), 30, 4 + i, 12, 2, 3, 1 + i, 9 + 3 * i, 3 + i, 6 - i, 1, 0, 4]); });
+  return { cols: BOXC, names, games: { a: { d: '2026-10-20', teams } } };
+};
+
+test('sourceCtx: avg is the plain context; a box source swaps only the lines, keeps the projection ref, and matches a hand-built pool', () => {
+  const a = baseArgs(), st = stateOf(), box = boxOf(6), rows = Rk.sourceRows('w7', PLAYERS, [box]);
+  const c0 = M.makeCtx(a), cAvg = V.sourceCtx(a, 'avg', Rk.sourceRows('avg', PLAYERS), FXP), cW = V.sourceCtx(a, 'w7', rows, FXP);
+  assert.deepStrictEqual(W.matrix(cAvg, st), W.matrix(c0, st));
+  assert.deepStrictEqual(cW.ref, c0.ref);
+  assert.strictEqual(cW.pool.players.filter(p => !p.lineFb).length, 6);
+  assert.notDeepStrictEqual(W.matrix(cW, st).mean, W.matrix(c0, st).mean);
+  const hand = Object.assign({}, pool, { players: pool.players.map(p => { const r = Rk.matchRows('w7', rows, pool, FXP).byKey.get(p.key); return r ? Object.assign({}, p, { line: r.line, mpg: r.m }) : p; }) });
+  hand.byKey = new Map(hand.players.map(p => [p.key, p]));
+  assert.deepStrictEqual(W.matrix(cW, st), W.matrix(M.makeCtx(Object.assign({}, a, { pool: hand, ref: c0.ref })), st));
+  assert.strictEqual(pool.byKey.get(cW.pool.players.find(p => !p.lineFb).key).lineFb, undefined);   // the base pool is untouched
+});
+
+test('sourceCtx: a previewed trade scores on a source context; scorer jobs are per context and come back when switching back', () => {
+  const a = baseArgs(), box = boxOf(6), rows = Rk.sourceRows('w7', PLAYERS, [box]), c0 = M.makeCtx(a), cW = V.sourceCtx(a, 'w7', rows, FXP), sc = V.createScorer();
+  const st = stateOf(), inK = ROS[other].find(x => x.slot === 'ACTIVE').fid, sw = T.applySwap(st, [st.order[0]], [inK]);
+  const m = W.matrix(cW, sw); assert.ok(m.teams.length > 0 && m.teams.every(t => Number.isFinite(t.match)));
+  const j0 = sc.get(c0, sw, { cats: 9 }), jW = sc.get(cW, sw, { cats: 9 });
+  assert.notStrictEqual(j0, jW); assert.strictEqual(sc.get(c0, sw, { cats: 9 }), j0); assert.strictEqual(sc.get(cW, sw, { cats: 9 }), jW);
+});

@@ -227,3 +227,46 @@ test('winStart (league): Average player is the average player on my roster', () 
   assert.ok(Math.abs(v.m) < 0.35 * Math.max(0.01, Math.abs(w.rep.get(fakePid).m - w.avg.get(fakePid).m)) + 0.02, 'a roster-average player has ~0 vs the roster average: ' + v.m + ' ' + w.rep.get(fakePid).m);
   assert.ok(isFinite(top.m));
 });
+
+// shared sources (2026-10-26): the Rankings and Team tabs judge a player on the same lines
+const SL = I.parseLeague(require('./fixtures/fx_league.json'));
+const spool = Pl.buildPool({ PLAYERS, fxPlayers: FXP, espn: ESPN, L: SL, rosters: ROS });
+const boxFor = name => ({ cols: BOX.cols, names: { 1: name }, games: { a: { d: '2026-10-20', teams: { SAS: [['1', 30, 5, 10, 4, 4, 1, 15, 7, 3, 0, 0, 4]] } } } });
+
+test('sourceRows: projection sources are projSource, window sources are windowSource; SOURCES lists the seven', () => {
+  assert.deepStrictEqual(R.SOURCES, ['season', 'w7', 'w14', 'w30', 'avg', 'bbm', 'hs']);
+  assert.deepStrictEqual(R.sourceRows('avg', PLAYERS, []), R.projSource(PLAYERS, 'avg'));
+  assert.deepStrictEqual(R.sourceRows('w14', PLAYERS, [BOX]), R.windowSource([BOX], 14, PLAYERS).rows);
+  assert.deepStrictEqual(R.sourceRows('w7', PLAYERS, []), []);
+});
+
+test('loadBox: months from 2026-10 to the current one, missing months and bad files skipped', async () => {
+  const seen = [], fetchFn = async url => { seen.push(url); return url.endsWith('2026-11.json') ? { ok: false } : url.endsWith('2026-12.json') ? { ok: true, json: async () => ({ nothing: 1 }) } : { ok: true, json: async () => ({ games: { x: 1 }, u: url }) }; };
+  const out = await R.loadBox(fetchFn, new Date(2027, 0, 15));
+  assert.deepStrictEqual(seen, ['stats/box-2026-10.json', 'stats/box-2026-11.json', 'stats/box-2026-12.json', 'stats/box-2027-01.json']);
+  assert.deepStrictEqual(out.map(f => f.u), ['stats/box-2026-10.json', 'stats/box-2027-01.json']);
+});
+
+test('matchRows: projection rows by pid; box rows by name and team, one row per player', () => {
+  const rowsA = R.projSource(PLAYERS, 'avg'), m = R.matchRows('avg', rowsA, spool, FXP);
+  const wem = spool.players.find(p => /Wembanyama/.test(p.n));
+  assert.strictEqual(m.byKey.get(wem.key).pid, wem.pid); assert.strictEqual(m.byPid.get(wem.pid), wem.key);
+  const wr = R.sourceRows('w7', PLAYERS, [boxFor(wem.n)]), mw = R.matchRows('w7', wr, spool, FXP);
+  assert.strictEqual(wr.length, 1); assert.strictEqual(mw.byKey.get(wem.key), wr[0]); assert.strictEqual(mw.byPid.get(wr[0].pid), wem.key); assert.strictEqual(mw.byKey.size, 1);
+});
+
+test('sourcePool: lines and minutes follow the source; key, games, owner, slot and order stay; a player with no usable row keeps his projection with lineFb', () => {
+  const wem = spool.players.find(p => /Wembanyama/.test(p.n)), wr = R.sourceRows('w7', PLAYERS, [boxFor(wem.n)]);
+  const sp = R.sourcePool(spool, R.matchRows('w7', wr, spool, FXP));
+  assert.deepStrictEqual(sp.players.map(p => p.key), spool.players.map(p => p.key));
+  const a = sp.players.find(p => p.key === wem.key);
+  assert.deepStrictEqual(a.line, wr[0].line); assert.strictEqual(a.mpg, wr[0].m); assert.strictEqual(a.lineFb, false);
+  ['g', 'owner', 'slot', 'n', 't', 'pid', 'src'].forEach(f => assert.strictEqual(a[f], wem[f]));
+  const other = sp.players.find(p => p.key !== wem.key);
+  assert.strictEqual(other.lineFb, true); assert.deepStrictEqual(other.line, spool.byKey.get(other.key).line);
+  assert.strictEqual(sp.byKey.get(wem.key), a);
+  assert.strictEqual(spool.byKey.get(wem.key).lineFb, undefined);   // the base pool is untouched
+  sp.players.forEach(p => assert.ok(Object.values(p.line).every(Number.isFinite)));
+  const pa = R.sourcePool(spool, R.matchRows('avg', R.sourceRows('avg', PLAYERS), spool, FXP));   // the projection source changes no projected line
+  pa.players.filter(p => p.pid != null).forEach(p => assert.deepStrictEqual(p.line, spool.byKey.get(p.key).line));
+});

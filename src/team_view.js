@@ -5,7 +5,7 @@
 // it only when the "adjust by Plays %" box is checked (opts.adjust).
 (function (root) {
   'use strict';
-  const Team = root.Team || require('./team_core.js'), TeamWin = root.TeamWin || require('./team_win.js');
+  const Team = root.Team || require('./team_core.js'), TeamWin = root.TeamWin || require('./team_win.js'), Matchup = root.Matchup || require('./matchup_core.js'), Rk = root.Rankings || require('./rankings_core.js');
   const SLOT_ORDER = Team.SLOTS;
   const COUNT = ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
 
@@ -127,6 +127,16 @@
       } };
   }
 
+  // ---- sources (2026-10-26): the same TeamWin math on another source's lines ----
+  // The context for source `src` ('avg' = the pool as the Team tab builds it, the plain Matchup.makeCtx). Any other source gets a copy of
+  // the pool with that source's lines (Rankings.sourcePool; a player with no row keeps his projection, lineFb) and the plain context's
+  // projection ref, so only the lines change. args = Matchup.makeCtx's argument; rows = Rankings.sourceRows(src, ...).
+  function sourceCtx(args, src, rows, fxPlayers) {
+    const base = Matchup.makeCtx(args);
+    if (src === 'avg') return base;
+    return Matchup.makeCtx(Object.assign({}, args, { pool: Rk.sourcePool(args.pool, Rk.matchRows(src, rows, args.pool, fxPlayers)), ref: base.ref }));
+  }
+
   // ---- the list as drawn ----
   const SLOT_LABEL = { active: 'Active', reserve: 'Reserve', il: 'IL' };
   // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query.
@@ -168,6 +178,6 @@
   const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
   const apply = (state, outs, ins) => Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
 
-  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);
