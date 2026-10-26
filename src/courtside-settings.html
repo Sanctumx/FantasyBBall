@@ -382,11 +382,15 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
       if (ln === 'Pos' && lines[i + 1] === 'Player') { cur = { name: prev, players: [], starters: [], bn: 0, il: 0 }; teams.push(cur); i++; continue; }
       if (cur && SLOT.test(ln)) {
         let j = i + 1; while (j < lines.length && !lines[j]) j++;
-        let k = j + 1, m = null; while (k < lines.length && k <= j + 4 && !(m = INFO.exec(lines[k]))) k++;
-        if (!m) { prev = ln; continue; }
+        let k = j + 1, m = null; while (k < lines.length && k <= j + 4 && !SLOT.test(lines[k]) && !(m = INFO.exec(lines[k]))) k++;
         const slot = ln.toUpperCase(), isIl = slot.startsWith('IL');
-        cur.players.push({ n: lines[j], t: YAHOO_TEAM[m[1]] || m[1], p: m[2].replace(/,/g, '/'), il: isIl });
-        if (isIl) cur.il++; else if (slot === 'BN') cur.bn++; else if (slot !== 'NA') cur.starters.push(slot === 'UTIL' ? 'U' : slot);
+        const count = () => { if (isIl) cur.il++; else if (slot === 'BN') cur.bn++; else if (slot !== 'NA') cur.starters.push(slot === 'UTIL' ? 'U' : slot); };
+        if (!m) {   // an empty slot counts toward the lineup but adds no player, and stops at the next slot line
+          if (j < lines.length && (SLOT.test(lines[j]) || /^\(?empty\)?$/i.test(lines[j]))) { count(); i = SLOT.test(lines[j]) ? j - 1 : j; continue; }
+          prev = ln; continue;
+        }
+        cur.players.push({ n: lines[j], t: YAHOO_TEAM[m[1]] || m[1], p: m[2].replace(/,/g, '/'), il: isIl, s: isIl ? 'IL' : slot === 'UTIL' ? 'U' : slot });
+        count();
         i = k; continue;
       }
       prev = ln;
@@ -400,7 +404,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     const n = parsed.teams.length, roster = parsed.luFx.length + parsed.bn;
     const settings = normalize(Object.assign({}, LEAGUE_DEF, base, { teams: Math.min(20, Math.max(4, n)), roster: Math.min(25, Math.max(8, roster)), ilSpots: parsed.il }, parsed.luFx.length ? slotSettings(parsed.luFx) : {}));
     return { v: 1, id: newManualId(), name, manual: true, settings, myTeam: 't' + ((mine >= 0 && mine < n ? mine : 0) + 1), updatedAt: Date.now(),
-      teams: parsed.teams.map((t, i) => ({ id: 't' + (i + 1), name: t.name, players: t.players.map(p => ({ n: p.n, t: p.t || '', p: p.p || '', il: !!p.il })) })) };
+      teams: parsed.teams.map((t, i) => ({ id: 't' + (i + 1), name: t.name, players: t.players.map(p => Object.assign({ n: p.n, t: p.t || '', p: p.p || '', il: !!p.il }, p.s ? { s: p.s } : {})) })) };
   }
   const manualPid = n => 'm:' + normName(n);
   // the circle method: every team meets every other once per N − 1 rounds (an odd league rests one team a round)
@@ -412,14 +416,16 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     }
     return rounds;
   }
-  // Without a Fantrax schedule: the season's weeks as scoring periods (days end at local midnight, UTC−6 as elsewhere) and the
-  // regular season up to the playoff start as a round robin in team order. Estimated; the pages say so.
+  // Without a Fantrax schedule: the season's weeks as scoring periods, timed as Fantrax's are (a period starts 19:00 ET on its
+  // first day and ends 18:59:59 ET on the next period's first day), and the regular season up to the playoff start as a round
+  // robin in team order. Estimated; the pages say so.
   function manualSchedule(ML, SCHED) {
     const plan = weekPlan(SCHED, ML.settings.asb), day = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
     const iso = ms => new Date(ms).toISOString().slice(0, 10), last = Math.max(1, Math.min(plan.count, ML.settings.poStart - 1));
+    const et = s => { const md = s.slice(5); return md >= '03-15' && md < '11-01' ? '-0400' : '-0500'; };   // US daylight time, near enough
     const scoringPeriods = plan.starts.slice(0, plan.count).map((s, i) => {
-      const next = i + 1 < plan.count ? day(plan.starts[i + 1]) : day(s) + 7 * 864e5;
-      return { number: i + 1, startDate: s + 'T00:00:00.0-0600', endDate: iso(next - 864e5) + 'T23:59:59.0-0600' };
+      const nextIso = iso(i + 1 < plan.count ? day(plan.starts[i + 1]) : day(s) + 7 * 864e5);
+      return { number: i + 1, startDate: s + 'T19:00:00.0' + et(s), endDate: nextIso + 'T18:59:59.0' + et(nextIso) };
     });
     const rounds = roundRobin(ML.teams.map(t => t.id)), nm = {}; ML.teams.forEach(t => { nm[t.id] = { name: t.name, id: t.id, shortName: t.name.slice(0, 3) }; });
     const matchups = [];
@@ -431,10 +437,10 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     const teamInfo = {}, rosters = {}, players = {};
     ML.teams.forEach(t => {
       teamInfo[t.id] = { division: 'Manual', name: t.name, id: t.id, shortName: t.name.slice(0, 3) };
-      rosters[t.id] = { teamName: t.name, rosterItems: t.players.map(p => { players[manualPid(p.n)] = { name: p.n, team: p.t, position: p.p }; return { id: manualPid(p.n), position: p.p, status: p.il ? 'INJURED_RESERVE' : 'ACTIVE' }; }) };
+      rosters[t.id] = { teamName: t.name, rosterItems: t.players.map(p => { players[manualPid(p.n)] = { name: p.n, team: p.t, position: p.p }; return { id: manualPid(p.n), position: p.p, status: p.il ? 'INJURED_RESERVE' : p.s === 'BN' ? 'RESERVE' : p.s === 'NA' ? 'MINORS' : 'ACTIVE' }; }) };
     });
-    const sch = SCHED ? manualSchedule(ML, SCHED) : { scoringPeriods: [], matchups: [] };
-    return { league: Object.assign({ teamInfo, rosterInfo: { maxTotalPlayers: ML.settings.roster }, playerInfo: {} }, sch),
+    const sch = SCHED ? manualSchedule(ML, SCHED) : { scoringPeriods: [], matchups: [] }, nAct = (ML.settings.luFx || []).length;
+    return { league: Object.assign({ teamInfo, rosterInfo: Object.assign({ maxTotalPlayers: ML.settings.roster }, nAct ? { maxTotalActivePlayers: nAct } : {}), playerInfo: {} }, sch),
       rosters: { period: 1, rosters }, standings: [], players };
   }
   // for FxCache.create({ manual }): the answers of a saved manual league, null for anything else
@@ -464,7 +470,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
       const ps = Array.isArray(t.players) ? t.players.filter(p => obj(p) && typeof p.n === 'string' && p.n.trim()) : [];
       if (ps.length > settings.roster + settings.ilSpots) return fail(nm + ' has ' + ps.length + ' players; the roster holds ' + (settings.roster + settings.ilSpots) + '.');
       for (const p of ps) { const k = normName(p.n); if (seen[k]) return fail(p.n + ' is on both ' + seen[k] + ' and ' + nm + '.'); seen[k] = nm; }
-      teams.push({ id: 't' + (i + 1), name: nm, players: ps.map(p => ({ n: p.n.trim(), t: String(p.t || ''), p: String(p.p || ''), il: !!p.il })), was: t.id });
+      teams.push({ id: 't' + (i + 1), name: nm, players: ps.map(p => Object.assign({ n: p.n.trim(), t: String(p.t || ''), p: String(p.p || ''), il: !!p.il }, /^(PG|SG|G|SF|PF|F|C|U|BN|IL|NA)$/.test(p.s) ? { s: p.s } : {})), was: t.id });
     }
     const mine = teams.find(t => t.was === L.myTeam);
     const id = typeof L.id === 'string' && /^m-[a-z0-9]+$/.test(L.id) ? L.id : newManualId();

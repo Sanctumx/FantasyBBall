@@ -17,7 +17,7 @@ test('parseYahooRosters reads every team of the Starting Rosters page', () => {
   const r = S.parseYahooRosters(YAHOO);
   assert.deepStrictEqual(r.teams.map(t => t.name), ['Los Laguneros', 'Droppin’Dimes']);
   assert.deepStrictEqual(r.teams.map(t => t.players.length), [15, 4]);
-  assert.deepStrictEqual(r.teams[0].players[0], { n: 'Egor Dëmin', t: 'BKN', p: 'PG/SG', il: false });
+  assert.deepStrictEqual(r.teams[0].players[0], { n: 'Egor Dëmin', t: 'BKN', p: 'PG/SG', il: false, s: 'PG' });
   assert.strictEqual(r.teams[0].players[9].n, 'Day\'Ron Sharpe');
   assert.deepStrictEqual(r.teams[0].players.filter(p => p.il).map(p => p.n), ['AJ Dybantsa', 'Paolo Banchero']);
   assert.deepStrictEqual(r.luFx, ['PG', 'SG', 'G', 'SF', 'PF', 'F', 'C', 'C', 'U', 'U']);
@@ -116,4 +116,30 @@ test('an odd number of teams rests one team each week', () => {
   const L = IL.parseLeague(S.manualAnswers(ML, SCHED).league);
   assert.ok(L.matchups[1].length === 1 && L.matchups[2].length === 1);
   assert.notDeepStrictEqual(L.matchups[1].flat().sort(), L.matchups[2].flat().sort());
+});
+
+test('manualAnswers tells the Team tab the active cap and keeps bench / NA players off the active list', () => {
+  const IL = require('../inseason_league.js');
+  const ML = S.makeManual('Y', S.parseYahooRosters(YAHOO), 0), a = S.manualAnswers(ML), L = IL.parseLeague(a.league);
+  assert.strictEqual(L.maxActive, 10);
+  const slots = IL.parseRosters(a.rosters).t1.map(x => x.slot);
+  assert.strictEqual(slots.filter(x => x === 'ACTIVE').length, 10);
+  assert.strictEqual(slots.filter(x => x === 'RESERVE').length, 3);
+  assert.strictEqual(slots.filter(x => x === 'IR').length, 2);
+  const na = S.manualAnswers({ settings: ML.settings, teams: [{ id: 't1', name: 'x', players: [{ n: 'A B', t: 'BKN', p: 'PG', il: false, s: 'NA' }] }] });
+  assert.notStrictEqual(na.rosters.rosters.t1.rosterItems[0].status, 'ACTIVE');
+});
+
+test('an empty Yahoo slot does not swallow the next slot\'s player', () => {
+  const r = S.parseYahooRosters('T \n\nPos\nPlayer\nPG\t\nA B\nA BNote\nPHX - PG\n1\nSG\t\n(Empty)\nBN\t\nKyrie Irving\nKyrie Note\nDAL - PG\n1\nBN\t\n(Empty)\n');
+  assert.deepStrictEqual(r.teams[0].players.map(p => [p.n, p.s]), [['A B', 'PG'], ['Kyrie Irving', 'BN']]);
+  assert.deepStrictEqual(r.luFx, ['PG', 'SG']);
+  assert.strictEqual(r.bn, 2);
+});
+
+test('a manual week is seven days long, the last day included', () => {
+  const SCHED = require('../sched.json'), IL = require('../inseason_league.js');
+  const ML = S.makeManual('Y', S.parseYahooRosters(YAHOO), 0), L = IL.parseLeague(S.manualAnswers(ML, SCHED).league);
+  L.periods.slice(1, 6).forEach(p => assert.strictEqual(IL.periodDays(p).length, 7));
+  assert.strictEqual(IL.periodDays(L.periods[1])[0], SCHED.weeks[1]);
 });
