@@ -19,3 +19,5 @@ Also: `.githooks/pre-commit` (tests `src/tests/pre_commit_hook.test.js`, 4 pass)
 ## Next
 
 Review, then (ask the user) push and merge. Then clean up the two branches above.
+
+1. Review (`reviewer`, sonnet is enough: docs, config, two small hooks), then ask the user to push and merge. 2. After the merge: tell the `fx-cache-assets` and `yahoo-points-137` chats to move their handoff text into `src/work/<branch>.md` and restore the handoff to the merge-base (the pre-commit hook will refuse otherwise). 3. Remove the `../FantasyBBall-handoff` worktree. 4. Renumber the duplicate #142.
