@@ -353,6 +353,46 @@ test('sourceCtx opts: {teamTab, basis} sets the flag on avg and on another sourc
   }
 });
 
+test('fillProbe puts every non-IL player in Active and leaves IL alone; autoFill ranks by score, top n Active, the rest Reserve, IL untouched, moves kept', () => {
+  const inK = ROS[other].find(x => x.slot === 'ACTIVE').fid, st0 = stateOf(), st = T.applySwap(st0, [st0.order[0]], [inK]);
+  const il = st.order.filter(k => st.slots[k] === 'il'), non = st.order.filter(k => st.slots[k] !== 'il');
+  const pr = V.fillProbe(st);
+  non.forEach(k => assert.strictEqual(pr.slots[k], 'active')); il.forEach(k => assert.strictEqual(pr.slots[k], 'il'));
+  assert.deepStrictEqual(pr.moves, st.moves);
+  const score = { }; non.forEach((k, i) => { score[k] = i % 3 === 0 ? 5 : i; });   // ties at 5 keep roster order
+  const f = V.autoFill(st, k => score[k], 4), ranked = non.map((k, i) => ({ k, i, v: score[k] })).sort((a, b) => b.v - a.v || a.i - b.i).map(x => x.k);
+  ranked.slice(0, 4).forEach(k => assert.strictEqual(f.slots[k], 'active', k)); ranked.slice(4).forEach(k => assert.strictEqual(f.slots[k], 'reserve', k));
+  il.forEach(k => assert.strictEqual(f.slots[k], 'il'));
+  assert.deepStrictEqual(f.moves, st.moves); assert.deepStrictEqual(f.order, st.order);
+  assert.strictEqual(V.autoFill(f, k => score[k], 4), f);   // a second fill changes nothing: the same object
+  const all = V.autoFill(st, k => score[k], 99); non.forEach(k => assert.strictEqual(all.slots[k], 'active'));
+  const miss = V.autoFill(st, k => k === non[3] ? 1 : null, 1); assert.strictEqual(miss.slots[non[3]], 'active'); assert.strictEqual(miss.slots[non[0]], 'reserve');
+});
+
+test('move / dropIn with a max: a move into a full Active throws, a move of an Active player or out of Active does not', () => {
+  const st = T.tabState(ROS[me]), act = st.order.filter(k => st.slots[k] === 'active'), il = st.order.find(k => st.slots[k] === 'il');
+  const full = act.length;
+  assert.throws(() => V.move(st, il, 'active', full), /Active is full \(\d+\)/);
+  assert.throws(() => V.dropIn(st, il, 'active', full), /Active is full/);
+  assert.strictEqual(V.move(st, act[0], 'active', full), st);
+  assert.strictEqual(V.move(st, act[0], 'reserve', full).slots[act[0]], 'reserve');
+  assert.strictEqual(V.move(st, il, 'active', full + 1).slots[il], 'active');
+  assert.strictEqual(V.move(st, il, 'active').slots[il], 'active');   // no max: as before
+  const free = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  assert.throws(() => V.dropIn(st, free, 'active', full));
+  assert.strictEqual(V.dropIn(st, free, 'reserve', full).slots[free], 'reserve');
+});
+
+test('apply with a max: incoming players take Active while there is room, otherwise Reserve; without a max they land in Reserve as before', () => {
+  const st = T.tabState(ROS[me]), act = st.order.filter(k => st.slots[k] === 'active'), full = act.length;
+  const ins = ROS[other].filter(x => x.slot === 'ACTIVE').slice(0, 2).map(x => ({ key: x.fid }));
+  const one = V.apply(st, [{ key: act[0] }], ins.slice(0, 1), full), two = V.apply(st, [{ key: act[0] }], ins, full);
+  assert.strictEqual(one.slots[ins[0].key], 'active');
+  assert.strictEqual(two.slots[ins[0].key], 'active'); assert.strictEqual(two.slots[ins[1].key], 'reserve');
+  assert.strictEqual(V.apply(st, [{ key: act[0] }], ins.slice(0, 1)).slots[ins[0].key], 'reserve');
+  assert.deepStrictEqual(two.moves, [{ out: [act[0]], in: ins.map(x => x.key) }]);
+});
+
 test('gamesLeft: plain = team games x min(1, g/82); Team tab Per game = full team games, total = as plain, Mix = halfway', () => {
   const ctx = mk(), pp = Object.assign({}, pool.players.find(p => p.t && p.g > 0 && p.g < 82), { g: 41 }), tg = T.seasonGamesLeft(ctx, pp.t);
   assert.ok(tg > 0);

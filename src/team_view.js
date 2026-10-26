@@ -166,11 +166,32 @@
     if (inKey in state.slots) return Team.moveSlot(Team.moveSlot(state, inKey, state.slots[outKey]), outKey, state.slots[inKey]);
     return Team.moveSlot(Team.applySwap(state, [outKey], [inKey]), inKey, state.slots[outKey]);
   }
-  const dropIn = (state, key, slot) => key in state.slots ? Team.moveSlot(state, key, slot) : Team.moveSlot(Team.applySwap(state, [], [key]), key, slot);
+  // max (the Team tab passes maxPlayers): Active never goes above it; a player who would make it larger is refused with an error
+  const activeCount = state => state.order.filter(k => state.slots[k] === 'active').length;
+  const full = (state, key, slot, max) => max != null && slot === 'active' && state.slots[key] !== 'active' && activeCount(state) >= max;
+  const FULL_MSG = max => 'Active is full (' + max + ')';
+  function dropIn(state, key, slot, max) {
+    if (full(state, key, slot, max)) throw new Error(FULL_MSG(max));
+    return key in state.slots ? Team.moveSlot(state, key, slot) : Team.moveSlot(Team.applySwap(state, [], [key]), key, slot);
+  }
 
   // ---- slots ----
-  // a move to another slot; the same slot returns the same state object
-  const move = (state, key, slot) => state.slots[key] === slot ? state : Team.moveSlot(state, key, slot);
+  // a move to another slot; the same slot returns the same state object; max as in dropIn
+  function move(state, key, slot, max) {
+    if (state.slots[key] === slot) return state;
+    if (full(state, key, slot, max)) throw new Error(FULL_MSG(max));
+    return Team.moveSlot(state, key, slot);
+  }
+
+  // Fill Active (2026-10-26): the probe every non-IL player is scored on (as if all were Active, since a Reserve player's Win M would be
+  // measured on leftovers), then the top n by score go to Active and the rest to Reserve; IL is untouched. score(key) -> number | null (null
+  // last), ties keep roster order. Goes through Team.moveSlot so state.moves is kept; nothing to change returns the same object
+  const fillProbe = state => state.order.reduce((s, k) => state.slots[k] === 'il' || s.slots[k] === 'active' ? s : Team.moveSlot(s, k, 'active'), state);
+  function autoFill(state, score, n) {
+    const miss = v => v == null || v !== v, non = state.order.filter(k => state.slots[k] !== 'il');
+    const ranked = non.map((k, i) => ({ k, i, v: score(k) })).sort((a, b) => (miss(a.v) - miss(b.v)) || (miss(a.v) ? 0 : b.v - a.v) || a.i - b.i).map(x => x.k);
+    return ranked.reduce((s, k, i) => { const to = i < n ? 'active' : 'reserve'; return s.slots[k] === to ? s : Team.moveSlot(s, k, to); }, state);
+  }
   // players per slot; over is set only for Active above the league limit
   function slotCounts(state, maxActive) {
     const o = {};
@@ -182,8 +203,14 @@
   const sendOutList = (ctx, state) => state.order.map(k => ctx.pool.byKey.get(k));
   const bringInList = (ctx, state) => ctx.pool.players.filter(p => !(p.key in state.slots));
   const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
-  const apply = (state, outs, ins) => Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
+  // max (Team tab): incoming players take Active while there is room after the outgoing ones leave, else Reserve; without it they land in Reserve
+  function apply(state, outs, ins, max) {
+    const s = Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
+    if (max == null) return s;
+    let room = max - activeCount(s);
+    return ins.reduce((t, x) => { if (room <= 0 || t.slots[x.key] === 'active') return t; room--; return Team.moveSlot(t, x.key, 'active'); }, s);
+  }
 
-  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, fillProbe, autoFill, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);
