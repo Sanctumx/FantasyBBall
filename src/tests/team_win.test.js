@@ -293,3 +293,32 @@ test("rep module row: an opponent candidate costs my worst player going to his t
   assert.ok(near(row.new, 100 * hand.mean.match, 1e-9));
   assert.strictEqual(W.received(ctx, sw)[other][0].key, su.worst);
 });
+
+// reviewer findings on D3 (2026-10-26)
+test('received: a swap-back undoes the earlier trade for good (free agent next, same player again, another team)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), o1 = st.order[0], a = oppActive(other), fa = pool.players.find(p => !p.owner && p.g > 0).key;
+  const back = T.applySwap(T.applySwap(st, [o1], [a]), [a], [o1]);
+  assert.deepStrictEqual(W.received(ctx, T.applySwap(back, [o1], [fa])), {});
+  assert.deepStrictEqual(W.received(ctx, T.applySwap(back, [o1], [a])), { [other]: [{ key: o1, slot: 'active' }] });
+  const third = ids.find(t => t !== me && t !== other), b = oppActive(third);
+  assert.deepStrictEqual(W.received(ctx, T.applySwap(back, [o1], [b])), { [third]: [{ key: o1, slot: 'active' }] });
+});
+
+test('received: getting my own sent-out player back from his new team hands the new team my outgoing player', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), [o1, o2] = st.order, a = oppActive(other);
+  const s2 = T.applySwap(T.applySwap(st, [o1], [a]), [o2], [o1]);
+  assert.deepStrictEqual(W.received(ctx, s2), { [other]: [{ key: o2, slot: 'active' }] });
+});
+
+test('avg: after a trade the Vs average rows use the same opponents as the matrix (what they received, what left)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), o1 = st.order.find(k => st.slots[k] === 'active'), a = oppActive(other);
+  const sw = T.applySwap(st, [o1], [a]), su = W.moduleSetup(ctx, sw, { baseline: 'avg' }), own = sw.order.find(k => k !== a && T.COUNTED.includes(sw.slots[k]));
+  const row = W.moduleRow(ctx, sw, su, own), recv = W.received(ctx, sw), W0 = su.ap.W;
+  const e = su.ap.mine.find(x => x.key === own), keys = [].concat(...Object.values(recv)).map(r => r.key);
+  const hand = W.matrixOf(ctx, su.ap.mine.filter(x => x.key !== own).concat(Object.assign({}, su.ap.mean, { games: e.games })), new Set(sw.order.concat(keys)), W0, { recv });
+  assert.ok(near(row.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9));
+  const cand = pool.players.find(p => !p.owner && p.g > 0).key, rc = W.moduleRow(ctx, sw, su, cand);
+  const mine = su.ap.mine.concat(Object.assign({}, su.ap.mean, { sign: -1 }), { p: ctx.pool.byKey.get(cand).line, games: require('../team_core.js').windowGames(ctx, [cand], null)[0] / W0 * su.ap.share });
+  const handC = W.matrixOf(ctx, mine, new Set(sw.order.concat(keys, [cand])), W0, { recv });
+  assert.ok(near(rc.dM, 100 * (handC.mean.match - su.base.mean.match), 1e-9));
+});

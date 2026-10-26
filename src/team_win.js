@@ -48,7 +48,7 @@
   // recv = the players it receives in a previewed trade [{ key, slot }] (see received), who join in the slot they take
   function oppState(ctx, teamId, exclude, recv) {
     const rows = ctx.roster[teamId].filter(f => !(exclude && exclude.has(f)) && ctx.pool.byKey.get(f).slot !== 'IR').map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
-    (recv || []).forEach(r => rows.push({ fid: r.key, slot: r.slot === 'active' ? 'ACTIVE' : 'RESERVE' }));
+    (recv || []).filter(r => ctx.pool.byKey.get(r.key).slot !== 'IR').forEach(r => rows.push({ fid: r.key, slot: r.slot === 'active' ? 'ACTIVE' : 'RESERVE' }));
     return Team.initState(rows);
   }
 
@@ -57,17 +57,29 @@
   // the vacated slots in order, the rest go to the reserve. Incoming players from several opponents pair with the outgoing ones in order
   // (extras go to nobody). Free agents send nothing back, a vacated IL slot becomes the reserve, and a player who is back on my preview
   // roster is not received. -> { teamId: [{ key, slot: 'active' | 'reserve' }] }
-  function received(ctx, state) {
-    const res = {}, slotOf = k => ctx.pool.byKey.get(k).slot === 'ACTIVE' ? 'active' : 'reserve';
-    const give = (t, key, slot) => (res[t] = res[t] || []).push({ key, slot });
+  // The swaps are replayed with each player's current holder, so a swap-back or a later trade of a received player moves him again.
+  // trade -> { recv, gone }: recv as above; gone = every opponent player not on his original team now (they leave that team's side)
+  function trade(ctx, state) {
+    const slotOf = k => ctx.pool.byKey.get(k).slot === 'ACTIVE' ? 'active' : 'reserve', loc = new Map(), slots = new Map(), pools = k => (ctx.pool.byKey.get(k) || {}).owner;
+    const at = k => loc.has(k) ? loc.get(k) : (pools(k) || null);
     (state.moves || []).forEach(m => {
-      const ins = m.in.map(k => { const o = (ctx.pool.byKey.get(k) || {}).owner; return o && o !== ctx.me && ctx.roster[o] ? { o, slot: slotOf(k) } : null; }), owners = [...new Set(ins.filter(Boolean).map(x => x.o))];
-      if (owners.length === 1) m.out.forEach((k, i) => give(owners[0], k, i < ins.filter(Boolean).length ? ins.filter(Boolean)[i].slot : 'reserve'));
-      else if (owners.length) m.out.forEach((k, i) => { if (ins[i]) give(ins[i].o, k, ins[i].slot); });
+      const ins = m.in.map(k => { const o = at(k); return o && o !== ctx.me && ctx.roster[o] ? { o, slot: slotOf(k) } : null; }), found = ins.filter(Boolean), owners = [...new Set(found.map(x => x.o))], to = m.out.map(() => null);
+      if (owners.length === 1) m.out.forEach((k, i) => { to[i] = { t: owners[0], slot: i < found.length ? found[i].slot : 'reserve' }; });
+      else if (owners.length) m.out.forEach((k, i) => { if (ins[i]) to[i] = { t: ins[i].o, slot: ins[i].slot }; });
+      m.in.forEach(k => loc.set(k, ctx.me));
+      m.out.forEach((k, i) => loc.set(k, to[i] ? to[i].t : null));
+      m.out.forEach((k, i) => { if (to[i]) slots.set(k, to[i].slot); });
     });
-    Object.keys(res).forEach(t => { res[t] = res[t].filter(r => !state.order.includes(r.key)); if (!res[t].length) delete res[t]; });
-    return res;
+    const recv = {}, gone = new Set();
+    loc.forEach((h, k) => {
+      const own = pools(k);
+      if (h && h !== ctx.me && h !== own) (recv[h] = recv[h] || []).push({ key: k, slot: slots.get(k) || 'reserve' });
+      if (h !== own && own && own !== ctx.me && ctx.roster[own]) gone.add(k);
+    });
+    Object.values(recv).forEach(r => r.forEach(x => gone.add(x.key)));
+    return { recv, gone };
   }
+  const received = (ctx, state) => trade(ctx, state).recv;
 
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
   function side(ctx, state, W) {
@@ -145,13 +157,14 @@
   function avgCandidate(ctx, state, ap, key, opts) {
     const g = Team.windowGames(ctx, [key], null)[0] / ap.W * ap.share;
     const mine = ap.mine.concat(Object.assign({}, ap.mean, { sign: -1 }), { p: ctx.pool.byKey.get(key).line, games: g });
-    return matrixOf(ctx, mine, new Set(state.order).add(key), ap.W, opts);
+    const t = trade(ctx, state);
+    return matrixOf(ctx, mine, new Set(state.order.concat([...t.gone])).add(key), ap.W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // my counted player replaced by an average-line player who keeps his games (so a Reserve player is judged on his quality, not his slot)
   function avgOwn(ctx, state, ap, key, opts) {
-    const e = ap.mine.find(x => x.key === key);
-    return matrixOf(ctx, ap.mine.filter(x => x.key !== key).concat(Object.assign({}, ap.mean, { games: e.games })), new Set(state.order), ap.W, opts);
+    const e = ap.mine.find(x => x.key === key), t = trade(ctx, state);
+    return matrixOf(ctx, ap.mine.filter(x => x.key !== key).concat(Object.assign({}, ap.mean, { games: e.games })), new Set(state.order.concat([...t.gone])), ap.W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   function playerWin(ctx, state, opts) {

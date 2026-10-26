@@ -106,21 +106,22 @@
     }).map(x => x.r);
   }
 
-  const signature = state => state.order.map(k => k + ':' + state.slots[k]).join('|');
+  // ctx given: the players the opponents received count too (the same roster reached by different trades scores differently)
+  const signature = (state, ctx) => state.order.map(k => k + ':' + state.slots[k]).join('|') + (ctx ? '>' + Object.entries(TeamWin.received(ctx, state)).map(([t, r]) => t + ':' + r.map(x => x.key + x.slot).join(',')).sort().join(';') : '');
 
   // finished and half-finished jobs by ctx object, roster and win options (cats); the weights are not an input, so moving a slider never rescores
   function createScorer() {
     const by = new WeakMap();
     const bucket = ctx => { let m = by.get(ctx); if (!m) by.set(ctx, m = new Map()); return m; };
-    const keyOf = (state, o) => signature(state) + '#' + (o.cats || '') + '#' + (o.baseline || '');
+    const keyOf = (ctx, state, o) => signature(state, ctx) + '#' + (o.cats || '') + '#' + (o.baseline || '');
     return {
       get(ctx, state, opts) {
-        const m = bucket(ctx), sig = keyOf(state, opts || {});
+        const m = bucket(ctx), sig = keyOf(ctx, state, opts || {});
         if (!m.has(sig)) m.set(sig, winJob(ctx, state, opts));
         return m.get(sig);
       },
       getModule(ctx, state, opts) {
-        const m = bucket(ctx), sig = 'module#' + keyOf(state, opts || {});
+        const m = bucket(ctx), sig = 'module#' + keyOf(ctx, state, opts || {});
         if (!m.has(sig)) m.set(sig, moduleJob(ctx, state, opts));
         return m.get(sig);
       } };
