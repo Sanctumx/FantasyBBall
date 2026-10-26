@@ -84,6 +84,7 @@
   // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
   function playsPct(ctx, state) {
+    if (ctx.teamTab) return tabPlays(ctx, state);
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
     const act = by('active'), bench = by('reserve'), res = {};
@@ -101,6 +102,22 @@
       const g = windowGames(ctx, bench.concat(k), used);
       done(k, g[g.length - 1], true);
     });
+    return res;
+  }
+
+  // Plays % on the Team tab (ctx.teamTab): Reserve is parked and plays 0%, never hypo. Per game: Active players claim the nights as above
+  // (everyone is there for every team game; IL gets none). Seasonal bases: Active and IL players are there for avail(g) of the team's games,
+  // capped per night at the league's active limit (InLeague.rosterGames); pct is the lineup share of the games a player is there for, so
+  // availability (which GL carries) is not counted twice
+  function tabPlays(ctx, state) {
+    const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k]));
+    const done = (k, played, a) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; };
+    state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
+    if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
+    else {
+      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), from: w.from, to: w.to }));
+      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, items[i].a));
+    }
     return res;
   }
 
