@@ -115,6 +115,12 @@ Analyst on `pairMatchup`: math sound; consistency test uses gVar 1.87, tolerance
 gates the merge. Ledger with every ruling: `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored).
 
 
+## Handoff lines trimmed 2026-10-26 (moved here unchanged)
+
+Old "Next session starts with" paragraph of `SESSION_HANDOFF.md` (PR #24 summary and the tab-overhaul brainstorm, since built as #131-135):
+
+**Merged to main (PR #24, 2026-10-21; Cloudflare deploys it):** ideas 122-129 (Waiver adds panel, Team schedule, keep list, Hashtag refresh, 68 Hashtag-only players, box-score scoring of adds, Fantrax period dates, review fixes: saved extras carry `base`, a save without one counts as 234 players). 192 unit tests pass. Board artifact republished (v166). First step: refit the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC); #130 done and released (Rankings: MPG, Order by, my players highlighted). Next: the tab overhaul #131-134 (user, 2026-10-21). #134 (order; Team tab still pending) and #132 (compact tabs) merged 2026-10-22. #135 Rankings Edge column merged 2026-10-22. Brainstorming was under way (decisions in archive 131: Team tab = see all my stats + preview-only swaps of any number of players, incl. waiver pickups, dropdowns pick the stats view). #116 and #112 are merged. Best adds/plan on remaining games.
+
 ## Handoff lines trimmed 2026-10-21 (moved here unchanged)
 
 Removed from `SESSION_HANDOFF.md` when it was cut from 12 KB to about 6 KB: duplicates of `CLAUDE.md`, finished or
