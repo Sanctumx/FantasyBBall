@@ -8,6 +8,8 @@ Docs only. One notes file per branch in `src/work/<branch>.md`; branches never e
 
 Also built: PreToolUse hook `.claude/hooks/before-edit.mjs` (tests `src/tests/before_edit_hook.test.js`, 4 pass) blocking handoff edits off main. It only takes effect in a checkout once this branch is merged (worktrees read hooks from the main checkout via `$CLAUDE_PROJECT_DIR`).
 
+Also: `.githooks/pre-commit` (tests `src/tests/pre_commit_hook.test.js`, 4 pass) refuses a handoff change off main at commit, covering Bash edits. `core.hooksPath` set to `.githooks` in this PC's repo config.
+
 ## Not done (deliberately)
 
 - `fx-cache-assets` and `yahoo-points-137` were **not** touched: another chat is active on them. Each still carries its own edits to `src/SESSION_HANDOFF.md` and will conflict when merged. Fix when each is wrapped up: move its "Next session starts with" text into `src/work/<branch>.md`, then `git checkout $(git merge-base HEAD origin/main) -- src/SESSION_HANDOFF.md`, merge `origin/main`.

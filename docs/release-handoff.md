@@ -29,6 +29,7 @@ with every request.
   the user whether to push. **On main:** update the Workstreams table rows. When a branch merges, its row becomes done and
   its notes file stays; done rows move to the archive later.
 - **Enforced** by the PreToolUse hook `.claude/hooks/before-edit.mjs`: an Edit/Write of the handoff off main is blocked (override once with `ALLOW_HANDOFF_EDIT=1`; bash edits are not caught).
+- **Also enforced at commit** by `.githooks/pre-commit` (catches Bash and manual edits): a non-main branch can't commit a handoff that differs from its merge-base with `origin/main`. Enable once per clone: `git config core.hooksPath .githooks` (set on this PC 2026-10-26; takes effect in a checkout once this is merged).
 - **New branch:** create its notes file in the first commit, even three lines. Name it exactly like the branch.
 - **Worktrees:** at most two (the main checkout plus one task). Finishing a task removes its worktree after `git status -sb`
   confirms the branch is pushed (or the user accepts it staying local). Keep branches until their PR merges.

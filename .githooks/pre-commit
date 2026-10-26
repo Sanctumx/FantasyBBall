@@ -1,0 +1,14 @@
+#!/bin/sh
+# Refuses a commit that changes src/SESSION_HANDOFF.md off main: a branch keeps its notes in src/work/<branch>.md.
+# Compares the staged file with the branch's merge-base with origin/main, so any way of editing it is caught and
+# the resume step (git checkout <merge-base> -- src/SESSION_HANDOFF.md) passes.
+# Enable once per clone: git config core.hooksPath .githooks. Override once: ALLOW_HANDOFF_EDIT=1 git commit ...
+FILE=src/SESSION_HANDOFF.md
+BRANCH=$(git branch --show-current)
+case "$BRANCH" in main|handoff-workstreams) exit 0 ;; esac
+[ "$ALLOW_HANDOFF_EDIT" = "1" ] && exit 0
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null) || exit 0
+git diff --cached --quiet "$BASE" -- "$FILE" && exit 0
+echo "Blocked: $FILE is edited on main only (this branch is ${BRANCH:-detached}). Write src/work/$BRANCH.md instead," >&2
+echo "or restore it: git checkout $BASE -- $FILE. See docs/release-handoff.md. Override once: ALLOW_HANDOFF_EDIT=1." >&2
+exit 1
