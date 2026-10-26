@@ -146,6 +146,29 @@ test('playerGain baseline avg: subtracts the average-player entry in his place, 
   if (il) { const h = W.playerGain(ctx, st, il, base, { baseline: 'avg' }); assert.strictEqual(h.hypo, true); assert.ok(Number.isFinite(h.m)); }
 });
 
+test('moduleSetup + moduleRow + moduleSort equal moduleScores in both baselines; new - old = dM; rep old is the matrix mean', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), own = st.order.filter(k => ['active', 'bench', 'il'].includes(st.slots[k]));
+  const cands = own.concat(ROS[other].map(x => x.fid).slice(0, 4)), w = [1, 1, 1, 0, 1, 1, 1, 1, 1];
+  ['rep', 'avg'].forEach(baseline => {
+    const full = W.moduleScores(ctx, st, { candidates: cands, baseline, weights: w }), su = W.moduleSetup(ctx, st, { baseline });
+    const rows = W.moduleSort(cands.map(k => W.moduleRow(ctx, st, su, k)), w);
+    assert.deepStrictEqual(rows.map(r => r.key), full.map(r => r.key));
+    rows.forEach((r, i) => { assert.ok(near(r.dM, full[i].dM, 1e-12)); assert.ok(near(r.new - r.old, r.dM, 1e-9), baseline + ' ' + r.key); });
+  });
+  const su = W.moduleSetup(ctx, st, { baseline: 'rep' });
+  assert.ok(near(W.moduleRow(ctx, st, su, cands[cands.length - 1]).old, 100 * W.matrix(ctx, st).mean.match, 1e-9));
+  assert.strictEqual(W.moduleSetup(mk(last.end + 1000, games(last.start, last.end)), st, {}), null);
+});
+
+test('moduleSort: by dM, by weighted dCat when a weight differs from 1, ties keep input order, input untouched', () => {
+  const r = (key, dM, dCat) => ({ key, dM, dCat });
+  const rows = [r('a', 1, [1, 5]), r('b', 3, [2, 0]), r('c', 3, [0, 0]), r('d', 2, [9, 0])], snap = JSON.stringify(rows);
+  assert.deepStrictEqual(W.moduleSort(rows, null).map(x => x.key), ['b', 'c', 'd', 'a']);
+  assert.deepStrictEqual(W.moduleSort(rows, [1, 1]).map(x => x.key), ['b', 'c', 'd', 'a']);
+  assert.deepStrictEqual(W.moduleSort(rows, [1, 0]).map(x => x.key), ['d', 'b', 'a', 'c']);
+  assert.strictEqual(JSON.stringify(rows), snap);
+});
+
 test('moduleScores works on a 2-for-1 preview state', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = T.applySwap(stateOf(), stateOf().order.slice(0, 2), [ROS[other][0].fid]);
   const rows = W.moduleScores(ctx, st, { candidates: ROS[ids[2]].map(x => x.fid).slice(0, 3) });

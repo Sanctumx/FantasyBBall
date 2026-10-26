@@ -124,6 +124,65 @@ test('scorer: the win options (cats, mode) are part of the cache key', () => {
   assert.strictEqual(sc.get(ctx, st, { cats: 9 }), sc.get(ctx, st, { cats: 9 }));
 });
 
+test('moduleJob: steps of a time budget, rows equal moduleScores, finished jobs stop stepping', () => {
+  const ctx = mk(), st = stateOf(), cands = ROS[other].map(x => x.fid).slice(0, 6);
+  ['rep', 'avg'].forEach(baseline => {
+    const job = V.moduleJob(ctx, st, { baseline }, cands);
+    let t = 0, steps = 0;
+    const clock = () => (t += 5);   // every call costs 5 ms
+    while (job.step(12, clock)) steps++;
+    assert.ok(job.done);
+    assert.strictEqual(job.step(12, clock), false);
+    assert.ok(steps > 1 && steps < cands.length + st.order.length + 3, 'steps ' + steps);   // several pieces per step, not all in one
+    assert.strictEqual(job.total, cands.length);
+    assert.strictEqual(job.rows.length, cands.length);
+    assert.deepStrictEqual(W.moduleSort(job.rows, null), W.moduleScores(ctx, st, { baseline, candidates: cands }));
+  });
+  const over = V.moduleJob(M.makeCtx({ L, pool, DAYS: games(last.end + 1e6, last.end + 2e6), rosters: ROS, me, nowMs: last.end + 1000 }), st, {}, cands);
+  while (over.step(12)); assert.ok(over.done); assert.deepStrictEqual(over.rows, []);
+});
+
+test('scorer.getModule: cached by roster, cats, mode and baseline, never the weights; nextJob picks the first unfinished', () => {
+  const ctx = mk(), st = stateOf(), sc = V.createScorer(), a = sc.getModule(ctx, st, { baseline: 'rep' });
+  assert.strictEqual(sc.getModule(ctx, T.initState(ROS[me]), { baseline: 'rep', weights: [0, 1, 1, 1, 1, 1, 1, 1, 1] }), a);
+  assert.notStrictEqual(sc.getModule(ctx, st, { baseline: 'avg' }), a);
+  assert.notStrictEqual(sc.getModule(ctx, T.moveSlot(st, st.order[0], 'reserve'), { baseline: 'rep' }), a);
+  const w = sc.get(ctx, st), done = { done: true };
+  assert.strictEqual(V.nextJob([done, w, a]), w);
+  assert.strictEqual(V.nextJob([done]), null);
+});
+
+test('moduleView: owner filters, label, accent-blind search that keeps the Win M order, limit and more', () => {
+  const ctx = mk(), st = T.applySwap(stateOf(), [stateOf().order[0]], []), sentOut = stateOf().order[0], mine = st.order[1];
+  const theirs = ROS[other].map(x => x.fid).slice(0, 3), fa = pool.players.find(p => !p.owner && !(p.key in st.slots)).key;
+  const rows = [theirs[0], mine, sentOut, fa, theirs[1], theirs[2]].map((key, i) => ({ key, dM: 10 - i, dCat: [], old: 50, new: 60 - i }));
+  const keys = r => r.rows.map(x => x.key), ownerOf = key => ctx.pool.byKey.get(key).owner;
+  assert.deepStrictEqual(keys(V.moduleView(rows, ctx, st, { owner: 'all' })), rows.map(r => r.key));
+  assert.deepStrictEqual(keys(V.moduleView(rows, ctx, st, { owner: 'me' })), [mine]);
+  assert.deepStrictEqual(keys(V.moduleView(rows, ctx, st, { owner: 'fa' })), [sentOut, fa]);   // sent out shows under free agents
+  assert.deepStrictEqual(keys(V.moduleView(rows, ctx, st, { owner: other })), theirs.filter(k => ownerOf(k) === other));
+  const v = V.moduleView(rows, ctx, st, { owner: 'all' });
+  assert.strictEqual(v.rows.find(x => x.key === sentOut).label, 'Sent out');
+  assert.strictEqual(v.rows.find(x => x.key === fa).label, 'Free agent');
+  assert.ok(/^You/.test(v.rows.find(x => x.key === mine).label));
+  const lim = V.moduleView(rows, ctx, st, { owner: 'all', limit: 2 });
+  assert.strictEqual(lim.rows.length, 2); assert.strictEqual(lim.total, 6); assert.strictEqual(lim.more, 4);
+  const nm = ctx.pool.byKey.get(theirs[1]).n, q = V.moduleView(rows, ctx, st, { owner: 'all', query: nm.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '') });
+  assert.ok(keys(q).includes(theirs[1]));
+  assert.ok(keys(q).every((k, i, a) => i === 0 || rows.findIndex(r => r.key === a[i - 1]) < rows.findIndex(r => r.key === k)));   // Win M order kept
+});
+
+test('dropSwap: the incoming player takes the outgoing one\'s slot, two of mine trade slots, dropIn adds to a slot', () => {
+  const st = stateOf(), out = st.order.find(k => st.slots[k] === 'active'), inK = ROS[other][0].fid;
+  const s = V.dropSwap(st, inK, out);
+  assert.ok(!(out in s.slots)); assert.strictEqual(s.slots[inK], 'active'); assert.strictEqual(s.order.length, st.order.length);
+  const b = st.order.find(k => st.slots[k] === 'bench'), t = V.dropSwap(st, b, out);
+  assert.strictEqual(t.slots[b], 'active'); assert.strictEqual(t.slots[out], 'bench'); assert.strictEqual(t.order.length, st.order.length);
+  const d = V.dropIn(st, inK, 'il');
+  assert.strictEqual(d.slots[inK], 'il'); assert.strictEqual(d.order.length, st.order.length + 1);
+  assert.strictEqual(V.dropIn(st, b, 'il').slots[b], 'il');   // already mine: a plain move
+});
+
 test('swap boxes: Send out sees only my roster, Bring in never does, accents and partial names match', () => {
   const ctx = mk(), st = stateOf(), out = V.sendOutList(ctx, st), inn = V.bringInList(ctx, st);
   assert.strictEqual(out.length, st.order.length);

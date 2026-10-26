@@ -102,39 +102,54 @@
   // worst shows 0); my IL / Reserve players are a swap for the worst, like a candidate.
   // opts: baseline 'rep' | 'avg', weights, cats, k, candidates (keys; default every pool player, my own included)
   // -> [{ key, owner, dM, dC, dCat[], sort }] sorted by sort, highest first (ties keep candidate order)
-  function moduleScores(ctx, state, opts) {
-    const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, base = matrix(ctx, state, mo);
-    if (!base.mean) return [];
-    const pw = playerWin(ctx, state, mo), counted = state.order.filter(k => state.slots[k] === 'active' || state.slots[k] === 'bench');
-    if (!counted.length) return [];
-    const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst], wPlayer = ctx.pool.byKey.get(worst), zero = () => new Array(9).fill(0);
-    // the preview with `key` in the worst player's slot, scored against the current team
-    const swapScore = (cx, key) => {
-      const s0 = key in state.slots ? Team.applySwap(state, [worst], []) : Team.applySwap(state, [worst], [key]), m = matrix(cx, Team.moveSlot(s0, key, wSlot), mo);
-      return gain(m, base);
-    };
-    let off = { c: 0, m: 0, dCat: zero() };
-    if (o.baseline === 'avg') {
+  // the scoring split in three so a page can score one candidate at a time (TeamView.moduleJob): moduleSetup does the work every row
+  // shares (the matrix, each counted player's contribution, the worst player, the average-entry offset) and returns null with no
+  // games left or no counted player; moduleRow scores one key; moduleSort orders rows (a copy). Each row also carries old / new, my
+  // Win M in points before and after: new = the current Win M + the raw change, old = the current Win M + the baseline offset (0 for
+  // 'rep'), so new - old = dM in both baselines.
+  // opts.base / opts.pw: the matrix and per-player gains when already computed (a job gets them one piece at a time)
+  function moduleSetup(ctx, state, opts) {
+    const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, base = o.base || matrix(ctx, state, mo);
+    if (!base.mean) return null;
+    const pw = o.pw || playerWin(ctx, state, mo), counted = state.order.filter(k => state.slots[k] === 'active' || state.slots[k] === 'bench');
+    if (!counted.length) return null;
+    const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst], wPlayer = ctx.pool.byKey.get(worst);
+    const su = { base, pw, worst, wSlot, mo, off: { c: 0, m: 0, dCat: new Array(9).fill(0) }, avg: o.baseline === 'avg' };
+    if (su.avg) {
       const line = Team.teamLine(counted.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: 1 })), counted.length);
-      const actx = withPlayer(ctx, { key: AVG_KEY, n: 'Average player', t: wPlayer.t, line, g: wPlayer.g, slot: null, owner: null });
-      off = swapScore(actx, AVG_KEY);
+      su.off = swapScore(ctx, state, su, withPlayer(ctx, { key: AVG_KEY, n: 'Average player', t: wPlayer.t, line, g: wPlayer.g, slot: null, owner: null }), AVG_KEY);
     }
-    const cand = o.candidates || ctx.pool.players.map(p => p.key);
-    const weighted = o.weights && o.weights.some(w => w != null && w !== 1);
-    const rows = cand.map((key, i) => {
-      const own = key in state.slots, s = own ? state.slots[key] : null;
-      let r;
-      if (key === worst) r = { c: 0, m: 0, dCat: zero() };
-      else if (own && (s === 'active' || s === 'bench')) r = { c: pw[key].c - pw[worst].c, m: pw[key].m - pw[worst].m, dCat: pw[key].dCat.map((v, c) => v - pw[worst].dCat[c]) };
-      else r = swapScore(ctx, key);
-      const dCat = r.dCat.map((v, c) => v - off.dCat[c]), dM = r.m - off.m;
-      return { key, owner: own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), dM, dC: r.c - off.c, dCat, sort: weighted ? dCat.reduce((a, v, c) => a + v * (o.weights[c] == null ? 1 : o.weights[c]), 0) : dM, i };
-    });
-    rows.sort((a, b) => b.sort - a.sort || a.i - b.i);
-    rows.forEach(r => { delete r.i; });
-    return rows;
+    return su;
   }
 
-  const api = { AVG_KEY, weeksLeft, oppState, side, matrix, playerGain, playerWin, moduleScores };
+  // the preview with `key` in the worst player's slot, scored against the current team
+  function swapScore(ctx, state, su, cx, key) {
+    const s0 = key in state.slots ? Team.applySwap(state, [su.worst], []) : Team.applySwap(state, [su.worst], [key]);
+    return gain(matrix(cx, Team.moveSlot(s0, key, su.wSlot), su.mo), su.base);
+  }
+
+  function moduleRow(ctx, state, su, key) {
+    const own = key in state.slots, s = own ? state.slots[key] : null, pw = su.pw, zero = () => new Array(9).fill(0);
+    let r;
+    if (key === su.worst) r = { c: 0, m: 0, dCat: zero() };
+    else if (own && (s === 'active' || s === 'bench')) r = { c: pw[key].c - pw[su.worst].c, m: pw[key].m - pw[su.worst].m, dCat: pw[key].dCat.map((v, c) => v - pw[su.worst].dCat[c]) };
+    else r = swapScore(ctx, state, su, ctx, key);
+    const cur = 100 * su.base.mean.match;
+    return { key, owner: own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), dM: r.m - su.off.m, dC: r.c - su.off.c, dCat: r.dCat.map((v, c) => v - su.off.dCat[c]), old: cur + su.off.m, new: cur + r.m };
+  }
+
+  function moduleSort(rows, weights) {
+    const weighted = weights && weights.some(w => w != null && w !== 1);
+    return rows.map((r, i) => Object.assign({}, r, { sort: weighted ? r.dCat.reduce((a, v, c) => a + v * (weights[c] == null ? 1 : weights[c]), 0) : r.dM, i }))
+      .sort((a, b) => b.sort - a.sort || a.i - b.i).map(r => { delete r.i; return r; });
+  }
+
+  function moduleScores(ctx, state, opts) {
+    const o = opts || {}, su = moduleSetup(ctx, state, o);
+    if (!su) return [];
+    return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
+  }
+
+  const api = { AVG_KEY, weeksLeft, oppState, side, matrix, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);

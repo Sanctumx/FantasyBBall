@@ -64,18 +64,76 @@
     return job;
   }
 
+  // ---- player list scoring (the Team tab module), in pieces of about `budgetMs` so the page stays responsive ----
+  // pieces: the matrix, one raw gain per counted player, the setup (the average-entry offset for 'avg'), then one candidate row each.
+  // opts: baseline 'rep' | 'avg', cats, k, mode (weights are not an input: they only re-sort, TeamWin.moduleSort). candidates default to the whole pool.
+  // -> { done, rows (unsorted, in candidate order), n, total, step(budgetMs, clock) }; step() returns true while it did work
+  function moduleJob(ctx, state, opts, candidates) {
+    const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, cand = candidates || ctx.pool.players.map(p => p.key);
+    const counted = state.order.filter(k => state.slots[k] === 'active' || state.slots[k] === 'bench');
+    let base = null, pw = {}, su = null;
+    const job = { done: false, rows: [], n: 0, total: cand.length, step(budgetMs, clock) {
+      if (job.done) return false;
+      const now = clock || Date.now, t0 = now();
+      do {
+        if (!base) { base = TeamWin.matrix(ctx, state, mo); if (!base.mean || !counted.length) { job.done = true; break; } }
+        else if (Object.keys(pw).length < state.order.length) { const k = state.order[Object.keys(pw).length]; pw[k] = TeamWin.playerGain(ctx, state, k, base, mo); }
+        else if (!su) { su = TeamWin.moduleSetup(ctx, state, Object.assign({}, o, { base, pw })); if (!su) { job.done = true; break; } }
+        else { job.rows.push(TeamWin.moduleRow(ctx, state, su, cand[job.n++])); if (job.n >= cand.length) job.done = true; }
+      } while (!job.done && now() - t0 < budgetMs);
+      return true;
+    } };
+    return job;
+  }
+
+  // the first job that is not done, or null (the page steps one job per tick: roster Win first, then the list)
+  const nextJob = jobs => jobs.find(j => j && !j.done) || null;
+
   const signature = state => state.order.map(k => k + ':' + state.slots[k]).join('|');
 
   // finished and half-finished jobs by ctx object, roster and win options (cats, mode); the weights are not an input, so moving a slider never rescores
   function createScorer() {
     const by = new WeakMap();
-    return { get(ctx, state, opts) {
-      let m = by.get(ctx); if (!m) by.set(ctx, m = new Map());
-      const o = opts || {}, sig = signature(state) + '#' + (o.cats || '') + '#' + (o.mode || '') + '#' + (o.baseline || '');
-      if (!m.has(sig)) m.set(sig, winJob(ctx, state, opts));
-      return m.get(sig);
-    } };
+    const bucket = ctx => { let m = by.get(ctx); if (!m) by.set(ctx, m = new Map()); return m; };
+    const keyOf = (state, o) => signature(state) + '#' + (o.cats || '') + '#' + (o.mode || '') + '#' + (o.baseline || '');
+    return {
+      get(ctx, state, opts) {
+        const m = bucket(ctx), sig = keyOf(state, opts || {});
+        if (!m.has(sig)) m.set(sig, winJob(ctx, state, opts));
+        return m.get(sig);
+      },
+      getModule(ctx, state, opts) {
+        const m = bucket(ctx), sig = 'module#' + keyOf(state, opts || {});
+        if (!m.has(sig)) m.set(sig, moduleJob(ctx, state, opts));
+        return m.get(sig);
+      } };
   }
+
+  // ---- the list as drawn ----
+  const SLOT_LABEL = { active: 'Active', bench: 'Bench', il: 'IL', reserve: 'Reserve' };
+  // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query, limit (default 50).
+  // -> { rows: [{ ...row, n, t, pos, label }], total (after the filters), more (not shown) }. My players sent out of the preview are
+  // free agents here ("Sent out"). The search only filters (Team.search would reorder by name match), so the Win M order stays.
+  function moduleView(rows, ctx, state, opts) {
+    const o = opts || {}, me = ctx.me, teamName = id => ((ctx.L.teams || []).find(t => t.id === id) || {}).name || String(id);
+    let list = rows.map(r => {
+      const pp = ctx.pool.byKey.get(r.key) || {}, mine = r.key in state.slots, sent = !mine && pp.owner === me;
+      const label = mine ? 'You · ' + SLOT_LABEL[state.slots[r.key]] : sent ? 'Sent out' : pp.owner ? teamName(pp.owner) : 'Free agent';
+      return Object.assign({}, r, { n: pp.n, t: pp.t, pos: pp.pos, label, _own: mine ? 'me' : (sent || !pp.owner) ? 'fa' : pp.owner });
+    });
+    if (o.owner && o.owner !== 'all') list = list.filter(r => r._own === o.owner);
+    if (o.query) { const hit = new Set(Team.search(list, o.query, Infinity).map(r => r.key)); list = list.filter(r => hit.has(r.key)); }
+    const limit = o.limit || 50;
+    return { rows: list.slice(0, limit).map(r => { const x = Object.assign({}, r); delete x._own; return x; }), total: list.length, more: Math.max(0, list.length - limit) };
+  }
+
+  // ---- drops from the list ----
+  // a list player dropped on a roster row takes that player's slot (one of mine: the two trade slots); dropped on a slot group he joins it
+  function dropSwap(state, inKey, outKey) {
+    if (inKey in state.slots) return Team.moveSlot(Team.moveSlot(state, inKey, state.slots[outKey]), outKey, state.slots[inKey]);
+    return Team.moveSlot(Team.applySwap(state, [outKey], [inKey]), inKey, state.slots[outKey]);
+  }
+  const dropIn = (state, key, slot) => key in state.slots ? Team.moveSlot(state, key, slot) : Team.moveSlot(Team.applySwap(state, [], [key]), key, slot);
 
   // ---- slots ----
   // a move to another slot; the same slot returns the same state object
@@ -93,6 +151,6 @@
   const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
   const apply = (state, outs, ins) => Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
 
-  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, dropSwap, dropIn, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);
