@@ -5,5 +5,7 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-09-01",
   // Serves the repo root (index.html) as static assets; .assetsignore keeps everything else out
-  "assets": { "directory": ".", "binding": "ASSETS" }
+  "assets": { "directory": ".", "binding": "ASSETS" },
+  // Branch builds run `wrangler preview`, which fails without this block (empty is fine)
+  "previews": {}
 }

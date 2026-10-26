@@ -1,4 +1,6 @@
-a=open('courtside-draft-board.html').read()
+# The site pages read the linked copies from gen.py (scripts as hashed files in site/assets/); the claude.ai board artifact is
+# courtside-draft-board.html, which stays one inlined file.
+a=open('site/linked/courtside-draft-board.html').read()
 head='''<!doctype html>
 <html lang="en">
 <head>
@@ -15,17 +17,17 @@ head='''<!doctype html>
 '''
 open('site/index.html','w').write(head+a+'\n</body>\n</html>\n')
 # League page: same head (its own <title> comes first in the body copy, as on the board)
-l=open('courtside-league.html').read()
+l=open('site/linked/courtside-league.html').read()
 open('site/league.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','Post-draft league analysis: every team\'s projected stats and its win chances against every other team.')+l+'\n</body>\n</html>\n')
 # In-Season page
-n=open('courtside-inseason.html').read()
+n=open('site/linked/courtside-inseason.html').read()
 open('site/inseason.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','In-season tools for a Fantrax league: weekly matchup win chances, waiver adds and trades.')+n+chr(10)+'</body>'+chr(10)+'</html>'+chr(10))
 # Settings page
-t=open('courtside-settings.html').read()
+t=open('site/linked/courtside-settings.html').read()
 open('site/settings.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','League settings and the Fantrax league every page shares.')+t+chr(10)+'</body>'+chr(10)+'</html>'+chr(10))
 # Team page
-tm=open('courtside-team.html').read()
+tm=open('site/linked/courtside-team.html').read()
 open('site/team.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','Your fantasy team as a preview: stats, games left, Plays %, win chances against every other team, and trial swaps.')+tm+chr(10)+'</body>'+chr(10)+'</html>'+chr(10))
 # Rankings page
-k=open('courtside-rankings.html').read()
+k=open('site/linked/courtside-rankings.html').read()
 open('site/rankings.html','w').write(head.replace('Live snake draft board for 9-cat and 8-cat fantasy basketball: BBM projections, Fantrax ADP and live Fantrax draft sync.','Player rankings for the season: Zscore and the nine categories from current stats or projections, with the owners in your league.')+k+chr(10)+'</body>'+chr(10)+'</html>'+chr(10))

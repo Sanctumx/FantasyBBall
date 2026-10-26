@@ -41,7 +41,7 @@ await p.selectOption('#basis', 'pergame'); await p.waitForTimeout(400);
 ok((await col('mx', '2')).join() !== mxBefore.join(), 'Per game changes the matrix');
 await p.click('#tsv button[data-v="raw"]'); await p.waitForTimeout(150);
 const ptsG = (await col('ts', 'PTS')).map(num);
-ok(ptsG.every(v => v > 50 && v < 400), 'Per game stats are per-game sizes (' + ptsG[0] + ')');
+ok(ptsG.every(v => v > 5 && v < 40), 'Per game stats are per-game sizes (' + ptsG[0] + ')');
 ok(!(await p.isVisible('#tsv button[data-v="week"]')), 'Per week hidden in Per game');
 ok(/per game/i.test(await p.textContent('#ts-sub')), 'stats subtitle says per game');
 await p.reload(); await p.waitForTimeout(1500);

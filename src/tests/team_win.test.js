@@ -253,3 +253,57 @@ test('matrix: opts.shrink overrides the constants, {match:1, cat:1} gives the ra
   assert.ok(near(s.mean.match, s.teams.reduce((a, t) => a + t.match, 0) / s.teams.length, 1e-12));
   assert.ok(Math.abs(s.mean.match - 0.5) < Math.abs(r.mean.match - 0.5) || near(r.mean.match, 0.5, 1e-9));
 });
+
+// ---- points mode (#137) ----
+const Pts = require('../points_core.js'), YAHOO = { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 };
+
+test('points: with one stat scored, each opponent match chance equals the category matrix for that stat', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), cat = W.matrix(ctx, st, { shrink: { match: 1, cat: 1 } }), pt = W.matrix(ctx, st, { points: { reb: 1 } });
+  assert.strictEqual(pt.teams.length, cat.teams.length);
+  pt.teams.forEach((t, i) => { assert.ok(near(t.match, cat.teams[i].cat[4], 1e-12), t.id); assert.strictEqual(t.cat, null); assert.strictEqual(t.winC, null); });
+  assert.strictEqual(pt.mean.cat, null); assert.strictEqual(pt.mean.winC, null);
+});
+
+test('points: Yahoo weights give match chances inside (0, 1), c is null and module rows are sorted by dM', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), m = W.matrix(ctx, st, { points: YAHOO });
+  m.teams.forEach(t => assert.ok(t.match > 0 && t.match < 1));
+  const cands = ROS[other].map(x => x.fid).slice(0, 6), rows = W.moduleScores(ctx, st, { candidates: cands, points: YAHOO });
+  assert.strictEqual(rows.length, 6);
+  rows.forEach((r, i) => { assert.strictEqual(r.dC, null); assert.strictEqual(r.dCat, null); assert.ok(Number.isFinite(r.dM)); if (i) assert.ok(rows[i - 1].dM >= r.dM); });
+  const g = W.playerWin(ctx, st, { points: YAHOO }); Object.values(g).forEach(x => { assert.strictEqual(x.c, null); assert.ok(Number.isFinite(x.m)); });
+});
+
+test('points: zero weights give match 0.5 everywhere and no NaN; the avg baseline works', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), m = W.matrix(ctx, st, { points: {} });
+  m.teams.forEach(t => assert.ok(near(t.match, 0.5, 1e-6), String(t.match)));
+  const rows = W.moduleScores(ctx, st, { candidates: ROS[other].map(x => x.fid).slice(0, 3), baseline: 'avg', points: YAHOO });
+  rows.forEach(r => assert.ok(Number.isFinite(r.dM) && r.dC === null));
+});
+
+test('points: two weight sets do not share a cached opponent forecast', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), a = W.matrix(ctx, st, { points: { pts: 1 } }), b = W.matrix(ctx, st, { points: { ast: 5 } });
+  assert.ok(a.teams.some((t, i) => Math.abs(t.match - b.teams[i].match) > 1e-6));
+});
+
+test('pointsPerWeek: the points my counted players produce in an average week', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), Wk = W.weeksLeft(ctx);
+  const want = W.side(ctx, st, Wk).reduce((s, e) => s + Pts.perGame(e.p, YAHOO) * e.games, 0);
+  assert.ok(near(W.pointsPerWeek(ctx, st, YAHOO), want, 1e-9));
+});
+
+test('nightOf: a crowded night goes to the better points player, and Matchup without it is unchanged', () => {
+  const nowMs = last.start, g = games(last.start, last.end), base = mk(nowMs, g), st = stateOf();
+  const rev = M.makeCtx({ L, pool, DAYS: g, rosters: ROS, me, nowMs, nightOf: pp => -Pts.perGame(pp.line, YAHOO) });
+  assert.strictEqual(base.nightOf, undefined); assert.strictEqual(typeof rev.nightOf, 'function');
+  const keys = st.order.slice(), seg = keys.map(k => ({ key: k, from: last.start, to: last.end }));
+  const a = M.segGames(base, seg, null, true), b = M.segGames(rev, seg, null, true);
+  assert.ok(a.some((v, i) => v !== b[i]), 'a different night order changes who plays');
+  assert.strictEqual(a.reduce((x, y) => x + y, 0), b.reduce((x, y) => x + y, 0));
+});
+
+test('points: a shared ctx used with weights A then B gives what a fresh ctx gives for B', () => {
+  const nowMs = last.start, g = games(last.start, last.end), st = stateOf(), A = { pts: 1 }, B = { ast: 5, reb: 2 };
+  const shared = mk(nowMs, g); W.matrix(shared, st, { points: A });
+  const after = W.matrix(shared, st, { points: B }), fresh = W.matrix(mk(nowMs, g), st, { points: B });
+  assert.deepStrictEqual(after.teams.map(t => t.match), fresh.teams.map(t => t.match)); assert.strictEqual(after.mean.match, fresh.mean.match);
+});

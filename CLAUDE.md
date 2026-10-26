@@ -1,6 +1,6 @@
 # Working on this repo
 
-Project state, decisions and the user's standing rules live in `src/SESSION_HANDOFF.md`. Read it first; this file only
+Project state, decisions and the user's standing rules live in `src/SESSION_HANDOFF.md`. Run `node .claude/scripts/branches.mjs` first (every branch in flight), then read it and your branch's `src/handoffs/<branch>.md` (`docs/release-handoff.md`, "Parallel sessions"); this file only
 covers how changes get made.
 
 Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are in `src/HANDOFF_ARCHIVE.md`. Search them
@@ -14,7 +14,7 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 - After a test or a shipped feature: edit its row in place (status and the deciding numbers in prize equity), add the
   write-up to the top of "Entries after 2026-10-18" in the archive, and update the handoff if the current model, defaults or
   open items changed.
-- New ideas get the next number in `IDEAS.md` with status Open. Never delete rows.
+- New ideas get the next number (`node .claude/scripts/ledger.mjs next`) in `IDEAS.md` with status Open, landed at once so the number is claimed. Never delete rows. All of these edits happen in the ledger worktree (`docs/release-handoff.md`, "Parallel sessions").
 
 ## Keeping context lean (`.claude/`)
 
@@ -84,6 +84,8 @@ They work alongside the routing above; this file takes precedence over them. Siz
 
 ## The user's working rules
 
+- Change files with the Edit/Write tools, not `python - <<EOF` or `sed -i` patch scripts, and run commands from the repo
+  root without a `cd` prefix; both trigger permission prompts the user is tired of (user, 2026-10-26).
 - Push, merge or deploy only when the user says "push" or types /release (the ask prompt above is the backstop).
 - Keep running plan tasks back to back unless something needs the user's input; the exception is the context limit
   above (user, 2026-10-20).
@@ -108,9 +110,10 @@ They work alongside the routing above; this file takes precedence over them. Siz
    - Browser checks: `src/tests/browser/*.mjs`. They need Playwright, run from a folder where it is installed, with the
      repo root served by `python3 -m http.server 8765`.
 4. **Build.** The site serves the repo root, so built pages are committed:
-   `cd src && python3 gen.py && python3 build_site.py && cp site/index.html ../index.html && cp site/league.html ../league.html && cp site/inseason.html ../inseason.html && cp site/settings.html ../settings.html && cp site/rankings.html ../rankings.html && cp site/team.html ../team.html`.
+   `node .claude/scripts/build.mjs` (runs `gen.py` and `build_site.py` in `src/`, then replaces `assets/` and copies the six
+   pages to the repo root; it deletes nothing else).
 5. **Commit** in small steps with a type prefix: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Record ideas and results in
-   `src/IDEAS.md` (and the archive), and current-state changes in `src/SESSION_HANDOFF.md` (keep it under ~150 lines).
+   `src/IDEAS.md` (and the archive), and current-state changes in `src/SESSION_HANDOFF.md` (keep it under ~150 lines). Those three change only through the ledger worktree (`node .claude/scripts/ledger.mjs setup | next | land`), never on a feature branch; the branch writes `src/handoffs/<branch>.md` instead.
 6. **Review.** Before merging a feature, the `reviewer` subagent reads the whole branch diff. Fix what matters, each fix with a
    test that failed first.
 7. **Pull request.** `git push -u origin <branch>`, then open a PR against main with a summary, the tests run and the

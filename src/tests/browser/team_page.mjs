@@ -10,8 +10,8 @@ const FX = { league: fx('fx_league.json'), rosters: fx('fx_rosters.json'), stand
 const ESPN = fx('espn_2025_26.json');
 const NOW = Date.UTC(2026, 9, 21, 12);
 const LID = 'abc123', TEAMS = Object.keys(JSON.parse(FX.league).teamInfo);
-const SEED = (my = TEAMS[0]) => ({
-  'courtside-settings-v1': JSON.stringify({ v: 1, settings: { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3 }, league: { id: LID, name: 'Home', teams: [], loadedAt: 1 }, note: '' }),
+const SEED = (my = TEAMS[0], pts = null) => ({
+  'courtside-settings-v1': JSON.stringify({ v: 1, settings: Object.assign({ teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3 }, pts ? { scoring: 'points', pointVals: pts } : {}), league: { id: LID, name: 'Home', teams: [], loadedAt: 1 }, note: '' }),
   'courtside-leagues-v1': JSON.stringify([{ id: LID, name: 'Home', myTeam: my, used: 1 }]) });
 const fails = []; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.push(m); };
 
@@ -22,7 +22,7 @@ async function open(opts = {}) {
   await ctx.route(/api\/fantrax/, r => r.fulfill({ body: FX[new URL(r.request().url()).searchParams.get('what')] || '{}', contentType: 'application/json' }));
   await ctx.route(/stats\/espn\.json/, r => r.fulfill({ body: ESPN, contentType: 'application/json' }));
   await ctx.addInitScript(t => { Date.now = () => t; }, NOW);
-  await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.clear(); Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)); sessionStorage.setItem('seeded', '1'); } }, SEED());
+  await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.clear(); Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)); sessionStorage.setItem('seeded', '1'); } }, SEED(undefined, opts.pts));
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto('http://localhost:8765/team.html'); await p.waitForSelector('#body:not([hidden])', { timeout: 20000 }).catch(() => {});
   return { p, errs, ctx };
@@ -236,6 +236,40 @@ for (const [w, side] of [[1440, true], [1200, false]]) {
   const pos = await p.evaluate(() => { const a = document.getElementById('roster').getBoundingClientRect(), l = document.getElementById('list').getBoundingClientRect(); return { rightOf: l.left >= a.right - 1, below: l.top >= a.bottom - 1 }; });
   ok(side ? pos.rightOf : pos.below, 'width ' + w + ': the list sits ' + (side ? 'right of' : 'below') + ' the roster');
   ok(errs.length === 0, 'width ' + w + ': no page errors');
+  await ctx.close(); }
+
+// points league (#137): Points column in place of Zscore and Win C, Win M and Points / wk, the rows follow a change made in another tab
+{ const YAHOO = { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 };
+  const { p, errs, ctx } = await open({ pts: YAHOO });
+  await scored(p);
+  const heads = await p.$$eval('#roster thead th', t => t.map(e => e.textContent.replace(/[▲▼]/g, '').trim()));
+  ok(heads.includes('Pts/g') && heads.includes('Win M') && !heads.includes('Zscore') && !heads.includes('Win C'), 'points: Pts/g and Win M columns, no Zscore or Win C: ' + heads.join('|'));
+  ok(await p.$eval('#zview', e => e.hidden) && await p.$eval('details.wts', e => e.hidden), 'points: the Zscore view and the weights are hidden');
+  const fp = await p.$$eval('#roster tbody tr[data-key] td:nth-child(' + (heads.indexOf('Pts/g') + 1) + ')', t => t.map(e => parseFloat(e.textContent)));
+  ok(fp.length > 8 && fp.every(v => v > 0), 'points: every player has a positive FP per game');
+  ok(/Points \/ wk/.test(await p.textContent('#cards')) && /Win M/.test(await p.textContent('#cards')) && !/Win C/.test(await p.textContent('#cards')), 'points: Old vs New cards show Points / wk and Win M only');
+  ok(/Points \/ wk/.test(await matrixText(p)) && /Win M/.test(await matrixText(p)), 'points: the matrix has Points / wk and Win M rows');
+  const first = fp[0], w = await ctx.newPage(); await w.goto('http://localhost:8765/robots.txt');
+  await w.evaluate(() => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.pointVals.pts = 3; localStorage.setItem(k, JSON.stringify(o)); });
+  await scored(p); await p.waitForTimeout(800);
+  const after = await p.$eval('#roster tbody tr[data-key] td:nth-child(' + (heads.indexOf('Pts/g') + 1) + ')', e => parseFloat(e.textContent));
+  ok(after > first, 'points: a point value changed in another tab changes the numbers: ' + first + ' -> ' + after);
+  // a swap pending (one out, one in, not applied) survives a point value change made in another tab
+  const outNm = (await p.$$eval('#roster tbody tr[data-key] td.l', t => t.map(e => e.firstChild.textContent)))[0];
+  await p.fill('#out-in', outNm.slice(0, 4)); await p.press('#out-in', 'Enter'); await p.fill('#in-in', 'a'); await p.press('#in-in', 'Enter'); await p.waitForTimeout(200);
+  const chips = async () => [await p.$$eval('#out-chips li', l => l.length), await p.$$eval('#in-chips li', l => l.length)].join();
+  ok(await chips() === '1,1', 'points: a swap is pending before the value change');
+  await w.evaluate(() => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.pointVals.ast = 4; localStorage.setItem(k, JSON.stringify(o)); });
+  await scored(p); await p.waitForTimeout(800);
+  ok(await chips() === '1,1', 'points: the pending swap stays after a point value changes in another tab');
+  // categories <-> points switch in another tab, both ways
+  const setScoring = async sc => { await w.evaluate(s => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.scoring = s; localStorage.setItem(k, JSON.stringify(o)); }, sc); await scored(p); await p.waitForTimeout(800); };
+  const headsNow = () => p.$$eval('#roster thead th', t => t.map(e => e.textContent.replace(/[▲▼]/g, '').trim()));
+  await setScoring('h2h'); let hn = await headsNow();
+  ok(hn.includes('Zscore') && !hn.includes('Pts/g'), 'switching to categories in another tab shows Zscore: ' + hn.join('|'));
+  await setScoring('points'); hn = await headsNow();
+  ok(hn.includes('Pts/g') && !hn.includes('Zscore'), 'switching back to points shows Pts/g: ' + hn.join('|'));
+  ok(errs.length === 0, 'points: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
 // phone width: no horizontal page scroll

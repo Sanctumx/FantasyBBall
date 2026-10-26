@@ -149,12 +149,15 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     <h2>League settings</h2>
     <div class="grid2">
       <label class="f" for="s-teams">Teams<select id="s-teams"></select></label>
-      <label class="f" for="s-scoring">Scoring<select id="s-scoring"><option value="roto">Roto</option><option value="h2h">H2H: each category</option><option value="most">H2H: most categories</option></select></label>
-      <label class="f" for="s-cats">Categories<select id="s-cats"><option value="9">9-cat</option><option value="8">8-cat (no TO)</option></select></label>
+      <label class="f" for="s-scoring">Scoring<select id="s-scoring"><option value="roto">Roto</option><option value="h2h">H2H: each category</option><option value="most">H2H: most categories</option><option value="points">H2H: points</option></select></label>
+      <label class="f" for="s-cats" id="s-cats-lab">Categories<select id="s-cats"><option value="9">9-cat</option><option value="8">8-cat (no TO)</option></select></label>
       <label class="f" for="s-asb" title="Merged counts Feb 15–28 as one week">All-Star break<select id="s-asb"><option value="merged">Merged</option><option value="separate">Separate</option></select></label>
       <label class="f" for="s-po">Playoffs start<select id="s-po"></select></label>
       <label class="f" for="s-pofmt" title="Weeks per playoff round, for three rounds">Playoff format<select id="s-pofmt"><option value="1-1-1">1-1-1</option><option value="1-1-2">1-1-2</option><option value="1-2-2">1-2-2</option><option value="2-2-2">2-2-2</option></select></label>
     </div>
+    <div class="grid2 rosterrow" id="pv-row" aria-label="Fantasy points per stat" title="Fantasy points per stat; a negative value subtracts" hidden></div>
+    <p class="hint" id="pv-hint" hidden>Fantasy points per stat; a negative value subtracts. Unscored stats stay 0. Rankings and Team will use these; the other tabs say points aren't supported yet.</p>
+    <p class="hint warn" id="pv-warn" role="status"></p>
     <div class="grid2 rosterrow" aria-label="Roster and lineup">
       <label class="f" for="s-roster">Roster size<select id="s-roster"></select></label>
       <label class="f" for="s-il" title="Injured players' missed games count at replacement level, not zero">IL spots<select id="s-il"></select></label>
@@ -180,8 +183,13 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   'use strict';
   const KEYS = { settings: 'courtside-settings-v1', board: 'courtside-board-v1', leagues: 'courtside-leagues-v1', inseason: 'courtside-inseason-v1' };
   // league settings only; slot, order and draft field belong to a draft and stay on the Draft page
-  const LEAGUE_DEF = { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2 };
-  const LEAGUE_KEYS = Object.keys(LEAGUE_DEF).concat('luFx');
+  // Points leagues (2026-10-26, #137): fantasy points per stat, kept with the other league settings; a draft never stores them
+  const POINT_STATS = ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'tpm', 'fgm', 'fga', 'ftm', 'fta'];
+  const POINT_LABELS = { pts: 'Points', reb: 'Rebounds', ast: 'Assists', stl: 'Steals', blk: 'Blocks', to: 'Turnovers', tpm: '3-pointers made', fgm: 'FG made', fga: 'FG attempted', ftm: 'FT made', fta: 'FT attempted' };
+  const PT_MAX = 100;
+  const LEAGUE_DEF = { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2,
+    pointVals: POINT_STATS.reduce((o, k) => { o[k] = 0; return o; }, {}) };
+  const LEAGUE_KEYS = Object.keys(LEAGUE_DEF).filter(k => k !== 'pointVals').concat('luFx');
   const LU_MAX = { luC: 4, luG: 6, luF: 6, luGC: 3, luFC: 3, luU: 10 };
   // Lineup slots: which positions each starting slot takes (U = Util, anyone)
   const SLOT_OK = { PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'], G: ['PG', 'SG'], F: ['SF', 'PF'], U: ['PG', 'SG', 'SF', 'PF', 'C'] };
@@ -206,10 +214,12 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     s = s || {};
     const o = {
       teams: intIn(s.teams, 4, 20, LEAGUE_DEF.teams), roster: intIn(s.roster, 8, 25, LEAGUE_DEF.roster),
-      scoring: oneOf(s.scoring, ['roto', 'h2h', 'most'], LEAGUE_DEF.scoring), cats: oneOf(s.cats, [8, 9], LEAGUE_DEF.cats),
+      scoring: oneOf(s.scoring, ['roto', 'h2h', 'most', 'points'], LEAGUE_DEF.scoring), cats: oneOf(s.cats, [8, 9], LEAGUE_DEF.cats),
       asb: oneOf(s.asb, ['merged', 'separate'], LEAGUE_DEF.asb), poStart: intIn(s.poStart, 10, 25, LEAGUE_DEF.poStart),
       poFmt: oneOf(s.poFmt, ['1-1-1', '1-1-2', '1-2-2', '2-2-2'], LEAGUE_DEF.poFmt), ilSpots: intIn(s.ilSpots, 0, 4, LEAGUE_DEF.ilSpots),
-      luSplit: typeof s.luSplit === 'boolean' ? s.luSplit : LEAGUE_DEF.luSplit };
+      luSplit: typeof s.luSplit === 'boolean' ? s.luSplit : LEAGUE_DEF.luSplit, pointVals: {} };
+    const pv = s.pointVals && typeof s.pointVals === 'object' ? s.pointVals : {};
+    POINT_STATS.forEach(k => { o.pointVals[k] = typeof pv[k] === 'number' && isFinite(pv[k]) && Math.abs(pv[k]) <= PT_MAX ? pv[k] : 0; });
     Object.keys(LU_MAX).forEach(k => { o[k] = intIn(s[k], 0, LU_MAX[k], LEAGUE_DEF[k]); });
     if (Array.isArray(s.luFx) && s.luFx.length && s.luFx.every(x => typeof x === 'string' && slotElig(x).length)) o.luFx = s.luFx.slice();
     return o;
@@ -232,6 +242,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     // a name the user typed (custom) is kept when Fantrax sends its own on reconnect
     const keep = i >= 0 && l[i].custom;
     const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
+    if (i >= 0 && l[i].scoring) { entry.scoring = l[i].scoring; entry.pointVals = l[i].pointVals; }
     if (i >= 0) l[i] = entry; else l.push(entry);
     set(KEYS.leagues, JSON.stringify(l));
   }
@@ -240,6 +251,16 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     l[i] = Object.assign({}, l[i], { name, custom: true }); set(KEYS.leagues, JSON.stringify(l));
   }
   const forgetLeague = (get, set, id) => set(KEYS.leagues, JSON.stringify(readLeagues(get).filter(x => x.id !== id)));
+  // scoring and point values belong to the league: kept on its saved record, restored on Load (a record from before this is category scoring)
+  function leagueScoring(get, id) {
+    const x = readLeagues(get).find(y => y.id === id); if (!x) return null;
+    const n = normalize(Object.assign({}, LEAGUE_DEF, { scoring: x.scoring, pointVals: x.pointVals }));
+    return { scoring: n.scoring, pointVals: n.pointVals };
+  }
+  function setLeagueScoring(get, set, id, settings) {
+    const l = readLeagues(get), i = l.findIndex(x => x.id === id); if (i < 0) return;
+    l[i] = Object.assign({}, l[i], { scoring: settings.scoring, pointVals: settings.pointVals }); set(KEYS.leagues, JSON.stringify(l));
+  }
   const defaultTeam = (get, id) => { const x = readLeagues(get).find(y => y.id === id); return x && x.myTeam != null ? x.myTeam : null; };
   // the team a tab shows: its own remembered pick, else the Settings default, else the first team
   const pickTeam = (remembered, ids, fallback) => ids.includes(remembered) ? remembered : ids.includes(fallback) ? fallback : ids[0];
@@ -337,8 +358,12 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     return { order, items, skipped, error: null };
   }
 
+  const isPoints = s => !!s && s.scoring === 'points';
+  // a saved draft's league keys over the defaults; the point values stay the league's
+  const draftSettings = (current, cfg) => normalize(Object.assign({}, LEAGUE_DEF, LEAGUE_KEYS.reduce((o, k) => { if (cfg && k in cfg) o[k] = cfg[k]; return o; }, {}), { pointVals: current && current.pointVals }));
+  const POINTS_NOTE_HTML = 'Points leagues aren\'t supported on this tab yet. Scoring is set to points in <a href="settings.html">Settings</a>. Rankings and Team work in points leagues.';
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
-  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local,
+  const api = { leagueScoring, setLeagueScoring, KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
     fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
@@ -393,6 +418,75 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Shared = api;
 })(this);
 </script>
+<script>// Fantrax answers, cached in the browser (2026-10-26): a page draws at once from the last answers it saved, then asks Fantrax
+// again in the background and redraws only if something changed. One copy for every page (it replaced the per-page fxGet).
+// Draft data is never cached: it feeds the picks and so the Model pick. Pure over a storage and a fetcher, so Node can test it.
+(function (root) {
+  'use strict';
+  const PREFIX = 'courtside-fx-v1:', DAY = 864e5;
+  const MAX_AGE = { players: 7 * DAY }, DEF_AGE = DAY, NEVER = { draft: 1 };
+
+  // One Fantrax call through the sync service. Errors: 'offline' (no answer), 'nohost' (not the hosted site), else Fantrax's own.
+  async function fxFetch(what, id, fetchFn, onResponse) {
+    const f = fetchFn || ((u, o) => fetch(u, o));
+    let r; try { r = await f('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    if (onResponse) onResponse(r);
+    return body;
+  }
+
+  const local = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => localStorage.setItem(k, v),
+    remove: k => { try { localStorage.removeItem(k); } catch (e) {} },
+    keys: () => { try { return Object.keys(localStorage); } catch (e) { return []; } } };
+
+  function create(opts) {
+    const st = opts.storage || local, fetcher = opts.fetcher || ((w, id) => fxFetch(w, id, null, opts.onResponse)), now = opts.now || Date.now;
+    const key = (what, id) => PREFIX + what + ':' + (id || '');
+
+    // the saved answer, or null when there is none, it is unreadable or it is too old to show
+    function peek(what, id) {
+      if (NEVER[what]) return null;
+      let e; try { e = JSON.parse(st.get(key(what, id)) || 'null'); } catch (x) { return null; }
+      if (!e || typeof e.at !== 'number' || typeof e.json !== 'string' || now() - e.at > (MAX_AGE[what] || DEF_AGE)) return null;
+      let body; try { body = JSON.parse(e.json); } catch (x) { return null; }
+      return { body, at: e.at, json: e.json };
+    }
+    // keep one league per kind of answer; a full or blocked storage just means no cache
+    function store(what, id, json) {
+      const k = key(what, id), lead = PREFIX + what + ':';
+      try { st.keys().forEach(x => { if (x.startsWith(lead) && x !== k) st.remove(x); }); } catch (e) {}
+      try { st.set(k, JSON.stringify({ at: now(), json })); } catch (e) {}
+    }
+    async function fetchOne(what, id) {
+      const body = await fetcher(what, id);
+      if (NEVER[what]) return { body };
+      const json = JSON.stringify(body);
+      store(what, id, json);
+      return { body, json };
+    }
+    const live = async (what, id) => (await fetchOne(what, id)).body;
+
+    // specs = [[what, leagueId?], ...]. onCached(bodies, at) only if every piece is saved; onFresh(bodies, at, changed) after
+    // the live answers; onError(error, hadCached) if a live call fails (the cached view stays).
+    async function swr(specs, hooks) {
+      const hit = specs.map(s => peek(s[0], s[1])), had = hit.every(Boolean);
+      const fresh = Promise.all(specs.map(s => fetchOne(s[0], s[1]))); fresh.catch(() => {});   // started before drawing; handled below
+      if (had) await hooks.onCached(hit.map(h => h.body), Math.min.apply(null, hit.map(h => h.at)));
+      let res; try { res = await fresh; } catch (e) { await hooks.onError(e, had); return; }
+      await hooks.onFresh(res.map(r => r.body), now(), !had || res.some((r, i) => r.json !== hit[i].json));   // against what the page drew, not what storage holds now
+    }
+    return { peek, live, swr };
+  }
+
+  const api = { PREFIX, fxFetch, create };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FxCache = api;
+})(this);
+</script>
 <script>
 (function () {
   'use strict';
@@ -400,7 +494,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('settings');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   let state = LS.load(get);
-  const persist = () => LS.save(set, state);
+  const persist = () => { LS.save(set, state); if (state.league) LS.setLeagueScoring(get, set, state.league.id, state.settings); };
   if (state.migrated) persist();   // the first visit writes the store built from the old keys
 
   const fmtDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -418,6 +512,9 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     const s = state.settings = LS.clampPoStart(state.settings, SCHED), plan = LS.weekPlan(SCHED, s.asb);
     fill($('s-teams'), 4, 20, s.teams); fill($('s-roster'), 8, 25, s.roster); fill($('s-il'), 0, 4, s.ilSpots);
     Object.keys(LU_IDS).forEach(id => fill($(id), 0, LS.LU_MAX[LU_IDS[id]], s[LU_IDS[id]]));
+    const pts = LS.isPoints(s);
+    $('s-cats-lab').style.display = pts ? 'none' : ''; $('pv-row').hidden = $('pv-hint').hidden = !pts; if (!pts) $('pv-warn').textContent = '';
+    LS.POINT_STATS.forEach(k => { $('pv-' + k).value = String(s.pointVals[k]); });
     $('s-scoring').value = s.scoring; $('s-cats').value = String(s.cats); $('s-asb').value = s.asb; $('s-pofmt').value = s.poFmt; $('s-lupos').value = s.luSplit ? 'split' : 'gf';
     const po = $('s-po'); po.innerHTML = '';
     for (let w = 10; w <= plan.count; w++) po.add(new Option('Wk ' + w + ' · ' + fmtDay(plan.starts[w - 1]), String(w)));
@@ -441,18 +538,25 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     else { delete s.luFx; if (id === 's-lupos') s.luSplit = v === 'split'; else s[LU_IDS[id]] = +v; }   // your own slots replace the ones read from Fantrax
     state.settings = LS.normalize(s); persist(); renderSettings();
   }
+  // point values: a bad box (letters, out of range) goes back to the stored value with a warning; an empty box is 0
+  LS.POINT_STATS.forEach(k => {
+    const lab = document.createElement('label'); lab.className = 'f'; lab.htmlFor = 'pv-' + k; lab.appendChild(document.createTextNode(LS.POINT_LABELS[k]));
+    const inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.min = -LS.PT_MAX; inp.max = LS.PT_MAX; inp.id = 'pv-' + k;
+    lab.appendChild(inp); $('pv-row').appendChild(lab);
+    inp.addEventListener('change', () => {
+      const raw = inp.value.trim(), n = raw === '' ? 0 : Number(raw);
+      if (inp.validity.badInput || !isFinite(n) || Math.abs(n) > LS.PT_MAX) {
+        $('pv-warn').textContent = LS.POINT_LABELS[k] + ': enter a number from −' + LS.PT_MAX + ' to ' + LS.PT_MAX + '.'; inp.value = String(state.settings.pointVals[k]); return;
+      }
+      $('pv-warn').textContent = '';
+      state.settings = LS.normalize(Object.assign({}, state.settings, { pointVals: Object.assign({}, state.settings.pointVals, { [k]: n }) })); persist(); renderSettings();
+    });
+  });
   ['s-teams', 's-roster', 's-scoring', 's-cats', 's-il', 's-pofmt', 's-po', 's-asb', 's-lupos'].concat(Object.keys(LU_IDS)).forEach(id => $(id).addEventListener('change', onSetting));
 
   // ---- Fantrax league ----
-  async function fxGet(what, id) {
-    let r;
-    try { r = await fetch('api/fantrax?what=' + what + '&leagueId=' + encodeURIComponent(id), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
-    if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('nohost');
-    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
-    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
-    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
-    return body;
-  }
+  // Load is always a live call; the answers are also saved for the other tabs to draw from at once
+  const FXC = FxCache.create({}), fxGet = (what, id) => FXC.live(what, id);
   // busy (429), 5xx and dropped connections: keep the old state and retry after 10 s, 20 s, 40 s … up to 2 minutes
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
   let wait = 0, retryT = null, seq = 0;
@@ -470,7 +574,8 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
       let standings = null; try { standings = await fxGet('standings', id); } catch (e) {}   // records are optional
       if (mine !== seq) return;
       wait = 0;
-      const res = LS.applyFantrax(state.settings, league), name = league.leagueName || league.name || (league.leagueInfo && league.leagueInfo.name) || null;
+      const was = LS.leagueScoring(get, id), own = was ? Object.assign({}, state.settings, was) : state.settings;   // a saved league brings its own scoring
+      const res = LS.applyFantrax(own, league), name = league.leagueName || league.name || (league.leagueInfo && league.leagueInfo.name) || null;
       LS.rememberLeague(get, set, id, name, null);
       const saved = LS.savedLeagues(get).find(x => x.id === id);
       state = { settings: res.settings, league: { id, name: saved ? saved.name : name || 'League ' + id, teams: LS.teamsOf(league, standings), loadedAt: Date.now() }, note: res.note };
