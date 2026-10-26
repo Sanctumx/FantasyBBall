@@ -247,6 +247,15 @@ test('points table: per game, season and mix values, order, pool and dead rows',
   assert.ok(pg.every(r => r.cats === null));
 });
 
+test('points table: early in the season Mix stays on the Season scale (real games), not 80-game scaled', () => {
+  const line = { pts: 20, reb: 5, ast: 5, stl: 1, blk: 1, to: 2, tpm: 2, fgp: 0.5, fga: 14, ftp: 0.8, fta: 4 };
+  const rs = [{ pid: 0, g: 80, gp: 8, line }, { pid: 1, g: 40, gp: 4, line }], w = { pts: 1 };
+  const se = Pts.table(rs, w, { teams: 1, roster: 2, basis: 'total' }), mx = Pts.table(rs, w, { teams: 1, roster: 2, basis: 'mix' });
+  assert.ok(near(se.find(r => r.pid === 0).z, 20 * 8));
+  const m0 = mx.find(r => r.pid === 0).z, s0 = se.find(r => r.pid === 0).z;
+  assert.ok(m0 <= s0 * 1.0001 && m0 > s0 * 0.5, String(m0 / s0));
+});
+
 test('points winStart: m equals a direct engine view and evaluate, c is null, with and without lists', () => {
   const base = { teams: 14, roster: 12, basis: 'pergame', cats: 9, points: YW };
   const tab = Pts.table(grows, YW, base);

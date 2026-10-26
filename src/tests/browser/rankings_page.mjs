@@ -176,6 +176,12 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(3)', t => t.map(e => e.t
   await w.evaluate(() => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.pointVals.pts = 2; localStorage.setItem(k, JSON.stringify(o)); }); await p.waitForTimeout(2500);
   const after = await p.$eval('#tbl tbody tr td:nth-child(' + col + ')', e => parseFloat(e.textContent));
   ok(after > first, 'points: a point value changed in another tab changes the top value: ' + first + ' -> ' + after);
+  { const setScoring = async sc => { await w.evaluate(s => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.scoring = s; localStorage.setItem(k, JSON.stringify(o)); }, sc); await p.waitForTimeout(3000); };
+    const headsNow = () => p.$$eval('#tbl thead th', t => t.map(e => e.textContent));
+    await setScoring('h2h'); let hn = await headsNow();
+    ok(hn.includes('Zscore') && !hn.includes('Pts/g'), 'switching to categories in another tab shows Zscore: ' + hn.join('|'));
+    await setScoring('points'); hn = await headsNow();
+    ok(hn.includes('Pts/g') && !hn.includes('Zscore'), 'switching back to points shows Pts/g: ' + hn.join('|')); }
   ok(errs.length === 0, 'points: no page errors ' + errs.join('; '));
   await ctx.close(); }
 { const { p, errs, ctx } = await open({ 'courtside-settings-v1': JSON.stringify({ v: 1, settings: { teams: 14, roster: 12, scoring: 'points', cats: 9, ilSpots: 3, pointVals: {} }, league: null, note: '' }), 'courtside-rankings-v1': JSON.stringify({ src: 'avg' }) });

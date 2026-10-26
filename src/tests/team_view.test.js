@@ -297,3 +297,9 @@ test('the scoring job cache keeps point values apart', () => {
   const ctx = mk(), st = stateOf(), job = a => V.winJob(ctx, st, { points: a }), run = j => { while (j.step()); return j.matrix.mean.match; };
   assert.notStrictEqual(run(job({ pts: 1 })), run(job({ ast: 5 })));
 });
+
+test('createScorer keeps point values apart: same ctx and roster, other values give another job; the same values give the same job', () => {
+  const ctx = mk(), st = stateOf(), sc = V.createScorer(), a = sc.get(ctx, st, { points: { pts: 1 } }), b = sc.get(ctx, st, { points: { ast: 5 } });
+  assert.notStrictEqual(a, b); assert.strictEqual(sc.get(ctx, st, { points: { pts: 1, reb: 0 } }), a); assert.notStrictEqual(sc.get(ctx, st, {}), a);
+  assert.notStrictEqual(sc.getModule(ctx, st, { points: { pts: 1 } }), sc.getModule(ctx, st, { points: { ast: 5 } }));
+});

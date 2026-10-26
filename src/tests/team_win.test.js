@@ -278,3 +278,10 @@ test('nightOf: a crowded night goes to the better points player, and Matchup wit
   assert.ok(a.some((v, i) => v !== b[i]), 'a different night order changes who plays');
   assert.strictEqual(a.reduce((x, y) => x + y, 0), b.reduce((x, y) => x + y, 0));
 });
+
+test('points: a shared ctx used with weights A then B gives what a fresh ctx gives for B', () => {
+  const nowMs = last.start, g = games(last.start, last.end), st = stateOf(), A = { pts: 1 }, B = { ast: 5, reb: 2 };
+  const shared = mk(nowMs, g); W.matrix(shared, st, { points: A });
+  const after = W.matrix(shared, st, { points: B }), fresh = W.matrix(mk(nowMs, g), st, { points: B });
+  assert.deepStrictEqual(after.teams.map(t => t.match), fresh.teams.map(t => t.match)); assert.strictEqual(after.mean.match, fresh.mean.match);
+});

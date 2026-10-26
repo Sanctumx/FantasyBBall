@@ -47,3 +47,8 @@ test('ESPN-style negative weights keep variance at or above 0; zero weights give
   assert.strictEqual(Pts.perGame(line, {}), 0); assert.strictEqual(Pts.pgVar(line, {}), 0); assert.strictEqual(Pts.projVar(line, 70, {}), 0);
   assert.notStrictEqual(Pts.key(YAHOO), Pts.key(ESPN)); assert.strictEqual(Pts.key({ pts: 1 }), Pts.key({ pts: 1, reb: 0 }));
 });
+
+test('a line with missing stats (a window row with no pts) still gives a finite variance', () => {
+  const sparse = { reb: 5, ast: 3, fga: 8, fgp: 0.5, fta: 2, ftp: 0.8 };
+  assert.ok(Number.isFinite(Pts.pgVar(sparse, YAHOO)) && Number.isFinite(Pts.weekVar(sparse, 70, YAHOO)) && Number.isFinite(Pts.projVar(sparse, 70, YAHOO)));
+});

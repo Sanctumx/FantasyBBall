@@ -254,6 +254,21 @@ for (const [w, side] of [[1440, true], [1200, false]]) {
   await scored(p); await p.waitForTimeout(800);
   const after = await p.$eval('#roster tbody tr[data-key] td:nth-child(' + (heads.indexOf('Pts/g') + 1) + ')', e => parseFloat(e.textContent));
   ok(after > first, 'points: a point value changed in another tab changes the numbers: ' + first + ' -> ' + after);
+  // a swap pending (one out, one in, not applied) survives a point value change made in another tab
+  const outNm = (await p.$$eval('#roster tbody tr[data-key] td.l', t => t.map(e => e.firstChild.textContent)))[0];
+  await p.fill('#out-in', outNm.slice(0, 4)); await p.press('#out-in', 'Enter'); await p.fill('#in-in', 'a'); await p.press('#in-in', 'Enter'); await p.waitForTimeout(200);
+  const chips = async () => [await p.$$eval('#out-chips li', l => l.length), await p.$$eval('#in-chips li', l => l.length)].join();
+  ok(await chips() === '1,1', 'points: a swap is pending before the value change');
+  await w.evaluate(() => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.pointVals.ast = 4; localStorage.setItem(k, JSON.stringify(o)); });
+  await scored(p); await p.waitForTimeout(800);
+  ok(await chips() === '1,1', 'points: the pending swap stays after a point value changes in another tab');
+  // categories <-> points switch in another tab, both ways
+  const setScoring = async sc => { await w.evaluate(s => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.scoring = s; localStorage.setItem(k, JSON.stringify(o)); }, sc); await scored(p); await p.waitForTimeout(800); };
+  const headsNow = () => p.$$eval('#roster thead th', t => t.map(e => e.textContent.replace(/[▲▼]/g, '').trim()));
+  await setScoring('h2h'); let hn = await headsNow();
+  ok(hn.includes('Zscore') && !hn.includes('Pts/g'), 'switching to categories in another tab shows Zscore: ' + hn.join('|'));
+  await setScoring('points'); hn = await headsNow();
+  ok(hn.includes('Pts/g') && !hn.includes('Zscore'), 'switching back to points shows Pts/g: ' + hn.join('|'));
   ok(errs.length === 0, 'points: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
