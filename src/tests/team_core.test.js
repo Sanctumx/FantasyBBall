@@ -163,3 +163,38 @@ test('applySwap records the swap in state.moves; moveSlot keeps the record; an e
   assert.deepStrictEqual(T.applySwap(w, [], []).moves, w.moves);
   assert.deepStrictEqual(s.moves, []);
 });
+
+// ---- the Team-tab flag (2026-10-26): ctx.teamTab turns Reserve into a parking slot and applies the basis; a plain ctx never changes ----
+test('tabState: Fantrax ACTIVE and RESERVE are both active (Courtside Active = active + bench), IR is il, no moves', () => {
+  const s = T.tabState(ROS[me]);
+  ROS[me].forEach(x => assert.strictEqual(s.slots[x.fid], x.slot === 'IR' ? 'il' : 'active'));
+  assert.deepStrictEqual(s.order, ROS[me].map(x => x.fid));
+  assert.deepStrictEqual(s.moves, []);
+});
+
+test('countedSlots: a plain ctx counts active + reserve; the Team tab on Per game counts only active, on the seasonal bases active + il', () => {
+  assert.deepStrictEqual(T.countedSlots({}), ['active', 'reserve']);
+  assert.deepStrictEqual(T.countedSlots(undefined), ['active', 'reserve']);
+  assert.deepStrictEqual(T.countedSlots({ teamTab: true, basis: 'pergame' }), ['active']);
+  assert.deepStrictEqual(T.countedSlots({ teamTab: true, basis: 'total' }), ['active', 'il']);
+  assert.deepStrictEqual(T.countedSlots({ teamTab: true, basis: 'mix' }), ['active', 'il']);
+});
+
+test('counted(state, ctx): without a ctx it is today\'s counted (active + reserve); with a Team-tab ctx it follows countedSlots', () => {
+  const s = T.initState(ROS[me]), k = s.order.find(x => s.slots[x] === 'il'), r = s.order.find(x => s.slots[x] === 'reserve');
+  assert.ok(k && r);
+  assert.ok(T.counted(s).includes(r) && !T.counted(s).includes(k));
+  assert.ok(!T.counted(s, { teamTab: true, basis: 'pergame' }).includes(r));
+  assert.ok(T.counted(s, { teamTab: true, basis: 'total' }).includes(k));
+  assert.deepStrictEqual(T.counted(s, {}), T.counted(s));
+});
+
+test('avail: 1 on a plain ctx and on Per game; min(1, g/82) on the seasonal basis; halfway on Mix', () => {
+  const pp = { g: 41 }, full = { g: 90 };
+  assert.strictEqual(T.avail({}, pp), 1);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'pergame' }, pp), 1);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'total' }, pp), 0.5);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'total' }, full), 1);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'mix' }, pp), 0.75);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'mix' }, full), 1);
+});

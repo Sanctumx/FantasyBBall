@@ -342,3 +342,22 @@ test('sourceCtx: a previewed trade scores on a source context; scorer jobs are p
   const j0 = sc.get(c0, sw, { cats: 9 }), jW = sc.get(cW, sw, { cats: 9 });
   assert.notStrictEqual(j0, jW); assert.strictEqual(sc.get(c0, sw, { cats: 9 }), j0); assert.strictEqual(sc.get(cW, sw, { cats: 9 }), jW);
 });
+
+test('sourceCtx opts: {teamTab, basis} sets the flag on avg and on another source; without opts a ctx carries neither (the Trade Analyzer and Rankings with no team stay plain)', () => {
+  const a = baseArgs(), rows = Rk.sourceRows('w7', PLAYERS, [boxOf(6)]);
+  for (const src of ['avg', 'w7']) {
+    const plain = V.sourceCtx(a, src, rows, FXP), tab = V.sourceCtx(a, src, rows, FXP, { teamTab: true, basis: 'total' });
+    assert.ok(!('teamTab' in plain) && !('basis' in plain), src);
+    assert.strictEqual(tab.teamTab, true); assert.strictEqual(tab.basis, 'total');
+    assert.strictEqual(V.sourceCtx(a, src, rows, FXP, { teamTab: true }).basis, 'pergame');
+  }
+});
+
+test('gamesLeft: plain = team games x min(1, g/82); Team tab Per game = full team games, total = as plain, Mix = halfway', () => {
+  const ctx = mk(), pp = Object.assign({}, pool.players.find(p => p.t && p.g > 0 && p.g < 82), { g: 41 }), tg = T.seasonGamesLeft(ctx, pp.t);
+  assert.ok(tg > 0);
+  assert.ok(near(V.gamesLeft(ctx, pp), tg * 0.5));
+  assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'pergame' }), pp), tg));
+  assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'total' }), pp), tg * 0.5));
+  assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'mix' }), pp), tg * 0.75));
+});

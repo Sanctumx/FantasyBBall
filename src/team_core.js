@@ -8,13 +8,30 @@
   const FROM_FANTRAX = { ACTIVE: 'active', RESERVE: 'reserve', IR: 'il' };
   // the slots that count in the team's stats, Win C and Win M
   const COUNTED = ['active', 'reserve'];
-  const counted = state => state.order.filter(k => COUNTED.includes(state.slots[k]));
+  // The Team tab (ctx.teamTab, set by TeamView.sourceCtx; the Trade Analyzer's and Rankings' plain ctxs never carry it): Reserve is only a
+  // parking place and counts for nothing; IL counts only on the seasonal bases, where availability (avail) scales its games
+  const countedSlots = ctx => !ctx || !ctx.teamTab ? COUNTED : ctx.basis === 'pergame' ? ['active'] : ['active', 'il'];
+  const counted = (state, ctx) => { const c = countedSlots(ctx); return state.order.filter(k => c.includes(state.slots[k])); };
+  // share of the team's games a player is there for: Per game compares everyone at peak non-injury performance (1), the seasonal basis uses
+  // his projected games (g/82), Mix halfway; a plain ctx has no availability
+  const avail = (ctx, pp) => {
+    if (!ctx || !ctx.teamTab || ctx.basis === 'pergame') return 1;
+    const a = Math.min(1, pp.g / 82);
+    return ctx.basis === 'mix' ? (1 + a) / 2 : a;
+  };
 
   // rows: parseRosters entries [{ fid, slot }] for my team
   function initState(rows) {
     const slots = {}, order = [];
     rows.forEach(x => { slots[x.fid] = FROM_FANTRAX[x.slot] || 'reserve'; order.push(x.fid); });
     return { slots, order, moves: [] };
+  }
+
+  // the Team tab's starting state: Courtside Active = the league's active + bench (Fantrax RESERVE), IR is il; there is no Reserve until a player is parked
+  function tabState(rows) {
+    const s = initState(rows);
+    s.order.forEach(k => { if (s.slots[k] === 'reserve') s.slots[k] = 'active'; });
+    return s;
   }
 
   function moveSlot(state, key, slot) {
@@ -123,6 +140,6 @@
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, COUNTED, counted, windowGames, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);
