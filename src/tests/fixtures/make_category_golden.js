@@ -64,7 +64,7 @@ function team() {
   o.leagueWinSwap = lws && { ids: lws.ids, P: lws.P };
   o.rosWinM = [Tr.rosWinM(ctx, R0, me), Tr.rosWinM(ctx, swapped, me)];
   o.playsPct = T.playsPct(ctx, st);
-  const moved = T.initState(ROS[me]); moved.order.slice(0, 2).forEach(k => T.moveSlot(moved, k, 'reserve'));
+  const moved = st.order.slice(0, 2).reduce((s, k) => T.moveSlot(s, k, 'reserve'), st);
   o.playsPctMoved = T.playsPct(ctx, moved);
   return o;
 }
