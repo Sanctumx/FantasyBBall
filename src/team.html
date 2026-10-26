@@ -136,7 +136,7 @@ tr.lrow{cursor:pointer}
       <h4>Stats and the Plays % box</h4>
       <p>Per game shows each player's projected line. Rest of season multiplies it by his projected games left. With "Adjust player stats by Plays %" checked, every player's stats and Z are also multiplied by his Plays %. Unchecked, the player rows are untouched and only the team values use Plays %.</p>
       <h4>Moving players</h4>
-      <p>Click any column header to sort inside each group (click again to reverse, a third time to clear). MPG is his projected minutes per game. Each row has a slot select (Active, Reserve, IL); you can also drag a row onto another group's header. Moves are a preview, and Plays %, the team average, Win C, Win M and the matrix all follow. Active may go over the league's limit: the header turns orange ("Active (11 / 10)") and the extra players simply sit some nights, as Plays % shows.</p>
+      <p>Click any column header to sort inside each group (click again to reverse, a third time to clear). MPG is his projected minutes per game. Each row has a slot select (Active, Reserve, IL); you can also drag a row onto another group's header. Moves are a preview, and Plays %, the team average, Win C, Win M and the matrix all follow. Active may go over the roster limit: the header turns orange ("Active (13 / 12)"). Active is every player not in Reserve or IL; at most 10 of them play each night, so with more than 10 the extra ones sit some nights, as Plays % shows, as Plays % shows.</p>
       <h4>Team average</h4>
       <p>The last row of the table. It always uses Plays %: a player adds his line in proportion to how often he plays, per lineup slot. Its Z is the same Plays %-weighted average of the players' Z; its Win C and Win M are your average over all opponents (the Average column of the matrix). IL players add nothing.</p>
      </section>
@@ -356,10 +356,10 @@ tr.lrow{cursor:pointer}
       CATN.slice(0, nCats()).map((c, i) => th('c' + i, c, ui.zview === 'z' ? c + ': his weighted Zscore in this category' : c + ': projected ' + (ui.view === 'ros' ? 'rest-of-season total' : 'per-game value'))).join('') +
       th('z', 'Zscore', 'Zscore, weighted by the category weights') + th('wc', 'Win C', 'Win C (hundredths) he adds over an average player in his place') + th('wm', 'Win M', 'Win M (points) he adds over an average player in his place') + '</tr></thead>';
     const nc = nCats(), cols = 4 + nc + 3, body = [], zv = ui.zview === 'z', wts = ui.weights, parts = x => TV.zParts(x.cats, wts, nc);
-    const cnt = TV.slotCounts(state, ctx.L.maxActive);
+    const cnt = TV.slotCounts(state, ctx.L.maxPlayers || ctx.L.maxActive);
     r.groups.forEach(g => {
-      const c = cnt[g.slot], lim = g.slot === 'active' ? ' / ' + ctx.L.maxActive : '';
-      body.push('<tr class="grp" data-slot="' + g.slot + '"><td colspan="' + cols + '"' + (c.over ? ' class="over" title="More Active players than the league allows each night; the extra ones sit some nights"' : ' title="Drop a player here to move him to ' + SLOT_NAME[g.slot] + '"') + '>' + SLOT_NAME[g.slot] + ' (' + g.rows.length + lim + ')' + (c.over ? ' · over the limit' : '') + '</td></tr>');
+      const c = cnt[g.slot], lim = g.slot === 'active' ? ' / ' + (ctx.L.maxPlayers || ctx.L.maxActive) : '';
+      body.push('<tr class="grp" data-slot="' + g.slot + '"><td colspan="' + cols + '"' + (c.over ? ' class="over" title="More Active players than the roster allows"' : ' title="Drop a player here to move him to ' + SLOT_NAME[g.slot] + '"') + '>' + SLOT_NAME[g.slot] + ' (' + g.rows.length + lim + ')' + (c.over ? ' · over the limit' : '') + '</td></tr>');
       sortedRows(g.rows, job, zv, parts).forEach(x => {
         const w = job.players[x.key], dim = x.hypo ? ' class="hy"' : '';
         body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + '</small>' +
@@ -403,7 +403,7 @@ tr.lrow{cursor:pointer}
   function commit(next) { if (next === state) return; log.push({ before: state, after: next }); state = next; }
   function drawLog() {
     $('logbox').hidden = !log.length; $('log-n').textContent = log.length ? '(' + log.length + ')' : '';
-    const nm = k => esc((ctx.pool.byKey.get(k) || {}).n || k), mm = job => job.done && job.matrix && job.matrix.mean ? job.matrix.mean.match : null;
+    const nm = k => esc((ctx.pool.byKey.get(k) || {}).n || k), mm = job => job.matrix && job.matrix.mean ? job.matrix.mean.match : null;
     $('log').innerHTML = log.map(e => {
       const d = TV.diff(e.before, e.after), parts = [];
       if (d.out.length) parts.push('Out ' + d.out.map(nm).join(', '));
@@ -433,8 +433,9 @@ tr.lrow{cursor:pointer}
     if (!job.done) { $('lmeta').textContent = 'Scoring ' + job.n + ' / ' + job.total + '…'; return; }
     if (!job.rows.length) { $('lmeta').textContent = ''; $('ltable').innerHTML = '<tbody><tr><td class="l">No regular-season weeks are left.</td></tr></tbody>'; return; }
     const weighted = ui.weights.some(w => w !== 1), rows = TW.moduleSort(job.rows, weighted ? ui.weights : null);
+    const r0 = job.rows[0], nowM = ui.listVs === 'avg' && r0.key in state.slots && ['active', 'reserve'].includes(state.slots[r0.key]) ? r0.new : r0.old;   // old is the current Win M, except for my own counted player in Vs average
     const v = TV.moduleView(rows, ctx, state, { owner: ui.lown, query: $('lq').value });
-    $('lmeta').textContent = v.total + ' players · Win M now ' + Math.round(job.rows[0].old) + '%';
+    $('lmeta').textContent = v.total + ' players · Win M now ' + Math.round(nowM) + '%';
     $('lhint').textContent = (ui.listVs === 'avg' ? 'Change in your Win M if he replaces a made-up average player of your team (your team games scaled down to make room).' : 'Change in your Win M if he replaces your worst Active or Reserve player.') + (weighted ? ' Sorted by the weighted change in category chances; the change shown is the real Win M change.' : '') + ' Click to bring him in (yours go to Send out); drag onto a roster row to swap.';
     const mine = r => r.label.indexOf('You') === 0;
     $('ltable').innerHTML = '<thead><tr><th class="l">Player</th><th class="l">Owner</th><th title="Your Win M after the swap">Win M</th><th title="Change in your Win M, in points">Change</th></tr></thead><tbody>' +
@@ -447,6 +448,9 @@ tr.lrow{cursor:pointer}
     const seq = ++tickSeq;
     const tick = () => {
       if (seq !== tickSeq || !ctx) return;
+      // each earlier change shows its Win M once both of its rosters have a matrix (the first step of a job builds it)
+      const lj = [].concat.apply([], log.map(e => [e.before, e.after])).map(s => scorer.get(ctx, s, winOpts())).find(x => !x.done && !(x.matrix && x.matrix.mean));
+      if (lj) { try { lj.step(1); } catch (e) { return; } drawLog(); setTimeout(tick, 0); return; }
       const j = TV.nextJob([scorer.get(ctx, state, winOpts()), scorer.get(ctx, base, winOpts()), scorer.getModule(ctx, state, listOpts())]);
       if (!j) { draw(); drawList(); return; }
       try { j.step(12); } catch (e) { $('rost-meta').textContent = 'Scoring failed: ' + (e && e.message || e); return; }

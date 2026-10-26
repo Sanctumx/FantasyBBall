@@ -83,12 +83,12 @@
   }
 
   // the made-up average player of Vs average. n = my counted players, tot = their games per week, mean = the games-weighted mean line with
-  // the mean games, share = the games my counted players get out of the games their schedules allow (the team's average lineup share).
+  // the mean games, share = the games my counted players get out of the games their own team schedules allow, with no nightly cap (the team's average lineup share).
   // Taking an average player out of the team in expectation = scaling every entry's games and games variance by (n-1)/n (a percentage
   // stays the same, a total loses 1/n). -> null with no counted player or no games
   function avgParts(ctx, state, W) {
     const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0);
-    const allowed = Team.windowGames(ctx, Team.counted(state), null).reduce((a, b) => a + b, 0);
+    const allowed = Team.counted(state).reduce((a, k) => a + Team.windowGames(ctx, [k], null)[0], 0);   // each player alone: no nightly cap
     if (!n || !(tot > 0) || !(allowed > 0)) return null;
     return { W, mine, n, tot, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / n, gVar: Matchup.GVAR } };
   }
@@ -100,9 +100,10 @@
     return matrixOf(ctx, mine, new Set(state.order).add(key), ap.W, opts);
   }
 
-  // my counted player replaced by the average player
+  // my counted player replaced by an average-line player who keeps his games (so a Reserve player is judged on his quality, not his slot)
   function avgOwn(ctx, state, ap, key, opts) {
-    return matrixOf(ctx, ap.mine.filter(e => e.key !== key).concat(ap.mean), new Set(state.order), ap.W, opts);
+    const e = ap.mine.find(x => x.key === key);
+    return matrixOf(ctx, ap.mine.filter(x => x.key !== key).concat(Object.assign({}, ap.mean, { games: e.games })), new Set(state.order), ap.W, opts);
   }
 
   function playerWin(ctx, state, opts) {
@@ -135,10 +136,10 @@
     return { base, pw, worst, wSlot, mo, off: { c: 0, m: 0, dCat: new Array(9).fill(0) }, avg: false };
   }
 
-  // the preview with `key` in the worst player's slot, scored against the current team
+  // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team
   function swapScore(ctx, state, su, cx, key) {
     const s0 = key in state.slots ? Team.applySwap(state, [su.worst], []) : Team.applySwap(state, [su.worst], [key]);
-    return gain(matrix(cx, Team.moveSlot(s0, key, su.wSlot), su.mo), su.base);
+    return gain(matrix(cx, Team.moveSlot(s0, key, su.wSlot === 'reserve' ? 'active' : su.wSlot), su.mo), su.base);   // Active claims nights before the Reserve, so a Reserve slot would score him on leftovers
   }
 
   function moduleRow(ctx, state, su, key) {

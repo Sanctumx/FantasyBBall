@@ -119,7 +119,7 @@ const before = {};
     ok((await p.$eval('select.slot[data-key="' + benchKey + '"]', s => s.value)) === 'active' && await nActive() === a0 + 1, 'dragging a row onto a group header moves it');
   }
   for (const k of await p.$$eval('select.slot', s => s.map(x => x.dataset.key))) { await p.selectOption('select.slot[data-key="' + k + '"]', 'active'); }
-  ok(/over the limit/.test(await grp('active')) && /\d+ \/ \d+/.test(await grp('active')), 'Active over the league limit shows the warning');
+  ok(/\d+ \/ 12/.test(await grp('active')) && !/over the limit/.test(await grp('active')), 'Active out of the 12 roster spots: no warning at exactly 12');
   ok((await p.$$eval('tr.grp td', t => t.every(x => x.title))), 'every group header has a tooltip');
   await p.click('#reset'); await scored(p);
   ok(await p.evaluate(() => localStorage.getItem('courtside-settings-v1') + localStorage.getItem('courtside-leagues-v1')) === before.ls, 'the saved league is untouched');
@@ -223,6 +223,10 @@ const lchg = p => p.$$eval('#ltable tbody tr[data-key] td:last-child', t => t.ma
   // drag onto a group header: he joins that group
   await p.dragAndDrop('#ltable tr[data-key="' + inKey + '"]', 'tr.grp[data-slot="reserve"]'); await scored(p);
   ok((await keys(p)).length === before.keys.length + 1 && (await slotOf(inKey)) === 'reserve', 'dropping a list row on a group header brings him in without sending anyone out');
+  await p.dragAndDrop('#ltable tr[data-key="' + inKey + '"]', 'tr.grp[data-slot="active"]'); await scored(p);
+  for (const k of await p.$$eval('select.slot', s => s.map(x => x.dataset.key))) { await p.selectOption('select.slot[data-key="' + k + '"]', 'active'); await scored(p); }
+  const gt = await p.$eval('tr.grp[data-slot="active"] td', e => e.textContent);
+  ok(/over the limit/.test(gt) && /13 \/ 12/.test(gt), 'Active over the roster limit (13 / 12) shows the warning');
   await p.click('#reset'); await scored(p);
   ok(errs.length === 0, 'list: no page errors ' + errs.join('; '));
   await ctx.close(); }

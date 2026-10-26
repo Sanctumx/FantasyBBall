@@ -178,8 +178,9 @@ test('moduleScores: my own rows carry per-category changes, so weighted sorts an
 const sideOf = (ctx, st) => W.side(ctx, st, W.weeksLeft(ctx));
 const sumG = es => es.reduce((a, e) => a + e.games, 0);
 const meanEntry = mine => ({ p: T.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), sumG(mine)), games: sumG(mine) / mine.length, gVar: M.GVAR });
+const allowedOf = (ctx, st) => T.counted(st).reduce((a, k) => a + T.windowGames(ctx, [k], null)[0], 0);   // each player's own team games, no nightly cap
 const candEntry = (ctx, st, mine, key) => {
-  const w = W.weeksLeft(ctx), counted = T.counted(st), share = sumG(mine) * w / T.windowGames(ctx, counted, null).reduce((a, b) => a + b, 0);
+  const w = W.weeksLeft(ctx), share = sumG(mine) * w / allowedOf(ctx, st);
   return { p: ctx.pool.byKey.get(key).line, games: T.windowGames(ctx, [key], null)[0] / w * share, gVar: M.GVAR };
 };
 
@@ -193,9 +194,9 @@ test('avg: a candidate is my team scaled by (n-1)/n (games and games variance) p
   assert.ok(near(row.new - row.old, row.dM, 1e-9) && near(row.old, 100 * base.mean.match, 1e-9));
 });
 
-test('avg: my own counted player replaces nobody; he is scored against an average-player entry in his place', () => {
+test('avg: my own counted player replaces nobody; he is scored against an average-line entry with his own games', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), x = st.order.find(k => st.slots[k] === 'active');
-  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(meanEntry(mine)), new Set(st.order), w);
+  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(Object.assign(meanEntry(mine), { games: mine.find(e => e.key === x).games })), new Set(st.order), w);
   const row = W.moduleScores(ctx, st, { baseline: 'avg', candidates: [x] })[0];
   assert.ok(near(row.dM, 100 * (base.mean.match - m.mean.match), 1e-9));
   assert.ok(near(row.new, 100 * base.mean.match, 1e-9) && near(row.old, 100 * m.mean.match, 1e-9));
@@ -206,6 +207,22 @@ test('avg: an average player scores about 0 (the projection-variance bias stays 
   const avg = meanEntry(mine), entries = mine.map(e => ({ p: e.p, games: e.games * (n - 1) / n, gVar: e.gVar * (n - 1) / n })).concat(avg);
   const m = W.matrixOf(ctx, entries, new Set(st.order), w);
   assert.ok(Math.abs(100 * (m.mean.match - base.mean.match)) < 0.1, String(100 * (m.mean.match - base.mean.match)));
+});
+
+test('avg: a candidate with my average line and my average games scores about 0 (the lineup share is taken from the uncapped schedule)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), mine = sideOf(ctx, st), t = teamsAll[0];
+  assert.ok(sumG(mine) * W.weeksLeft(ctx) < allowedOf(ctx, st) - 1e-9, 'a crowded schedule leaves share below 1');
+  const ent = { key: 'MEAN', t, owner: null, line: meanEntry(mine).p };
+  const byKey = new Map(ctx.pool.byKey).set('MEAN', ent), cx = Object.assign({}, ctx, { pool: Object.assign({}, ctx.pool, { byKey }) });
+  const row = W.moduleScores(cx, st, { baseline: 'avg', candidates: ['MEAN'] })[0];
+  assert.ok(Math.abs(row.dM) < 0.1, String(row.dM));
+});
+
+test('rep: when the worst player is in Reserve a candidate is scored as an Active player, not with the Reserve leftovers', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), su0 = W.moduleSetup(ctx, st, {}), c = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  const rk = st.order.find(k => st.slots[k] === 'reserve'), su = Object.assign({}, su0, { worst: rk, wSlot: 'reserve' });   // force the Reserve player to be the worst
+  const s0 = T.moveSlot(T.applySwap(st, [su.worst], [c]), c, 'active'), exp = 100 * (W.matrix(ctx, s0).mean.match - su.base.mean.match);
+  assert.ok(near(W.moduleRow(ctx, st, su, c).dM, exp, 1e-9), String(W.moduleRow(ctx, st, su, c).dM) + ' vs ' + exp);
 });
 
 test('avg: playerGain equals the module row for every roster player (IL counts as a candidate); the pool is untouched', () => {
@@ -222,6 +239,6 @@ test('avg: playerGain equals the module row for every roster player (IL counts a
 test('avg: no worst-player rule (nobody is forced to 0); rep still has one', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), cands = T.counted(st);
   const avg = W.moduleScores(ctx, st, { baseline: 'avg', candidates: cands }), rep = W.moduleScores(ctx, st, { candidates: cands });
-  assert.ok(avg.every(r => r.dM !== 0));
+  assert.ok(avg.filter(r => st.slots[r.key] === 'active').every(r => r.dM !== 0));   // a Reserve player with no nights adds exactly 0 either way
   assert.ok(rep.some(r => r.dM === 0));
 });
