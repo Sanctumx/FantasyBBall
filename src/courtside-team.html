@@ -3295,6 +3295,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // the Per game / Rest of season toggle is the basis of the Win numbers and the Zscore table, as on the Rankings tab (2026-10-26)
   const basisOf = () => ui.view === 'ros' ? 'total' : 'pergame';
   const maxA = () => ctx.L.maxPlayers || ctx.L.maxActive;
+  const maxIl = () => { const n = SS.settings && SS.settings.ilSpots; return n == null ? null : n; };   // the league's IL spots (Settings); null = no cap
   function mkZ() {
     zmap = new Map(); if (pw()) return;
     const s = SS.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: basisOf() };
@@ -3539,7 +3540,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // a move into a full Active is refused (TV.move throws "Active is full (N)"); the select snaps back on the redraw
   const moveTo = (key, slot) => {
     if (!(key in state.slots) || !SLOT_NAME[slot]) return;
-    try { const s2 = TV.move(state, key, slot, maxA()); if (s2 !== state) { commit(s2); swapMsg(''); } } catch (e) { swapMsg(e.message, true); }
+    try { const s2 = TV.move(state, key, slot, maxA(), maxIl()); if (s2 !== state) { commit(s2); swapMsg(''); } } catch (e) { swapMsg(e.message, true); }
     render();
   };
   $('roster').addEventListener('click', e => {
@@ -3557,7 +3558,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const t = dropTarget(e); if (!t) return; e.preventDefault(); t.classList.remove('drop');
     const d = e.dataTransfer.getData('text/plain');
     if (d.indexOf('list:') === 0) {   // a list player: onto a row he takes that player's slot, onto a header he joins the group
-      try { const k = d.slice(5); commit(t.dataset.slot ? TV.dropIn(state, k, t.dataset.slot, maxA()) : TV.dropSwap(state, k, t.dataset.key)); outs = outs.filter(c => c.key in state.slots); ins = ins.filter(c => !(c.key in state.slots)); $('swap-msg').textContent = ''; render(); }
+      try { const k = d.slice(5); commit(t.dataset.slot ? TV.dropIn(state, k, t.dataset.slot, maxA(), maxIl()) : TV.dropSwap(state, k, t.dataset.key)); outs = outs.filter(c => c.key in state.slots); ins = ins.filter(c => !(c.key in state.slots)); $('swap-msg').textContent = ''; render(); }
       catch (er) { $('swap-msg').textContent = er.message; $('swap-msg').className = 'msg err'; }
     } else if (t.dataset.slot) moveTo(d, t.dataset.slot);
   });

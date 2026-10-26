@@ -167,19 +167,25 @@
     return Team.moveSlot(Team.applySwap(state, [outKey], [inKey]), inKey, state.slots[outKey]);
   }
   // max (the Team tab passes maxPlayers): Active never goes above it; a player who would make it larger is refused with an error
-  const activeCount = state => state.order.filter(k => state.slots[k] === 'active').length;
-  const full = (state, key, slot, max) => max != null && slot === 'active' && state.slots[key] !== 'active' && activeCount(state) >= max;
-  const FULL_MSG = max => 'Active is full (' + max + ')';
-  function dropIn(state, key, slot, max) {
-    if (full(state, key, slot, max)) throw new Error(FULL_MSG(max));
+  // ilMax (the league's IL spots): IL never goes above it either, so IL cannot park a healthy player to get round the Active limit
+  const slotCount = (state, slot) => state.order.filter(k => state.slots[k] === slot).length;
+  const activeCount = state => slotCount(state, 'active');
+  const LIMITS = { active: 'Active', il: 'IL' };
+  const full = (state, key, slot, max, ilMax) => {
+    const cap = slot === 'active' ? max : slot === 'il' ? ilMax : null;
+    return cap != null && state.slots[key] !== slot && slotCount(state, slot) >= cap;
+  };
+  const FULL_MSG = (slot, cap) => LIMITS[slot] + ' is full (' + cap + ')';
+  function dropIn(state, key, slot, max, ilMax) {
+    if (full(state, key, slot, max, ilMax)) throw new Error(FULL_MSG(slot, slot === 'active' ? max : ilMax));
     return key in state.slots ? Team.moveSlot(state, key, slot) : Team.moveSlot(Team.applySwap(state, [], [key]), key, slot);
   }
 
   // ---- slots ----
-  // a move to another slot; the same slot returns the same state object; max as in dropIn
-  function move(state, key, slot, max) {
+  // a move to another slot; the same slot returns the same state object; max and ilMax as in dropIn
+  function move(state, key, slot, max, ilMax) {
     if (state.slots[key] === slot) return state;
-    if (full(state, key, slot, max)) throw new Error(FULL_MSG(max));
+    if (full(state, key, slot, max, ilMax)) throw new Error(FULL_MSG(slot, slot === 'active' ? max : ilMax));
     return Team.moveSlot(state, key, slot);
   }
 

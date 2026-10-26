@@ -401,3 +401,15 @@ test('gamesLeft: plain = team games x min(1, g/82); Team tab Per game = full tea
   assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'total' }), pp), tg * 0.5));
   assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'mix' }), pp), tg * 0.75));
 });
+
+test('move / dropIn with an IL cap: a move into a full IL throws, Active/Reserve moves and a player already in IL do not; no cap = as before', () => {
+  const st = T.tabState(ROS[me]), act = st.order.filter(k => st.slots[k] === 'active'), il = st.order.filter(k => st.slots[k] === 'il'), nIl = il.length;
+  assert.ok(act.length > 1);
+  assert.throws(() => V.move(st, act[0], 'il', 99, nIl), /IL is full \(\d+\)/);
+  assert.throws(() => V.dropIn(st, act[0], 'il', 99, nIl), /IL is full/);
+  assert.strictEqual(V.move(st, act[0], 'il', 99, nIl + 1).slots[act[0]], 'il');
+  assert.strictEqual(V.move(st, act[0], 'il', 99).slots[act[0]], 'il');   // no cap: as before
+  if (il.length) { assert.strictEqual(V.move(st, il[0], 'il', 99, nIl), st); assert.strictEqual(V.move(st, il[0], 'reserve', 99, nIl).slots[il[0]], 'reserve'); }
+  const free = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  assert.throws(() => V.dropIn(st, free, 'il', 99, nIl));
+});
