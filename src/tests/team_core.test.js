@@ -122,3 +122,29 @@ test('search: accent- and case-insensitive, partial, every word must match, star
   assert.deepStrictEqual(names('zzz'), []);
   assert.strictEqual(T.search(list, 'n', 2).length, 2);
 });
+
+// review fixes (2026-10-25)
+test('Plays %: an "out" player sits out only the rest of the current week, and the bench uses his open nights', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 11), early = Math.floor(NOW / 1000) + 3600, g = {};
+  keys.forEach(k => { g[pool.byKey.get(k).t] = [early, NIGHT]; });
+  const ctx = M.makeCtx({ L, pool, DAYS: { games: g }, rosters: ROS, me, nowMs: NOW });
+  ctx.curEnd = NOW + 2 * 3600 * 1000;   // the current week ends between the two nights
+  ctx.out = new Set([keys[0]]);
+  const r = T.playsPct(ctx, stateOf(keys.slice(0, 10), [keys[10]]));
+  assert.deepStrictEqual([r[keys[0]].gl, r[keys[0]].pct], [2, 0.5]);   // misses the early night only
+  assert.strictEqual(r[keys[1]].pct, 1);
+  assert.strictEqual(r[keys[10]].pct, 0.5);   // takes the slot the out player leaves on the early night
+});
+
+test('weightedZ follows the league: in an 8-category league turnovers carry no weight, as in Rankings.table', () => {
+  const tab = R.table(Rows, { teams: 12, roster: 12, type: 'h2h', basis: 'pergame', cats: 8 }).filter(r => r.z != null).slice(0, 20);
+  tab.forEach(r => assert.ok(Math.abs(T.weightedZ(r.cats, null, 8) - r.z) < 1e-12));
+});
+
+test('playsPct marks IL and reserve rows as hypothetical and teamLine leaves them out', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 4), ctx = mkCtx(keys), r = T.playsPct(ctx, stateOf(keys.slice(0, 2), [keys[2]], [], [keys[3]]));
+  assert.ok(!r[keys[0]].hypo && !r[keys[2]].hypo);
+  assert.strictEqual(r[keys[3]].hypo, true);
+  const line = pool.byKey.get(keys[0]).line;
+  assert.strictEqual(T.teamLine([Object.assign({ line }, r[keys[3]])], 10).pts, 0);
+});

@@ -3,7 +3,7 @@
 (function (root) {
   'use strict';
   const InLeague = root.InLeague || require('./inseason_league.js'), Matchup = root.Matchup || require('./matchup_core.js'),
-    InPlayers = root.InPlayers || require('./inseason_players.js'), Shared = root.Shared || require('./shared.js');
+    Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Shared = root.Shared || require('./shared.js');
   const SLOTS =['active', 'bench', 'il', 'reserve'];
   const FROM_FANTRAX = { ACTIVE: 'active', RESERVE: 'bench', IR: 'il' };
 
@@ -43,39 +43,52 @@
     return (G[team] || []).filter(s => s * 1000 >= w.from && s * 1000 < w.to).length;
   }
 
+  // games per key over the window. segGames zeroes an "out" player's segment when it starts before ctx.curEnd, which is meant
+  // for the rest of the current week only, so the window is cut at curEnd and the two parts are summed
+  function windowGames(ctx, keys, used) {
+    const w = window(ctx), cut = Math.min(Math.max(ctx.curEnd || 0, w.from), w.to), seg = (key, from, to) => ({ key, from, to });
+    if (cut <= w.from || cut >= w.to) return Matchup.segGames(ctx, keys.map(k => seg(k, w.from, w.to)), used, true);
+    const a = Matchup.segGames(ctx, keys.map(k => seg(k, w.from, cut)), used, true), b = Matchup.segGames(ctx, keys.map(k => seg(k, cut, w.to)), used, true);
+    return a.map((x, i) => x + b[i]);
+  }
+
   // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
-  // bench takes what is left; IL and reserve rows show what they would get as one more bench player. Roster order breaks ties.
-  // -> { key: { gl, played, pct } }; pct is null when the team has no games left
+  // bench takes what is left; IL and reserve rows show what they would get as one more bench player (hypo: true, so teamLine
+  // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
   function playsPct(ctx, state) {
-    const w = window(ctx), seg = key => ({ key, from: w.from, to: w.to }), by = slot => state.order.filter(k => state.slots[k] === slot);
+    const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
     const act = by('active'), bench = by('bench'), res = {};
-    const done = (k, played) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; };
-    const gA = Matchup.segGames(ctx, act.map(seg), null, true), count = {}, used = {};
+    const done = (k, played, hypo) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; };
+    const gA = windowGames(ctx, act, null), count = {}, used = {};
     act.forEach((k, i) => {
       done(k, gA[i]);
-      (G[byKey.get(k).t] || []).map(s => s * 1000).filter(ms => ms >= w.from && ms < w.to).forEach(ms => { const d = InLeague.localDay(ms); count[d] = (count[d] || 0) + 1; });
+      const out = ctx.out && ctx.out.has(k);
+      (G[byKey.get(k).t] || []).map(s => s * 1000).filter(ms => ms >= w.from && ms < w.to && !(out && ms < ctx.curEnd)).forEach(ms => { const d = InLeague.localDay(ms); count[d] = (count[d] || 0) + 1; });
     });
     Object.keys(count).forEach(d => { used[d] = Math.min(max, count[d]); });
-    const gB = Matchup.segGames(ctx, bench.map(seg), used, true);
+    const gB = windowGames(ctx, bench, used);
     bench.forEach((k, i) => done(k, gB[i]));
     state.order.filter(k => state.slots[k] === 'il' || state.slots[k] === 'reserve').forEach(k => {
-      const g = Matchup.segGames(ctx, bench.concat(k).map(seg), used, true);
-      done(k, g[g.length - 1]);
+      const g = windowGames(ctx, bench.concat(k), used);
+      done(k, g[g.length - 1], true);
     });
     return res;
   }
 
-  // Zscore with a 0-1 weight per category (punt lens): the Rankings Zscore is sum(cats[c] x WEIGHTS[c]); weights default to 1
-  function weightedZ(cats, weights) {
-    return cats.reduce((s, v, c) => s + v * InPlayers.WEIGHTS[c] * (weights && weights[c] != null ? weights[c] : 1), 0);
+  // Zscore with a 0-1 weight per category (punt lens): the Rankings Zscore is sum(cats[c] x base weight[c]); weights default to 1
+  // nCats = the league's category count (9 or 8; turnovers carry no weight in 8), as in Rankings.table
+  function weightedZ(cats, weights, nCats) {
+    const W = Eng.catWeights({ catW: InPlayers.WEIGHTS, cats: nCats || 9 });
+    return cats.reduce((s, v, c) => s + v * W[c] * (weights && weights[c] != null ? weights[c] : 1), 0);
   }
 
-  // my team's per-game line: entries [{ line, pct }] (pct = Plays %, null counts for nothing); counting stats are
+  // my team's per-game line: entries [{ line, pct, hypo }] (pct = Plays %, null counts for nothing; hypo rows are left out); counting stats are
   // sum(pct x stat) / slots, the percentages come from summed makes and attempts
   function teamLine(entries, slots) {
     const S = { fga: 0, fgm: 0, fta: 0, ftm: 0, tpm: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0 };
     entries.forEach(e => {
+      if (e.hypo) return;
       const p = e.pct || 0, l = e.line;
       S.fga += p * l.fga; S.fgm += p * l.fga * l.fgp; S.fta += p * l.fta; S.ftm += p * l.fta * l.ftp;
       ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'].forEach(k => { S[k] += p * l[k]; });
