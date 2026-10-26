@@ -93,7 +93,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
       <label class="f" for="basis" title="Season counts games played; Per game ignores games missed; Mix is halfway.">Basis<select id="basis"><option value="pergame">Per game</option><option value="total">Season</option><option value="mix">Mix</option></select></label>
       <label class="f" for="zdrop" title="Discount each player's worst one (−1) or two (−2) categories"><span>Zscore</span><select id="zdrop"><option value="0,0">Normal</option><option value="1,50">−1 50%</option><option value="1,0">−1 100%</option><option value="2,50">−2 50%</option><option value="2,0">−2 100%</option></select></label>
       <label class="f" for="show" title="How many players to list"><span>Show</span><select id="show"><option value="25">Top 25</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="200">Top 200</option><option value="0">All</option></select></label>
-      <label class="f" for="winvs" title="Replacement: the best player left once the draft ends (as on the Draft tab). Average player: with a team picked below, the Team tab's Vs average (your team minus an average player plus him, scored in the background); with no team, an average player from the Zscore pool."><span>Win vs</span><select id="winvs"><option value="rep">Replacement</option><option value="avg">Average player</option></select></label>
+      <label class="f" for="winvs" title="Replacement: the best player left once the draft ends (as on the Draft tab). Average player: an average player from the Zscore pool. With a team picked below, both are the Team tab's numbers: Replacement is your worst counted player, Average player is your team minus an average player plus him (scored in the background)."><span>Win vs</span><select id="winvs"><option value="rep">Replacement</option><option value="avg">Average player</option></select></label>
       <label class="f" for="myteam" title="The team Win is measured for: its players fill the slots and a new player takes the spot of its weakest. Starts as the team saved in Settings; No team measures against an empty draft."><span>My team</span><select id="myteam"><option value="none">No team</option></select></label>
       <label class="f" for="orderby" title="What the # rank means; picking one also sorts by it. Clicking a column header only re-sorts the rows."><span>Order by</span><select id="orderby"><option value="z">Zscore</option><option value="winC">Win C</option><option value="winM">Win M</option></select></label>
       <label class="f" for="stats">Stats<select id="stats"><option value="z">Zscore</option><option value="raw">Raw</option></select></label>
@@ -231,17 +231,17 @@ tbody tr.mine:hover td{background:var(--sunk)}
   const d2 = { key: '', seq: 0, job: null, map: new Map(), todo: new Set(), failed: false, n: 0, last: 0 };
   function d2For(rows) {
     const s = settings(), me = myTeam();
-    if (ui.winvs !== 'avg' || !Lg || !rosters || !fxPlayers || me == null || !(rosters[me] || []).length) return null;
-    const key = ['d2', dataVer, ui.src, me, ptKey(), s.cats].join('|');
+    if (!Lg || !rosters || !fxPlayers || me == null || !(rosters[me] || []).length) return null;
+    const key = ['d2', dataVer, ui.src, ui.winvs, ui.basis, me, ptKey(), s.cats].join('|');
     if (d2.key === key) return d2.failed ? null : d2;
     d2.key = key; d2.map = new Map(); d2.failed = false; d2.n = 0; const seq = ++d2.seq, w = pw();
     let m;
     try {
       const pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L: Lg, rosters });
       m = R.matchRows(ui.src, rows, pool, fxPlayers);
-      const ctx = TV.sourceCtx({ L: Lg, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [], nightOf: w ? pp => Points.perGame(pp.line, w) : undefined }, ui.src, rows, fxPlayers);
+      const ctx = TV.sourceCtx({ L: Lg, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [], nightOf: w ? pp => Points.perGame(pp.line, w) : undefined }, ui.src, rows, fxPlayers, { teamTab: true, basis: ui.basis });
       d2.todo = new Set([...m.byKey.values()].map(r => r.pid));
-      d2.job = TV.moduleJob(ctx, Team.initState(rosters[me]), { baseline: 'avg', cats: s.cats === 8 ? 8 : 9, points: w }, [...m.byKey.keys()]);
+      d2.job = TV.moduleJob(ctx, Team.tabState(rosters[me]), { baseline: ui.winvs === 'avg' ? 'avg' : 'rep', cats: s.cats === 8 ? 8 : 9, points: w }, [...m.byKey.keys()]);
     } catch (err) { console.error('Win vs Average player', err); d2.failed = true; d2.todo = new Set(); return null; }
     const tick = () => {
       if (seq !== d2.seq) return;
@@ -294,7 +294,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
     const tab0 = tableFor(rows), tab = R.withPlayoffs(tab0, rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
     if (s.cats !== 9) W[8] = 0;
     syncW();
-    const wn0 = winFor(rows, tab0, own), dd = d2For(rows), wn = dd ? { avg: dd.map, rep: { has: pid => dd.todo.has(pid) }, pending: [] } : wn0, wv =pid => { const m = wn[ui.winvs].get(pid); return m ? (!win.mine || !wn.pending.includes(pid) ? m : null) : null; };
+    const wn0 = winFor(rows, tab0, own), dd = d2For(rows), wn = dd ? { [ui.winvs]: dd.map, [ui.winvs === 'avg' ? 'rep' : 'avg']: { has: pid => dd.todo.has(pid) }, pending: [] } : wn0, wv =pid => { const m = wn[ui.winvs].get(pid); return m ? (!win.mine || !wn.pending.includes(pid) ? m : null) : null; };
     // Zscore from the weighted categories; -1 / -2 take off the worst one or two (50% = half of it, 100% = all of it)
     const [zd, zp] = P_ ? [0, 0] : ui.zdrop.split(',').map(Number), keep = zp / 100;
     tab.forEach(t => { if (t.z == null) return; if (P_) { t.zw = t.z; return; }
@@ -330,7 +330,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
     const zeroPts = P_ && Object.values(P_).every(v => !v);
-    const d2note = dd ? ' Win vs Average player is the Team tab\'s number for your team (your team minus an average player plus him; ' + (dd.todo.size ? dd.todo.size + ' players still scoring' : 'all scored') + '); players with no Fantrax match show —.' + (WINDAYS[ui.src] ? ' From recent games it is uncalibrated.' : '') + ' ' : '';
+    const d2note = dd ? ' With a team, Win C / Win M are the Team tab\'s numbers for it (' + (ui.winvs === 'avg' ? 'your team minus an average player plus him' : 'he takes the place of your worst counted player') + '; Reserve counts for nothing, IL players count only on Season and Mix, and the IL-spots setting does not apply; ' + (dd.todo.size ? dd.todo.size + ' players still scoring' : 'all scored') + '); players with no Fantrax match show —.' + (WINDAYS[ui.src] ? ' From recent games it is uncalibrated.' : '') + ' ' : '';
     const winTxt = dd ? '' : (P_ ? 'Win M is season-long, as on the Draft tab, against' : 'Win C / Win M are season-long, as on the Draft tab, against') + ' simulated league teams' + (P_ ? '' : ', pulled toward 50% as on the Team tab (Win M by 0.6, Win C by 0.75)') + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ';
     n.textContent = d2note + (zeroPts ? 'All point values are 0: enter your league\'s values in Settings. ' : '') + (matched < tab.length ? matched + ' players match. ' : '') + winTxt + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. ' + (P_ ? 'Points are your Settings point values times each stat; Season multiplies by games played, Mix by the midpoint of his games and the top ' + K + ' players\' average (scaled to games played). Win M treats each team\'s week as one points total, with the engine\'s own stat noise plus measured correlations between stats (a high-scoring night is usually also a high-FG night).' : 'Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).') + (ui.poboost !== 'off' ? (P_ ? ' Playoff boost scales the Points value by 1 + strength' : ' Playoff boost scales Zscore and each category by 1 + strength') + ' × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
     prewarm();
