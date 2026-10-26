@@ -9,3 +9,13 @@ Built 2026-10-26 (design in archive, "Parallel sessions workflow"): `src/work` r
 ## Next
 
 1. `reviewer` (sonnet, docs/config/scripts), fix findings test-first. 2. Ask the user to push and merge. 3. After the merge: `node .claude/scripts/ledger.mjs setup`; `git config core.hooksPath .githooks` is already set on this PC. 4. Migrate the other branches (list from `branches.mjs`): calib-ros (restore its three shared files to the merge-base, merge main, land its IDEAS 139 result and archive through the ledger, renumber its 142-144 follow-ups with `ledger.mjs next`), plays-rank, fix-136-espn-retry (cherry says landed: ask before deleting), data-hashtag-1025 (its "#137 Hashtag" clashes with Yahoo's 137). 5. yahoo-points-137 when its session wraps up. 6. Remove the `../FantasyBBall-handoff` worktree. 7. Add the general version to Sanctumx/Claude-Workflow (no local clone yet: template/ scripts, hooks, settings and a GUIDELINES.md section) and tell the user the skill wording to paste (handoff step 3: "if the project specifics define a ledger worktree, record shared files there and write only the topic notes on the branch"; release: "land the ledger as the specifics say").
+
+## Review (sonnet, 2026-10-26): no must-fix; 322 tests passed
+
+Fixed: pre-commit hook blocked the commit that finishes a conflicted merge of main (now exits when MERGE_HEAD exists; test added; template copy needs recommitting in the Claude-Workflow clone). Open, for the next session or the user:
+- **Ask rule is exact-prefix:** `Bash(node .claude/scripts/ledger.mjs land:*)` won't match `cd x && node ...`, an absolute path or `node ./.claude/...`; consider also `Bash(node *ledger.mjs land*)`. Permission setting, so the user decides.
+- `core.hooksPath .githooks` must be set in every clone; have `branches.mjs` warn when it isn't.
+- Remove `handoff-workstreams` from `before-edit.mjs` allowBranches and from `.githooks/pre-commit` once this merges.
+- `ledger.mjs next` reads origin/main only; document how to renumber a committed row when land is rejected.
+- `branches.mjs`: print nothing outside a git repo; collapse merged / landed branches to one line.
+- Spot-check that the full Team tab "Next, in order" list is in `team-tab-next.md`.

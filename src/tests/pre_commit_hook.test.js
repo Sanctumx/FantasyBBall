@@ -65,3 +65,14 @@ test('the resume step (restore the shared files to the merge-base version) passe
   git('checkout', base, '--', FILE);
   assert.strictEqual(git('commit', '-q', '-m', 'restore').status, 0);
 });
+
+test('the commit that finishes a conflicted merge of main is not blocked', () => {
+  const { dir, git } = repo('some-task');
+  edit(dir, 'src/handoffs/some-task.md', 'notes\n'); edit(dir, 'src/other.js', 'branch\n'); git('add', '-A'); git('commit', '-q', '-m', 'w');
+  git('checkout', '-q', 'main'); edit(dir, FILE, 'main change\n'); edit(dir, 'src/other.js', 'main\n'); git('add', '-A'); git('commit', '-q', '-m', 'm', '--no-verify');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  git('checkout', '-q', 'some-task');
+  assert.notStrictEqual(git('merge', 'origin/main', '--no-edit').status, 0);
+  edit(dir, 'src/other.js', 'resolved\n'); git('add', '-A');
+  assert.strictEqual(git('commit', '-q', '--no-edit').status, 0);
+});

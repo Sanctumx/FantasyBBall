@@ -8,6 +8,8 @@ FILES="src/SESSION_HANDOFF.md src/IDEAS.md src/HANDOFF_ARCHIVE.md"
 BRANCH=$(git branch --show-current)
 case "$BRANCH" in main|ledger|handoff-workstreams) exit 0 ;; esac
 [ "$ALLOW_HANDOFF_EDIT" = "1" ] && exit 0
+# finishing a merge of main: the shared files legitimately carry main's changes
+git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
 BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null) || exit 0
 BAD=""
 for F in $FILES; do
