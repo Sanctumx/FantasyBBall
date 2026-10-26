@@ -2798,7 +2798,15 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team
   function swapScore(ctx, state, su, cx, key) {
     const s0 = key in state.slots ? Team.applySwap(state, [su.worst], []) : Team.applySwap(state, [su.worst], [key]);
-    return gain(matrix(cx, Team.moveSlot(s0, key, ctx.teamTab || su.wSlot === 'reserve' ? 'active' : su.wSlot), su.mo), su.base);   // Active claims nights before the Reserve, so a Reserve slot would score him on leftovers; on the Team tab he always takes Active
+    return gain(matrix(cx, Team.moveSlot(s0, key, swapSlot(ctx, s0, su.wSlot)), su.mo), su.base);
+  }
+  // The slot a candidate takes in the worst player's place. Active claims nights before the Reserve, so a Reserve slot would score him on leftovers.
+  // Plain ctx: the worst's slot (Active for a Reserve one). Team tab: Active while it has room under the roster limit, else the IL slot the worst
+  // vacated on the seasonal bases (the slot Apply swap gives him, TeamView.apply), so the list and the roster after Apply agree
+  function swapSlot(ctx, s0, wSlot) {
+    if (!ctx.teamTab) return wSlot === 'reserve' ? 'active' : wSlot;
+    const max = ctx.L.maxPlayers || ctx.L.maxActive, n = s0.order.filter(k => s0.slots[k] === 'active').length;
+    return n >= max && wSlot === 'il' && Team.countedSlots(ctx).includes('il') ? 'il' : 'active';
   }
 
   function moduleRow(ctx, state, su, key) {

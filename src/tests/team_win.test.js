@@ -512,3 +512,45 @@ test('Team tab: a plain ctx still counts Reserve and leaves IL out (the golden p
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), n = st.order.filter(k => ['active', 'reserve'].includes(st.slots[k])).length;
   assert.strictEqual(W.side(ctx, st, 1).length, n);
 });
+
+test('Team tab: oppState with recv adds a received player as Active, a received IR player stays il; a plain ctx drops the IR one', () => {
+  const tab = mkTab('total'), plain = mk(last.start, games(last.start, last.end)), act = ROS[me].find(x => x.slot === 'ACTIVE').fid, irMine = ROS[me].find(x => x.slot === 'IR');
+  const s = W.oppState(tab, other, null, [{ key: act, slot: 'active' }]);
+  assert.strictEqual(s.slots[act], 'active');
+  if (irMine) {
+    assert.strictEqual(W.oppState(tab, other, null, [{ key: irMine.fid, slot: 'reserve' }]).slots[irMine.fid], 'il');
+    assert.ok(!(irMine.fid in W.oppState(plain, other, null, [{ key: irMine.fid, slot: 'reserve' }]).slots));
+  }
+});
+
+test('Team tab: soloGames = the games his own schedule allows with no nightly cap; Per game ignores g, seasonal bases scale by availability', () => {
+  const st = tabSt(), k = st.order.find(x => st.slots[x] === 'active'), pg = mkTab('pergame'), tot = mkTab('total'), pp = pg.pool.byKey.get(k), g0 = pp.g;
+  try {
+    pp.g = 41;
+    const full = T.soloGames(pg, k), half = T.soloGames(tot, k), w = T.window(tot);
+    assert.strictEqual(full, T.windowGames(pg, [k], null)[0]);
+    assert.ok(full > 0);
+    assert.strictEqual(half, require('../inseason_league.js').rosterGames([{ t: pp.t, a: 0.5, from: w.from, to: w.to }], tot.DAYS, tot.L.maxActive, null)[0]);
+    assert.ok(half < full && half > 0);
+    pp.g = 82; assert.ok(near(T.soloGames(tot, k), full, 1e-9));
+  } finally { pp.g = g0; }
+});
+
+test('Team tab: Vs average on the seasonal basis: the share is a fraction of the allowed games and a candidate with more games scores higher; Per game ignores g', () => {
+  const cand = ctxOther => ctxOther.roster[other].find(f => ctxOther.pool.byKey.get(f).slot === 'ACTIVE'), st = tabSt();
+  for (const basis of ['pergame', 'total']) {
+    const ctx = mkTab(basis), ap = W.avgParts(ctx, st, W.weeksLeft(ctx)), c = cand(ctx), pp = ctx.pool.byKey.get(c), g0 = pp.g, row = g => { pp.g = g; return W.moduleRow(ctx, st, W.moduleSetup(ctx, st, { baseline: 'avg' }), c).dM; };
+    assert.ok(ap && ap.share > 0 && ap.share <= 1 + 1e-9, basis + ' share ' + (ap && ap.share));
+    try { const hi = row(82), lo = row(10); if (basis === 'total') assert.ok(hi > lo, 'total: ' + hi + ' vs ' + lo); else assert.ok(near(hi, lo, 1e-9), 'pergame ' + hi + ' vs ' + lo); } finally { pp.g = g0; }
+  }
+});
+
+test('Team tab: a candidate in the list scores as the worst counted player\'s slot swapped for him, in Active', () => {
+  for (const basis of ['pergame', 'total']) {
+    const ctx = mkTab(basis), st = tabSt(), c = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE'), su = W.moduleSetup(ctx, st, { baseline: 'rep' });
+    if (su.wSlot !== 'active') continue;
+    const row = W.moduleRow(ctx, st, su, c), after = T.moveSlot(T.applySwap(st, [su.worst], [c]), c, 'active');
+    assert.ok(near(row.dM, 100 * (W.matrix(ctx, after, su.mo).mean.match - su.base.mean.match), 1e-6), basis);
+    assert.ok(Number.isFinite(row.dM) && row.dM !== 0, basis);
+  }
+});
