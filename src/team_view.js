@@ -71,7 +71,7 @@
     const by = new WeakMap();
     return { get(ctx, state, opts) {
       let m = by.get(ctx); if (!m) by.set(ctx, m = new Map());
-      const o = opts || {}, sig = signature(state) + '#' + (o.cats || '') + '#' + (o.mode || '');
+      const o = opts || {}, sig = signature(state) + '#' + (o.cats || '') + '#' + (o.mode || '') + '#' + (o.baseline || '');
       if (!m.has(sig)) m.set(sig, winJob(ctx, state, opts));
       return m.get(sig);
     } };

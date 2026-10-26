@@ -129,7 +129,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
       <h4>An average week</h4>
       <p>Each cell is one average remaining week: every player's games are his remaining Plays % games divided by the weeks left. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ. Chances use the Matchup Analyzer's games variance and are shrunk toward 50%.</p>
       <h4>Win C and Win M per player</h4>
-      <p>The change in your Win C (hundredths) and Win M (points) from having him on the team: your team minus your team with him moved to Reserve. For IL and Reserve rows it is what moving him to the bench would add.</p>
+      <p>What he adds to your Win C (hundredths) and Win M (points) over an average player in his place, as on the Rankings tab: your team minus your team with him moved to Reserve, minus the same for an average-player entry (the mean line of your Active and Bench players, with his team's schedule). For IL and Reserve rows it is what moving him to the bench would add, again minus the average player's.</p>
      </section>
     <section class="how-card">
       <h3>Z and category weights</h3>
@@ -262,7 +262,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   }
 
   const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
-  const winOpts = () => ({ mode: WIN.mode, cats: nCats() });
+  const winOpts = () => ({ mode: WIN.mode, cats: nCats(), baseline: 'avg' });
   const teamName = id => { const t = L.teams.find(q => q.id === id); return t ? t.name : id; };
   const zCats = pp => (pp.pid != null && zmap.has(pp.pid) ? zmap.get(pp.pid) : null);
 
@@ -296,7 +296,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
 
   function rosterHtml(r, job) {
     const head = '<thead><tr><th class="l">Player</th><th title="Projected remaining games">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th>' + c + '</th>').join('') +
-      '<th class="sortable" id="th-z" title="Zscore, weighted by the category weights; click to sort by it"' + (ui.sortZ ? ' aria-sort="descending"' : '') + '>Z</th><th title="Change in your Win C (hundredths) from having him">Win C</th><th title="Change in your Win M (points) from having him">Win M</th></tr></thead>';
+      '<th class="sortable" id="th-z" title="Zscore, weighted by the category weights; click to sort by it"' + (ui.sortZ ? ' aria-sort="descending"' : '') + '>Z</th><th title="Win C (hundredths) he adds over an average player in his place">Win C</th><th title="Win M (points) he adds over an average player in his place">Win M</th></tr></thead>';
     const nc = nCats(), cols = 3 + nc + 3, body = [], zv = ui.zview === 'z', wts = ui.weights, parts = x => TV.zParts(x.cats, wts, nc);
     r.groups.forEach(g => {
       if (!g.rows.length) return;

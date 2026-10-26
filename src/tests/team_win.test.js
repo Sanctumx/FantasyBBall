@@ -134,6 +134,18 @@ test('moduleScores vs average: subtracts the average-player entry and never touc
   rep.forEach(r => assert.ok(near(r.dM - avg.find(q => q.key === r.key).dM, off, 1e-9)));
 });
 
+test('playerGain baseline avg: subtracts the average-player entry in his place, leaves the pool alone, rep stays the default', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), n = ctx.pool.byKey.size, base = W.matrix(ctx, st);
+  const k = st.order.find(x => st.slots[x] === 'active'), il = st.order.find(x => st.slots[x] === 'il' || st.slots[x] === 'reserve');
+  const rep = W.playerGain(ctx, st, k, base), avg = W.playerGain(ctx, st, k, base, { baseline: 'avg' });
+  assert.deepStrictEqual(W.playerGain(ctx, st, k, base, { baseline: 'rep' }), rep);
+  assert.strictEqual(ctx.pool.byKey.size, n);
+  assert.strictEqual(ctx.pool.byKey.has(W.AVG_KEY), false);
+  const off = rep.m - avg.m;
+  assert.ok(Math.abs(off) > 1e-6 && Number.isFinite(off));
+  if (il) { const h = W.playerGain(ctx, st, il, base, { baseline: 'avg' }); assert.strictEqual(h.hypo, true); assert.ok(Number.isFinite(h.m)); }
+});
+
 test('moduleScores works on a 2-for-1 preview state', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = T.applySwap(stateOf(), stateOf().order.slice(0, 2), [ROS[other][0].fid]);
   const rows = W.moduleScores(ctx, st, { candidates: ROS[ids[2]].map(x => x.fid).slice(0, 3) });

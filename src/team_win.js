@@ -66,11 +66,19 @@
   // each roster player's contribution to my Win C / Win M: active and bench = the team minus the team without him (the bench
   // refills his nights); IL and reserve = the team with him on the bench minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
   // one player's contribution given the current roster's matrix `base` (playerWin's per-player step, so a page can score one at a time)
+  // opts.baseline 'avg' (as on Rankings) subtracts what an average-player entry in his place would give: the mean per-game line of my
+  // Active and Bench players with his team's schedule; his slot, or the bench for IL and reserve players. Default 'rep' = the raw contribution.
   function playerGain(ctx, state, k, base, opts) {
     if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };
-    const s = state.slots[k];
-    if (s === 'active' || s === 'bench') return gain(base, matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts));
-    return Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'bench'), opts), base), { hypo: true });
+    const s = state.slots[k], counted = s === 'active' || s === 'bench';
+    const raw = counted ? gain(base, matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'bench'), opts), base), { hypo: true });
+    if (!opts || opts.baseline !== 'avg') return raw;
+    const pp = ctx.pool.byKey.get(k), inTeam = state.order.filter(x => state.slots[x] === 'active' || state.slots[x] === 'bench');
+    if (!inTeam.length) return raw;
+    const actx = withPlayer(ctx, { key: AVG_KEY, n: 'Average player', t: pp.t, line: Team.teamLine(inTeam.map(x => ({ line: ctx.pool.byKey.get(x).line, pct: 1 })), inTeam.length), g: pp.g, slot: null, owner: null });
+    const s0 = counted ? Team.applySwap(state, [k], [AVG_KEY]) : Team.applySwap(state, [], [AVG_KEY]);
+    const off = counted ? gain(matrix(actx, Team.moveSlot(s0, AVG_KEY, s), opts), matrix(actx, Team.moveSlot(state, k, 'reserve'), opts)) : gain(matrix(actx, Team.moveSlot(s0, AVG_KEY, 'bench'), opts), base);
+    return Object.assign({}, raw, { c: raw.c - off.c, m: raw.m - off.m, dCat: raw.dCat.map((v, c) => v - off.dCat[c]) });
   }
 
   function playerWin(ctx, state, opts) {
