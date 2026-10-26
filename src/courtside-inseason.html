@@ -1485,6 +1485,75 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
 })(this);
 </script>
+<script>// Fantrax answers, cached in the browser (2026-10-26): a page draws at once from the last answers it saved, then asks Fantrax
+// again in the background and redraws only if something changed. One copy for every page (it replaced the per-page fxGet).
+// Draft data is never cached: it feeds the picks and so the Model pick. Pure over a storage and a fetcher, so Node can test it.
+(function (root) {
+  'use strict';
+  const PREFIX = 'courtside-fx-v1:', DAY = 864e5;
+  const MAX_AGE = { players: 7 * DAY }, DEF_AGE = DAY, NEVER = { draft: 1 };
+
+  // One Fantrax call through the sync service. Errors: 'offline' (no answer), 'nohost' (not the hosted site), else Fantrax's own.
+  async function fxFetch(what, id, fetchFn, onResponse) {
+    const f = fetchFn || ((u, o) => fetch(u, o));
+    let r; try { r = await f('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    if (onResponse) onResponse(r);
+    return body;
+  }
+
+  const local = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => localStorage.setItem(k, v),
+    remove: k => { try { localStorage.removeItem(k); } catch (e) {} },
+    keys: () => { try { return Object.keys(localStorage); } catch (e) { return []; } } };
+
+  function create(opts) {
+    const st = opts.storage || local, fetcher = opts.fetcher || ((w, id) => fxFetch(w, id, null, opts.onResponse)), now = opts.now || Date.now;
+    const key = (what, id) => PREFIX + what + ':' + (id || '');
+
+    // the saved answer, or null when there is none, it is unreadable or it is too old to show
+    function peek(what, id) {
+      if (NEVER[what]) return null;
+      let e; try { e = JSON.parse(st.get(key(what, id)) || 'null'); } catch (x) { return null; }
+      if (!e || typeof e.at !== 'number' || typeof e.json !== 'string' || now() - e.at > (MAX_AGE[what] || DEF_AGE)) return null;
+      let body; try { body = JSON.parse(e.json); } catch (x) { return null; }
+      return { body, at: e.at, json: e.json };
+    }
+    // keep one league per kind of answer; a full or blocked storage just means no cache
+    function store(what, id, json) {
+      const k = key(what, id), lead = PREFIX + what + ':';
+      try { st.keys().forEach(x => { if (x.startsWith(lead) && x !== k) st.remove(x); }); } catch (e) {}
+      try { st.set(k, JSON.stringify({ at: now(), json })); } catch (e) {}
+    }
+    async function fetchOne(what, id) {
+      const body = await fetcher(what, id);
+      if (NEVER[what]) return { body };
+      const json = JSON.stringify(body);
+      store(what, id, json);
+      return { body, json };
+    }
+    const live = async (what, id) => (await fetchOne(what, id)).body;
+
+    // specs = [[what, leagueId?], ...]. onCached(bodies, at) only if every piece is saved; onFresh(bodies, at, changed) after
+    // the live answers; onError(error, hadCached) if a live call fails (the cached view stays).
+    async function swr(specs, hooks) {
+      const hit = specs.map(s => peek(s[0], s[1])), had = hit.every(Boolean);
+      const fresh = Promise.all(specs.map(s => fetchOne(s[0], s[1]))); fresh.catch(() => {});   // started before drawing; handled below
+      if (had) await hooks.onCached(hit.map(h => h.body), Math.min.apply(null, hit.map(h => h.at)));
+      let res; try { res = await fresh; } catch (e) { await hooks.onError(e, had); return; }
+      await hooks.onFresh(res.map(r => r.body), now(), !had || res.some((r, i) => r.json !== hit[i].json));   // against what the page drew, not what storage holds now
+    }
+    return { peek, live, swr };
+  }
+
+  const api = { PREFIX, fxFetch, create };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FxCache = api;
+})(this);
+</script>
 <script>// In-season league calendar (2026-10-20): Fantrax league/roster/standings parsing, matchup periods, team-code mapping and
 // the expected games a roster plays in a window (from the daily tip-off times in sched_days.json).
 (function (root) {
@@ -2146,15 +2215,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
 
   let staleAge = 0;   // seconds old of the oldest answer the Worker served from memory because Fantrax was busy
-  async function fxGet(what, id) {
-    let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
-    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
-    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
-    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
-    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
-    const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age);
-    return body;
-  }
+  // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  const FXC = FxCache.create({ onResponse: r => { const age = +r.headers.get('x-courtside-age'); if (age > 0) staleAge = Math.max(staleAge, age); } });
+  let fxChecking = false;
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
   async function loadStats() {
@@ -2174,27 +2237,43 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     if (!lg) { ui.leagueId = null; sayHtml(LS.NO_LEAGUE_HTML); return; }
     const id = ui.leagueId = lg.id;
     say('Loading the league from Fantrax…');
-    try {
-      const league = await fxGet('league', id), ros = await fxGet('rosters', id), st = await fxGet('standings', id);
-      if (!fxPlayers) fxPlayers = await fxGet('players');
-      const stats = await loadStats();
-      const boxes = await loadBox(InL.parseLeague(league));
-      if (seq !== loadSeq) return;
-      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); standings = InL.parseStandings(st); espn = stats; box = boxes; fetchedAt = new Date();
+    const stats = loadStats(); let shown = false;
+    // draws the page from [league, rosters, standings, players] fetched at `at`
+    const build = async (b, at) => {
+      const lgn = InL.parseLeague(b[0]), sp = await stats, boxes = await loadBox(lgn); if (seq !== loadSeq) return false;
+      L = lgn; rosters = InL.parseRosters(b[1]); standings = InL.parseStandings(b[2]); fxPlayers = b[3]; espn = sp; box = boxes; fetchedAt = new Date(at);
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
-      Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
-      fxWait = 0; say(''); start();
-    } catch (e) {
-      if (seq !== loadSeq) return;
-      $('retry').hidden = false;
-      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
-      if (transient(e)) {
-        fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
-        say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
-        fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
-      }
-      say(e.message, true);
-    }
+      memo.clear(); memoGen++; Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
+      fxWait = 0; say(''); start(); return true;
+    };
+    await FXC.swr([['league', id], ['rosters', id], ['standings', id], ['players']], {
+      onCached: async (b, at) => { try { fxChecking = true; shown = await build(b, at); } catch (e) { shown = false; } },
+      onFresh: async (b, at, changed) => {
+        if (seq !== loadSeq) return;
+        fxChecking = false;
+        try {
+          if (!shown) { shown = await build(b, at); return; }
+          if (!changed) { fetchedAt = new Date(at); freshness(); return; }
+          if (bd && (bd.aGets.length || bd.bGets.length)) {   // keep the trade being built; the new data waits for a click
+            fetchedAt = new Date(at); freshness();
+            sayHtml('New Fantrax data is in. Your trade is kept. <button type="button" class="retry" id="applynew">Update</button>'); return;
+          }
+          await build(b, at);
+        } catch (e) { say(e.message, true); }
+      },
+      onError: e => {
+        if (seq !== loadSeq) return;
+        fxChecking = false;
+        if (shown) { freshness(); say('Couldn\'t refresh from Fantrax; showing the saved data.', true); $('retry').hidden = false; return; }
+        $('retry').hidden = false;
+        if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
+        if (transient(e)) {
+          fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
+          say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
+          fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
+        }
+        say(e.message, true);
+      } });
   }
 
   function teamLabel(t) {
@@ -2217,7 +2296,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function freshness() {
     const want = L.season + '-' + String(L.season + 1).slice(2), parts = [];
     if (staleAge) parts.push('<span class="warn">Fantrax is busy: rosters are about ' + (staleAge >= 3600 ? Math.round(staleAge / 3600) + ' h' : Math.max(1, Math.round(staleAge / 60)) + ' min') + ' old</span>');
-    else parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
+    else parts.push('<span>' + (fxChecking ? 'Rosters from ' + fetchedAt.toTimeString().slice(0, 5) + ', checking Fantrax…' : 'Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5)) + '</span>');
     if (!espn) parts.push('<span class="warn">No actual stats: perceived value uses projection and ADP only</span>');
     else parts.push('<span>Stats: ESPN ' + esc(espn.label) + ', fetched ' + esc(String(espn.fetchedAt).slice(0, 10)) + (espn.label !== want ? ' <span class="warn">last season</span>' : '') + '</span>');
     parts.push('<span>Projections: BBM + Hashtag average (players.json)</span>');
@@ -2492,6 +2571,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     $(id).addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const th = e.target.closest('thead th'); if (th) { e.preventDefault(); go(th); } } }); }
 
   $('retry').addEventListener('click', () => { fxWait = 0; load(); });
+  $('msg').addEventListener('click', e => { if (e.target.id === 'applynew') load(); });   // the pending Fantrax update replaces the view (and the trade)
   $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });

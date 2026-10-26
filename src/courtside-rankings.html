@@ -1275,6 +1275,75 @@ tbody tr.mine:hover td{background:var(--sunk)}
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
 })(this);
 </script>
+<script>// Fantrax answers, cached in the browser (2026-10-26): a page draws at once from the last answers it saved, then asks Fantrax
+// again in the background and redraws only if something changed. One copy for every page (it replaced the per-page fxGet).
+// Draft data is never cached: it feeds the picks and so the Model pick. Pure over a storage and a fetcher, so Node can test it.
+(function (root) {
+  'use strict';
+  const PREFIX = 'courtside-fx-v1:', DAY = 864e5;
+  const MAX_AGE = { players: 7 * DAY }, DEF_AGE = DAY, NEVER = { draft: 1 };
+
+  // One Fantrax call through the sync service. Errors: 'offline' (no answer), 'nohost' (not the hosted site), else Fantrax's own.
+  async function fxFetch(what, id, fetchFn, onResponse) {
+    const f = fetchFn || ((u, o) => fetch(u, o));
+    let r; try { r = await f('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
+    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
+    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
+    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
+    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
+    if (onResponse) onResponse(r);
+    return body;
+  }
+
+  const local = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => localStorage.setItem(k, v),
+    remove: k => { try { localStorage.removeItem(k); } catch (e) {} },
+    keys: () => { try { return Object.keys(localStorage); } catch (e) { return []; } } };
+
+  function create(opts) {
+    const st = opts.storage || local, fetcher = opts.fetcher || ((w, id) => fxFetch(w, id, null, opts.onResponse)), now = opts.now || Date.now;
+    const key = (what, id) => PREFIX + what + ':' + (id || '');
+
+    // the saved answer, or null when there is none, it is unreadable or it is too old to show
+    function peek(what, id) {
+      if (NEVER[what]) return null;
+      let e; try { e = JSON.parse(st.get(key(what, id)) || 'null'); } catch (x) { return null; }
+      if (!e || typeof e.at !== 'number' || typeof e.json !== 'string' || now() - e.at > (MAX_AGE[what] || DEF_AGE)) return null;
+      let body; try { body = JSON.parse(e.json); } catch (x) { return null; }
+      return { body, at: e.at, json: e.json };
+    }
+    // keep one league per kind of answer; a full or blocked storage just means no cache
+    function store(what, id, json) {
+      const k = key(what, id), lead = PREFIX + what + ':';
+      try { st.keys().forEach(x => { if (x.startsWith(lead) && x !== k) st.remove(x); }); } catch (e) {}
+      try { st.set(k, JSON.stringify({ at: now(), json })); } catch (e) {}
+    }
+    async function fetchOne(what, id) {
+      const body = await fetcher(what, id);
+      if (NEVER[what]) return { body };
+      const json = JSON.stringify(body);
+      store(what, id, json);
+      return { body, json };
+    }
+    const live = async (what, id) => (await fetchOne(what, id)).body;
+
+    // specs = [[what, leagueId?], ...]. onCached(bodies, at) only if every piece is saved; onFresh(bodies, at, changed) after
+    // the live answers; onError(error, hadCached) if a live call fails (the cached view stays).
+    async function swr(specs, hooks) {
+      const hit = specs.map(s => peek(s[0], s[1])), had = hit.every(Boolean);
+      const fresh = Promise.all(specs.map(s => fetchOne(s[0], s[1]))); fresh.catch(() => {});   // started before drawing; handled below
+      if (had) await hooks.onCached(hit.map(h => h.body), Math.min.apply(null, hit.map(h => h.at)));
+      let res; try { res = await fresh; } catch (e) { await hooks.onError(e, had); return; }
+      await hooks.onFresh(res.map(r => r.body), now(), !had || res.some((r, i) => r.json !== hit[i].json));   // against what the page drew, not what storage holds now
+    }
+    return { peek, live, swr };
+  }
+
+  const api = { PREFIX, fxFetch, create };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FxCache = api;
+})(this);
+</script>
 <script>// In-season league calendar (2026-10-20): Fantrax league/roster/standings parsing, matchup periods, team-code mapping and
 // the expected games a roster plays in a window (from the daily tip-off times in sched_days.json).
 (function (root) {
@@ -1707,14 +1776,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
   let SS = LS.load(LS.local.get), box = [], fxPlayers = null, rosters = null, teamName = {}, fxTimer = null, fxWait = 0, loadSeq = 0;
   const cache = new Map();   // source rows and tables, by key
 
-  async function fxGet(what, id) {
-    let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
-    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
-    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
-    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
-    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
-    return body;
-  }
+  const FXC = FxCache.create({});   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
 
   // monthly box-score files (stats/box-YYYY-MM.json) from the season's first month to this month; missing months are skipped
@@ -1734,20 +1796,29 @@ tbody tr.mine:hover td{background:var(--sunk)}
     if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); draw(); return; }
     if (!lg) { sayHtml('Load a league in <a href="settings.html">Settings</a> to see owners and hide taken players.'); draw(); return; }
     say('Loading ' + (lg.name || lg.id) + ' from Fantrax…');
-    try {
-      const league = await fxGet('league', lg.id), ros = await fxGet('rosters', lg.id);
-      if (!fxPlayers) fxPlayers = await fxGet('players');
-      if (seq !== loadSeq) return;
-      const L = InL.parseLeague(league); L.teams.forEach(t => { teamName[t.id] = t.name; });
-      rosters = InL.parseRosters(ros); fxWait = 0; say('');
-    } catch (e) {
-      if (seq !== loadSeq) return;
-      $('retry').hidden = false;
-      if (e.message === 'nohost') say('Fantrax leagues load on the hosted site; owners are not shown here.', true);
-      else if (transient(e)) { fxWait = Math.min(120, fxWait ? fxWait * 2 : 10); say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true); fxTimer = setTimeout(() => { if (seq === loadSeq) loadLeague(); }, fxWait * 1000); }
-      else say(e.message, true);
-    }
-    draw();
+    let shown = false;
+    // owners from [league, rosters, players]; the table is drawn again from them
+    const apply = b => {
+      if (seq !== loadSeq) return false;
+      const L = InL.parseLeague(b[0]); teamName = {}; L.teams.forEach(t => { teamName[t.id] = t.name; });
+      rosters = InL.parseRosters(b[1]); fxPlayers = b[2]; owned.key = ''; fxWait = 0; draw(); return true;
+    };
+    await FXC.swr([['league', lg.id], ['rosters', lg.id], ['players']], {
+      onCached: b => { try { shown = apply(b); } catch (e) { shown = false; } },
+      onFresh: (b, at, changed) => {
+        if (seq !== loadSeq) return;
+        try { if (!shown || changed) shown = apply(b); } catch (e) { say(e.message, true); draw(); return; }
+        say('');
+      },
+      onError: e => {
+        if (seq !== loadSeq) return;
+        $('retry').hidden = false;
+        if (shown) { say('Couldn\'t refresh from Fantrax; showing the saved owners.', true); return; }
+        if (e.message === 'nohost') say('Fantrax leagues load on the hosted site; owners are not shown here.', true);
+        else if (transient(e)) { fxWait = Math.min(120, fxWait ? fxWait * 2 : 10); say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true); fxTimer = setTimeout(() => { if (seq === loadSeq) loadLeague(); }, fxWait * 1000); }
+        else say(e.message, true);
+        draw();
+      } });
   }
 
   const settings = () => SS.settings;
