@@ -4,7 +4,7 @@ Branch `yahoo-points-pr2`, worktree `../FantasyBBall-137b`, cut from origin/main
 
 ## State
 
-Built and committed, not pushed, no PR yet: Rankings and Team tabs in points mode.
+Built and committed, not pushed, no PR yet (reviewer fixes applied): Rankings and Team tabs in points mode.
 - `src/points_core.js` (FP of a line, variance with measured stat correlations, `engineView` = one FP total in category slot `FP_SLOT` 3 so `Engine.evaluate` runs unchanged, Win M = 100 x gainC[FP_SLOT]), `src/points_fit.js` (the correlation fit from logs3.csv), `Points.table` (Per game / Season / Mix), `Rankings.winStart` with `o.points`.
 - `engine.js` only gained exports and an output-neutral refactor (`simDraws` / `draftSims`, `p.gUse`, `PROJ_SD`, `VARS`, `perGameVar`); `engine_golden.json` is untouched and `category_golden.json` (new) pins Rankings tables, `buildContext` outputs and the Team matrix / module scores in categories.
 - Team: `TeamWin` takes `opts.points` (engine view cached per point values; the opponent memo and `team_view` keys carry the values), gain / module rows have `c` and `dCat` null in points, `pointsPerWeek`, matrix `ppw`; `Matchup.makeCtx({nightOf})` so a crowded night goes to the better points player (Matchup Analyzer never sets it).
@@ -18,13 +18,7 @@ D1 Team roster bottom row keeps "Team average (per slot)" with the points averag
 
 ## Next
 
-1. Reviewer should-fix items (each fix with a test that failed first), then rebuild with the full command (assets/ included):
-   - `src/tests/team_view.test.js` (~296): the cache test builds two `V.winJob`s directly and never goes through `createScorer`/`keyOf`; call `scorer.get` twice on the same ctx and state with different point values and assert the jobs differ.
-   - `src/tests/team_win.test.js` (~261): passes even if the `oppTeam` memo or `engCtx` ignored the weights; assert `matrix(sharedCtx, st, {points: B})` run after A equals `matrix(freshCtx, st, {points: B})`.
-   - `src/tests/browser/points_note.mjs` (~49): Rankings and Team left the "scoring switched in another tab, both ways" loop; add a categories<->points switch on both pages, and a point-value change on Team with a swap pending that checks the swap stays.
-   - `src/points_core.js` (~162): `pgVar` hands the raw line to `Eng.perGameVar`; a window row with `pts` undefined gives NaN variance and NaN Win M for the whole source. Pass the `statsOf` values (`Object.assign({}, l, s, {fgp, ftp})`) and test it.
-   - `src/points_core.js` (~230): Season uses gp, Mix uses g (scaled to 80 games), so early in the season Mix shows ~7x Season. Scale Mix by gp/g or say so in the note.
-   - `src/rankings.html` (~310): in points mode the note still opens "Win C / Win M are season-long" and the playoff-boost sentence says it scales Zscore and each category; reword both for points.
+1. Reviewer should-fix items: all six done (commit 4d9c5dc, pages rebuilt, 356 unit tests and the browser checks pass; the Rankings speed check is timing-flaky). pgVar passes statsOf values; Mix is scaled by gp/g so it stays on the Season scale; the Rankings note and playoff-boost wording follow points; new tests cover the scorer cache, a shared ctx across weights, and scoring switches on Rankings and Team (pending swap survives a point-value change). Nothing more from the review.
 2. Ledger: done and committed in the ledger worktree (`../FantasyBBall-ledger`, commit 5fda80b: IDEAS #137 row edited, new Open row #143, archive entry 137b, handoff line), NOT landed. If the reviewer fixes change the story, amend those there; land with `node .claude/scripts/ledger.mjs land` only on the user's "push".
 3. On "push": `git push -u origin yahoo-points-pr2`, PR against main (summary, tests, decisions), merge only on the user's word. Then Yahoo link (part 2) when Yahoo approves the API app.
 
