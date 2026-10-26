@@ -23,6 +23,6 @@ Open from the review (not fixed, decide with the user):
 
 ## Next
 
-1. Ask the user about the Trade Analyzer item above (keep KR for trades, or give the Trade Analyzer its own k).
+1. Decision (user, 2026-10-26): the Trade Analyzer should run Engine.evaluate (through TeamWin), not pairMatchup, and Team, Rankings and Trade should share one k (TeamWin.SHRINK, display only). Draft only after a preseason check and never where the Model pick reads. Recorded as ledger #147 (Open, in the ledger worktree). Until that lands the interim KR split in matchup_core stands. Plan it with the planner (hard area; analyst for the check).
 2. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`).
 3. On "push": push, PR, merge only on the user's word, then `ledger.mjs land` (ledger commit c447469 holds the #139 row, archive entry and #144-#146).
