@@ -24,6 +24,20 @@
     "xlsx": "off"
   },
   "permissions": {
+    "allow": [
+      "Bash(git fetch:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree list:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git show:*)",
+      "Bash(node .claude/scripts/branches.mjs:*)",
+      "Bash(node .claude/scripts/ledger.mjs next:*)",
+      "Bash(node .claude/scripts/ledger.mjs setup:*)",
+      "Bash(node --test:*)"
+    ],
     "ask": [
       "Bash(git push:*)",
       "Bash(gh pr merge:*)",
