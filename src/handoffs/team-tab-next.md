@@ -1,26 +1,45 @@
-# team-tab-next (Team tab #131 follow-ups; branch not created yet)
+# team-tab-next (Team tab #131 follow-ups, step 3; planned, no code yet)
 
-Start it with `git checkout -b team-tab-next origin/main`. Moved here unchanged from the main handoff, 2026-10-26.
+Branch `team-tab-next`, worktree `C:/Users/Fefe/Documents/FantasyBBall-tabnext`, created 2026-10-26 from `team-d3-swap` (not main), because step 3 edits the same Team tab code. **PR #45** (`team-d3-swap`: D3 trades, Source switch, Rankings D2, review fixes; 417 unit tests; pushed on the user's word, not yet merged) must merge first; then `git fetch && git rebase origin/main` here (the d3 commits drop out) and rebuild. The `FantasyBBall-d3` worktree is removed; the branch is on origin.
 
-## State
+## Done on the earlier steps
 
-**Team tab (#131, branch team-core, released 2026-10-26 with the logo wordmark; unreviewed since #138; spec docs/superpowers/specs/2026-10-25-team-tab-design.md, archive 131-131g and 138).** 2026-10-26 (#138): Win C / Win M now come from `Engine.evaluate` (no shrink, `Engine.entryVec` + one entry per team) with Plays % games for every team; Vs average = team - average player + him (average = Plays %-weighted mean line, games = total / 12; user spec). 272 unit + 78 browser checks pass; code and rebuilt pages committed on team-core. The shrink (#139, 0.6 / 0.75, `WinK.SHRINK` in `src/win_k.js`) merged 2026-10-26 (PR #37, with the Trade Analyzer on `TeamWin.leagueWin`, #147); follow-ups #144-#146 and #149 (IL on the Team tab) are in `IDEAS.md`.
+1 (D3 swap) and 2 (Rankings D2) are in PR #45. Browser checks pass except the known `rankings_page` 302 vs 303.
 
-## Next, in order (user decisions 2026-10-26)
+## Step 3: user requests (2026-10-26) and the planner's plan
 
-1. D3 swap: a candidate from an opponent leaves that team and that opponent receives the player I send out (for Vs average the average player; for a typed swap the sent-out players, into the vacated slots).
-2. Rankings Vs average from the same TeamWin code when a league is loaded (D2; Vs replacement and the no-league path unchanged; adapter in `rankings_core.js`, `rankings.html` needs SCHED_DAYS and L; test: same roster gives the same Vs average on both tabs). It must use `TeamWin` so it inherits the shrink k. **Hazard:** Rankings `winStart(..., { shrink })` already scales Win columns by `WinK.SHRINK`; the league path through `TeamWin` must not also take `o.shrink`, or the shrink is applied twice.
-3. The user's other requests: toggle per-game / season stats on the Team tab, auto-fill the top 12 into Active (decide by what: recommend Win M or Zscore, and how it treats Reserve / IL).
-4. Browser check, reviewer pass, then the PR (push only when the user says).
+User: (a) the Per game / Rest of season toggle (`#view`) should "also affect player values the same way it does for ranking/draft/trade-analyzer"; (b) auto-fill the top 12 into Active, ranked by **Win M**; (c) "neither eligible, top 12 players are already going into your active team, play% for players in reserve and IL should show 0%".
 
-## Other open
+Planner's plan (Opus, 2026-10-26), tests first in each step:
+1. `team_view.js` `sourceCtx(args, src, rows, fx, basis)`: 'pergame' copies the pool with every player's g = G0 (mean g of rostered players with g > 0), so `gamesLeft`, Plays % and `TeamWin.engCtx` follow; 'total' stays as today. View 'game' -> 'pergame', 'ros' -> 'total'.
+2. `team.html`: `ctxs` keyed `src|basis`, `#view` handler calls `srcCtx(); render()`, `mkZ` uses the basis (it hardcodes `'pergame'` now) and adds it to `ck`; show the "uncalibrated" warning in Per game (the shrink k was fitted on Season-like forecasts; the analyst should check k on a per-game ctx).
+3. `rankings.html` `d2For`: pass `ui.basis` to `TV.sourceCtx`, add it to `d2.key`, still no `shrink`; extend `rankings_team_parity.mjs` (Per game vs Per game, Season vs Rest of season).
+4. `team_view.js` pure `autoFill(state, score, n)`: non-IL players by score, top n Active, rest Reserve, IL untouched, via `Team.moveSlot` so `moves` is kept.
+5. Fill scorer ranks on a probe state with every non-IL player Active (a Reserve player's displayed Win M uses leftover games, so he could never be promoted); n = `ctx.L.maxPlayers || ctx.L.maxActive`; a "Fill Active" button makes one Changes entry that Undo restores.
+6. IL rows show Plays % 0%; update How it works and `rost-note`.
+The draft Model pick is not affected (no prize-equity backtest). Mix stays Rankings-only.
 
-- **#137** (Yahoo / points leagues): own branch `yahoo-points-137`, see `yahoo-points-137.md` if present, PR #30.
-- Tab overhaul, the rest: Rankings left of Draft, a collapsible How it works panel on every tab, hover tooltips like the Draft tab. #116 and #112 are merged. Best adds/plan on remaining games.
+## Waiting on the user (six decisions, asked at the end of the 2026-10-26 session)
+
+1. Should Win C / Win M follow the toggle (Rankings, Draft) or only Zscore (Trade Analyzer)? Planner: Win follows; the default view is Per game, so the Win numbers users see by default change and are uncalibrated.
+2. In Per game, do GL and Plays % follow too? Planner: yes (injured players then look healthy).
+3. "Neither eligible": (a) Reserve are candidates for Active, IL stays put (recommended), or (b) only Active players over the limit are trimmed to Reserve?
+4. What are `maxPlayers` and `maxActive` in the user's league (the "12")?
+5. "Reserve shows 0%" contradicts the model (Reserve fills nights Active leaves open); a display-only 0% would contradict the Win numbers. Do Reserve players score in the league? If not, that is a model change (COUNTED = active only) moving the Trade Analyzer and Rankings D2: own IDEAS row, own branch, analyst. Otherwise this branch ships only IL 0%.
+6. IL 0% conflicts with #149 (IL counted as healthy, Open). Confirm 0% for now.
+
+## Next
+
+1. Get the six decisions above, then build the plan test-first, rebuild with `node .claude/scripts/build.mjs`, run unit + browser (`team_page`, `inseason_page`, `rankings_page` [known 302 vs 303], `rankings_team_parity`), `reviewer` (effort high), PR on the user's word.
+
+## Hazards
+
+- A g change in only one of `segGames`, `gamesLeft` or `engCtx` gives believable but inconsistent Win numbers; step 1's tests must cover all three.
+- No double shrink: `d2For` passes no `shrink`; the fill ranks already-shrunk Win M (order unchanged).
+- Rebase after PR #45 merges; built pages and assets conflict: rebuild instead of resolving by hand.
+- Ledger: no IDEAS row for this step yet; add through the ledger worktree (`node .claude/scripts/ledger.mjs next`).
 
 ## PC commands
 
-- Browser check: copy `src/tests/browser/team_page.mjs` to the Playwright folder (`$TEMP/claude/.../17acf9ec-.../scratchpad/pw`), `REPO=C:/Users/Fefe/Documents/FantasyBBall node team_page.mjs`, repo root served on :8765 (`python -m http.server 8765`).
-- Unit tests: `node --test src/tests/*.test.js`.
-
-On resume: `git checkout $(git merge-base HEAD origin/main) -- src/SESSION_HANDOFF.md`, then merge origin/main.
+- Browser check: copy `src/tests/browser/*.mjs` to the Playwright folder (`$TEMP/claude/c--Users-Fefe-Documents-FantasyBBall/17acf9ec-27b6-4489-8c20-2f1a7575e2cd/scratchpad/pw`), `REPO=<worktree> node X.mjs`, worktree served with `python -m http.server 8765 --directory <worktree>`; kill stale servers on 8765 first.
+- Unit tests from outside the worktree: `node --test C:/Users/Fefe/Documents/FantasyBBall-tabnext/src/tests/*.test.js`.
