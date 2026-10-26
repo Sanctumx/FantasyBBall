@@ -131,6 +131,79 @@ const before = {};
   ok(/Plays %/.test(how) && /average week|An average week/.test(how) && !/Model pick/.test(how), 'How it works text is specific to the Team tab');
   await ctx.close(); }
 
+// the player list (#131 PR 4b): scoring, filters, click to add, drag to swap, weights re-sort, layout
+const listReady = p => p.waitForFunction(() => /players/.test(document.getElementById('lmeta').textContent) && document.querySelectorAll('#ltable tbody tr[data-key]').length > 0, null, { timeout: 90000 });
+const lkeys = p => p.$$eval('#ltable tbody tr[data-key]', r => r.map(x => x.dataset.key));
+const lchg = p => p.$$eval('#ltable tbody tr[data-key] td:last-child', t => t.map(e => parseFloat(e.textContent.replace('−', '-'))));
+{ const { p, errs, ctx } = await open();
+  await scored(p); await listReady(p);
+  const rows0 = await lkeys(p), chg0 = await lchg(p);
+  ok(rows0.length === 50, 'list shows the top 50 (' + rows0.length + ')');
+  ok(chg0.every((v, i) => i === 0 || chg0[i - 1] >= v - 1e-9), 'the Change column never rises down the list');
+  ok(await p.$eval('#lmore', b => !b.hidden), 'Show more is offered');
+  await p.click('#lmore'); await p.waitForTimeout(100);
+  ok((await lkeys(p)).length === 100, 'Show more adds 50 rows');
+  ok(await p.$eval('#lvs', s => s.value) === 'rep', 'the list defaults to vs replacement');
+  // roster first: its Win cells fill without waiting for the list
+  const cards = await p.textContent('#cards');
+  ok(/Team Zscore/.test(cards) && /Win C/.test(cards) && /Win M/.test(cards) && /was/.test(cards), 'Old vs New cards sit in the swap panel');
+  // vs average changes the numbers and persists
+  await p.selectOption('#lvs', 'avg'); await listReady(p); await p.waitForFunction(() => !/Scoring/.test(document.getElementById('lmeta').textContent), null, { timeout: 90000 });
+  ok((await lchg(p)).join() !== chg0.join(), 'vs average changes the list numbers');
+  ok(await p.evaluate(() => JSON.parse(localStorage.getItem('courtside-team-v1')).listVs) === 'avg', 'the dropdown is remembered');
+  ok((await winCol(p)).join() === before.win.join(), 'the roster table stays vs average (unchanged by the list dropdown)');
+  await p.selectOption('#lvs', 'rep'); await p.waitForFunction(() => !/Scoring/.test(document.getElementById('lmeta').textContent), null, { timeout: 90000 });
+  // owner filter and search
+  await p.selectOption('#lown', 'fa'); await p.waitForTimeout(100);
+  ok((await p.$$eval('#ltable tbody tr[data-key] td:nth-child(2)', t => t.every(e => /Free agent|Sent out/.test(e.textContent)))), 'the Free agents filter shows only free agents');
+  await p.selectOption('#lown', 'me'); await p.waitForTimeout(100);
+  ok((await lkeys(p)).length > 0 && (await p.$$eval('#ltable tbody tr[data-key] td:nth-child(2)', t => t.every(e => /^You/.test(e.textContent)))), 'My roster filter shows only my players');
+  await p.selectOption('#lown', 'all');
+  const nm = await p.$eval('#ltable tbody tr[data-key] td.l', e => e.firstChild.textContent);
+  await p.fill('#lq', nm.slice(0, 5).toUpperCase()); await p.waitForTimeout(100);
+  const sk = await lkeys(p);
+  ok(sk.length >= 1 && sk.length < 50 && sk.includes(rows0[0]), 'search narrows the list');
+  await p.fill('#lq', '');
+  // a weight of 0 re-sorts the list but leaves each player's change alone
+  const byKey = async () => Object.fromEntries((await lkeys(p)).map((k, i) => [k, i])), chgMap = async () => { const k = await lkeys(p), c = await lchg(p); return Object.fromEntries(k.map((x, i) => [x, c[i]])); };
+  await p.selectOption('#lown', 'all'); await p.waitForTimeout(100);
+  const order0 = (await lkeys(p)).join(), map0 = await chgMap();
+  await p.click('details.wts summary');
+  await p.$eval('#wgrid input[data-c="3"]', i => { i.value = '0'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await p.waitForTimeout(200);
+  const map1 = await chgMap();
+  ok((await lkeys(p)).join() !== order0, 'a weight of 0 re-orders the list');
+  ok(Object.keys(map1).filter(k => k in map0).every(k => map1[k] === map0[k]), 'the real change per player is unchanged by weights');
+  await p.click('#wreset'); await p.waitForTimeout(200);
+  ok((await lkeys(p)).join() === order0, 'Reset weights restores the list order');
+  // click: a free agent / other team's player goes to Bring in, mine to Send out
+  await p.click('#ltable tbody tr[data-key]:not([data-own="1"])'); await p.waitForTimeout(50);
+  ok((await p.$$eval('#in-chips li', l => l.length)) === 1, 'clicking a list row adds him to the Bring in chips');
+  await p.selectOption('#lown', 'me'); await p.click('#ltable tbody tr[data-key]'); await p.waitForTimeout(50);
+  ok((await p.$$eval('#out-chips li', l => l.length)) === 1, 'clicking one of my players adds him to Send out');
+  await p.selectOption('#lown', 'all');
+  // drag onto a roster row: 1-for-1 into that slot, same roster size
+  const inKey = rows0.find(k => !before.keys.includes(k)), target = before.keys[0];
+  const slotOf = k => p.$eval('select.slot[data-key="' + k + '"]', s => s.value);
+  const t0 = await slotOf(target);
+  await p.dragAndDrop('#ltable tr[data-key="' + inKey + '"]', '#roster tr[data-key="' + target + '"]'); await scored(p);
+  ok((await keys(p)).length === before.keys.length && !(await keys(p)).includes(target) && (await slotOf(inKey)) === t0, 'dragging a list row onto a roster row swaps him into that slot (same roster size)');
+  await listReady(p);
+  await p.click('#reset'); await scored(p);
+  // drag onto a group header: he joins that group
+  await p.dragAndDrop('#ltable tr[data-key="' + inKey + '"]', 'tr.grp[data-slot="bench"]'); await scored(p);
+  ok((await keys(p)).length === before.keys.length + 1 && (await slotOf(inKey)) === 'bench', 'dropping a list row on a group header brings him in without sending anyone out');
+  await p.click('#reset'); await scored(p);
+  ok(errs.length === 0, 'list: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+// layout: list right of the roster at 1440 px, below it at 1200 px
+for (const [w, side] of [[1440, true], [1200, false]]) {
+  const { p, errs, ctx } = await open({ vp: { width: w, height: 900 } }); await scored(p);
+  const pos = await p.evaluate(() => { const a = document.getElementById('roster').getBoundingClientRect(), l = document.getElementById('list').getBoundingClientRect(); return { rightOf: l.left >= a.right - 1, below: l.top >= a.bottom - 1 }; });
+  ok(side ? pos.rightOf : pos.below, 'width ' + w + ': the list sits ' + (side ? 'right of' : 'below') + ' the roster');
+  ok(errs.length === 0, 'width ' + w + ': no page errors');
+  await ctx.close(); }
+
 // phone width: no horizontal page scroll
 { const { p, errs, ctx } = await open({ vp: { width: 390, height: 800 } });
   await scored(p);
