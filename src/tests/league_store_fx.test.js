@@ -42,3 +42,9 @@ test('sameLeague compares the effective lineup, so a missing luFx that matches t
   assert.strictEqual(S.sameLeague(base, Object.assign({}, base, { luFx: SLOTS })), false);
   assert.strictEqual(S.sameLeague(base, Object.assign({}, base, { teams: 12 })), false);
 });
+
+test('Load keeps points scoring and point values', () => {
+  const before = Object.assign({}, S.LEAGUE_DEF, { scoring: 'points', pointVals: Object.assign({}, S.LEAGUE_DEF.pointVals, { to: -1 }) });
+  const r = S.applyFantrax(before, FXL);
+  assert.deepStrictEqual([r.settings.scoring, r.settings.pointVals.to], ['points', -1]);
+});

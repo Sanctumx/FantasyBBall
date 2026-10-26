@@ -248,7 +248,7 @@ tr.lrow{cursor:pointer}
 <script src="assets/sched_days.72a6a842.js"></script>
 <script src="assets/engine.a0107795.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.eb1e4311.js"></script>
+<script src="assets/store.7910c1ad.js"></script>
 <script src="assets/fxcache.b51ac615.js"></script>
 <script src="assets/team_mods.57aa11c2.js"></script>
 <script>
@@ -288,6 +288,7 @@ tr.lrow{cursor:pointer}
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer);
     $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; pool = null; ctx = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
     say('Loading the league from Fantrax…');
     const stats = loadStats(); let shown = false;
@@ -328,6 +329,12 @@ tr.lrow{cursor:pointer}
       } });
   }
 
+  // scoring switched in another tab: the page follows without a reload
+  window.addEventListener('storage', e => {
+    if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings); SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) load();
+  });
   const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
   const winOpts = () => ({ cats: nCats(), baseline: 'avg' });
   const teamName = id => { const t = L.teams.find(q => q.id === id); return t ? t.name : id; };

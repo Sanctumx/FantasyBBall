@@ -303,6 +303,7 @@ tr.click{cursor:pointer}
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
     memo.clear(); memoGen++; $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (LS.isPoints(SS.settings)) { ui.leagueId = null; sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { ui.leagueId = null; sayHtml(LS.NO_LEAGUE_HTML); return; }
     const id = ui.leagueId = lg.id;
     say('Loading the league from Fantrax…');
@@ -647,8 +648,8 @@ tr.click{cursor:pointer}
   // Settings changed in another tab (a different league, or other settings): load again
   window.addEventListener('storage', e => {   // reload only for another league or other settings
     if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
-    const was = SS.league && SS.league.id; SS = LS.load(LS.local.get);
-    if ((SS.league && SS.league.id) !== was) load();
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings); SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) load();
   });
   $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });

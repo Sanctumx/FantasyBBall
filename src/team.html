@@ -275,6 +275,7 @@ tr.lrow{cursor:pointer}
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer);
     $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; pool = null; ctx = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
     say('Loading the league from Fantrax…');
     const stats = loadStats(); let shown = false;
@@ -315,6 +316,12 @@ tr.lrow{cursor:pointer}
       } });
   }
 
+  // scoring switched in another tab: the page follows without a reload
+  window.addEventListener('storage', e => {
+    if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings); SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) load();
+  });
   const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
   const winOpts = () => ({ cats: nCats(), baseline: 'avg' });
   const teamName = id => { const t = L.teams.find(q => q.id === id); return t ? t.name : id; };

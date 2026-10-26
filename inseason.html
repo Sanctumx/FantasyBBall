@@ -245,6 +245,8 @@ tr.click{cursor:pointer}
       <p>Trade Win M is your average chance over the remaining regular-season matchups against the real opponents, with both rosters changed; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
       <h4>Rankings</h4>
       <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, as the gain over a replacement-level player (Win vs: Average player subtracts an average player on your roster instead, or an average pool player when no team is saved in Settings). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
+      <h4>Points leagues</h4>
+      <p>Settings can score a league in fantasy points (a value per stat). Draft, League, Matchup, Trade and Rankings don't value points leagues yet and say so; nothing is calculated from the category model for a points league.</p>
       <h4>Shrinkage and missing projections</h4>
       <p>Chances are pulled toward 50% (matchup by 0.72, each category by 0.82) because backtests on 2024-26 weeks showed projections alone are overconfident. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
     </section>
@@ -338,7 +340,7 @@ tr.click{cursor:pointer}
 <script src="assets/sched_days.72a6a842.js"></script>
 <script src="assets/engine.a0107795.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.eb1e4311.js"></script>
+<script src="assets/store.7910c1ad.js"></script>
 <script src="assets/fxcache.b51ac615.js"></script>
 <script src="assets/inseason_mods.efb1f2d9.js"></script>
 <script>
@@ -395,6 +397,7 @@ tr.click{cursor:pointer}
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
     memo.clear(); memoGen++; $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (LS.isPoints(SS.settings)) { ui.leagueId = null; sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { ui.leagueId = null; sayHtml(LS.NO_LEAGUE_HTML); return; }
     const id = ui.leagueId = lg.id;
     say('Loading the league from Fantrax…');
@@ -739,8 +742,8 @@ tr.click{cursor:pointer}
   // Settings changed in another tab (a different league, or other settings): load again
   window.addEventListener('storage', e => {   // reload only for another league or other settings
     if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
-    const was = SS.league && SS.league.id; SS = LS.load(LS.local.get);
-    if ((SS.league && SS.league.id) !== was) load();
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings); SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) load();
   });
   $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });

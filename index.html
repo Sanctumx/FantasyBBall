@@ -365,6 +365,8 @@ label.f select,label.f input{font-weight:400}
       <p>Trade Win M is your average chance over the remaining regular-season matchups against the real opponents, with both rosters changed; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
       <h4>Rankings</h4>
       <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, as the gain over a replacement-level player (Win vs: Average player subtracts an average player on your roster instead, or an average pool player when no team is saved in Settings). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
+      <h4>Points leagues</h4>
+      <p>Settings can score a league in fantasy points (a value per stat). Draft, League, Matchup, Trade and Rankings don't value points leagues yet and say so; nothing is calculated from the category model for a points league.</p>
       <h4>Shrinkage and missing projections</h4>
       <p>Chances are pulled toward 50% (matchup by 0.72, each category by 0.82) because backtests on 2024-26 weeks showed projections alone are overconfident. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
     </section>
@@ -382,6 +384,8 @@ label.f select,label.f input{font-weight:400}
     </div>
     <p class="hint" id="lg-sum"></p>
   </details>
+
+  <section class="panel" id="pts-note" style="display:none" role="status"></section>
 
   <section class="panel" id="drafts">
     <h2>Saved drafts <span class="hint" id="curDraft" style="margin:0;text-transform:none;letter-spacing:0;font:400 .8rem var(--f-body)"></span></h2>
@@ -498,7 +502,7 @@ label.f select,label.f input{font-weight:400}
 <script src="assets/sched.42cc8c3b.js"></script>
 <script src="assets/engine.a0107795.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.eb1e4311.js"></script>
+<script src="assets/store.7910c1ad.js"></script>
 <script>
 (function(){
 'use strict';
@@ -510,6 +514,7 @@ const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
 // League keys (teams, roster, scoring, cats, playoffs, IL, lineup) come from the shared store's defaults
 const DEF = Object.assign({ b2b: 'off', b2bOv: {}, field: 'easy', puntMode: 'off', puntLock: '', stats: 'raw', poBoost: 'off', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], shown: 0, orderBy: 'z', edgeBy: 'z', zdrop: 0, slot: 1, order: '3rr', adpSrc: 'ftx', basis: 'pergame', proj: 'avg', zdropPct: 0, zScale: 'classic', fieldZ: 'std', basisV: 12 }, LS.LEAGUE_DEF);
+delete DEF.pointVals;   // point values live in the league settings, never in a draft or the shared defaults
 let cfg = Object.assign({}, DEF, { catW: DEF.catW.slice() }), picks = [], log = [];
 // Saved settings are the user's: defaults (DEF) apply only on a first visit, and a new version of the page never changes a
 // saved choice (user rule, 2026-10-18). migrate() only repairs what a saved board can't hold any more: removed options and
@@ -676,10 +681,10 @@ function onSetup(e) {
   if (id === 's-slot') recompute(); else rebuild();
 }
 ['s-slot','s-order','s-basis','s-proj'].forEach(id => $(id).addEventListener('change', onSetup));
-const SC_NAME = { roto: 'Roto', h2h: 'H2H each category', most: 'H2H most categories' };
+const SC_NAME = { roto: 'Roto', h2h: 'H2H each category', most: 'H2H most categories', points: 'H2H points' };
 function lgSummary() {
   const lg = SS.league;
-  $('lg-sum').innerHTML = 'League: ' + (lg && lg.name ? esc(lg.name) + ' · ' : '') + cfg.teams + ' teams · roster ' + cfg.roster + ' · ' + cfg.cats + '-cat ' + SC_NAME[cfg.scoring] + ' · IL ' + cfg.ilSpots + ' · <a href="settings.html">Edit in Settings</a>';
+  $('lg-sum').innerHTML = 'League: ' + (lg && lg.name ? esc(lg.name) + ' · ' : '') + cfg.teams + ' teams · roster ' + cfg.roster + ' · ' + (cfg.scoring === 'points' ? '' : cfg.cats + '-cat ') + SC_NAME[cfg.scoring] + ' · IL ' + cfg.ilSpots + ' · <a href="settings.html">Edit in Settings</a>';
 }
 // Settings changed in another tab: take the new league settings now (a smaller league drops the extra picks, as before)
 window.addEventListener('storage', e => { if (e.key !== LS.KEYS.settings) return; SS = LS.load(LS.local.get); overlay(cfg, SS.settings); fit(); if (fxTimer && (!fxLeague() || !fx || fx.leagueId !== fxLeague().id)) fxStop('Stopped syncing: the league loaded in Settings changed.'); syncSetup(); renderFxLeague(); rebuild(); });
@@ -718,7 +723,14 @@ function buildModel() {
   PM.forEach(p => { p.poMult = 1; p.poEdge = 0; });
   ctxM = E.buildContext(PM, mcfg());
 }
-function rebuild() { applyProj(); ctx = E.buildContext(P, cfg); buildModel(); recompute(); }
+// Points leagues (#137): the board has no points mode yet, so it shows a note and the engine does not run
+function pointsGuard() {
+  const pts = LS.isPoints(SS.settings);
+  $('pts-note').style.display = pts ? '' : 'none'; if (pts) $('pts-note').innerHTML = LS.POINTS_NOTE_HTML;
+  ['sync', 'clock', 'mine', 'teams', 'list'].forEach(id => { $(id).style.display = pts ? 'none' : ''; });
+  return pts;
+}
+function rebuild() { if (pointsGuard()) return; applyProj(); ctx = E.buildContext(P, cfg); buildModel(); recompute(); }
 // Playoff boost: multiplier = 1 + strength × (his playoff games ÷ league average − 1), kept within ×0.5–×1.5
 function setPlayoffMult() {
   const lam = { light: 0.25, medium: 0.5, strong: 0.75, vstrong: 1 }[cfg.poBoost] || 0;
@@ -731,6 +743,7 @@ function setPlayoffMult() {
 // On your turn the Model pick weighs value early and Win M + look-ahead after (engine slidePick): run after the first render so the board stays quick.
 let look2Timer = null;
 function recompute() {
+  if (pointsGuard()) return;
   setPlayoffMult(); res = E.evaluate(P, ctx, cfg, { picks, owner: ownerV() });
   if (modelSame() !== !PM || (PM && PM.length !== P.length)) buildModel();   // e.g. Playoff boost changed (it doesn't rebuild)
   if (PM) res.modelPick = E.evaluate(PM, ctxM, mcfg(), { picks, owner: ownerV() }).modelPick;
@@ -997,7 +1010,7 @@ $('sv-list').addEventListener('click', e => {
   }
   if (lb) {
     const d = list.find(x => x.name === lb.dataset.load); if (!d) return;
-    const ds = LS.normalize(Object.assign({}, LS.LEAGUE_DEF, LS.LEAGUE_KEYS.reduce((o, k) => { if (d.cfg && k in d.cfg) o[k] = d.cfg[k]; return o; }, {})));
+    const ds = LS.draftSettings(SS.settings, d.cfg);
     const other = !LS.sameLeague(ds, SS.settings);
     const replaces = picks.some(v => v != null) && curName !== d.name;
     if ((replaces || other) && !arm('load:' + d.name, lb, other ? 'Switch settings?' : 'Replace?')) {
@@ -1450,7 +1463,7 @@ function playerFirst() {
     if (oc) tr.insertBefore(oc, pc.nextSibling);
   }
 }
-try { PHONE.addEventListener('change', () => renderTable()); } catch (e) {}
+try { PHONE.addEventListener('change', () => { if (res && !LS.isPoints(SS.settings)) renderTable(); }); } catch (e) {}
 
 fit(); syncSetup(); renderFx(); renderSaves(); renderFxLeague();
 // a saved draft's sync resumes only while its league is the one loaded in Settings

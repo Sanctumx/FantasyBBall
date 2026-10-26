@@ -1089,8 +1089,13 @@ tbody tr.mine:hover td{background:var(--sunk)}
   'use strict';
   const KEYS = { settings: 'courtside-settings-v1', board: 'courtside-board-v1', leagues: 'courtside-leagues-v1', inseason: 'courtside-inseason-v1' };
   // league settings only; slot, order and draft field belong to a draft and stay on the Draft page
-  const LEAGUE_DEF = { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2 };
-  const LEAGUE_KEYS = Object.keys(LEAGUE_DEF).concat('luFx');
+  // Points leagues (2026-10-26, #137): fantasy points per stat, kept with the other league settings; a draft never stores them
+  const POINT_STATS = ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'tpm', 'fgm', 'fga', 'ftm', 'fta'];
+  const POINT_LABELS = { pts: 'Points', reb: 'Rebounds', ast: 'Assists', stl: 'Steals', blk: 'Blocks', to: 'Turnovers', tpm: '3-pointers made', fgm: 'FG made', fga: 'FG attempted', ftm: 'FT made', fta: 'FT attempted' };
+  const PT_MAX = 100;
+  const LEAGUE_DEF = { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2,
+    pointVals: POINT_STATS.reduce((o, k) => { o[k] = 0; return o; }, {}) };
+  const LEAGUE_KEYS = Object.keys(LEAGUE_DEF).filter(k => k !== 'pointVals').concat('luFx');
   const LU_MAX = { luC: 4, luG: 6, luF: 6, luGC: 3, luFC: 3, luU: 10 };
   // Lineup slots: which positions each starting slot takes (U = Util, anyone)
   const SLOT_OK = { PG: ['PG'], SG: ['SG'], SF: ['SF'], PF: ['PF'], C: ['C'], G: ['PG', 'SG'], F: ['SF', 'PF'], U: ['PG', 'SG', 'SF', 'PF', 'C'] };
@@ -1115,10 +1120,12 @@ tbody tr.mine:hover td{background:var(--sunk)}
     s = s || {};
     const o = {
       teams: intIn(s.teams, 4, 20, LEAGUE_DEF.teams), roster: intIn(s.roster, 8, 25, LEAGUE_DEF.roster),
-      scoring: oneOf(s.scoring, ['roto', 'h2h', 'most'], LEAGUE_DEF.scoring), cats: oneOf(s.cats, [8, 9], LEAGUE_DEF.cats),
+      scoring: oneOf(s.scoring, ['roto', 'h2h', 'most', 'points'], LEAGUE_DEF.scoring), cats: oneOf(s.cats, [8, 9], LEAGUE_DEF.cats),
       asb: oneOf(s.asb, ['merged', 'separate'], LEAGUE_DEF.asb), poStart: intIn(s.poStart, 10, 25, LEAGUE_DEF.poStart),
       poFmt: oneOf(s.poFmt, ['1-1-1', '1-1-2', '1-2-2', '2-2-2'], LEAGUE_DEF.poFmt), ilSpots: intIn(s.ilSpots, 0, 4, LEAGUE_DEF.ilSpots),
-      luSplit: typeof s.luSplit === 'boolean' ? s.luSplit : LEAGUE_DEF.luSplit };
+      luSplit: typeof s.luSplit === 'boolean' ? s.luSplit : LEAGUE_DEF.luSplit, pointVals: {} };
+    const pv = s.pointVals && typeof s.pointVals === 'object' ? s.pointVals : {};
+    POINT_STATS.forEach(k => { o.pointVals[k] = typeof pv[k] === 'number' && isFinite(pv[k]) && Math.abs(pv[k]) <= PT_MAX ? pv[k] : 0; });
     Object.keys(LU_MAX).forEach(k => { o[k] = intIn(s[k], 0, LU_MAX[k], LEAGUE_DEF[k]); });
     if (Array.isArray(s.luFx) && s.luFx.length && s.luFx.every(x => typeof x === 'string' && slotElig(x).length)) o.luFx = s.luFx.slice();
     return o;
@@ -1141,6 +1148,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
     // a name the user typed (custom) is kept when Fantrax sends its own on reconnect
     const keep = i >= 0 && l[i].custom;
     const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
+    if (i >= 0 && l[i].scoring) { entry.scoring = l[i].scoring; entry.pointVals = l[i].pointVals; }
     if (i >= 0) l[i] = entry; else l.push(entry);
     set(KEYS.leagues, JSON.stringify(l));
   }
@@ -1149,6 +1157,16 @@ tbody tr.mine:hover td{background:var(--sunk)}
     l[i] = Object.assign({}, l[i], { name, custom: true }); set(KEYS.leagues, JSON.stringify(l));
   }
   const forgetLeague = (get, set, id) => set(KEYS.leagues, JSON.stringify(readLeagues(get).filter(x => x.id !== id)));
+  // scoring and point values belong to the league: kept on its saved record, restored on Load (a record from before this is category scoring)
+  function leagueScoring(get, id) {
+    const x = readLeagues(get).find(y => y.id === id); if (!x) return null;
+    const n = normalize(Object.assign({}, LEAGUE_DEF, { scoring: x.scoring, pointVals: x.pointVals }));
+    return { scoring: n.scoring, pointVals: n.pointVals };
+  }
+  function setLeagueScoring(get, set, id, settings) {
+    const l = readLeagues(get), i = l.findIndex(x => x.id === id); if (i < 0) return;
+    l[i] = Object.assign({}, l[i], { scoring: settings.scoring, pointVals: settings.pointVals }); set(KEYS.leagues, JSON.stringify(l));
+  }
   const defaultTeam = (get, id) => { const x = readLeagues(get).find(y => y.id === id); return x && x.myTeam != null ? x.myTeam : null; };
   // the team a tab shows: its own remembered pick, else the Settings default, else the first team
   const pickTeam = (remembered, ids, fallback) => ids.includes(remembered) ? remembered : ids.includes(fallback) ? fallback : ids[0];
@@ -1246,8 +1264,12 @@ tbody tr.mine:hover td{background:var(--sunk)}
     return { order, items, skipped, error: null };
   }
 
+  const isPoints = s => !!s && s.scoring === 'points';
+  // a saved draft's league keys over the defaults; the point values stay the league's
+  const draftSettings = (current, cfg) => normalize(Object.assign({}, LEAGUE_DEF, LEAGUE_KEYS.reduce((o, k) => { if (cfg && k in cfg) o[k] = cfg[k]; return o; }, {}), { pointVals: current && current.pointVals }));
+  const POINTS_NOTE_HTML = 'Points leagues aren\'t supported on this tab yet. Scoring is set to points in <a href="settings.html">Settings</a>.';
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
-  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local,
+  const api = { leagueScoring, setLeagueScoring, KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
     fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
@@ -1771,6 +1793,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
   // the league loaded in Settings: owners come from its current rosters; the table works without it
   async function loadLeague() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); rosters = null; teamName = {}; owned.key = ''; $('retry').hidden = true;
+    if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); draw(); return; }
     if (!lg) { sayHtml('Load a league in <a href="settings.html">Settings</a> to see owners and hide taken players.'); draw(); return; }
     say('Loading ' + (lg.name || lg.id) + ' from Fantrax…');
     let shown = false;
@@ -1873,6 +1896,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
 
   function draw() {
     const rows = sourceRows(), n = $('note');
+    if (LS.isPoints(SS.settings)) { $('tbl').innerHTML = ''; n.textContent = ''; return; }
     fillTeams(); $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
     if (WINDAYS[ui.src] && !windowOf().rows.length) { $('tbl').innerHTML = ''; n.textContent = 'No games in the box-score files yet; the table fills in as the season is played.'; return; }
     const tab0 = tableFor(rows), tab = R.withPlayoffs(tab0, rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
@@ -1937,8 +1961,8 @@ tbody tr.mine:hover td{background:var(--sunk)}
     save(); draw();
   });
   window.addEventListener('storage', () => {
-    const was = SS.league && SS.league.id, s0 = JSON.stringify(SS.settings), me0 = was ? LS.defaultTeam(LS.local.get, was) : null; SS = LS.load(LS.local.get);
-    if ((SS.league && SS.league.id) !== was) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings), s0 = JSON.stringify(SS.settings), me0 = was ? LS.defaultTeam(LS.local.get, was) : null; SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
   });
   sync();
   loadBox().then(b => { box = b; draw(); loadLeague(); });
