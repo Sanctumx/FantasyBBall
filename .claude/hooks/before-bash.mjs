@@ -4,19 +4,21 @@
 import { readFileSync } from 'node:fs';
 
 const RULES = [
-  [/(^|&&|;|\|\|)\s*cd\s/, 'a `cd` prefix: run from the repo root, use absolute paths, or `git -C <dir>` for another worktree'],
+  [/(^|[;&|\n])\s*cd\s/, 'a `cd` prefix: run from the repo root, use absolute paths, or `git -C <dir>` for another worktree'],
   [/\bsed\s+(-[a-zA-Z]*i|--in-place)/, '`sed -i`: change the file with the Edit tool'],
   [/\bcat\s+>>?\s*\S+\s*<</, 'a `cat > file <<EOF` write: use the Write tool'],
-  [/\b(python3?|node|perl)\s+-\s*<<[\s\S]*(writeFile|\.write\(|open\([^)]*['"][wa]|\.replace\(|re\.sub|\.sub\()/, 'a heredoc patch script: use the Edit/Write tools'],
+  [/\bcat\s*<<-?\s*['"]?\w+['"]?\s*>>?\s*\S+/, 'a `cat <<EOF > file` write: use the Write tool'],
+  [/\b(python3?|node|perl)\s*(-\s*)?<<[\s\S]*(writeFile|\.write\(|write_text|write_bytes|open\([^)]*['"][wa])/, 'a heredoc patch script: use the Edit/Write tools'],
 ];
 
 let input = {};
 try { input = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { process.exit(0); }
 const cmd = input.tool_input && input.tool_input.command;
 if (!cmd || process.env.ALLOW_BASH_PATTERNS === '1') process.exit(0);
-// A commit message may name a blocked pattern; drop its quoted text (and heredoc body) so only the command itself is checked.
+// A commit message may name a blocked pattern; drop the message argument (and its heredoc body) so only the command itself is
+// checked. Other quoted text on a commit line stays checked, so `git commit -m x; bash -c "sed -i ..."` is still blocked.
 const text = /\bgit\s+commit\b/.test(cmd)
-  ? cmd.replace(/<<-?\s*'?(\w+)'?[\s\S]*?\n\s*\1\b/g, '').replace(/"[^"]*"|'[^']*'/g, '""')
+  ? cmd.replace(/<<-?\s*'?(\w+)'?[\s\S]*?\n\s*\1\b/g, '').replace(/(\s-[a-zA-Z]*m|\s--message)([\s=]+)("[^"]*"|'[^']*'|[^\s;&|]+)/g, '$1 ""')
   : cmd;
 const hit = RULES.find(([re]) => re.test(text));
 if (!hit) process.exit(0);
