@@ -65,6 +65,50 @@
     return new Map([...best].map(([pid, v]) => [pid, { owner: v.owner, slot: v.slot }]));
   }
 
+  // ---- sources (shared by the Rankings and Team tabs, 2026-10-26): the lines a player is judged on ----
+  const SOURCES = ['season', 'w7', 'w14', 'w30', 'avg', 'bbm', 'hs'], WINDAYS = { season: 400, w7: 7, w14: 14, w30: 30 };
+  function sourceRows(src, PLAYERS, box) { return WINDAYS[src] ? windowSource(box, WINDAYS[src], PLAYERS).rows : projSource(PLAYERS, src); }
+
+  // monthly box-score files (stats/box-YYYY-MM.json) from the season's first month to this month; missing months are skipped
+  async function loadBox(fetchFn, now) {
+    const out = [], d = now || new Date(); let y = 2026, m = 10;
+    while (y < d.getFullYear() || (y === d.getFullYear() && m <= d.getMonth() + 1)) {
+      try { const r = await fetchFn('stats/box-' + y + '-' + String(m).padStart(2, '0') + '.json', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); if (j && j.games) out.push(j); } } catch (e) {}
+      if (++m > 12) { m = 1; y++; }
+    }
+    return out;
+  }
+
+  // which source row is which Fantrax player: -> { byKey: Map key -> row, byPid: Map row pid -> key }. Projection rows go by the pool player's
+  // pid; box rows by name and team as ownersOf does, each row to one player (the rostered one, then the one whose team matches).
+  function matchRows(src, rows, pool, fxPlayers) {
+    const byKey = new Map(), byPid = new Map();
+    if (!WINDAYS[src]) {
+      const row = new Map(rows.map(r => [r.pid, r]));
+      pool.players.forEach(pp => { if (pp.pid != null && row.has(pp.pid)) { byKey.set(pp.key, row.get(pp.pid)); byPid.set(pp.pid, pp.key); } });
+      return { byKey, byPid };
+    }
+    const list = rows.map(r => ({ n: r.n, t: r.t, id: r.pid })), rowOf = new Map(rows.map(r => [r.pid, r])), best = new Map();
+    pool.players.forEach(pp => {
+      const info = (fxPlayers && fxPlayers[pp.key]) || { name: pp.n, team: pp.t }, m = InPlayers.matchTo(list, InPlayers.OVERRIDES.fx[pp.key] || info.name, info.team); if (!m) return;
+      const score = (pp.owner ? 2 : 0) + (info.team && InLeague.toProjTeam(info.team) === m.t ? 1 : 0), cur = best.get(m.id);
+      if (!cur || score > cur.score) best.set(m.id, { score, key: pp.key });
+    });
+    best.forEach((v, pid) => { byKey.set(v.key, rowOf.get(pid)); byPid.set(pid, v.key); });
+    return { byKey, byPid };
+  }
+
+  // a copy of the pool whose lines (and minutes) are the source's. Everything else (key, games, owner, slot, team) stays; a player with no
+  // usable line in the source keeps his projection line and gets lineFb: true.
+  function sourcePool(pool, match) {
+    const ok = r => r && r.line && r.g > 0 && Object.keys(r.line).every(k => Number.isFinite(r.line[k]));
+    const players = pool.players.map(pp => {
+      const r = match.byKey.get(pp.key);
+      return ok(r) ? Object.assign({}, pp, { line: r.line, mpg: r.m == null ? null : r.m, lineFb: false }) : Object.assign({}, pp, { lineFb: true });
+    });
+    return { players, byKey: new Map(players.map(p => [p.key, p])), unmatched: pool.unmatched, stats: pool.stats };
+  }
+
   const SAME = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
   // rows → [{pid, z, cats[9], inPool}] best first; players with no games get z null and sort last.
@@ -173,6 +217,6 @@
     return { rep, avg, pending, hasAvg: ai >= 0, step() { const pid = pending.shift(); if (pid == null) return null; const b = build(pid); put(gains(b.picks, b.owner), pid); return pid; } };
   }
 
-  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, windowSource, ownersOf, table, playoffGames, withPlayoffs, winStart };
+  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, windowSource, ownersOf, SOURCES, WINDAYS, sourceRows, loadBox, matchRows, sourcePool, table, playoffGames, withPlayoffs, winStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
 })(this);
