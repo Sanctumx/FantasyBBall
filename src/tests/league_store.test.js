@@ -51,6 +51,16 @@ test('saved leagues: newest first, a custom name survives a reload, forget remov
   assert.strictEqual(S.defaultTeam(get, 'a1b2'), 't1');
   S.forgetLeague(get, set, 'c3d4'); assert.deepStrictEqual(S.savedLeagues(get).map(x => x.id), ['a1b2']);
 });
+test('scoring is kept per saved league; a league saved before this has category scoring', () => {
+  const d = { 'courtside-leagues-v1': J([{ id: 'old1', name: 'Old', used: 1 }, { id: 'pts1', name: 'Pts', used: 2 }]) }, get = getter(d), set = (k, v) => { d[k] = v; };
+  assert.deepStrictEqual(S.leagueScoring(get, 'old1'), { scoring: 'h2h', pointVals: ZERO });
+  assert.strictEqual(S.leagueScoring(get, 'nope'), null);
+  S.setLeagueScoring(get, set, 'pts1', Object.assign({}, S.LEAGUE_DEF, { scoring: 'points', pointVals: { pts: 1, to: -1 } }));
+  assert.deepStrictEqual(S.leagueScoring(get, 'pts1'), { scoring: 'points', pointVals: Object.assign({}, ZERO, { pts: 1, to: -1 }) });
+  S.rememberLeague(get, set, 'pts1', 'Fantrax', null);   // reconnecting keeps it
+  assert.strictEqual(S.leagueScoring(get, 'pts1').scoring, 'points');
+  assert.strictEqual(S.leagueScoring(get, 'old1').scoring, 'h2h');
+});
 test('pickTeam: remembered, else the default, else the first team', () => {
   const ids = ['t1', 't2', 't3'];
   assert.strictEqual(S.pickTeam('t3', ids, 't2'), 't3'); assert.strictEqual(S.pickTeam('gone', ids, 't2'), 't2'); assert.strictEqual(S.pickTeam(null, ids, 'gone'), 't1');

@@ -1355,6 +1355,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     // a name the user typed (custom) is kept when Fantrax sends its own on reconnect
     const keep = i >= 0 && l[i].custom;
     const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
+    if (i >= 0 && l[i].scoring) { entry.scoring = l[i].scoring; entry.pointVals = l[i].pointVals; }
     if (i >= 0) l[i] = entry; else l.push(entry);
     set(KEYS.leagues, JSON.stringify(l));
   }
@@ -1363,6 +1364,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     l[i] = Object.assign({}, l[i], { name, custom: true }); set(KEYS.leagues, JSON.stringify(l));
   }
   const forgetLeague = (get, set, id) => set(KEYS.leagues, JSON.stringify(readLeagues(get).filter(x => x.id !== id)));
+  // scoring and point values belong to the league: kept on its saved record, restored on Load (a record from before this is category scoring)
+  function leagueScoring(get, id) {
+    const x = readLeagues(get).find(y => y.id === id); if (!x) return null;
+    const n = normalize(Object.assign({}, LEAGUE_DEF, { scoring: x.scoring, pointVals: x.pointVals }));
+    return { scoring: n.scoring, pointVals: n.pointVals };
+  }
+  function setLeagueScoring(get, set, id, settings) {
+    const l = readLeagues(get), i = l.findIndex(x => x.id === id); if (i < 0) return;
+    l[i] = Object.assign({}, l[i], { scoring: settings.scoring, pointVals: settings.pointVals }); set(KEYS.leagues, JSON.stringify(l));
+  }
   const defaultTeam = (get, id) => { const x = readLeagues(get).find(y => y.id === id); return x && x.myTeam != null ? x.myTeam : null; };
   // the team a tab shows: its own remembered pick, else the Settings default, else the first team
   const pickTeam = (remembered, ids, fallback) => ids.includes(remembered) ? remembered : ids.includes(fallback) ? fallback : ids[0];
@@ -1465,7 +1476,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const draftSettings = (current, cfg) => normalize(Object.assign({}, LEAGUE_DEF, LEAGUE_KEYS.reduce((o, k) => { if (cfg && k in cfg) o[k] = cfg[k]; return o; }, {}), { pointVals: current && current.pointVals }));
   const POINTS_NOTE_HTML = 'Points leagues aren\'t supported on this tab yet. Scoring is set to points in <a href="settings.html">Settings</a>.';
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
-  const api = { KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
+  const api = { leagueScoring, setLeagueScoring, KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
     fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;

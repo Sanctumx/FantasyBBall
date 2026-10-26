@@ -184,7 +184,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('settings');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   let state = LS.load(get);
-  const persist = () => LS.save(set, state);
+  const persist = () => { LS.save(set, state); if (state.league) LS.setLeagueScoring(get, set, state.league.id, state.settings); };
   if (state.migrated) persist();   // the first visit writes the store built from the old keys
 
   const fmtDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -271,7 +271,8 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
       let standings = null; try { standings = await fxGet('standings', id); } catch (e) {}   // records are optional
       if (mine !== seq) return;
       wait = 0;
-      const res = LS.applyFantrax(state.settings, league), name = league.leagueName || league.name || (league.leagueInfo && league.leagueInfo.name) || null;
+      const was = LS.leagueScoring(get, id), own = was ? Object.assign({}, state.settings, was) : state.settings;   // a saved league brings its own scoring
+      const res = LS.applyFantrax(own, league), name = league.leagueName || league.name || (league.leagueInfo && league.leagueInfo.name) || null;
       LS.rememberLeague(get, set, id, name, null);
       const saved = LS.savedLeagues(get).find(x => x.id === id);
       state = { settings: res.settings, league: { id, name: saved ? saved.name : name || 'League ' + id, teams: LS.teamsOf(league, standings), loadedAt: Date.now() }, note: res.note };

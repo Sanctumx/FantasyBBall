@@ -92,5 +92,17 @@ const stored = p => p.evaluate(() => JSON.parse(localStorage.getItem('courtside-
   ok(errs.length === 0, 'no page errors ' + errs.join('; '));
   await ctx.close(); }
 
+// 4. scoring is per league: loading a category league from the saved list leaves points scoring behind, and back
+{ const st0 = { v: 1, settings: Object.assign({}, board.cfg, { scoring: 'points', pointVals: { pts: 1, to: -1 } }), league: { id: 'ptsLg1', name: 'Friend', teams: [], loadedAt: 1 }, note: '' };
+  const lgs = [{ id: 'ptsLg1', name: 'Friend', used: 2, scoring: 'points', pointVals: { pts: 1, to: -1 } }, { id: 'catLg2', name: 'Mine', used: 1 }];
+  const { p, errs, ctx } = await open({ 'courtside-settings-v1': JSON.stringify(st0), 'courtside-leagues-v1': JSON.stringify(lgs) }, okFx);
+  ok(await p.$eval('#s-scoring', e => e.value) === 'points', 'starts on the points league');
+  await p.selectOption('#lg-sel', 'catLg2'); await p.click('#lg-go'); await p.waitForTimeout(600);
+  ok(await p.$eval('#s-scoring', e => e.value) === 'h2h', 'loading a category league restores its category scoring');
+  await p.selectOption('#lg-sel', 'ptsLg1'); await p.click('#lg-go'); await p.waitForTimeout(600);
+  ok(await p.$eval('#s-scoring', e => e.value) === 'points' && await p.$eval('#pv-pts', e => e.value) === '1' && await p.$eval('#pv-to', e => e.value) === '-1', 'loading the points league brings back its scoring and point values');
+  ok(errs.length === 0, 'no page errors ' + errs.join('; '));
+  await ctx.close(); }
+
 await b.close();
 console.log(fails.length ? 'FAILED: ' + fails.length : 'ALL PASS'); process.exit(fails.length ? 1 : 0);
