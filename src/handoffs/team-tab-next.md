@@ -4,6 +4,17 @@
 
 Branch `team-tab-next`, worktree `C:/Users/Fefe/Documents/FantasyBBall-tabnext`, created 2026-10-26 from `team-d3-swap` (not main), because step 3 edits the same Team tab code. **PR #45** (`team-d3-swap`: D3 trades, Source switch, Rankings D2, review fixes; 417 unit tests; pushed on the user's word, not yet merged) must merge first; then `git fetch && git rebase origin/main` here (the d3 commits drop out) and rebuild. The `FantasyBBall-d3` worktree is removed; the branch is on origin.
 
+## Review result (Opus, effort high, 2026-10-26): no must-fix; no plain-ctx behaviour change. Fix these test-first, then rebuild
+
+1. `make_category_golden.js` ~l.337: `playsPctMoved` pin is a no-op (`forEach` discards `T.moveSlot`'s new state); use `reduce`, regenerate from the pre-flag code (a09193e) so the plain Reserve path is really pinned.
+2. `rankings.html` ~l.297/323: with a team and Vs replacement, unscored players show "—" not "…"; `wTd` should use `dd ? dd.todo.has(pid) : wn.rep.has(pid)`.
+3. `team_view.js apply` vs `team_win.js swapScore`: on Rest of season IL is often the worst counted player, so the list scores a candidate as Active, but Apply swap with a full Active puts him in Reserve (counts 0). Give incoming players the counted slot the outgoing one vacates (like `tradeState`), or make `swapScore` follow `apply`; add a test that list dM equals the matrix change after `apply`.
+4. IL counts like Active on the seasonal bases and moves into IL are never blocked: a user can park healthy players in IL to dodge the full-Active block. Decide with the user: cap IL at the league's IL spots, or count IL only for players whose Fantrax slot is IR.
+5. `team_view.js rows()` (Team average row, Team Zscore card): Plays % excludes availability, so a g=5 IL player on Rest of season counts as a full slot in the team line/Z (Win counts him ~6%); weight by played/gl (pct x avail) when `ctx.teamTab`. How it works "IL players add nothing" is false on Rest of season.
+6. `team.html` Fill handler: abort when `ctx` changes too (capture `cx = ctx`), not only `state`.
+7. How it works text: GL paragraph (full team games on Per game), "Z is the Rankings Zscore (Standard, per game)" (follows the toggle now), Plays % "best per-game players take the slots" and points hint "a crowded night goes to the better points player" (untrue on Rest of season: `rosterGames` scales crowded nights evenly).
+8. Test gaps: `soloGames`; Vs average share (`avgParts`/`avgCandidate`) on total; "candidate takes Active" test only checks finite; `oppState` recv under the flag; Rankings "…" in rep mode.
+
 ## Done on the earlier steps
 
 1 (D3 swap) and 2 (Rankings D2) are in PR #45. Browser checks pass except the known `rankings_page` 302 vs 303.
