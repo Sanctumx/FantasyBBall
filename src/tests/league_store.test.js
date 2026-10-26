@@ -1,13 +1,14 @@
 const test = require('node:test'), assert = require('node:assert');
 const S = require('../league_store.js');
+const ZERO = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0, tpm: 0, fgm: 0, fga: 0, ftm: 0, fta: 0 };
 const getter = d => k => (k in d ? d[k] : null), J = JSON.stringify;
 
 test('league defaults are the Draft Kit defaults', () => {
-  assert.deepStrictEqual(S.LEAGUE_DEF, { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2 });
+  assert.deepStrictEqual(S.LEAGUE_DEF, { teams: 14, roster: 12, scoring: 'h2h', cats: 9, asb: 'merged', poStart: 18, poFmt: '2-2-2', ilSpots: 3, luSplit: true, luC: 2, luG: 3, luF: 3, luGC: 0, luFC: 0, luU: 2, pointVals: ZERO });
 });
 test('normalize keeps valid saved values, drops draft keys, repairs only invalid ones', () => {
   const v = { teams: 10, roster: 13, scoring: 'most', cats: 8, asb: 'separate', poStart: 20, poFmt: '1-1-1', ilSpots: 0, luSplit: false, luC: 0, luG: 6, luF: 0, luGC: 3, luFC: 0, luU: 10 };
-  assert.deepStrictEqual(S.normalize(Object.assign({ slot: 4, field: 'strong', order: 'snake' }, v)), v);
+  assert.deepStrictEqual(S.normalize(Object.assign({ slot: 4, field: 'strong', order: 'snake' }, v)), Object.assign({ pointVals: ZERO }, v));
   const r = S.normalize({ teams: 'x', roster: 99, scoring: 'pts', cats: 7, luC: 9, luFx: ['ZZ'] });
   assert.deepStrictEqual([r.teams, r.roster, r.scoring, r.cats, r.luC, 'luFx' in r], [14, 12, 'h2h', 9, 2, false]);
   assert.deepStrictEqual(S.normalize({ luFx: ['PG', 'G/C', 'U'] }).luFx, ['PG', 'G/C', 'U']);
@@ -57,4 +58,32 @@ test('pickTeam: remembered, else the default, else the first team', () => {
 test('lineup slots: split G/F, plain C and UTIL, or the Fantrax list', () => {
   assert.deepStrictEqual(S.lineupSlots(S.LEAGUE_DEF), ['PG', 'SG', 'G', 'SF', 'PF', 'F', 'C', 'C', 'U', 'U']);
   assert.deepStrictEqual(S.lineupSlots({ luFx: ['PG', 'U'] }), ['PG', 'U']);
+});
+
+test('points scoring: normalize keeps point values, zeros bad ones, drops unknown keys', () => {
+  assert.deepStrictEqual(S.POINT_STATS, ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'tpm', 'fgm', 'fga', 'ftm', 'fta']);
+  assert.strictEqual(S.PT_MAX, 100);
+  const r = S.normalize({ scoring: 'points', cats: 8, pointVals: { to: -1.5, reb: 1.2, zzz: 5 } });
+  assert.deepStrictEqual([r.scoring, r.cats, r.pointVals.to, r.pointVals.reb, 'zzz' in r.pointVals], ['points', 8, -1.5, 1.2, false]);
+  assert.deepStrictEqual(Object.assign({}, r.pointVals, { to: 0, reb: 0 }), ZERO);
+  ['2', NaN, Infinity, 101, -100.01, null].forEach(bad => assert.strictEqual(S.normalize({ pointVals: { pts: bad } }).pointVals.pts, 0));
+  assert.strictEqual(S.normalize({ pointVals: { pts: -100 } }).pointVals.pts, -100);
+  const m = S.normalize({}); assert.deepStrictEqual(m.pointVals, ZERO); assert.notStrictEqual(m.pointVals, S.LEAGUE_DEF.pointVals);
+});
+test('saved settings without point values load unchanged plus zeros', () => {
+  const saved = { v: 1, settings: { teams: 10, scoring: 'most' }, league: null, note: '' };
+  const s = S.load(getter({ [S.KEYS.settings]: J(saved) })).settings;
+  assert.deepStrictEqual([s.teams, s.scoring, s.pointVals], [10, 'most', ZERO]);
+});
+test('pointVals are league settings but not draft keys, so the Draft board ignores them', () => {
+  assert.strictEqual(S.LEAGUE_KEYS.includes('pointVals'), false);
+  const a = S.normalize({}), b = S.normalize({ pointVals: { to: -1 } });
+  assert.strictEqual(S.sameLeague(a, b), true);
+});
+test('isPoints and draftSettings', () => {
+  assert.strictEqual(S.isPoints({ scoring: 'points' }), true);
+  assert.strictEqual(S.isPoints({ scoring: 'h2h' }), false);
+  const d = S.draftSettings(S.normalize({ pointVals: { to: -1 } }), { teams: 12, scoring: 'h2h' });
+  assert.deepStrictEqual([d.teams, d.scoring, d.pointVals.to], [12, 'h2h', -1]);
+  assert.match(S.POINTS_NOTE_HTML, /aren't supported on this tab yet/);
 });
