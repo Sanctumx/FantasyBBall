@@ -40,5 +40,5 @@ Fine: memo and cache keys, pairwise chances, Rankings k scale, bundle order, spe
 
 ## Next
 
-1. Ask the user (a) or (b) for IL players, fix the items above test-first, rebuild, rerun the tests, merge on the user's word, then `ledger.mjs land` (ledger holds the #139 row, archive 139, #144-#146; update the #147 row to Partly done: Trade and Rankings built, Draft open).
+1. User chose (a) (2026-10-26): a traded IL player counts as reserve with his Plays % games (leftover nights only; Team.playsPct already handles `il` rows as hypo reserve). Fix the items above test-first, rebuild, rerun the tests, merge on the user's word, then `ledger.mjs land` (ledger holds the #139 row, archive 139, #144-#146; update the #147 row to Partly done: Trade and Rankings built, Draft open).
 2. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`); do not shrink twice.
