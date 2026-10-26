@@ -14,6 +14,9 @@ with every request.
 - **Build check** (only if `src/engine.js`, `src/app.html` or `src/league.html` changed since the last push): the build
   command above, the unit tests, a Playwright smoke test with no page errors, then publish
   `src/courtside-draft-board.html` to the board artifact if it isn't current. Never publish `app.html`.
+- **Hashed script files:** the build writes `assets/<name>.<hash>.js` at the repo root; commit the whole `assets/` folder
+  with the pages (the build command deletes and recopies it, so old hashes disappear). After a deploy, check with
+  `curl -I <site>/assets/<file>` (immutable) and `curl -I <site>/team.html` (must not be immutable).
 - **Deploy:** merging to main deploys the Cloudflare Worker `courtside-basketball`, the only host (the Netlify site
   was deleted, 2026-10-20).
 - **Never during /release or /handoff:** use the user's computer.

@@ -236,6 +236,7 @@ tr.lrow{cursor:pointer}
 <script>/*__ENGINE__*/</script>
 <script>/*__SHARED__*/</script>
 <script>/*__STORE__*/</script>
+<script>/*__FXCACHE__*/</script>
 <script>/*__TEAM__*/</script>
 <script>
 (function () {
@@ -264,14 +265,8 @@ tr.lrow{cursor:pointer}
   let SS = LS.load(LS.local.get), L = null, rosters = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
   let me = null, base = null, state = null, zmap = new Map(), scorer = TV.createScorer(), outs = [], ins = [], log = [], tickSeq = 0;
 
-  async function fxGet(what, id) {
-    let r; try { r = await fetch('api/fantrax?what=' + what + (id ? '&leagueId=' + encodeURIComponent(id) : ''), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
-    const type = r.headers.get('content-type') || ''; if (!type.includes('json')) throw new Error('nohost');
-    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
-    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
-    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
-    return body;
-  }
+  const FXC = FxCache.create({});   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  let fxChecking = false;
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
   async function loadStats() {
     try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
@@ -282,25 +277,42 @@ tr.lrow{cursor:pointer}
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
     if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
     say('Loading the league from Fantrax…');
-    try {
-      const league = await fxGet('league', lg.id), ros = await fxGet('rosters', lg.id);
-      if (!fxPlayers) fxPlayers = await fxGet('players');
-      const stats = await loadStats();
-      if (seq !== loadSeq) return;
-      L = InL.parseLeague(league); rosters = InL.parseRosters(ros); espn = stats; fetchedAt = new Date();
+    const stats = loadStats(); let shown = false;
+    // draws the page from [league, rosters, players] fetched at `at`
+    const build = async (b, at) => {
+      const sp = await stats; if (seq !== loadSeq) return false;
+      L = InL.parseLeague(b[0]); rosters = InL.parseRosters(b[1]); fxPlayers = b[2]; espn = sp; fetchedAt = new Date(at);
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
-      fxWait = 0; say(''); start();
-    } catch (e) {
-      if (seq !== loadSeq) return;
-      $('retry').hidden = false;
-      if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
-      if (transient(e)) {
-        fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
-        say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
-        fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
-      }
-      say(e.message, true);
-    }
+      fxWait = 0; say(''); start(); return true;
+    };
+    await FXC.swr([['league', lg.id], ['rosters', lg.id], ['players']], {
+      onCached: async (b, at) => { try { fxChecking = true; shown = await build(b, at); } catch (e) { shown = false; } },
+      onFresh: async (b, at, changed) => {
+        if (seq !== loadSeq) return;
+        fxChecking = false;
+        try {
+          if (!shown) { shown = await build(b, at); return; }
+          if (!changed) { fetchedAt = new Date(at); freshness(); return; }
+          if (outs.length || ins.length || log.length) {   // keep the swaps (typed or applied) being tried; the new data waits for a click
+            fetchedAt = new Date(at); freshness();
+            sayHtml('New Fantrax data is in. Your swaps are kept. <button type="button" class="retry" id="applynew">Update</button>'); return;
+          }
+          await build(b, at);
+        } catch (e) { say(e.message, true); }
+      },
+      onError: e => {
+        if (seq !== loadSeq) return;
+        fxChecking = false;
+        if (shown) { freshness(); say('Couldn\'t refresh from Fantrax; showing the saved data.', true); $('retry').hidden = false; return; }
+        $('retry').hidden = false;
+        if (e.message === 'nohost') { say('Fantrax leagues load on the hosted site; there is nothing to show here.', true); return; }
+        if (transient(e)) {
+          fxWait = Math.min(120, fxWait ? fxWait * 2 : 10);
+          say((e.status === 429 ? 'Fantrax is busy (too many requests)' : e.message === 'offline' ? 'Couldn\'t reach the sync service' : 'Fantrax didn\'t answer') + '. Retrying in ' + fxWait + ' s…', true);
+          fxTimer = setTimeout(() => { if (seq === loadSeq) load(); }, fxWait * 1000); return;
+        }
+        say(e.message, true);
+      } });
   }
 
   const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
@@ -325,7 +337,7 @@ tr.lrow{cursor:pointer}
   }
   function freshness() {
     const parts = [];
-    parts.push('<span>Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5) + '</span>');
+    parts.push('<span>' + (fxChecking ? 'Rosters from ' + fetchedAt.toTimeString().slice(0, 5) + ', checking Fantrax…' : 'Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5)) + '</span>');
     parts.push(espn ? '<span>Stats: ESPN ' + esc(espn.label) + '</span>' : '<span class="warn">No actual stats loaded</span>');
     parts.push('<span>Projections: BBM + Hashtag average</span>');
     $('fresh').innerHTML = parts.join('');
@@ -538,6 +550,7 @@ tr.lrow{cursor:pointer}
   $('wreset').addEventListener('click', () => { ui.weights = new Array(9).fill(1); save(); weightsHtml(); draw(); drawList(); });
   $('team').addEventListener('change', () => setTeam($('team').value));
   $('retry').addEventListener('click', () => { fxWait = 0; load(); });
+  $('msg').addEventListener('click', e => { if (e.target.id === 'applynew') load(); });   // the pending Fantrax update replaces the view (and the swaps)
   $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   load();

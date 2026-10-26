@@ -175,6 +175,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 <script>/*__SCHED__*/</script>
 <script>/*__STORE__*/</script>
 <script>/*__SHARED__*/</script>
+<script>/*__FXCACHE__*/</script>
 <script>
 (function () {
   'use strict';
@@ -226,15 +227,8 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   ['s-teams', 's-roster', 's-scoring', 's-cats', 's-il', 's-pofmt', 's-po', 's-asb', 's-lupos'].concat(Object.keys(LU_IDS)).forEach(id => $(id).addEventListener('change', onSetting));
 
   // ---- Fantrax league ----
-  async function fxGet(what, id) {
-    let r;
-    try { r = await fetch('api/fantrax?what=' + what + '&leagueId=' + encodeURIComponent(id), { cache: 'no-store' }); } catch (e) { throw new Error('offline'); }
-    if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('nohost');
-    let body; try { body = await r.json(); } catch (e) { throw new Error('nohost'); }
-    if (r.status === 404 && !(body && body.error)) throw new Error('nohost');
-    if (!r.ok || body.error) { const er = new Error(body.error || ('Fantrax answered ' + r.status)); er.status = r.status; throw er; }
-    return body;
-  }
+  // Load is always a live call; the answers are also saved for the other tabs to draw from at once
+  const FXC = FxCache.create({}), fxGet = (what, id) => FXC.live(what, id);
   // busy (429), 5xx and dropped connections: keep the old state and retry after 10 s, 20 s, 40 s … up to 2 minutes
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
   let wait = 0, retryT = null, seq = 0;
