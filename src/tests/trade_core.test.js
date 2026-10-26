@@ -74,5 +74,5 @@ test('the current period counts whole games, later periods keep expected games (
   const opp = n => I.opponentOf(L, me, n);
   assert.ok(near(per(ctx.cur), M.scoreSegments(ctx, segs(me, ctx.cur), segs(opp(ctx.cur), ctx.cur), true).match));
   const later = ctx.cur + 1;
-  assert.ok(near(per(later), M.scoreSegments(ctx, segs(me, later), segs(opp(later), later), false).match));
+  assert.ok(near(per(later), M.scoreSegments(ctx, segs(me, later), segs(opp(later), later), false, true).match));
 });

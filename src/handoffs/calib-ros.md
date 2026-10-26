@@ -12,9 +12,17 @@ Branch `calib-ros`, worktree `../FantasyBBall-calib` (made 2026-10-26). Local on
 
 In the ledger worktree (commit c447469, committed, NOT landed): the #139 row (Adopted, provisional k), archive entry 139, and the follow-ups renumbered #144 (early-season availability), #145 (season-so-far blend, k by weeks played), #146 (moving rosters, live tracking). Land with `node .claude/scripts/ledger.mjs land` only on the user's "push".
 
+## Review (done 2026-10-26, effort high)
+
+Must-fix fixed: the new k also hit the Matchup Analyzer's future weeks. `matchup_core` keeps `K_MATCH / K_CAT` 0.72 / 0.82 for later weeks; new `KR_MATCH / KR_CAT` 0.6 / 0.75 apply only when `scoreSegments(..., whole, ros)` gets `ros` (the Trade Analyzer's `rosWinM`). Tests added / updated in `matchup_core.test.js` and `trade_core.test.js`. Team help text now says points leagues are not shrunk. 362 unit tests, Team and Matchup browser checks pass, pages rebuilt. Merge resolution in `team_win.js` judged correct; the shrink never reorders the Team list.
+
+Open from the review (not fixed, decide with the user):
+- Trade Analyzer: future weeks now use 0.6 instead of 0.72 while the current week keeps 0.83, so `dA + dB` is not a uniform rescale and trade order can change; `likelihood` uses `TRADE_W.winM * dB` (0.1 set on the old scale), so likelihoods shift. The 0.6 / 0.75 was fitted on the Team tab forecaster, not on `pairMatchup`; check `results[season].k.PM` in `calib_ros.json` before saying the Trade Analyzer "uses the same k".
+- `calib_ros_k.js:41-43`: the SE takes the larger of two one-way cluster bootstraps, so it understates the two-way SE; the 2 SE gates are slightly lenient (does not change the shipped k).
+- `team_win.test.js` "engCtxFrom / evalVecs" test is loose (0.02); low priority.
+
 ## Next
 
-1. Team browser check passed (merged state, :8767). Reviewer (effort high, Team numbers) was dispatched; get its result (re-dispatch if the chat was cleared first).
-2. Reviewer result is pending (agent running when this was written); fix findings test-first, amend the ledger if the story changes.
-3. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`).
-4. On "push": push, PR, merge only on the user's word, then `ledger.mjs land`.
+1. Ask the user about the Trade Analyzer item above (keep KR for trades, or give the Trade Analyzer its own k).
+2. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`).
+3. On "push": push, PR, merge only on the user's word, then `ledger.mjs land` (ledger commit c447469 holds the #139 row, archive entry and #144-#146).

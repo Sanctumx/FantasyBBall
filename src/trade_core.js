@@ -14,7 +14,7 @@
     const periods = [];
     InLeague.regularFrom(ctx.L, ctx.cur).forEach(n => {
       const opp = InLeague.opponentOf(ctx.L, teamId, n);
-      if (opp) periods.push({ n, opp, p: Matchup.scoreSegments(ctx, segs(teamId, n), segs(opp, n), n === ctx.cur).match });
+      if (opp) periods.push({ n, opp, p: Matchup.scoreSegments(ctx, segs(teamId, n), segs(opp, n), n === ctx.cur, true).match });
     });
     return { mean: periods.length ? periods.reduce((s, x) => s + x.p, 0) / periods.length : null, periods };
   }

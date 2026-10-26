@@ -149,7 +149,7 @@ tr.lrow{cursor:pointer}
       <h3>Win C, Win M and the matrix</h3>
       <p>The matrix is your previewed team against every other team in the league, one column each. A category cell is your chance to win that category, Win C is the expected number of categories won and Win M is the chance to win the match.</p>
       <h4>How the chances are computed</h4>
-      <p>The same engine as the Rankings and Draft tabs. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ. The chances are then pulled toward 50% (by 0.6 for the match, 0.75 for each category). In backtests of three seasons the raw rest-of-season odds were about twice too confident: matchups called 85% were won only 63-72% of the time. The backtest keeps draft rosters and preseason lines, so the true correction in a live league is probably a little smaller. Player gains scale by the same factors; the order of the lists does not change.</p>
+      <p>The same engine as the Rankings and Draft tabs. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ. In category leagues the chances are then pulled toward 50% (by 0.6 for the match, 0.75 for each category); points leagues are not pulled yet. In backtests of three seasons the raw rest-of-season odds were about twice too confident: matchups called 85% were won only 63-72% of the time. The backtest keeps draft rosters and preseason lines, so the true correction in a live league is probably a little smaller. Player gains scale by the same factors; the order of the lists does not change.</p>
       <h4>Win C and Win M per player</h4>
       <p>What he adds to your Win C (hundredths) and Win M (points) over an average player: your team minus a made-up average player plus him. The average player is the Plays %-weighted mean line of your Active and Reserve players with your team's total games divided by your Active spots, so he is one slot's worth of your team; the incoming player's games are his own remaining games times the share of schedulable games your lineup gets. For a player already on your Active or Reserve it is what you lose if an average-line player with his games stood in his place; for IL it is what he would add. Same as Vs average in the player list.</p>
      </section>
@@ -1717,8 +1717,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   'use strict';
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
-  // K_MATCH / K_CAT: fractional games (Trade Analyzer, rest of season): same as TeamWin.SHRINK, fitted on rest-of-season forecasts (#139)
-  const GVAR = 1.87, K_MATCH = 0.6, K_CAT = 0.75;
+  // K_MATCH / K_CAT: fractional games of a later week (Matchup Analyzer), fitted weekly. KR_*: the rest-of-season k for the Trade Analyzer, same as TeamWin.SHRINK (#139)
+  const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82, KR_MATCH = 0.6, KR_CAT = 0.75;
   // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
   const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
@@ -1785,13 +1785,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     return out;
   }
-  function scoreSegments(ctx, segsA, segsB, whole) {
+  function scoreSegments(ctx, segsA, segsB, whole, ros) {
     const side = segs => {
       const g = segGames(ctx, segs, null, whole);
       return { games: g.reduce((s, x) => s + x, 0), entries: segs.map((s, i) => ({ p: ctx.pool.byKey.get(s.key).line, games: g[i], gVar: GVAR })) };
     };
     const A = side(segsA), B = side(segsB), r = Engine.pairMatchup(A.entries, B.entries);
-    return { mu: r.mu, cat: r.cat.map(p => shrink(p, whole ? KW_CAT : K_CAT)), match: shrink(r.match, whole ? KW_MATCH : K_MATCH), games: [A.games, B.games] };
+    return { mu: r.mu, cat: r.cat.map(p => shrink(p, whole ? KW_CAT : ros ? KR_CAT : K_CAT)), match: shrink(r.match, whole ? KW_MATCH : ros ? KR_MATCH : K_MATCH), games: [A.games, B.games] };
   }
   function projectWeek(ctx, teamId, n) {
     const opp = InLeague.opponentOf(ctx.L, teamId, n);
@@ -1977,7 +1977,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return plan;
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { GVAR, K_MATCH, K_CAT, KR_MATCH, KR_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
 

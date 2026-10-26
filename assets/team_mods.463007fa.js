@@ -237,8 +237,8 @@
   'use strict';
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
-  // K_MATCH / K_CAT: fractional games (Trade Analyzer, rest of season): same as TeamWin.SHRINK, fitted on rest-of-season forecasts (#139)
-  const GVAR = 1.87, K_MATCH = 0.6, K_CAT = 0.75;
+  // K_MATCH / K_CAT: fractional games of a later week (Matchup Analyzer), fitted weekly. KR_*: the rest-of-season k for the Trade Analyzer, same as TeamWin.SHRINK (#139)
+  const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82, KR_MATCH = 0.6, KR_CAT = 0.75;
   // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
   const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
@@ -305,13 +305,13 @@
     });
     return out;
   }
-  function scoreSegments(ctx, segsA, segsB, whole) {
+  function scoreSegments(ctx, segsA, segsB, whole, ros) {
     const side = segs => {
       const g = segGames(ctx, segs, null, whole);
       return { games: g.reduce((s, x) => s + x, 0), entries: segs.map((s, i) => ({ p: ctx.pool.byKey.get(s.key).line, games: g[i], gVar: GVAR })) };
     };
     const A = side(segsA), B = side(segsB), r = Engine.pairMatchup(A.entries, B.entries);
-    return { mu: r.mu, cat: r.cat.map(p => shrink(p, whole ? KW_CAT : K_CAT)), match: shrink(r.match, whole ? KW_MATCH : K_MATCH), games: [A.games, B.games] };
+    return { mu: r.mu, cat: r.cat.map(p => shrink(p, whole ? KW_CAT : ros ? KR_CAT : K_CAT)), match: shrink(r.match, whole ? KW_MATCH : ros ? KR_MATCH : K_MATCH), games: [A.games, B.games] };
   }
   function projectWeek(ctx, teamId, n) {
     const opp = InLeague.opponentOf(ctx.L, teamId, n);
@@ -497,7 +497,7 @@
     return plan;
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { GVAR, K_MATCH, K_CAT, KR_MATCH, KR_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
 
