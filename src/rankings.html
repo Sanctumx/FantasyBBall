@@ -165,6 +165,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
   // the league loaded in Settings: owners come from its current rosters; the table works without it
   async function loadLeague() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); rosters = null; teamName = {}; owned.key = ''; $('retry').hidden = true;
+    if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); draw(); return; }
     if (!lg) { sayHtml('Load a league in <a href="settings.html">Settings</a> to see owners and hide taken players.'); draw(); return; }
     say('Loading ' + (lg.name || lg.id) + ' from Fantrax…');
     try {
@@ -258,6 +259,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
 
   function draw() {
     const rows = sourceRows(), n = $('note');
+    if (LS.isPoints(SS.settings)) { $('tbl').innerHTML = ''; n.textContent = ''; return; }
     fillTeams(); $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
     if (WINDAYS[ui.src] && !windowOf().rows.length) { $('tbl').innerHTML = ''; n.textContent = 'No games in the box-score files yet; the table fills in as the season is played.'; return; }
     const tab0 = tableFor(rows), tab = R.withPlayoffs(tab0, rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();

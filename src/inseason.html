@@ -307,6 +307,7 @@ tr.click{cursor:pointer}
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
     memo.clear(); memoGen++; $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
+    if (LS.isPoints(SS.settings)) { ui.leagueId = null; sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { ui.leagueId = null; sayHtml(LS.NO_LEAGUE_HTML); return; }
     const id = ui.leagueId = lg.id;
     say('Loading the league from Fantrax…');
