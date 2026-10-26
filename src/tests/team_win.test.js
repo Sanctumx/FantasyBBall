@@ -327,13 +327,22 @@ test('leagueWin: one linear k on every pair (shrink 1 vs 0.6)', () => {
   a.P.forEach((row, i) => row.forEach((p, j) => { if (i !== j) assert.ok(near(b.P[i][j] - 0.5, 0.6 * (p - 0.5), 1e-12)); }));
 });
 
-test('leagueWin: a traded roster moves the incoming player into the slot the outgoing one left, IL players count for nothing', () => {
+test('tradeState: a traded IL player counts as reserve and leaves the freed Active slot to the next player; slot order does not depend on fids order', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), slot = f => ctx.pool.byKey.get(f).slot;
+  const x = ctx.roster[me].filter(f => slot(f) === 'ACTIVE').slice(0, 2), ys = ctx.roster[other].filter(f => slot(f) === 'ACTIVE').slice(0, 2);
+  const keep = ctx.roster[me].filter(f => !x.includes(f)), a = W.tradeState(ctx, me, keep.concat(ys)), b = W.tradeState(ctx, me, keep.concat(ys.slice().reverse()));
+  ys.forEach(y => assert.strictEqual(a.slots[y], b.slots[y]));
+  const il = ctx.roster[other].find(f => slot(f) === 'IR');
+  if (il) { const s = W.tradeState(ctx, me, keep.concat([il, ys[0]])); assert.strictEqual(s.slots[il], 'reserve'); assert.strictEqual(s.slots[ys[0]], 'active'); }
+});
+
+test('leagueWin: a traded roster moves the incoming player into the slot the outgoing one left, an incoming IL player is a reserve', () => {
   const ctx = mk(last.start, games(last.start, last.end)), x = ctx.roster[me].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE'), y = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE');
   const R = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(y), [other]: ctx.roster[other].filter(f => f !== y).concat(x) });
   const st = W.tradeState(ctx, me, R[me]);
   assert.strictEqual(st.slots[y], 'active'); assert.ok(!(x in st.slots));
   const il = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'IR');
-  if (il) { const R2 = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(il), [other]: ctx.roster[other].filter(f => f !== il).concat(x) }); assert.ok(!(il in W.tradeState(ctx, me, R2[me]).slots)); }
+  if (il) { const R2 = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(il), [other]: ctx.roster[other].filter(f => f !== il).concat(x) }); assert.strictEqual(W.tradeState(ctx, me, R2[me]).slots[il], 'reserve'); }
   const a = W.leagueWin(ctx, ctx.roster), b = W.leagueWin(ctx, R);
   assert.ok(Math.abs(a.P[a.ids.indexOf(me)][a.ids.indexOf(other)] - b.P[b.ids.indexOf(me)][b.ids.indexOf(other)]) > 1e-6);
 });

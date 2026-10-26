@@ -108,12 +108,14 @@
   }
 
   // The state of team t holding the fantrax ids `fids` (a trade's roster): its players keep their Fantrax slots, IL players count for
-  // nothing (as oppState), and each incoming player takes a slot the outgoing ones left (Active first), else the reserve
+  // nothing (as oppState), and each incoming player takes a slot the outgoing ones left (Active first), else the reserve. An incoming
+  // IL player counts as a reserve with his Plays % games (user, 2026-10-26) and leaves the freed slots alone. Incoming players are
+  // sorted, so the slots do not depend on the order of `fids` (the leagueWin memo key sorts them)
   function tradeState(ctx, t, fids) {
     const keep = new Set(fids), was = new Set(ctx.roster[t]), slotOf = f => ctx.pool.byKey.get(f).slot;
     const rows = ctx.roster[t].filter(f => keep.has(f) && slotOf(f) !== 'IR').map(f => ({ fid: f, slot: slotOf(f) }));
     const free = ctx.roster[t].filter(f => !keep.has(f) && slotOf(f) !== 'IR').map(slotOf).sort((a, b) => (a === 'ACTIVE' ? 0 : 1) - (b === 'ACTIVE' ? 0 : 1));
-    fids.filter(f => !was.has(f) && slotOf(f) !== 'IR').forEach(f => rows.push({ fid: f, slot: free.length ? free.shift() : 'RESERVE' }));
+    fids.filter(f => !was.has(f)).sort().forEach(f => rows.push({ fid: f, slot: slotOf(f) === 'IR' || !free.length ? 'RESERVE' : free.shift() }));
     return Team.initState(rows);
   }
 

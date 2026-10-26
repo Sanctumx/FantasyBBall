@@ -149,7 +149,7 @@ tr.lrow{cursor:pointer}
       <h3>Win C, Win M and the matrix</h3>
       <p>The matrix is your previewed team against every other team in the league, one column each. A category cell is your chance to win that category, Win C is the expected number of categories won and Win M is the chance to win the match.</p>
       <h4>How the chances are computed</h4>
-      <p>The same engine as the Rankings and Draft tabs. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ. In category leagues the chances are then pulled toward 50% (by 0.6 for the match, 0.75 for each category); points leagues are not pulled yet. In backtests of three seasons the raw rest-of-season odds were about twice too confident: matchups called 85% were won only 63-72% of the time. The backtest keeps draft rosters and preseason lines, so the true correction in a live league is probably a little smaller. Player gains scale by the same factors; the order of the lists does not change.</p>
+      <p>The same engine as the Rankings and Draft tabs. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer uses the same forecast with both rosters changed (opponents weighted equally), so its Win M matches this tab's. In category leagues the chances are then pulled toward 50% (by 0.6 for the match, 0.75 for each category); points leagues are not pulled yet. In backtests of three seasons the raw rest-of-season odds were about twice too confident: matchups called 85% were won only 63-72% of the time. The backtest keeps draft rosters and preseason lines, so the true correction in a live league is probably a little smaller. Player gains scale by the same factors; the order of the lists does not change.</p>
       <h4>Win C and Win M per player</h4>
       <p>What he adds to your Win C (hundredths) and Win M (points) over an average player: your team minus a made-up average player plus him. The average player is the Plays %-weighted mean line of your Active and Reserve players with your team's total games divided by your Active spots, so he is one slot's worth of your team; the incoming player's games are his own remaining games times the share of schedulable games your lineup gets. For a player already on your Active or Reserve it is what you lose if an average-line player with his games stood in his place; for IL it is what he would add. Same as Vs average in the player list.</p>
      </section>
@@ -2724,12 +2724,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // The state of team t holding the fantrax ids `fids` (a trade's roster): its players keep their Fantrax slots, IL players count for
-  // nothing (as oppState), and each incoming player takes a slot the outgoing ones left (Active first), else the reserve
+  // nothing (as oppState), and each incoming player takes a slot the outgoing ones left (Active first), else the reserve. An incoming
+  // IL player counts as a reserve with his Plays % games (user, 2026-10-26) and leaves the freed slots alone. Incoming players are
+  // sorted, so the slots do not depend on the order of `fids` (the leagueWin memo key sorts them)
   function tradeState(ctx, t, fids) {
     const keep = new Set(fids), was = new Set(ctx.roster[t]), slotOf = f => ctx.pool.byKey.get(f).slot;
     const rows = ctx.roster[t].filter(f => keep.has(f) && slotOf(f) !== 'IR').map(f => ({ fid: f, slot: slotOf(f) }));
     const free = ctx.roster[t].filter(f => !keep.has(f) && slotOf(f) !== 'IR').map(slotOf).sort((a, b) => (a === 'ACTIVE' ? 0 : 1) - (b === 'ACTIVE' ? 0 : 1));
-    fids.filter(f => !was.has(f) && slotOf(f) !== 'IR').forEach(f => rows.push({ fid: f, slot: free.length ? free.shift() : 'RESERVE' }));
+    fids.filter(f => !was.has(f)).sort().forEach(f => rows.push({ fid: f, slot: slotOf(f) === 'IR' || !free.length ? 'RESERVE' : free.shift() }));
     return Team.initState(rows);
   }
 
