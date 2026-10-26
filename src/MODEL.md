@@ -38,3 +38,11 @@ touches the engine, the Model pick, defaults, backtests or the build. Edit in pl
   each category, 3 IL, field Average; opponents 2 kit users, 2 punters, 4 sharp, 5 ADP; seeds 145-160 (161-176 used by run 35; fresh from 177) × slots
   1/4/7/10/14. PC runs: the user double-clicks a .bat in `C:\Users\Fefe\Documents\courtside-backtest`.
 - League facts (user's): Fantrax, 14 teams, 4 adds/week, no games cap, 10 active + 2 bench, 3 IL.
+
+## Points leagues (#137, 2026-10-26; Rankings and Team tabs only)
+
+- FP per game m = sum of weight x stat over pts, reb, ast, stl, blk, to, tpm, fgm, fga, ftm, fta (`points_core.js`; fgm = fgp x fga, ftm = ftp x fta). Season multiplies by games, Mix by the midpoint of the player's games and the top teams x roster players' mean games.
+- One FP total goes into category slot 3 (`Points.FP_SLOT`) of copies of the players and the context (`Points.engineView`), and `Engine.evaluate` runs unchanged: Win M = 100 x gainC[FP_SLOT]; a match chance is `catProb` of that slot. With one stat scored, every FP number equals the engine's number for that category (tested to 1e-12).
+- Variance: games-played part m^2 x 0.82 and the 12% projection error as in the categories; game-to-game noise uses the engine's per-stat fits (and variance/mean 1.225 fgm, 1.406 fga, 2.004 ftm, 2.182 fta from `points_fit.js`) combined with the measured within-player per-game correlations (logs3.csv, 723 player-seasons; pts-fgm 0.94, ftm-fta 0.94, fgm-fga 0.78, pts-fga 0.75, pts-tpm 0.66). Correlations raise Yahoo-style FP variance about 1.4x and ESPN-style about 1.2x over independent stats. pts = 2 fgm + tpm + ftm exactly, so rho is positive semidefinite, not definite; quadratic forms are clamped at 0.
+- Team noise: the engine's 80 simulated ADP drafts (`Engine.draftSims`), same SIGMA_G2 games factor and formulas as `scaleFor`.
+- No shrink toward 0.5 (as on the categories' Rankings and Team win numbers). Win M for points is not calibrated on real weeks (IDEAS #143).
