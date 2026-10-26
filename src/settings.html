@@ -148,12 +148,15 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     <h2>League settings</h2>
     <div class="grid2">
       <label class="f" for="s-teams">Teams<select id="s-teams"></select></label>
-      <label class="f" for="s-scoring">Scoring<select id="s-scoring"><option value="roto">Roto</option><option value="h2h">H2H: each category</option><option value="most">H2H: most categories</option></select></label>
-      <label class="f" for="s-cats">Categories<select id="s-cats"><option value="9">9-cat</option><option value="8">8-cat (no TO)</option></select></label>
+      <label class="f" for="s-scoring">Scoring<select id="s-scoring"><option value="roto">Roto</option><option value="h2h">H2H: each category</option><option value="most">H2H: most categories</option><option value="points">H2H: points</option></select></label>
+      <label class="f" for="s-cats" id="s-cats-lab">Categories<select id="s-cats"><option value="9">9-cat</option><option value="8">8-cat (no TO)</option></select></label>
       <label class="f" for="s-asb" title="Merged counts Feb 15–28 as one week">All-Star break<select id="s-asb"><option value="merged">Merged</option><option value="separate">Separate</option></select></label>
       <label class="f" for="s-po">Playoffs start<select id="s-po"></select></label>
       <label class="f" for="s-pofmt" title="Weeks per playoff round, for three rounds">Playoff format<select id="s-pofmt"><option value="1-1-1">1-1-1</option><option value="1-1-2">1-1-2</option><option value="1-2-2">1-2-2</option><option value="2-2-2">2-2-2</option></select></label>
     </div>
+    <div class="grid2 rosterrow" id="pv-row" aria-label="Fantasy points per stat" title="Fantasy points per stat; a negative value subtracts" hidden></div>
+    <p class="hint" id="pv-hint" hidden>Fantasy points per stat; a negative value subtracts. Unscored stats stay 0. Rankings and Team will use these; the other tabs say points aren't supported yet.</p>
+    <p class="hint warn" id="pv-warn" role="status"></p>
     <div class="grid2 rosterrow" aria-label="Roster and lineup">
       <label class="f" for="s-roster">Roster size<select id="s-roster"></select></label>
       <label class="f" for="s-il" title="Injured players' missed games count at replacement level, not zero">IL spots<select id="s-il"></select></label>
@@ -199,6 +202,9 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     const s = state.settings = LS.clampPoStart(state.settings, SCHED), plan = LS.weekPlan(SCHED, s.asb);
     fill($('s-teams'), 4, 20, s.teams); fill($('s-roster'), 8, 25, s.roster); fill($('s-il'), 0, 4, s.ilSpots);
     Object.keys(LU_IDS).forEach(id => fill($(id), 0, LS.LU_MAX[LU_IDS[id]], s[LU_IDS[id]]));
+    const pts = LS.isPoints(s);
+    $('s-cats-lab').style.display = pts ? 'none' : ''; $('pv-row').hidden = $('pv-hint').hidden = !pts;
+    LS.POINT_STATS.forEach(k => { $('pv-' + k).value = String(s.pointVals[k]); });
     $('s-scoring').value = s.scoring; $('s-cats').value = String(s.cats); $('s-asb').value = s.asb; $('s-pofmt').value = s.poFmt; $('s-lupos').value = s.luSplit ? 'split' : 'gf';
     const po = $('s-po'); po.innerHTML = '';
     for (let w = 10; w <= plan.count; w++) po.add(new Option('Wk ' + w + ' · ' + fmtDay(plan.starts[w - 1]), String(w)));
@@ -222,6 +228,20 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     else { delete s.luFx; if (id === 's-lupos') s.luSplit = v === 'split'; else s[LU_IDS[id]] = +v; }   // your own slots replace the ones read from Fantrax
     state.settings = LS.normalize(s); persist(); renderSettings();
   }
+  // point values: a bad box (letters, out of range) goes back to the stored value with a warning; an empty box is 0
+  LS.POINT_STATS.forEach(k => {
+    const lab = document.createElement('label'); lab.className = 'f'; lab.htmlFor = 'pv-' + k; lab.appendChild(document.createTextNode(LS.POINT_LABELS[k]));
+    const inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.min = -LS.PT_MAX; inp.max = LS.PT_MAX; inp.id = 'pv-' + k;
+    lab.appendChild(inp); $('pv-row').appendChild(lab);
+    inp.addEventListener('change', () => {
+      const raw = inp.value.trim(), n = raw === '' ? 0 : Number(raw);
+      if (inp.validity.badInput || !isFinite(n) || Math.abs(n) > LS.PT_MAX) {
+        $('pv-warn').textContent = LS.POINT_LABELS[k] + ': enter a number from −' + LS.PT_MAX + ' to ' + LS.PT_MAX + '.'; inp.value = String(state.settings.pointVals[k]); return;
+      }
+      $('pv-warn').textContent = '';
+      state.settings = LS.normalize(Object.assign({}, state.settings, { pointVals: Object.assign({}, state.settings.pointVals, { [k]: n }) })); persist(); renderSettings();
+    });
+  });
   ['s-teams', 's-roster', 's-scoring', 's-cats', 's-il', 's-pofmt', 's-po', 's-asb', 's-lupos'].concat(Object.keys(LU_IDS)).forEach(id => $(id).addEventListener('change', onSetting));
 
   // ---- Fantrax league ----
