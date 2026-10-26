@@ -24,10 +24,25 @@
     "xlsx": "off"
   },
   "permissions": {
+    "allow": [
+      "Bash(git fetch:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree list:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git show:*)",
+      "Bash(node .claude/scripts/branches.mjs:*)",
+      "Bash(node .claude/scripts/ledger.mjs next:*)",
+      "Bash(node .claude/scripts/ledger.mjs setup:*)",
+      "Bash(node --test:*)"
+    ],
     "ask": [
       "Bash(git push:*)",
       "Bash(gh pr merge:*)",
-      "Bash(gh api:*merge*)"
+      "Bash(gh api:*merge*)",
+      "Bash(node .claude/scripts/ledger.mjs land:*)"
     ],
     "deny": [
       "Edit(/index.html)",
@@ -53,6 +68,29 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/branches.mjs\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/before-edit.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
