@@ -23,6 +23,13 @@ function rankings() {
     while (ws.step() != null);
     out.winStart[withLists ? 'lists' : 'none'] = { rep: [...ws.rep.entries()], avg: [...ws.avg.entries()], hasAvg: ws.hasAvg };
   }
+  // Rankings with no team loaded keeps winStart on the other bases too (2026-10-26, before Rankings follows the Team tab with a team)
+  for (const basis of ['total', 'mix']) {
+    const tab = R.table(rows, { teams: 14, roster: 12, type: 'classic', basis, cats: 9 });
+    const ws = R.winStart(rows, tab, { teams: 14, roster: 12, basis, cats: 9 });
+    while (ws.step() != null);
+    out.winStart['none/' + basis] = { rep: [...ws.rep.entries()], avg: [...ws.avg.entries()], hasAvg: ws.hasAvg };
+  }
   // the engine context and per-player vectors, for every basis, cats and IL spots
   for (const basis of ['total', 'pergame', 'mix']) for (const cats of [9, 8]) for (const ilSpots of [0, 3]) {
     const cfg = R.cfgFor({ teams: 14, roster: 12, cats, ilSpots, basis });
@@ -49,6 +56,16 @@ function team() {
   const other = L.teams[1].id, cands = ROS[other].map(x => x.fid).slice(0, 6);
   const o = { teams: m.teams.map(t => [t.id, t.match, arr(t.cat), t.winC]), mean: [m.mean.match, arr(m.mean.cat), m.mean.winC] };
   for (const baseline of ['rep', 'avg']) o['scores_' + baseline] = W.moduleScores(ctx, st, { candidates: cands, baseline }).map(r => JSON.parse(JSON.stringify(r)));
+  // the Trade Analyzer's forecaster and the plain Plays % (2026-10-26, before the Reserve/IL/Team-tab flag): none of these may move
+  const Tr = require('../../trade_core.js'), R0 = ctx.roster, swapped = JSON.parse(JSON.stringify(R0));
+  swapped[me][0] = R0[other][0]; swapped[other][0] = R0[me][0];
+  const lw = W.leagueWin(ctx, null), lws = W.leagueWin(ctx, swapped);
+  o.leagueWin = lw && { ids: lw.ids, P: lw.P };
+  o.leagueWinSwap = lws && { ids: lws.ids, P: lws.P };
+  o.rosWinM = [Tr.rosWinM(ctx, R0, me), Tr.rosWinM(ctx, swapped, me)];
+  o.playsPct = T.playsPct(ctx, st);
+  const moved = T.initState(ROS[me]); moved.order.slice(0, 2).forEach(k => T.moveSlot(moved, k, 'reserve'));
+  o.playsPctMoved = T.playsPct(ctx, moved);
   return o;
 }
 
