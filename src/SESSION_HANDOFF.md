@@ -46,7 +46,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
 7. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 combine known
    game stats with projections; (#116 done).
-8. **#136** done 2026-10-25: `src/collect/espn_fetch.mjs` retries the ESPN collectors with backoff (429/403/5xx/network, 3
+8. **#136** done 2026-10-25: `src/collect/espn_fetch.mjs` retries the ESPN collectors with backoff (429/403/5xx/network, 3
    retries) and `espn_stats` pauses 500 ms between pages.
 
 ## Next session starts with
@@ -62,7 +62,6 @@ Playoff boost hidden, Win uses Draft field Easy, traded player's games use his p
 (#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against
 drops 2-5; `matchup_core` addPlan day list still runs to per.end (an extra empty day). Offered, unanswered: a "Team games left"
 column. 126 leftovers: `ftx` of the 234 BBM rows not refreshed from the Fantrax snapshot; Hashtag-only rows carry Hashtag ADP, BBM rows BBM ADP.
-Note: 6 context-hook tests fail when run inside a long session (not code).
 
 ## This PC
 
