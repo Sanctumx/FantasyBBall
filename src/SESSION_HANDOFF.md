@@ -25,7 +25,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 - **In-season tools + Settings tab (95-109, released 2026-10-21):** Matchup and Trade Analyzers (`inseason.html`), shared
   store `league_store.js`; Win M, shrink and no-projection decisions in force: archive "Handoff lines trimmed 2026-10-26".
 
-- **Tab speed (#142, released 2026-10-26, PR #32):** `src/fx_cache.js` caches Fantrax answers in localStorage (draw at once, refresh in the background); the pages link Engine, data and shared code as hashed `assets/` files (`_headers`: immutable). Board artifact unchanged. Details and timings: archive 142.
+- **Tab speed (#142, released 2026-10-26, PR #32):** `src/fx_cache.js` caches Fantrax answers in localStorage (draw at once, refresh in the background); the pages link Engine, data and shared code as hashed `assets/` files (`_headers`: immutable); `gen.py` clears `src/site/assets` before each build. Leftovers: cache `stats/espn.json` and box files, skip the live `players` call when cached, purge cache on Unload. Board artifact unchanged. Details and timings: archive 142.
 
 ## Open items (details in IDEAS.md)
 
