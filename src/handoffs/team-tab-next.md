@@ -19,7 +19,12 @@ Planner's plan (Opus, 2026-10-26), tests first in each step:
 6. IL rows show Plays % 0%; update How it works and `rost-note`.
 The draft Model pick is not affected (no prize-equity backtest). Mix stays Rankings-only.
 
-## Waiting on the user (six decisions, asked at the end of the 2026-10-26 session)
+## Decisions (user, 2026-10-26, after the plan) — these replace the plan's steps 4-6 where they differ
+
+1. Win C / Win M follow the toggle. 2. GL and Plays % follow it in Per game. 3. Only **Reserve** shows and counts 0% Plays % for the team; a player can still be moved into Active (respecting the max) and then counts again. 4. The "12" is `maxActive`. 5. Courtside "Active" = the league's active + bench; Reserve is only a parking place for preview/testing so a player does not count toward the team's games. So the model change IS wanted: Reserve players must not fill nights (today `Team.COUNTED` includes them via the reserve slot; check `team_core.js`, `TeamWin.side`, `oppState`). Auto-fill therefore ranks all non-IL players on a probe state and puts the top `maxActive` into Active, the rest into Reserve (0%). 6. IL does not show 0%: it uses **#149** (IL players count as healthy on the Team tab, as the Trade Analyzer already does), so #149 is part of this branch's work.
+Open for the next session: the model change moves the Trade Analyzer and Rankings D2 wherever they use the reserve slot; have the `explorer` find every use of the reserve slot / `COUNTED`, then the planner re-plans step 4-6 and #149 (Hard area: TeamWin), and the analyst judges calibration (k was fitted with Reserve counting).
+
+## Superseded: six questions asked at the end of the 2026-10-26 session (answered above)
 
 1. Should Win C / Win M follow the toggle (Rankings, Draft) or only Zscore (Trade Analyzer)? Planner: Win follows; the default view is Per game, so the Win numbers users see by default change and are uncalibrated.
 2. In Per game, do GL and Plays % follow too? Planner: yes (injured players then look healthy).
@@ -30,7 +35,7 @@ The draft Model pick is not affected (no prize-equity backtest). Mix stays Ranki
 
 ## Next
 
-1. Get the six decisions above, then build the plan test-first, rebuild with `node .claude/scripts/build.mjs`, run unit + browser (`team_page`, `inseason_page`, `rankings_page` [known 302 vs 303], `rankings_team_parity`), `reviewer` (effort high), PR on the user's word.
+1. Explorer: every use of the reserve slot / `COUNTED` / IL in `team_core.js`, `team_win.js`, `team_view.js`, the Trade Analyzer and Rankings D2. Planner (effort high): re-plan steps 4-6 plus #149 from the Decisions section; show the plan, then build the plan test-first, rebuild with `node .claude/scripts/build.mjs`, run unit + browser (`team_page`, `inseason_page`, `rankings_page` [known 302 vs 303], `rankings_team_parity`), `reviewer` (effort high), PR on the user's word.
 
 ## Hazards
 
