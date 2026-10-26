@@ -231,3 +231,65 @@ test('avg: no worst-player rule (nobody is forced to 0); rep still has one', () 
   assert.ok(avg.filter(r => st.slots[r.key] === 'active').every(r => r.dM !== 0));   // a Reserve player with no nights adds exactly 0 either way
   assert.ok(rep.some(r => r.dM === 0));
 });
+
+// D3 (2026-10-26): a candidate from an opponent leaves that team and the opponent receives the player I send out
+const oppActive = (tid, n) => ROS[tid].filter(x => x.slot === 'ACTIVE')[n || 0].fid;
+
+test('received: an opponent candidate sends my outgoing player to his old team in the vacated slot; free agents send nothing', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), out = st.order[0], inK = oppActive(other);
+  const r = W.received(ctx, T.applySwap(st, [out], [inK]));
+  assert.deepStrictEqual(r, { [other]: [{ key: out, slot: 'active' }] });
+  const fa = pool.players.find(p => !p.owner && p.g > 0).key;
+  assert.deepStrictEqual(W.received(ctx, T.applySwap(st, [out], [fa])), {});
+  assert.deepStrictEqual(W.received(ctx, T.applySwap(st, [out], [])), {});
+  assert.deepStrictEqual(W.received(ctx, st), {});
+});
+
+test('received: extra outgoing players go to the reserve; two opponents pair in order; an IL slot becomes reserve; swapped back = nothing', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), [o1, o2] = st.order, a = oppActive(other);
+  assert.deepStrictEqual(W.received(ctx, T.applySwap(st, [o1, o2], [a])), { [other]: [{ key: o1, slot: 'active' }, { key: o2, slot: 'reserve' }] });
+  const third = ids.find(t => t !== me && t !== other), b = oppActive(third);
+  assert.deepStrictEqual(W.received(ctx, T.applySwap(st, [o1, o2], [a, b])), { [other]: [{ key: o1, slot: 'active' }], [third]: [{ key: o2, slot: 'active' }] });
+  const il = ROS[other].find(x => x.slot === 'IR');
+  if (il) assert.deepStrictEqual(W.received(ctx, T.applySwap(st, [o1], [il.fid])), { [other]: [{ key: o1, slot: 'reserve' }] });
+  const back = T.applySwap(T.applySwap(st, [o1], [a]), [a], [o1]);
+  assert.deepStrictEqual(W.received(ctx, back), {});
+});
+
+test('matrix: after a trade only the old team of my candidate changes, and he now has the player I sent out', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), out = st.order.find(k => st.slots[k] === 'active'), inK = oppActive(other);
+  const sw = T.applySwap(st, [out], [inK]), m = W.matrix(ctx, sw);
+  // the old behaviour: the candidate left, nothing came back
+  const without = W.matrixOf(ctx, W.side(ctx, sw, W.weeksLeft(ctx)), new Set(sw.order), W.weeksLeft(ctx), {});
+  const at = m.teams.find(t => t.id === other), was = without.teams.find(t => t.id === other);
+  assert.notStrictEqual(at.match, was.match);
+  m.teams.filter(t => t.id !== other).forEach(t => assert.ok(near(t.match, without.teams.find(x => x.id === t.id).match, 1e-12)));
+  // the received player really is on the opponent's side: the better the player I send him, the lower my match chance against him
+  const act = st.order.filter(k => st.slots[k] === 'active').sort((a, b) => Pl.valueZ(ctx.pool.byKey.get(a).line, 82, ctx.ref) - Pl.valueZ(ctx.pool.byKey.get(b).line, 82, ctx.ref)), lo = act[0], hi = act[act.length - 1];
+  const vs = k => W.matrix(ctx, T.applySwap(st, [k], [inK])).teams.find(t => t.id === other).match;
+  assert.ok(vs(hi) < vs(lo));
+});
+
+test('matrix: a free-agent swap gives exactly the numbers it gave before D3', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), out = st.order[0], fa = pool.players.find(p => !p.owner && p.g > 0).key;
+  const sw = T.applySwap(st, [out], [fa]), W0 = W.weeksLeft(ctx);
+  assert.deepStrictEqual(W.matrix(ctx, sw), W.matrixOf(ctx, W.side(ctx, sw, W0), new Set(sw.order), W0, {}));
+});
+
+test('matrix cache: the same candidate with a different player sent to his team gives different numbers; a chain U to me to T leaves U', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), act = st.order.filter(k => st.slots[k] === 'active'), inK = oppActive(other);
+  const m1 = W.matrix(ctx, T.applySwap(st, [act[0]], [inK])).teams.find(t => t.id === other);
+  const m2 = W.matrix(ctx, T.applySwap(st, [act[1]], [inK])).teams.find(t => t.id === other);
+  assert.notStrictEqual(m1.match, m2.match);
+  const third = ids.find(t => t !== me && t !== other), x = oppActive(third);
+  const chain = T.applySwap(T.applySwap(st, [act[0]], [x]), [x], [inK]);   // x came from `third`, then went to `other`
+  assert.deepStrictEqual(W.received(ctx, chain), { [third]: [{ key: act[0], slot: 'active' }], [other]: [{ key: x, slot: 'active' }] });
+});
+
+test("rep module row: an opponent candidate costs my worst player going to his team; my own rows and free agents are unchanged", () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), su = W.moduleSetup(ctx, st, { baseline: 'rep' }), inK = oppActive(other);
+  const row = W.moduleRow(ctx, st, su, inK), sw = T.applySwap(st, [su.worst], [inK]);
+  const hand = W.matrix(ctx, T.moveSlot(sw, inK, su.wSlot === 'reserve' ? 'active' : su.wSlot), su.mo);
+  assert.ok(near(row.new, 100 * hand.mean.match, 1e-9));
+  assert.strictEqual(W.received(ctx, sw)[other][0].key, su.worst);
+});

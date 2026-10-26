@@ -153,3 +153,13 @@ test('playsPct marks IL rows as hypothetical and teamLine leaves them out', () =
   const line = pool.byKey.get(keys[0]).line;
   assert.strictEqual(T.teamLine([Object.assign({ line }, r[keys[3]])], 10).pts, 0);
 });
+
+test('applySwap records the swap in state.moves; moveSlot keeps the record; an empty swap leaves it as it was (D3)', () => {
+  const s = T.initState(ROS[me]), inK = ROS[other][0].fid;
+  assert.deepStrictEqual(s.moves, []);
+  const w = T.applySwap(s, [s.order[0]], [inK]);
+  assert.deepStrictEqual(w.moves, [{ out: [s.order[0]], in: [inK] }]);
+  assert.deepStrictEqual(T.moveSlot(w, inK, 'active').moves, w.moves);
+  assert.deepStrictEqual(T.applySwap(w, [], []).moves, w.moves);
+  assert.deepStrictEqual(s.moves, []);
+});

@@ -44,10 +44,29 @@
     return ctx.L.periods.filter(p => p.n <= ctx.L.lastRegular).reduce((s, p) => s + Math.max(0, Math.min(p.end, w.to) - Math.max(p.start, w.from)) / (p.end - p.start), 0);
   }
 
-  // a Team.initState for another team from its Fantrax slots; IL players and the excluded keys (players I brought in) are left out
-  function oppState(ctx, teamId, exclude) {
+  // a Team.initState for another team from its Fantrax slots; IL players and the excluded keys (players I brought in) are left out;
+  // recv = the players it receives in a previewed trade [{ key, slot }] (see received), who join in the slot they take
+  function oppState(ctx, teamId, exclude, recv) {
     const rows = ctx.roster[teamId].filter(f => !(exclude && exclude.has(f)) && ctx.pool.byKey.get(f).slot !== 'IR').map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
+    (recv || []).forEach(r => rows.push({ fid: r.key, slot: r.slot === 'active' ? 'ACTIVE' : 'RESERVE' }));
     return Team.initState(rows);
+  }
+
+  // D3 (user 2026-10-26): a candidate I bring in from an opponent's roster leaves that team, and the team receives the player I send out
+  // (a previewed trade; state.moves records each swap). One opponent among the incoming players gets every outgoing player: the first take
+  // the vacated slots in order, the rest go to the reserve. Incoming players from several opponents pair with the outgoing ones in order
+  // (extras go to nobody). Free agents send nothing back, a vacated IL slot becomes the reserve, and a player who is back on my preview
+  // roster is not received. -> { teamId: [{ key, slot: 'active' | 'reserve' }] }
+  function received(ctx, state) {
+    const res = {}, slotOf = k => ctx.pool.byKey.get(k).slot === 'ACTIVE' ? 'active' : 'reserve';
+    const give = (t, key, slot) => (res[t] = res[t] || []).push({ key, slot });
+    (state.moves || []).forEach(m => {
+      const ins = m.in.map(k => { const o = (ctx.pool.byKey.get(k) || {}).owner; return o && o !== ctx.me && ctx.roster[o] ? { o, slot: slotOf(k) } : null; }), owners = [...new Set(ins.filter(Boolean).map(x => x.o))];
+      if (owners.length === 1) m.out.forEach((k, i) => give(owners[0], k, i < ins.filter(Boolean).length ? ins.filter(Boolean)[i].slot : 'reserve'));
+      else if (owners.length) m.out.forEach((k, i) => { if (ins[i]) give(ins[i].o, k, ins[i].slot); });
+    });
+    Object.keys(res).forEach(t => { res[t] = res[t].filter(r => !state.order.includes(r.key)); if (!res[t].length) delete res[t]; });
+    return res;
   }
 
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
@@ -60,27 +79,29 @@
   // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
   // opponents' forecasts are the same for every previewed roster that removes the same players from them, so they are cached per ctx
   const memos = new WeakMap();
-  function oppTeam(ctx, e, nc, tid, exclude, W) {
+  function oppTeam(ctx, e, nc, tid, exclude, W, recv) {
     let memo = memos.get(ctx);
     if (!memo) { memo = new Map(); memos.set(ctx, memo); }
-    const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + W + '|' + nc;
-    if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude), W)));
+    const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + (recv || []).map(r => r.key + ':' + r.slot).sort().join(',') + '|' + W + '|' + nc;
+    if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude, recv), W)));
     return memo.get(id);
   }
 
   // my previewed roster against every other team. -> { weeks, teams: [{ id, cat[9], match, winC }], mean: { cat, match, winC } }
-  // (cat entries beyond the league's category count are null). opts: cats 9 | 8. Players I hold leave their old team's side.
+  // (cat entries beyond the league's category count are null). opts: cats 9 | 8. Players I hold leave their old team's side, and the
+  // teams my candidates came from receive the players I send out (received).
   function matrix(ctx, state, opts) {
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
-    return matrixOf(ctx, side(ctx, state, W), new Set(state.order), W, opts);
+    const recv = received(ctx, state), keys = [].concat(...Object.values(recv)).map(r => r.key);
+    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat(keys)), W, Object.assign({}, opts, { recv }));
   }
 
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
   // their old team's side (everyone on my roster, and a candidate I bring in)
   function matrixOf(ctx, mine, exclude, W, o) {
     const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
-    const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W)));
+    const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W, o && o.recv && o.recv[id])));
     const pl = tv.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
     const out = Eng.evaluate(pl, e.ctx, Object.assign({}, e.cfg, { teams: pl.length, roster: 1, slot: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
     const teams = ids.map((id, i) => {
@@ -195,6 +216,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { weeksLeft, oppState, received, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
