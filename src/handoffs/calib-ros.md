@@ -21,8 +21,17 @@ Open from the review (not fixed, decide with the user):
 - `calib_ros_k.js:41-43`: the SE takes the larger of two one-way cluster bootstraps, so it understates the two-way SE; the 2 SE gates are slightly lenient (does not change the shipped k).
 - `team_win.test.js` "engCtxFrom / evalVecs" test is loose (0.02); low priority.
 
+## #147 built (2026-10-26, same branch)
+
+Decisions (user, 2026-10-26): opponents weighted equally (not by schedule) until playoff odds are in; IL players left out of a trade as on the Team tab; `TRADE_W.winM` rescaled by the measured factor.
+- `src/win_k.js` holds the one `SHRINK` 0.6 / 0.75 (`TeamWin.SHRINK` is the same object); bundled in Team, Rankings and In-season (`gen.py`).
+- `TeamWin.leagueWin(ctx, R, opts)` = one `Engine.evaluate` over all N team forecasts (`tradeState` puts an incoming player in the slot the outgoing one left, Active first; IL counts for nothing). Trade `rosWinM` / `evaluateTrade(ctx, trade, opts)` read it: `{ mean, opps: [{ opp, p }] }` (was `periods`); dA, dB are exactly k times the unshrunk values; KR_* and the `ros` argument are gone from `matchup_core` (the Matchup Analyzer keeps its weekly k).
+- Rankings: `winStart(..., { shrink })` scales Win C by k.cat and Win M by k.match (categories only; order and Edge unchanged); `rankings.html` passes `WinK.SHRINK`.
+- `winM` 0.1 -> 0.07: old (origin/main) dB = 0.672 x new dB over the 2145 one-for-one candidates (scratch `fit_winm.js`). New dB is more spread (sd 4.5 vs 3.4); rank correlation of dA old vs new 0.94, but only 8 of the top 25 by dA x likelihood are shared. The likelihood guard test cap went 60% -> 70% (a win-win offer sits at 68%). `CAND_VER` v3 drops saved candidates.
+- Not done: the Trade page still scores 9 categories (no `cats` / `points` passed); Draft tab and Model pick untouched (needs a preseason check and a paired backtest with the analyst). Browser `rankings_page.mjs` "projections list all 302 players" fails on main too (303 players now), unrelated.
+- Hazard: when D2 (Rankings Vs average through TeamWin, team-tab-next) lands its league path must not also take `o.shrink` (double shrink).
+
 ## Next
 
-1. Decision (user, 2026-10-26): the Trade Analyzer should run Engine.evaluate (through TeamWin), not pairMatchup, and Team, Rankings and Trade should share one k (TeamWin.SHRINK, display only). Draft only after a preseason check and never where the Model pick reads. Recorded as ledger #147 (Open, in the ledger worktree). Until that lands the interim KR split in matchup_core stands. Plan it with the planner (hard area; analyst for the check).
-2. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`).
-3. On "push": push, PR, merge only on the user's word, then `ledger.mjs land` (ledger commit c447469 holds the #139 row, archive entry and #144-#146).
+1. Review (reviewer, effort high), fix, merge on the user's word, then `ledger.mjs land` (ledger holds the #139 row, archive 139, #144-#146; update the #147 row to Partly done: Trade and Rankings built, Draft open).
+2. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`); do not shrink twice.
