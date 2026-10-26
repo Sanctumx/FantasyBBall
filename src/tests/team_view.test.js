@@ -150,3 +150,45 @@ test('apply: wraps applySwap on the picked keys and leaves the old state alone',
   assert.ok(!(out.key in next.slots) && next.slots[inn.key] === 'bench');
   assert.strictEqual(JSON.stringify(st), before);
 });
+
+test('zParts: the weighted parts add up to the row Z; weight 0 and TO in 8-cat leagues give 0', () => {
+  const ctx = mk(), st = stateOf(), w = Array(9).fill(1); w[3] = 0; w[5] = 0.5;
+  [9, 8].forEach(nc => {
+    const r = V.rows(ctx, st, { zCats, weights: w, cats: nc, adjust: true }).rows[0], parts = V.zParts(r.cats, w, nc);
+    assert.strictEqual(parts.length, 9);
+    assert.ok(near(parts.reduce((s, v) => s + v, 0), r.z, 1e-9));
+    assert.strictEqual(parts[3], 0);
+    if (nc === 8) assert.strictEqual(parts[8], 0);
+  });
+});
+
+test('avgCats: Plays % weighted per-category Z per slot, parts add up to avgZ', () => {
+  const ctx = mk(), st = stateOf(), w = Array(9).fill(1); w[0] = 0.25;
+  const r = V.rows(ctx, st, { zCats, weights: w });
+  assert.strictEqual(r.avgCats.length, 9);
+  assert.ok(near(V.zParts(r.avgCats, w, 9).reduce((s, v) => s + v, 0), r.avgZ, 1e-9));
+});
+
+test('move: refuses the same slot; IL to Bench adds him to the team average, Bench to Reserve drops him', () => {
+  const ctx = mk(), st = stateOf(), il = st.order.find(k => st.slots[k] === 'il'), bn = st.order.find(k => st.slots[k] === 'bench');
+  assert.strictEqual(V.move(st, bn, 'bench'), st);
+  const a = V.rows(ctx, st, { zCats });
+  if (il) {
+    const up = V.move(st, il, 'active'), b = V.rows(ctx, up, { zCats });
+    assert.strictEqual(up.slots[il], 'active');
+    assert.ok(find(a, il).hypo && !find(b, il).hypo);   // he now counts in the team rows
+    assert.ok(b.avgZ !== a.avgZ || b.avg.pts !== a.avg.pts);
+  }
+  if (bn) {
+    const down = V.move(st, bn, 'reserve'), c = V.rows(ctx, down, { zCats });
+    assert.strictEqual(down.slots[bn], 'reserve');
+    assert.deepStrictEqual(c.avg, V.rows(ctx, T.applySwap(st, [bn], []), { zCats }).avg);
+  }
+});
+
+test('slotCounts: players per slot against the active limit', () => {
+  const st = stateOf(), n = V.slotCounts(st, 10);
+  assert.strictEqual(n.active.n, st.order.filter(k => st.slots[k] === 'active').length);
+  assert.strictEqual(n.active.over, n.active.n > 10);
+  assert.strictEqual(n.il.over, false);
+});

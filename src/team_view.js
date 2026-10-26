@@ -34,8 +34,18 @@
     });
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
     const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: plays[k].pct, hypo: plays[k].hypo })), slots);
-    const avgZ = o.zCats ? state.order.reduce((s, k) => { const p = plays[k], pp = ctx.pool.byKey.get(k), c = o.zCats(pp); return p.hypo || p.pct == null || !c ? s : s + p.pct * Team.weightedZ(c, o.weights, nc); }, 0) / slots : null;
-    return { groups, rows: all, avg, avgZ };
+    let avgCats = null;
+    if (o.zCats) {
+      avgCats = Array(9).fill(0);
+      state.order.forEach(k => { const p = plays[k], c = o.zCats(ctx.pool.byKey.get(k)); if (!p.hypo && p.pct != null && c) c.forEach((v, i) => { avgCats[i] += p.pct * v / slots; }); });
+    }
+    const avgZ = avgCats ? Team.weightedZ(avgCats, o.weights, nc) : null;
+    return { groups, rows: all, avg, avgZ, avgCats };
+  }
+
+  // each category's share of the weighted Z (cats x base weight x user weight), so the parts add up to Team.weightedZ
+  function zParts(cats, weights, nc) {
+    return cats.map((v, c) => Team.weightedZ(cats.map((x, i) => i === c ? x : 0), weights, nc));
   }
 
   // ---- Win scoring, one piece per step() so the page stays responsive: the matrix first, then one roster player per step ----
@@ -67,12 +77,22 @@
     } };
   }
 
+  // ---- slots ----
+  // a move to another slot; the same slot returns the same state object
+  const move = (state, key, slot) => state.slots[key] === slot ? state : Team.moveSlot(state, key, slot);
+  // players per slot; over is set only for Active above the league limit
+  function slotCounts(state, maxActive) {
+    const o = {};
+    SLOT_ORDER.forEach(sl => { const n = state.order.filter(k => state.slots[k] === sl).length; o[sl] = { n, over: sl === 'active' && n > maxActive }; });
+    return o;
+  }
+
   // ---- swap boxes ----
   const sendOutList = (ctx, state) => state.order.map(k => ctx.pool.byKey.get(k));
   const bringInList = (ctx, state) => ctx.pool.players.filter(p => !(p.key in state.slots));
   const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
   const apply = (state, outs, ins) => Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
 
-  const api = { gamesLeft, rows, winJob, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);

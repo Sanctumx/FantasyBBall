@@ -169,6 +169,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
       <h2>Roster <span class="meta" id="rost-meta"></span></h2>
       <div class="ctl">
         <span class="seg" id="view" role="group" aria-label="Stat view"><button type="button" data-v="game">Per game</button><button type="button" data-v="ros">Rest of season</button></span>
+        <span class="seg" id="zview" role="group" aria-label="Columns show"><button type="button" data-z="stats" title="Show each player's projected stats">Stats</button><button type="button" data-z="z" title="Show each category's Z score, weighted, adding up to the Z column">Z</button></span>
         <label class="chk" for="adj" title="Multiply each player's stats and Z by his Plays %"><input type="checkbox" id="adj"> Adjust player stats by Plays %</label>
         <button class="btn" type="button" id="reset">Reset roster</button>
       </div>
@@ -2308,8 +2309,18 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
     const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: plays[k].pct, hypo: plays[k].hypo })), slots);
-    const avgZ = o.zCats ? state.order.reduce((s, k) => { const p = plays[k], pp = ctx.pool.byKey.get(k), c = o.zCats(pp); return p.hypo || p.pct == null || !c ? s : s + p.pct * Team.weightedZ(c, o.weights, nc); }, 0) / slots : null;
-    return { groups, rows: all, avg, avgZ };
+    let avgCats = null;
+    if (o.zCats) {
+      avgCats = Array(9).fill(0);
+      state.order.forEach(k => { const p = plays[k], c = o.zCats(ctx.pool.byKey.get(k)); if (!p.hypo && p.pct != null && c) c.forEach((v, i) => { avgCats[i] += p.pct * v / slots; }); });
+    }
+    const avgZ = avgCats ? Team.weightedZ(avgCats, o.weights, nc) : null;
+    return { groups, rows: all, avg, avgZ, avgCats };
+  }
+
+  // each category's share of the weighted Z (cats x base weight x user weight), so the parts add up to Team.weightedZ
+  function zParts(cats, weights, nc) {
+    return cats.map((v, c) => Team.weightedZ(cats.map((x, i) => i === c ? x : 0), weights, nc));
   }
 
   // ---- Win scoring, one piece per step() so the page stays responsive: the matrix first, then one roster player per step ----
@@ -2341,13 +2352,23 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     } };
   }
 
+  // ---- slots ----
+  // a move to another slot; the same slot returns the same state object
+  const move = (state, key, slot) => state.slots[key] === slot ? state : Team.moveSlot(state, key, slot);
+  // players per slot; over is set only for Active above the league limit
+  function slotCounts(state, maxActive) {
+    const o = {};
+    SLOT_ORDER.forEach(sl => { const n = state.order.filter(k => state.slots[k] === sl).length; o[sl] = { n, over: sl === 'active' && n > maxActive }; });
+    return o;
+  }
+
   // ---- swap boxes ----
   const sendOutList = (ctx, state) => state.order.map(k => ctx.pool.byKey.get(k));
   const bringInList = (ctx, state) => ctx.pool.players.filter(p => !(p.key in state.slots));
   const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
   const apply = (state, outs, ins) => Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
 
-  const api = { gamesLeft, rows, winJob, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, createScorer, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2362,9 +2383,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   $('sitenav').outerHTML = Shared.TOOLBAR_HTML('team');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-team-v1';
-  let ui = { view: 'game', adjust: false, weights: null, sortZ: false, team: null };
+  let ui = { view: 'game', zview: 'stats', adjust: false, weights: null, sortZ: false, team: null };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
-  ui.view = ui.view === 'ros' ? 'ros' : 'game'; ui.adjust = !!ui.adjust; ui.sortZ = !!ui.sortZ; ui.team = typeof ui.team === 'string' ? ui.team : null;
+  ui.view = ui.view === 'ros' ? 'ros' : 'game'; ui.zview = ui.zview === 'z' ? 'z' : 'stats'; ui.adjust = !!ui.adjust; ui.sortZ = !!ui.sortZ; ui.team = typeof ui.team === 'string' ? ui.team : null;
   ui.weights = Array.isArray(ui.weights) && ui.weights.length === 9 && ui.weights.every(v => v >= 0 && v <= 1) ? ui.weights.map(Number) : new Array(9).fill(1);
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -2454,7 +2475,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function rosterHtml(r, job) {
     const head = '<thead><tr><th class="l">Player</th><th title="Projected remaining games">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th>' + c + '</th>').join('') +
       '<th class="sortable" id="th-z" title="Zscore, weighted by the category weights; click to sort by it"' + (ui.sortZ ? ' aria-sort="descending"' : '') + '>Z</th><th title="Change in your Win C (hundredths) from having him">Win C</th><th title="Change in your Win M (points) from having him">Win M</th></tr></thead>';
-    const nc = nCats(), cols = 3 + nc + 3, body = [];
+    const nc = nCats(), cols = 3 + nc + 3, body = [], zv = ui.zview === 'z', wts = ui.weights, parts = x => TV.zParts(x.cats, wts, nc);
     r.groups.forEach(g => {
       if (!g.rows.length) return;
       body.push('<tr class="grp"><td colspan="' + cols + '">' + SLOT_NAME[g.slot] + ' (' + g.rows.length + ')</td></tr>');
@@ -2462,13 +2483,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
         const w = job.players[x.key], dim = x.hypo ? ' class="hy"' : '';
         body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + '</small></td><td>' + x.gl.toFixed(0) + '</td>' +
           '<td' + (x.hypo ? ' class="dim" title="What he would get as one more bench player"' : '') + '>' + pctTxt(x.pct) + '</td>' +
-          RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo ? ' class="dim"' : '') + '>' + fmtStat(x.stat[k], c) + '</td>').join('') +
+          RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo || (zv && wts[c] === 0) ? ' class="dim"' : '') + '>' + (zv ? (x.cats ? signed(parts(x)[c], 2) : '–') : fmtStat(x.stat[k], c)) + '</td>').join('') +
           '<td>' + (x.z == null ? '–' : signed(x.z, 2)) + '</td>' +
           (w ? '<td' + dim + '><span class="' + sgn(w.c) + '">' + signed(w.c) + '</span></td><td' + dim + '><span class="' + sgn(w.m) + '">' + signed(w.m) + '</span></td>' : '<td>…</td><td>…</td>') + '</tr>');
       });
     });
     const mean = job.matrix && job.matrix.mean;
-    body.push('<tr class="tot"><td class="l">Team average (per slot)</td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td>' + fmtStat(r.avg[k], c) + '</td>').join('') +
+    const avgParts = zv && r.avgCats ? TV.zParts(r.avgCats, ui.weights, nc) : null;
+    body.push('<tr class="tot"><td class="l">Team average (per slot)</td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td' + (zv && wts[c] === 0 ? ' class="dim"' : '') + '>' + (zv ? (avgParts ? signed(avgParts[c], 2) : '–') : fmtStat(r.avg[k], c)) + '</td>').join('') +
       '<td>' + (r.avgZ == null ? '–' : signed(r.avgZ, 2)) + '</td><td>' + (mean ? mean.winC.toFixed(1) : '…') + '</td><td>' + (mean && mean.match != null ? Math.round(mean.match * 100) + '%' : '…') + '</td></tr>');
     return head + '<tbody>' + body.join('') + '</tbody>';
   }
@@ -2539,7 +2561,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   $('reset').addEventListener('click', () => { state = base; outs = []; ins = []; $('swap-msg').textContent = ''; render(); });
 
   // ---- controls ----
-  function viewButtons() { document.querySelectorAll('#view button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.view)); }
+  function viewButtons() { document.querySelectorAll('#view button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.view)); document.querySelectorAll('#zview button').forEach(b => b.classList.toggle('on', b.dataset.z === ui.zview)); }
+  $('zview').addEventListener('click', e => { const b = e.target.closest('button[data-z]'); if (!b) return; ui.zview = b.dataset.z; save(); viewButtons(); draw(); });
   $('view').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (!b) return; ui.view = b.dataset.v; save(); viewButtons(); draw(); });
   $('adj').checked = ui.adjust; viewButtons();
   $('adj').addEventListener('change', () => { ui.adjust = $('adj').checked; save(); draw(); });
