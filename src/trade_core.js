@@ -28,8 +28,23 @@
     if (!ctx._projVals) ctx._projVals = ctx.pool.players.filter(p => p.src === 'proj').map(p => InPlayers.valueZ(p.line, p.g, ctx.ref)).sort((a, b) => b - a);
     return ctx._projVals;
   }
+  // an IL player's season value: his projected games (which already hold the time he misses) at his line, the rest of the season at the
+  // line of his owner's worst non-IL player (user, 2026-10-26); everyone else is valued over his own games
+  const FULL_G = 82;
+  function worstLine(ctx, owner) {
+    const c = ctx._worst = ctx._worst || {};
+    if (!(owner in c)) {
+      const ps = (ctx.roster[owner] || []).map(f => ctx.pool.byKey.get(f)).filter(p => p.slot !== 'IR').sort((a, b) => InPlayers.valueZ(a.line, a.g, ctx.ref) - InPlayers.valueZ(b.line, b.g, ctx.ref));
+      c[owner] = ps.length ? ps[0].line : null;
+    }
+    return c[owner];
+  }
+  function seasonZ(ctx, pp, line) {
+    const fill = pp.slot === 'IR' && pp.g < FULL_G ? worstLine(ctx, pp.owner) : null;
+    return fill ? InPlayers.valueZFill(line, pp.g, fill, FULL_G, ctx.ref) : InPlayers.valueZ(line, pp.g, ctx.ref);
+  }
   function perceived(ctx, pp) {
-    const proj = InPlayers.valueZ(pp.line, pp.g, ctx.ref), cur = InPlayers.valueZ(InPlayers.curLine(pp, TRADE_W.shrinkGames), pp.g, ctx.ref);
+    const proj = seasonZ(ctx, pp, pp.line), cur = seasonZ(ctx, pp, InPlayers.curLine(pp, TRADE_W.shrinkGames));
     const vals = projValues(ctx), rank = Math.max(1, Math.min(vals.length, Math.round(pp.adp == null ? 168 : pp.adp)));
     const adp = vals[rank - 1];
     return { cur, proj, adp, pv: TRADE_W.cur * cur + TRADE_W.proj * proj + TRADE_W.adp * adp, rv: proj };

@@ -111,6 +111,15 @@ test('candidates cover every other-team player and findTrades still defaults to 
   assert.ok(T.filterTrades(all, { limit: 5000 }).length === all.length);   // the page's blank "+Win M you" box means no floor
 });
 
+test('perceived: an IL player is g games of his line plus the owner\'s worst non-IL player for the rest of 82 (user, 2026-10-26)', () => {
+  const Pi = require('../inseason_players.js');
+  const il = pool.players.find(p => p.slot === 'IR' && p.owner && p.g > 0 && p.g < 82);
+  assert.ok(il, 'fixture has an IL player with fewer than 82 projected games');
+  const worst = ctx.roster[il.owner].map(f => pool.byKey.get(f)).filter(p => p.slot !== 'IR').sort((a, b) => Pi.valueZ(a.line, a.g, ctx.ref) - Pi.valueZ(b.line, b.g, ctx.ref))[0];
+  assert.ok(Math.abs(T.perceived(ctx, il).proj - Pi.valueZFill(il.line, il.g, worst.line, 82, ctx.ref)) < 1e-9);
+  assert.ok(Math.abs(T.perceived(ctx, worst).proj - Pi.valueZ(worst.line, worst.g, ctx.ref)) < 1e-9);   // healthy players are unchanged
+});
+
 // (#147: the cap was 60% on the old pairMatchup dB; on the TeamWin dB the top list includes a win-win offer at 68%, so the cap is 70%)
 // (#147 review: searching every give, not the first four, and leaving out IL players on either side: an IL player costs his owner 0 Win M,
 // so offers for one reach 97% and are judged separately; over every give the median of the top 25 is 44%)
