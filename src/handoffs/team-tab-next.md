@@ -52,7 +52,7 @@ Open for the next session: have the `explorer` find every use of the reserve slo
 
 ## Next
 
-1. Explorer: every use of the reserve slot / `COUNTED` / IL in `team_core.js`, `team_win.js`, `team_view.js`, the Trade Analyzer and Rankings D2. Planner (effort high): re-plan steps 4-6 plus #149 from the Decisions section; show the plan, then build the plan test-first, rebuild with `node .claude/scripts/build.mjs`, run unit + browser (`team_page`, `inseason_page`, `rankings_page` [known 302 vs 303], `rankings_team_parity`), `reviewer` (effort high), PR on the user's word.
+Built and review fixes done (443 unit tests). 1. Land the ledger rows (#149-#152, committed in the ledger worktree: `node .claude/scripts/ledger.mjs land`) if the user agrees. 2. After PR #45 merges: `git fetch && git rebase origin/main` in this worktree, `node .claude/scripts/build.mjs` (do not hand-resolve built pages), unit + browser checks (serve on a free port; 8765 had a stale server). 3. PR only on the user's word.
 
 ## Hazards
 
