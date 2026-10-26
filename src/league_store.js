@@ -3,7 +3,7 @@
 // one-time migration from the keys the pages used before. Pure functions over get/set callbacks, so Node can test them.
 (function (root) {
   'use strict';
-  const KEYS = { settings: 'courtside-settings-v1', board: 'courtside-board-v1', leagues: 'courtside-leagues-v1', inseason: 'courtside-inseason-v1' };
+  const KEYS = { settings: 'courtside-settings-v1', board: 'courtside-board-v1', leagues: 'courtside-leagues-v1', inseason: 'courtside-inseason-v1', manual: 'courtside-manual-v1' };
   // league settings only; slot, order and draft field belong to a draft and stay on the Draft page
   // Points leagues (2026-10-26, #137): fantasy points per stat, kept with the other league settings; a draft never stores them
   const POINT_STATS = ['pts', 'reb', 'ast', 'stl', 'blk', 'to', 'tpm', 'fgm', 'fga', 'ftm', 'fta'];
@@ -63,7 +63,7 @@
     const l = readLeagues(get), i = l.findIndex(x => x.id === id);
     // a name the user typed (custom) is kept when Fantrax sends its own on reconnect
     const keep = i >= 0 && l[i].custom;
-    const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now() };
+    const entry = { id, name: keep ? l[i].name : name || (i >= 0 ? l[i].name : 'League ' + id), custom: keep || undefined, myTeam: myTeam != null ? myTeam : (i >= 0 ? l[i].myTeam : null), used: Date.now(), manual: i >= 0 && l[i].manual || undefined };
     if (i >= 0 && l[i].scoring) { entry.scoring = l[i].scoring; entry.pointVals = l[i].pointVals; }
     if (i >= 0) l[i] = entry; else l.push(entry);
     set(KEYS.leagues, JSON.stringify(l));
@@ -72,7 +72,10 @@
     const l = readLeagues(get), i = l.findIndex(x => x.id === id); if (i < 0 || !name) return;
     l[i] = Object.assign({}, l[i], { name, custom: true }); set(KEYS.leagues, JSON.stringify(l));
   }
-  const forgetLeague = (get, set, id) => set(KEYS.leagues, JSON.stringify(readLeagues(get).filter(x => x.id !== id)));
+  function forgetLeague(get, set, id) {
+    set(KEYS.leagues, JSON.stringify(readLeagues(get).filter(x => x.id !== id)));
+    const m = readManual(get); if (id in m) { delete m[id]; set(KEYS.manual, JSON.stringify(m)); }
+  }
   // scoring and point values belong to the league: kept on its saved record, restored on Load (a record from before this is category scoring)
   function leagueScoring(get, id) {
     const x = readLeagues(get).find(y => y.id === id); if (!x) return null;
@@ -148,6 +151,109 @@
       .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
   }
 
+  // ---- manual leagues (2026-10-26): a league typed or pasted in (Yahoo has no sync yet) ----
+  // Stored whole in KEYS.manual; manualAnswers() turns one into the answers Fantrax would give, so the pages read it unchanged.
+  const normName = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  const YAHOO_TEAM = { PHX: 'PHO', NOP: 'NOR', NO: 'NOR', GS: 'GSW', NY: 'NYK', SA: 'SAS', UTAH: 'UTA', WSH: 'WAS' };
+  const readManual = get => obj(parse(get, KEYS.manual)) || {};
+  const manualLeague = (get, id) => { const m = readManual(get)[id]; return obj(m) ? m : null; };
+  const newManualId = () => 'm-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  // Yahoo lineup slots → the starting-slot list, bench count and IL count; tokens it does not know are handed back
+  function parseSlotList(text) {
+    const luFx = [], unknown = []; let bn = 0, il = 0;
+    String(text || '').split(/[\s,]+/).filter(Boolean).forEach(w => {
+      const x = w.toUpperCase();
+      if (['PG', 'SG', 'G', 'SF', 'PF', 'F', 'C', 'G/C', 'F/C'].includes(x)) luFx.push(x);
+      else if (['UTIL', 'UT', 'U'].includes(x)) luFx.push('U');
+      else if (['BN', 'BE', 'BENCH'].includes(x)) bn++;
+      else if (x === 'IL' || x === 'IL+') il++;
+      else if (x !== 'NA') unknown.push(w);
+    });
+    return { luFx, bn, il, unknown };
+  }
+  // the Lineup dropdown values a slot list stands for (as Load sets them)
+  function slotSettings(luFx) {
+    const o = { luFx: luFx.slice(), luSplit: luFx.some(x => ['PG', 'SG', 'SF', 'PF'].includes(x)) };
+    LU_COUNT.forEach(f => { o[f[0]] = Math.min(LU_MAX[f[0]], luFx.filter(f[1]).length); });
+    return o;
+  }
+  // The text of a Yahoo "Starting Rosters" page (every team, slot by slot) → teams, the lineup, bench and IL counts.
+  // Per team: the line before "Pos" is its name; a slot line is followed by the player's name and then "BKN - PG,SG".
+  function parseYahooRosters(text) {
+    const lines = String(text || '').split(/\r?\n/).map(x => x.trim()), teams = [];
+    const SLOT = /^(PG|SG|G|SF|PF|F|C|UTIL|BN|IL\+?|NA)$/i, INFO = /^([A-Z]{2,4}) - ([A-Z]{1,2}(?:,[A-Z]{1,2})*)$/;
+    let prev = '', cur = null, luFx = [], bn = 0, il = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i]; if (!ln) continue;
+      if (ln === 'Pos' && lines[i + 1] === 'Player') { cur = { name: prev, players: [], starters: [], bn: 0, il: 0 }; teams.push(cur); i++; continue; }
+      if (cur && SLOT.test(ln)) {
+        let j = i + 1; while (j < lines.length && !lines[j]) j++;
+        let k = j + 1, m = null; while (k < lines.length && k <= j + 4 && !(m = INFO.exec(lines[k]))) k++;
+        if (!m) { prev = ln; continue; }
+        const slot = ln.toUpperCase(), isIl = slot.startsWith('IL');
+        cur.players.push({ n: lines[j], t: YAHOO_TEAM[m[1]] || m[1], p: m[2].replace(/,/g, '/'), il: isIl });
+        if (isIl) cur.il++; else if (slot === 'BN') cur.bn++; else if (slot !== 'NA') cur.starters.push(slot === 'UTIL' ? 'U' : slot);
+        i = k; continue;
+      }
+      prev = ln;
+    }
+    const kept = teams.filter(t => t.players.length);
+    kept.forEach(t => { if (t.starters.length > luFx.length) luFx = t.starters; bn = Math.max(bn, t.bn); il = Math.max(il, t.il); });
+    return { teams: kept.map(t => ({ name: t.name, players: t.players })), luFx, bn, il };
+  }
+  // a new manual league from parsed rosters (parseYahooRosters); `mine` is the index of your team
+  function makeManual(name, parsed, mine, base) {
+    const n = parsed.teams.length, roster = parsed.luFx.length + parsed.bn;
+    const settings = normalize(Object.assign({}, LEAGUE_DEF, base, { teams: Math.min(20, Math.max(4, n)), roster: Math.min(25, Math.max(8, roster)), ilSpots: parsed.il }, parsed.luFx.length ? slotSettings(parsed.luFx) : {}));
+    return { v: 1, id: newManualId(), name, manual: true, settings, myTeam: 't' + ((mine >= 0 && mine < n ? mine : 0) + 1), updatedAt: Date.now(),
+      teams: parsed.teams.map((t, i) => ({ id: 't' + (i + 1), name: t.name, players: t.players.map(p => ({ n: p.n, t: p.t || '', p: p.p || '', il: !!p.il })) })) };
+  }
+  const manualPid = n => 'm:' + normName(n);
+  // the league as the Worker would answer: what=league, rosters, standings and the player list (never cached; see fx_cache)
+  function manualAnswers(ML) {
+    const teamInfo = {}, rosters = {}, players = {};
+    ML.teams.forEach(t => {
+      teamInfo[t.id] = { division: 'Manual', name: t.name, id: t.id, shortName: t.name.slice(0, 3) };
+      rosters[t.id] = { teamName: t.name, rosterItems: t.players.map(p => { players[manualPid(p.n)] = { name: p.n, team: p.t, position: p.p }; return { id: manualPid(p.n), position: p.p, status: p.il ? 'INJURED_RESERVE' : 'ACTIVE' }; }) };
+    });
+    return { league: { teamInfo, rosterInfo: { maxTotalPlayers: ML.settings.roster }, playerInfo: {}, matchups: [], scoringPeriods: [] },
+      rosters: { period: 1, rosters }, standings: [], players };
+  }
+  function saveManual(get, set, ML) {
+    const m = readManual(get); m[ML.id] = ML; set(KEYS.manual, JSON.stringify(m));
+    rememberLeague(get, set, ML.id, ML.name, ML.myTeam);
+    const l = readLeagues(get), i = l.findIndex(x => x.id === ML.id);
+    l[i] = Object.assign({}, l[i], { name: ML.name, manual: true }); set(KEYS.leagues, JSON.stringify(l));
+  }
+  const exportLeague = ML => JSON.stringify({ app: 'courtside-draft-kit', kind: 'league', version: 1, exportedAt: new Date().toISOString(), league: ML }, null, 1);
+  // a league file → { league, exists, error }; the league is cleaned up (settings normalized, team ids t1.., a fresh id if it is not ours)
+  function parseLeagueImport(text, existingIds) {
+    const fail = error => ({ error, league: null, exists: false });
+    let f; try { f = JSON.parse(text); } catch (e) { return fail('That file is not JSON.'); }
+    if (!obj(f) || f.kind !== 'league') return fail('That file is not a Courtside league.');
+    if (f.version !== 1) return fail('That league file is version ' + f.version + '; this page reads version 1.');
+    const L = obj(f.league); if (!L || !Array.isArray(L.teams)) return fail('The file has no teams.');
+    if (L.teams.length < 2 || L.teams.length > 20) return fail('A league needs 2 to 20 teams; this file has ' + L.teams.length + '.');
+    const settings = normalize(Object.assign({}, LEAGUE_DEF, obj(L.settings))), seen = {}, names = {};
+    const teams = [];
+    for (let i = 0; i < L.teams.length; i++) {
+      const t = obj(L.teams[i]), nm = t && typeof t.name === 'string' ? t.name.trim() : '';
+      if (!nm) return fail('Team ' + (i + 1) + ' has no name.');
+      if (names[nm.toLowerCase()]) return fail('Two teams are called "' + nm + '".');
+      names[nm.toLowerCase()] = 1;
+      const ps = Array.isArray(t.players) ? t.players.filter(p => obj(p) && typeof p.n === 'string' && p.n.trim()) : [];
+      if (ps.length > settings.roster + settings.ilSpots) return fail(nm + ' has ' + ps.length + ' players; the roster holds ' + (settings.roster + settings.ilSpots) + '.');
+      for (const p of ps) { const k = normName(p.n); if (seen[k]) return fail(p.n + ' is on both ' + seen[k] + ' and ' + nm + '.'); seen[k] = nm; }
+      teams.push({ id: 't' + (i + 1), name: nm, players: ps.map(p => ({ n: p.n.trim(), t: String(p.t || ''), p: String(p.p || ''), il: !!p.il })), was: t.id });
+    }
+    const mine = teams.find(t => t.was === L.myTeam);
+    const id = typeof L.id === 'string' && /^m-[a-z0-9]+$/.test(L.id) ? L.id : newManualId();
+    const league = { v: 1, id, name: typeof L.name === 'string' && L.name.trim() ? L.name.trim() : 'Manual league', manual: true, settings, myTeam: mine ? mine.id : 't1', updatedAt: Date.now(),
+      teams: teams.map(t => ({ id: t.id, name: t.name, players: t.players })) };
+    return { error: null, league, exists: (existingIds || []).includes(id) };
+  }
+  const copyLeague = ML => Object.assign({}, ML, { id: newManualId(), name: ML.name + ' (2)', updatedAt: Date.now() });
+
   // ---- schedule (the season's weeks and the playoffs), as on the board ----
   const ASB_WEEK = 18;
   function weekPlan(SCHED, asb) {
@@ -187,6 +293,7 @@
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
   const api = { leagueScoring, setLeagueScoring, KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
+    manualLeague, saveManual, parseSlotList, slotSettings, parseYahooRosters, makeManual, manualAnswers, exportLeague, parseLeagueImport, copyLeague,
     fxSlots, applyFantrax, teamsOf, weekPlan, playoffRounds, clampPoStart, withAsb, fxDraftPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LeagueStore = api;
 })(this);
