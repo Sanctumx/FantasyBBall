@@ -8,7 +8,7 @@
 // the summed category chances, averaged over the opponents).
 (function (root) {
   'use strict';
-  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Team = root.Team || require('./team_core.js'), Pts = root.Points || require('./points_core.js');
+  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Team = root.Team || require('./team_core.js'), Pts = root.Points || require('./points_core.js'), WinK = root.WinK || require('./win_k.js');
   const NC = Eng.NC;
 
   // the engine context of a ctx's player pool: noise and pool averages from simulated drafts of the real league (rostered players
@@ -89,8 +89,7 @@
   // Shrink toward 50%, fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (#139, calib_ros_k.js): pooled k 0.43 match,
   // 0.65 per category (one k per category did not beat one k); unshrunk was about twice too confident. Shipped at 0.6 / 0.75 (user, 2026-10-26):
   // the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident. opts.shrink overrides.
-  const SHRINK = { match: 0.6, cat: 0.75 };
-  const shr = (p, k) => 0.5 + k * (p - 0.5);
+  const SHRINK = WinK.SHRINK, shr = WinK.shrink;
   function matrixOf(ctx, mine, exclude, W, o) {
     const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o && o.points), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
     const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W)));
@@ -106,6 +105,36 @@
     });
     const avg = f => teams.reduce((s, t) => s + f(t), 0) / (teams.length || 1);
     return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
+  }
+
+  // The state of team t holding the fantrax ids `fids` (a trade's roster): its players keep their Fantrax slots, IL players count for
+  // nothing (as oppState), and each incoming player takes a slot the outgoing ones left (Active first), else the reserve
+  function tradeState(ctx, t, fids) {
+    const keep = new Set(fids), was = new Set(ctx.roster[t]), slotOf = f => ctx.pool.byKey.get(f).slot;
+    const rows = ctx.roster[t].filter(f => keep.has(f) && slotOf(f) !== 'IR').map(f => ({ fid: f, slot: slotOf(f) }));
+    const free = ctx.roster[t].filter(f => !keep.has(f) && slotOf(f) !== 'IR').map(slotOf).sort((a, b) => (a === 'ACTIVE' ? 0 : 1) - (b === 'ACTIVE' ? 0 : 1));
+    fids.filter(f => !was.has(f) && slotOf(f) !== 'IR').forEach(f => rows.push({ fid: f, slot: free.length ? free.shift() : 'RESERVE' }));
+    return Team.initState(rows);
+  }
+
+  // Every team's chance against every other team with the rosters R (fantrax ids per team; default the saved ones), rest of season, from one
+  // Engine.evaluate run: the forecaster the Team tab shows, with the same SHRINK. -> { W, ids, P } with P[i][j] = team i's match chance
+  // against team j (null on the diagonal); opts.rows (team ids) fills only those rows. null with no weeks left.
+  // opts: cats 9 | 8, points, shrink. Team forecasts are cached per ctx (team, its roster, weeks, categories, point values)
+  const lwMemos = new WeakMap();
+  function leagueWin(ctx, R, o) {
+    const W = weeksLeft(ctx);
+    if (!(W > 0)) return null;
+    const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o && o.points), ids = Object.keys(ctx.roster), rows = new Set((o && o.rows) || ids), k = (o && o.shrink) || SHRINK;
+    let memo = lwMemos.get(ctx); if (!memo) lwMemos.set(ctx, memo = new Map());
+    const vecs = ids.map(t => {
+      const id = t + '|' + (R || ctx.roster)[t].slice().sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '');
+      if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, tradeState(ctx, t, (R || ctx.roster)[t]), W)));
+      return memo.get(id);
+    });
+    const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
+    const P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? out.catProb(out.teams[i], out.teams[j], F) : shr(out.pairProb(out.teams[i], out.teams[j]), k.match)));
+    return { W, ids, P };
   }
 
   // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb
@@ -225,6 +254,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, pointsPerWeek, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -2,22 +2,26 @@
 // Pure; browser and Node. Builds on matchup_core (a team's week vs its real opponent) and inseason_players (value scale).
 (function (root) {
   'use strict';
-  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Matchup = root.Matchup || require('./matchup_core.js');
+  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), TeamWin = root.TeamWin || require('./team_win.js');
 
-  const TRADE_W = { cur: 0.4, proj: 0.3, adp: 0.3, shrinkGames: 20, slope: 2.0, winM: 0.1, tagGap: 0.5, bias: -0.75 };   // bias: a manager wants to come out ahead, so an even-looking swap is not a coin flip
+  // winM was 0.1 on the old pairMatchup scale; #147 moved dB to the TeamWin forecaster, where dB is larger, so 0.1 x 0.672 (a fit of old dB on new dB over
+  // the 2145 one-for-one candidates of the fixture league, scratch script fit_winm.js) keeps the likelihood moving with dB as much as before
+  const TRADE_W = { cur: 0.4, proj: 0.3, adp: 0.3, shrinkGames: 20, slope: 2.0, winM: 0.07, tagGap: 0.5, bias: -0.75 };   // bias: a manager wants to come out ahead, so an even-looking swap is not a coin flip
 
-  // mean Win M over the remaining regular-season matchups with the rosters as given (fids per team, IR rule as in the current week);
-  // the current week counts whole scheduled games, later weeks expected games (g/82)
-  function rosWinM(ctx, roster, teamId) {
-    if (ctx.cur == null) return { mean: null, periods: [] };
-    const segs = (t, n) => Matchup.teamSegments(ctx, t, n, roster[t].filter(f => n !== ctx.cur || ctx.pool.byKey.get(f).slot !== 'IR'));
-    const periods = [];
-    InLeague.regularFrom(ctx.L, ctx.cur).forEach(n => {
-      const opp = InLeague.opponentOf(ctx.L, teamId, n);
-      if (opp) periods.push({ n, opp, p: Matchup.scoreSegments(ctx, segs(teamId, n), segs(opp, n), n === ctx.cur, true).match });
+  // Rest-of-season Win M with the rosters as given (fids per team): the Team tab's forecaster (TeamWin.leagueWin, one Engine.evaluate run, the
+  // shared WinK.SHRINK on every term), the mean over every other team weighted equally (user, 2026-10-26: until playoff odds are in).
+  // IL players count for nothing. opts: cats, points, shrink as TeamWin.leagueWin. -> { mean, opps: [{ opp, p }] }, mean null with no weeks left
+  function rosMeans(ctx, roster, teams, opts) {
+    const none = { mean: null, opps: [] }, lw = ctx.cur == null ? null : TeamWin.leagueWin(ctx, roster, Object.assign({}, opts, { rows: teams })), out = {};
+    teams.forEach(t => {
+      if (!lw) { out[t] = none; return; }
+      const row = lw.P[lw.ids.indexOf(t)], opps = lw.ids.map((o, j) => ({ opp: o, p: row[j] })).filter(x => x.opp !== t);
+      out[t] = { mean: opps.length ? opps.reduce((s, x) => s + x.p, 0) / opps.length : null, opps };
     });
-    return { mean: periods.length ? periods.reduce((s, x) => s + x.p, 0) / periods.length : null, periods };
+    return out;
   }
+  const rosWinM = (ctx, roster, teamId, opts) => rosMeans(ctx, roster, [teamId], opts)[teamId];
+  const optKey = o => o ? JSON.stringify([o.cats, o.points, o.shrink]) : '';
 
   // projected players' values, best first (the ADP-implied value of a rank)
   function projValues(ctx) {
@@ -31,12 +35,12 @@
     return { cur, proj, adp, pv: TRADE_W.cur * cur + TRADE_W.proj * proj + TRADE_W.adp * adp, rv: proj };
   }
 
-  function baseline(ctx, t) {
-    ctx._ros = ctx._ros || {};
-    return ctx._ros[t] === undefined ? (ctx._ros[t] = rosWinM(ctx, ctx.roster, t).mean) : ctx._ros[t];
+  function baseline(ctx, t, opts) {
+    const ro = ctx._ros = ctx._ros || {}, k = t + '#' + optKey(opts);
+    return ro[k] === undefined ? (ro[k] = rosWinM(ctx, ctx.roster, t, opts).mean) : ro[k];
   }
-  // aGets: fids A receives from B; bGets: fids B receives from A. dA, dB in percentage points of rest-of-season Win M.
-  function evaluateTrade(ctx, { a, b, aGets, bGets }) {
+  // aGets: fids A receives from B; bGets: fids B receives from A. dA, dB in percentage points of rest-of-season Win M (opts: see rosMeans).
+  function evaluateTrade(ctx, { a, b, aGets, bGets }, opts) {
     if (a === b) throw new Error('A trade needs two different teams');
     const ra = new Set(ctx.roster[a]), rb = new Set(ctx.roster[b]);
     aGets.forEach(f => { if (!rb.has(f)) throw new Error('Player ' + f + ' is not on the giving team'); if (bGets.includes(f)) throw new Error('Player ' + f + ' is on both sides'); });
@@ -44,10 +48,10 @@
     const R = Object.assign({}, ctx.roster);
     R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets);
     R[b] = ctx.roster[b].filter(f => !aGets.includes(f)).concat(bGets);
-    // rest-of-season matchups are cached per (team, the two changed rosters)
-    const sig = t => R[t].slice().sort().join(','), cache = ctx._rosCache = ctx._rosCache || new Map(), sab = sig(a) + '|' + sig(b);
-    const mean = t => { const k = t + '#' + sab; if (!cache.has(k)) cache.set(k, rosWinM(ctx, R, t).mean); return cache.get(k); };
-    const dA = 100 * (mean(a) - baseline(ctx, a)), dB = 100 * (mean(b) - baseline(ctx, b));
+    // one league run gives both sides; cached per (the two changed rosters, options)
+    const sig = t => R[t].slice().sort().join(','), cache = ctx._rosCache = ctx._rosCache || new Map(), key = a + '#' + sig(a) + '|' + b + '#' + sig(b) + '|' + optKey(opts);
+    if (!cache.has(key)) { const m = rosMeans(ctx, R, [a, b], opts); cache.set(key, [m[a].mean, m[b].mean]); }
+    const after = cache.get(key), dA = 100 * (after[0] - baseline(ctx, a, opts)), dB = 100 * (after[1] - baseline(ctx, b, opts));
     const pvSum = fs => fs.reduce((s, f) => s + perceived(ctx, ctx.pool.byKey.get(f)).pv, 0);
     const gapB = pvSum(bGets) - pvSum(aGets);
     return { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi: aGets.length !== bGets.length };

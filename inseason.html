@@ -343,7 +343,7 @@ tr.click{cursor:pointer}
 <script src="assets/shared.9f9a6a1b.js"></script>
 <script src="assets/store.22818a7e.js"></script>
 <script src="assets/fxcache.3a003ffb.js"></script>
-<script src="assets/inseason_mods.520fd1df.js"></script>
+<script src="assets/inseason_mods.4c66ab5a.js"></script>
 <script>
 (function () {
   'use strict';
@@ -586,7 +586,7 @@ tr.click{cursor:pointer}
 
   // One player's candidate trades take about 0.7 s, so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
-  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v2';
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v3';
   const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
   function candSave(sig, ck, gives) {
     try {

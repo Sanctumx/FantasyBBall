@@ -1884,8 +1884,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   'use strict';
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
-  // K_MATCH / K_CAT: fractional games of a later week (Matchup Analyzer), fitted weekly. KR_*: the rest-of-season k for the Trade Analyzer, same as TeamWin.SHRINK (#139)
-  const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82, KR_MATCH = 0.6, KR_CAT = 0.75;
+  // K_MATCH / K_CAT: fractional games of a later week (Matchup Analyzer), fitted weekly. The rest-of-season k is WinK.SHRINK (Team, Rankings, Trade)
+  const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82;
   // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
   const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
@@ -1952,13 +1952,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     return out;
   }
-  function scoreSegments(ctx, segsA, segsB, whole, ros) {
+  function scoreSegments(ctx, segsA, segsB, whole) {
     const side = segs => {
       const g = segGames(ctx, segs, null, whole);
       return { games: g.reduce((s, x) => s + x, 0), entries: segs.map((s, i) => ({ p: ctx.pool.byKey.get(s.key).line, games: g[i], gVar: GVAR })) };
     };
     const A = side(segsA), B = side(segsB), r = Engine.pairMatchup(A.entries, B.entries);
-    return { mu: r.mu, cat: r.cat.map(p => shrink(p, whole ? KW_CAT : ros ? KR_CAT : K_CAT)), match: shrink(r.match, whole ? KW_MATCH : ros ? KR_MATCH : K_MATCH), games: [A.games, B.games] };
+    return { mu: r.mu, cat: r.cat.map(p => shrink(p, whole ? KW_CAT : K_CAT)), match: shrink(r.match, whole ? KW_MATCH : K_MATCH), games: [A.games, B.games] };
   }
   function projectWeek(ctx, teamId, n) {
     const opp = InLeague.opponentOf(ctx.L, teamId, n);
@@ -2144,7 +2144,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return plan;
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, KR_MATCH, KR_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
 
@@ -2251,6 +2251,17 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const api = { table, FP_SLOT, noise, engineView, entry, STATS, RHO, DISP, statsOf, perGame, pgVar, projVar, weekVar, key };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Points = api;
 })(this);
+
+// The one shrink every Win C / Win M display reads (#139, #147): Team, Rankings and the Trade Analyzer. Display only, never in the Model pick.
+// Fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (calib_ros_k.js): pooled k 0.43 match, 0.65 per category; shipped at
+// 0.6 / 0.75 (user, 2026-10-26) because the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident.
+(function (root) {
+  'use strict';
+  const SHRINK = { match: 0.6, cat: 0.75 };
+  const shrink = (p, k) => 0.5 + k * (p - 0.5);
+  const api = { SHRINK, shrink };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.WinK = api;
+})(typeof self !== 'undefined' ? self : this);
 
 // Rankings core (2026-10-21): per-game lines from any source → Zscore table. Pure; browser and Node.
 // Rule (user, 2026-10-21): a source's Zscore is calculated on the top X players by H2H-adjusted value within that source,
@@ -2440,7 +2451,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     let ctx = Eng.buildContext(P, cfg);
     const n0 = P.length, pts = o.points ? Points.FP_SLOT : -1;   // points mode: one FP total in a category slot (points_core.engineView)
     if (o.points) { const v = Points.engineView(P, ctx, cfg, o.points); P = v.P; ctx = v.ctx; }
-    const cOf = p => pts < 0 ? p.gain * 100 : null, mOf = p => pts < 0 ? p.gainM * 100 : p.gainC[pts] * 100;
+    const sk = o.shrink && pts < 0 ? o.shrink : { match: 1, cat: 1 };   // #147: the Team tab's pull toward 50% (WinK.SHRINK), display only; a gain is a difference of chances, so it scales by k
+    const cOf = p => pts < 0 ? p.gain * 100 * sk.cat : null, mOf = p => pts < 0 ? p.gainM * 100 * sk.match : p.gainC[pts] * 100;
     const lists = o.lists || null;
     const full = lists ? lists.map(l => l.filter(pid => idx.has(pid)).slice(0, Rr)) : null;
     // average-player entry: the average player on my roster when a league is loaded, else the Zscore pool's average; needs enough
@@ -2612,7 +2624,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 // the summed category chances, averaged over the opponents).
 (function (root) {
   'use strict';
-  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Team = root.Team || require('./team_core.js'), Pts = root.Points || require('./points_core.js');
+  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Team = root.Team || require('./team_core.js'), Pts = root.Points || require('./points_core.js'), WinK = root.WinK || require('./win_k.js');
   const NC = Eng.NC;
 
   // the engine context of a ctx's player pool: noise and pool averages from simulated drafts of the real league (rostered players
@@ -2693,8 +2705,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // Shrink toward 50%, fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (#139, calib_ros_k.js): pooled k 0.43 match,
   // 0.65 per category (one k per category did not beat one k); unshrunk was about twice too confident. Shipped at 0.6 / 0.75 (user, 2026-10-26):
   // the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident. opts.shrink overrides.
-  const SHRINK = { match: 0.6, cat: 0.75 };
-  const shr = (p, k) => 0.5 + k * (p - 0.5);
+  const SHRINK = WinK.SHRINK, shr = WinK.shrink;
   function matrixOf(ctx, mine, exclude, W, o) {
     const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o && o.points), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
     const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W)));
@@ -2710,6 +2721,36 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     const avg = f => teams.reduce((s, t) => s + f(t), 0) / (teams.length || 1);
     return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
+  }
+
+  // The state of team t holding the fantrax ids `fids` (a trade's roster): its players keep their Fantrax slots, IL players count for
+  // nothing (as oppState), and each incoming player takes a slot the outgoing ones left (Active first), else the reserve
+  function tradeState(ctx, t, fids) {
+    const keep = new Set(fids), was = new Set(ctx.roster[t]), slotOf = f => ctx.pool.byKey.get(f).slot;
+    const rows = ctx.roster[t].filter(f => keep.has(f) && slotOf(f) !== 'IR').map(f => ({ fid: f, slot: slotOf(f) }));
+    const free = ctx.roster[t].filter(f => !keep.has(f) && slotOf(f) !== 'IR').map(slotOf).sort((a, b) => (a === 'ACTIVE' ? 0 : 1) - (b === 'ACTIVE' ? 0 : 1));
+    fids.filter(f => !was.has(f) && slotOf(f) !== 'IR').forEach(f => rows.push({ fid: f, slot: free.length ? free.shift() : 'RESERVE' }));
+    return Team.initState(rows);
+  }
+
+  // Every team's chance against every other team with the rosters R (fantrax ids per team; default the saved ones), rest of season, from one
+  // Engine.evaluate run: the forecaster the Team tab shows, with the same SHRINK. -> { W, ids, P } with P[i][j] = team i's match chance
+  // against team j (null on the diagonal); opts.rows (team ids) fills only those rows. null with no weeks left.
+  // opts: cats 9 | 8, points, shrink. Team forecasts are cached per ctx (team, its roster, weeks, categories, point values)
+  const lwMemos = new WeakMap();
+  function leagueWin(ctx, R, o) {
+    const W = weeksLeft(ctx);
+    if (!(W > 0)) return null;
+    const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o && o.points), ids = Object.keys(ctx.roster), rows = new Set((o && o.rows) || ids), k = (o && o.shrink) || SHRINK;
+    let memo = lwMemos.get(ctx); if (!memo) lwMemos.set(ctx, memo = new Map());
+    const vecs = ids.map(t => {
+      const id = t + '|' + (R || ctx.roster)[t].slice().sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '');
+      if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, tradeState(ctx, t, (R || ctx.roster)[t]), W)));
+      return memo.get(id);
+    });
+    const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
+    const P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? out.catProb(out.teams[i], out.teams[j], F) : shr(out.pairProb(out.teams[i], out.teams[j]), k.match)));
+    return { W, ids, P };
   }
 
   // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb
@@ -2829,7 +2870,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, pointsPerWeek, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 

@@ -186,7 +186,8 @@
     let ctx = Eng.buildContext(P, cfg);
     const n0 = P.length, pts = o.points ? Points.FP_SLOT : -1;   // points mode: one FP total in a category slot (points_core.engineView)
     if (o.points) { const v = Points.engineView(P, ctx, cfg, o.points); P = v.P; ctx = v.ctx; }
-    const cOf = p => pts < 0 ? p.gain * 100 : null, mOf = p => pts < 0 ? p.gainM * 100 : p.gainC[pts] * 100;
+    const sk = o.shrink && pts < 0 ? o.shrink : { match: 1, cat: 1 };   // #147: the Team tab's pull toward 50% (WinK.SHRINK), display only; a gain is a difference of chances, so it scales by k
+    const cOf = p => pts < 0 ? p.gain * 100 * sk.cat : null, mOf = p => pts < 0 ? p.gainM * 100 * sk.match : p.gainC[pts] * 100;
     const lists = o.lists || null;
     const full = lists ? lists.map(l => l.filter(pid => idx.has(pid)).slice(0, Rr)) : null;
     // average-player entry: the average player on my roster when a league is loaded, else the Zscore pool's average; needs enough

@@ -149,6 +149,16 @@ test('winStart: Average player view shifts every row by one constant and ranks t
   assert.ok(dC.every(v => near(v, dC[0], 1e-9)) && dM.every(v => near(v, dM[0], 1e-9)) && dC[0] > 0, 'constant positive shift ' + dC[0]);
 });
 
+test('winStart: o.shrink scales every Win C by k.cat and every Win M by k.match, Replacement and Average alike, and changes no order (#147)', () => {
+  const plain = R.winStart(rows, tabAvg, wOpts), k = { match: 0.6, cat: 0.75 }, sh = R.winStart(rows, tabAvg, Object.assign({ shrink: k }, wOpts));
+  for (const [pid, v] of plain.rep) {
+    assert.ok(near(sh.rep.get(pid).c, k.cat * v.c, 1e-9) && near(sh.rep.get(pid).m, k.match * v.m, 1e-9), 'rep ' + pid);
+    assert.ok(near(sh.avg.get(pid).c, k.cat * plain.avg.get(pid).c, 1e-9) && near(sh.avg.get(pid).m, k.match * plain.avg.get(pid).m, 1e-9), 'avg ' + pid);
+  }
+  const ord = w => [...w.rep.keys()].sort((a, b) => w.rep.get(b).m - w.rep.get(a).m || a - b);
+  assert.deepStrictEqual(ord(sh), ord(plain));
+});
+
 test('winStart: the average-player entry does not move real gains', () => {
   const small = R.winStart(rows.slice(0, 150), R.table(rows.slice(0, 150), { teams: 14, roster: 12, type: 'classic', basis: 'total' }), wOpts);
   assert.ok(small.rep.size > 0);   // too few rows for the average entry: Average view falls back to Replacement

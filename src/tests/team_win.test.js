@@ -307,3 +307,33 @@ test('points: a shared ctx used with weights A then B gives what a fresh ctx giv
   const after = W.matrix(shared, st, { points: B }), fresh = W.matrix(mk(nowMs, g), st, { points: B });
   assert.deepStrictEqual(after.teams.map(t => t.match), fresh.teams.map(t => t.match)); assert.strictEqual(after.mean.match, fresh.mean.match);
 });
+
+// ---- #147: one k for every tab, and the league-wide matrix the Trade Analyzer reads ----
+test('WinK: Team, Rankings and Trade read one shrink object', () => {
+  const K = require('../win_k.js');
+  assert.strictEqual(W.SHRINK, K.SHRINK); assert.deepStrictEqual(K.SHRINK, { match: 0.6, cat: 0.75 });
+  assert.ok(near(K.shrink(0.9, 0.6), 0.5 + 0.6 * 0.4));
+});
+
+test('leagueWin: with the saved rosters my row is the Team tab matrix with every opponent weighted equally', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), lw = W.leagueWin(ctx, ctx.roster), m = W.matrix(ctx, stateOf());
+  const mi = lw.ids.indexOf(me), mean = lw.ids.filter(t => t !== me).reduce((s, t) => s + lw.P[mi][lw.ids.indexOf(t)], 0) / (ids.length - 1);
+  assert.ok(near(mean, m.mean.match, 1e-9));
+  lw.ids.forEach((a, i) => lw.ids.forEach((b, j) => { if (i < j) assert.ok(near(lw.P[i][j] + lw.P[j][i], 1, 0.05), 'pair ' + a + b); }));
+});
+
+test('leagueWin: one linear k on every pair (shrink 1 vs 0.6)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), a = W.leagueWin(ctx, ctx.roster, { shrink: { match: 1, cat: 1 } }), b = W.leagueWin(ctx, ctx.roster, { shrink: { match: 0.6, cat: 0.75 } });
+  a.P.forEach((row, i) => row.forEach((p, j) => { if (i !== j) assert.ok(near(b.P[i][j] - 0.5, 0.6 * (p - 0.5), 1e-12)); }));
+});
+
+test('leagueWin: a traded roster moves the incoming player into the slot the outgoing one left, IL players count for nothing', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), x = ctx.roster[me].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE'), y = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE');
+  const R = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(y), [other]: ctx.roster[other].filter(f => f !== y).concat(x) });
+  const st = W.tradeState(ctx, me, R[me]);
+  assert.strictEqual(st.slots[y], 'active'); assert.ok(!(x in st.slots));
+  const il = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'IR');
+  if (il) { const R2 = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(il), [other]: ctx.roster[other].filter(f => f !== il).concat(x) }); assert.ok(!(il in W.tradeState(ctx, me, R2[me]).slots)); }
+  const a = W.leagueWin(ctx, ctx.roster), b = W.leagueWin(ctx, R);
+  assert.ok(Math.abs(a.P[a.ids.indexOf(me)][a.ids.indexOf(other)] - b.P[b.ids.indexOf(me)][b.ids.indexOf(other)]) > 1e-6);
+});
