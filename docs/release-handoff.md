@@ -28,6 +28,7 @@ with every request.
   archive as usual. Never edit `SESSION_HANDOFF.md` on a branch and never push; if the branch is unmerged and unpushed, ask
   the user whether to push. **On main:** update the Workstreams table rows. When a branch merges, its row becomes done and
   its notes file stays; done rows move to the archive later.
+- **Enforced** by the PreToolUse hook `.claude/hooks/before-edit.mjs`: an Edit/Write of the handoff off main is blocked (override once with `ALLOW_HANDOFF_EDIT=1`; bash edits are not caught).
 - **New branch:** create its notes file in the first commit, even three lines. Name it exactly like the branch.
 - **Worktrees:** at most two (the main checkout plus one task). Finishing a task removes its worktree after `git status -sb`
   confirms the branch is pushed (or the user accepts it staying local). Keep branches until their PR merges.
