@@ -263,7 +263,7 @@ function draft(season, slot, seed, cfgExtra, opp) {
       else id = av.reduce((b, p) => (p.gainM > b.gainM ? p : b), av[0]).id;
     } else if (oppModel[t]) {
       P.forEach(p => { p.poMult = 1; });
-      const ocfg = Object.assign({}, cfg, { slot: t + 1, puntMode: opp.modelPunt || (opp.mix ? 'auto' : 'off'), puntLock: '', poBoost: 'off', fieldZ: opp.stdField ? 'std' : undefined });   // kit users read the league's field the same way whatever the board arm
+      const ocfg = Object.assign({}, cfg, { slot: t + 1, puntMode: opp.modelPunt || (opp.mix ? 'auto' : 'off'), puntLock: '', poBoost: 'off', playsRank: cfg.oppPlaysRank || false, fieldZ: opp.stdField ? 'std' : undefined });   // kit users read the league's field the same way whatever the board arm
       if (WO) PO.forEach(p => { p.poMult = 1; });
       E.evaluate(PO, ctxO, ocfg, { picks });
       const av = P.filter(p => !taken.has(p.id));

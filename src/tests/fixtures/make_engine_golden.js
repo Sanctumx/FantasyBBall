@@ -10,7 +10,7 @@ const LEAGUE_CFG = { teams: 14, roster: 12, slot: 1, order: '3rr', scoring: 'h2h
 const arr = a => Array.from(a);
 
 function compute() {
-  const out = { draft: {}, league: null };
+  const out = { draft: {}, plays: {}, league: null };
   const byAdp = PLAYERS.map((p, i) => [p.ftx || 999, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
   for (const k of [0, 29, 70]) {
     const P = E.prepPlayers(PLAYERS.map(r => Object.assign({}, r, Shared.projOf(r, 'avg'))));
@@ -24,6 +24,10 @@ function compute() {
       standings: res.standings, myChance: arr(res.myChance), myMatch: res.myMatch,
       rows: P.map(p => [p.id, p.gain, p.gainM, p.thereAt == null ? null : p.thereAt])
     };
+    // same state with the Plays % by roster rank factor on (#141)
+    const cfgP = Object.assign({}, cfg, { playsRank: true });
+    const resP = E.slidePick(P, ctx, cfgP, { picks }, myIdx, E.evaluate(P, ctx, cfgP, { picks }));
+    out.plays[k] = { modelPick: resP.modelPick, myMatch: resP.myMatch, rows: P.map(p => [p.id, p.gain, p.gainM]) };
   }
   const picks = byAdp.slice(0, 168);
   const R = L.computeLeague(PLAYERS, { cfg: Object.assign({}, LEAGUE_CFG), picks, owner: [], extra: [], names: null }, 'avg');
