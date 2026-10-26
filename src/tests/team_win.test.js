@@ -455,3 +455,60 @@ test('leagueWin: a traded roster moves the incoming player into the slot the out
   const a = W.leagueWin(ctx, ctx.roster), b = W.leagueWin(ctx, R);
   assert.ok(Math.abs(a.P[a.ids.indexOf(me)][a.ids.indexOf(other)] - b.P[b.ids.indexOf(me)][b.ids.indexOf(other)]) > 1e-6);
 });
+
+// ---- the Team-tab flag (2026-10-26): Reserve is a parking place, IL counts only on the seasonal bases; a plain ctx is untouched ----
+const mkTab = basis => Object.assign(mk(last.start, games(last.start, last.end)), { teamTab: true, basis });
+const tabSt = () => T.tabState(ROS[me]);
+
+test('Team tab: oppState keeps the opponent\'s IL players as il and makes his bench Active; a plain ctx is as before', () => {
+  const tid = other, il = ROS[tid].filter(x => x.slot === 'IR').map(x => x.fid), plain = mk(last.start, games(last.start, last.end));
+  assert.ok(il.length, 'fixture opponent has an IL player');
+  const s = W.oppState(mkTab('total'), tid);
+  il.forEach(k => assert.strictEqual(s.slots[k], 'il'));
+  s.order.filter(k => !il.includes(k)).forEach(k => assert.strictEqual(s.slots[k], 'active'));
+  il.forEach(k => assert.ok(!(k in W.oppState(plain, tid).slots)));
+});
+
+test('Team tab: side counts Active (and IL on the seasonal bases) only; a Reserve player is no entry', () => {
+  const st = tabSt(), k = st.order.find(x => st.slots[x] === 'active'), il = st.order.find(x => st.slots[x] === 'il'), res = T.moveSlot(st, k, 'reserve');
+  assert.ok(il);
+  const nAct = st.order.filter(x => st.slots[x] === 'active').length;
+  assert.strictEqual(W.side(mkTab('pergame'), st, 1).length, nAct);
+  assert.strictEqual(W.side(mkTab('pergame'), res, 1).length, nAct - 1);
+  assert.strictEqual(W.side(mkTab('total'), st, 1).length, nAct + 1);
+  assert.ok(W.side(mkTab('total'), st, 1).some(e => e.key === il));
+});
+
+test('Team tab: parking a player in Reserve is the same as removing him, and a Reserve player scores as the swap into Active (hypo)', () => {
+  for (const basis of ['pergame', 'total']) {
+    const ctx = mkTab(basis), st = tabSt(), k = st.order.find(x => st.slots[x] === 'active'), res = T.moveSlot(st, k, 'reserve');
+    assert.ok(near(W.matrix(ctx, res).mean.match, W.matrix(ctx, T.applySwap(st, [k], [])).mean.match), basis);
+    const g = W.playerGain(ctx, res, k, W.matrix(ctx, res)), back = W.matrix(ctx, st).mean.match - W.matrix(ctx, res).mean.match;
+    assert.strictEqual(g.hypo, true, basis); assert.ok(near(g.m, 100 * back, 1e-7), basis);
+  }
+});
+
+test('Team tab: an IL player is hypo on Per game and counted (not hypo, his own contribution) on the seasonal basis', () => {
+  const st = tabSt(), il = st.order.find(x => st.slots[x] === 'il');
+  const per = mkTab('pergame'), tot = mkTab('total');
+  assert.strictEqual(W.playerGain(per, st, il, W.matrix(per, st)).hypo, true);
+  const g = W.playerGain(tot, st, il, W.matrix(tot, st));
+  assert.ok(!g.hypo);
+  assert.ok(near(g.m, 100 * (W.matrix(tot, st).mean.match - W.matrix(tot, T.applySwap(st, [il], [])).mean.match), 1e-7));
+});
+
+test('Team tab: the module scores a Reserve player and a candidate with finite numbers, a candidate takes an Active slot', () => {
+  for (const basis of ['pergame', 'total']) {
+    const ctx = mkTab(basis), st = T.moveSlot(tabSt(), tabSt().order[0], 'reserve'), cands = [st.order[0], ctx.roster[other][0]];
+    for (const baseline of ['rep', 'avg']) {
+      const r = W.moduleScores(ctx, st, { candidates: cands, baseline });
+      assert.strictEqual(r.length, 2, basis + baseline);
+      r.forEach(x => assert.ok(Number.isFinite(x.dM) && Number.isFinite(x.dC), basis + baseline));
+    }
+  }
+});
+
+test('Team tab: a plain ctx still counts Reserve and leaves IL out (the golden pins the numbers)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), n = st.order.filter(k => ['active', 'reserve'].includes(st.slots[k])).length;
+  assert.strictEqual(W.side(ctx, st, 1).length, n);
+});
