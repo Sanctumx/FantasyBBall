@@ -4,7 +4,7 @@
 // last-week lines. The engine is only called, never changed (the Model pick and Win do not see any of this).
 (function (root) {
   'use strict';
-  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), InLeague = root.InLeague || require('./inseason_league.js'), Shared = root.Shared || require('./shared.js'), LeagueStore = root.LeagueStore || require('./league_store.js');
+  const Eng = root.Engine || require('./engine.js'), Points = root.Points || require('./points_core.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), InLeague = root.InLeague || require('./inseason_league.js'), Shared = root.Shared || require('./shared.js'), LeagueStore = root.LeagueStore || require('./league_store.js');
 
   const WEIGHTS = InPlayers.WEIGHTS;   // fixed: every category x1, TO x0.5 (user ruling D2)
   const TYPES = ['classic', 'h2h', 'adj'];   // Standard, H2H-Adjusted, ROTO-Adjusted
@@ -138,8 +138,11 @@
     const cfg = cfgFor(o), N = cfg.teams, Rr = cfg.roster;
     const live = rows.filter(r => r.g > 0).sort((a, b) => a.pid - b.pid), idx = new Map(live.map((r, i) => [r.pid, i]));
     const rank = new Map(tab.filter(t => t.z != null).map((t, i) => [t.pid, i + 1]));
-    const P = Eng.prepPlayers(live.map(r => Object.assign({}, r.line, { g: r.g, ftx: r.ftx !== undefined ? r.ftx : (rank.get(r.pid) || null) })));
-    const ctx = Eng.buildContext(P, cfg), n0 = P.length;
+    let P = Eng.prepPlayers(live.map(r => Object.assign({}, r.line, { g: r.g, ftx: r.ftx !== undefined ? r.ftx : (rank.get(r.pid) || null) })));
+    let ctx = Eng.buildContext(P, cfg);
+    const n0 = P.length, pts = o.points ? Points.FP_SLOT : -1;   // points mode: one FP total in a category slot (points_core.engineView)
+    if (o.points) { const v = Points.engineView(P, ctx, cfg, o.points); P = v.P; ctx = v.ctx; }
+    const cOf = p => pts < 0 ? p.gain * 100 : null, mOf = p => pts < 0 ? p.gainM * 100 : p.gainC[pts] * 100;
     const lists = o.lists || null;
     const full = lists ? lists.map(l => l.filter(pid => idx.has(pid)).slice(0, Rr)) : null;
     // average-player entry: the average player on my roster when a league is loaded, else the Zscore pool's average; needs enough
@@ -153,10 +156,10 @@
     }
     const gains = (picks, owner) => {
       Eng.evaluate(P, ctx, cfg, { picks, owner });
-      const base = ai < 0 ? { c: 0, m: 0 } : { c: P[ai].gain * 100, m: P[ai].gainM * 100 };
-      return { g: P.slice(0, n0).map(p => ({ c: p.gain * 100, m: p.gainM * 100 })), base };
+      const base = ai < 0 ? { c: pts < 0 ? 0 : null, m: 0 } : { c: cOf(P[ai]), m: mOf(P[ai]) };
+      return { g: P.slice(0, n0).map(p => ({ c: cOf(p), m: mOf(p) })), base };
     };
-    const rep = new Map(), avg = new Map(), put = (r, pid) => { const i = idx.get(pid), v = r.g[i]; rep.set(pid, v); avg.set(pid, { c: v.c - r.base.c, m: v.m - r.base.m }); };
+    const rep = new Map(), avg = new Map(), put = (r, pid) => { const i = idx.get(pid), v = r.g[i]; rep.set(pid, v); avg.set(pid, { c: pts < 0 ? v.c - r.base.c : null, m: v.m - r.base.m }); };
     const build = skip => {   // my team in slots 0..R-1 (minus the skipped pid), team t in slots t*R..
       const picks = new Array(N * Rr).fill(null), owner = new Array(N * Rr);
       for (let k = 0; k < N * Rr; k++) owner[k] = Math.floor(k / Rr);

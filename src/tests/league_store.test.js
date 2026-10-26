@@ -96,4 +96,6 @@ test('isPoints and draftSettings', () => {
   const d = S.draftSettings(S.normalize({ pointVals: { to: -1 } }), { teams: 12, scoring: 'h2h' });
   assert.deepStrictEqual([d.teams, d.scoring, d.pointVals.to], [12, 'h2h', -1]);
   assert.match(S.POINTS_NOTE_HTML, /aren't supported on this tab yet/);
+  assert.match(S.POINTS_NOTE_HTML, /Rankings and Team work in points leagues/);
+  assert.match(S.POINTS_NOTE_HTML, /Rankings and Team work in points leagues/);
 });

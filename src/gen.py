@@ -15,8 +15,8 @@ SRC={'DATA':('players','const PLAYERS='+P+';'),'SCHED':('sched','const SCHED='+S
      'ENGINE':('engine',rd('engine.js')),'SHARED':('shared',rd('shared.js')),'STORE':('store',rd('league_store.js')),'FXCACHE':('fxcache',rd('fx_cache.js')),
      'LEAGUE':('league_core',rd('league_core.js')),
      'INSEASON':('inseason_mods',cat(['inseason_league.js','inseason_players.js','matchup_core.js','trade_core.js'])),
-     'RANKINGS':('rankings_mods',cat(['inseason_league.js','inseason_players.js','rankings_core.js'])),
-     'TEAM':('team_mods',cat(['inseason_league.js','inseason_players.js','matchup_core.js','rankings_core.js','team_core.js','team_win.js','team_view.js']))}
+     'RANKINGS':('rankings_mods',cat(['inseason_league.js','inseason_players.js','points_core.js','rankings_core.js'])),
+     'TEAM':('team_mods',cat(['inseason_league.js','inseason_players.js','matchup_core.js','points_core.js','rankings_core.js','team_core.js','team_win.js','team_view.js']))}
 ASSET={}   # file name under assets/ -> text
 # the hash is of the bytes written, which are what open(...,'w') makes of the text on this machine
 OUTENC=open(os.devnull,'w').encoding or 'utf-8'

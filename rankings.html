@@ -128,11 +128,11 @@ tbody tr.mine:hover td{background:var(--sunk)}
 
 <script src="assets/players.af9cbf9f.js"></script>
 <script src="assets/sched.42cc8c3b.js"></script>
-<script src="assets/engine.a0107795.js"></script>
+<script src="assets/engine.95e53a1b.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
-<script src="assets/store.7910c1ad.js"></script>
+<script src="assets/store.f6a996f6.js"></script>
 <script src="assets/fxcache.b51ac615.js"></script>
-<script src="assets/rankings_mods.56262fbd.js"></script>
+<script src="assets/rankings_mods.19f5dd3d.js"></script>
 <script>
 (function () {
   'use strict';
@@ -173,7 +173,6 @@ tbody tr.mine:hover td{background:var(--sunk)}
   // the league loaded in Settings: owners come from its current rosters; the table works without it
   async function loadLeague() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); rosters = null; teamName = {}; owned.key = ''; $('retry').hidden = true;
-    if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); draw(); return; }
     if (!lg) { sayHtml('Load a league in <a href="settings.html">Settings</a> to see owners and hide taken players.'); draw(); return; }
     say('Loading ' + (lg.name || lg.id) + ' from Fantrax…');
     let shown = false;
@@ -202,6 +201,8 @@ tbody tr.mine:hover td{background:var(--sunk)}
   }
 
   const settings = () => SS.settings;
+  // points leagues (#137): the point values, or null in categories; Points.key(...) goes into every cache key
+  const pw = () => LS.isPoints(SS.settings) ? SS.settings.pointVals : null, ptKey = () => pw() ? Points.key(pw()) : '';
   function windowOf(src) {
     src = src || ui.src; const k = 'win:' + src; if (!cache.has(k)) cache.set(k, R.windowSource(box, WINDAYS[src], PLAYERS));
     return cache.get(k);
@@ -237,18 +238,18 @@ tbody tr.mine:hover td{background:var(--sunk)}
   function winFor(rows, tab, own) {
     const s = settings(), lists = winLists(rows, tab, own, s);
     win.mine = !!lists;
-    const key = ['win', ui.src, ui.basis, WINDAYS[ui.src] ? ui.type : '', s.teams, s.roster, s.cats, s.ilSpots, lists ? lists.map(l => l.join(',')).join(';') : 'none'].join('|');
+    const key = ['win', ptKey(), ui.src, ui.basis, WINDAYS[ui.src] ? ui.type : '', s.teams, s.roster, s.cats, s.ilSpots, lists ? lists.map(l => l.join(',')).join(';') : 'none'].join('|');
     if (win.key === key) return win.w;
     win.key = key; const seq = ++win.seq;
-    win.w = R.winStart(rows, tab, { teams: s.teams, roster: s.roster, cats: s.cats, ilSpots: s.ilSpots, basis: ui.basis, lists });
+    win.w = R.winStart(rows, tab, { teams: s.teams, roster: s.roster, cats: s.cats, ilSpots: s.ilSpots, basis: ui.basis, lists, points: pw() });
     const tick = () => { if (seq !== win.seq) return; if (win.w.step() != null) { draw(); setTimeout(tick, 0); } else draw(); };
     if (win.w.pending.length) setTimeout(tick, 0);
     return win.w;
   }
   function tableFor(rows, src, type, basis) {
     src = src || ui.src; type = type || ui.type; basis = basis || ui.basis;
-    const s = settings(), k = ['tab', src, type, basis, s.teams, s.roster, s.cats].join('|');
-    if (!cache.has(k)) cache.set(k, R.table(rows, { teams: s.teams, roster: s.roster, cats: s.cats, type, basis }));
+    const s = settings(), k = ['tab', ptKey(), src, type, basis, s.teams, s.roster, s.cats].join('|');
+    if (!cache.has(k)) cache.set(k, pw() ? Points.table(rows, pw(), { teams: s.teams, roster: s.roster, basis }) : R.table(rows, { teams: s.teams, roster: s.roster, cats: s.cats, type, basis }));
     return cache.get(k);
   }
   // after drawing, idle time builds the tables for the other Zscore types and bases of this source, then the other sources, so
@@ -257,7 +258,7 @@ tbody tr.mine:hover td{background:var(--sunk)}
   function prewarm() {
     clearTimeout(warmTimer);
     const todo = [], BASES = ['pergame', 'total', 'mix'];
-    R.TYPES.forEach(t => BASES.forEach(b => { if (t !== ui.type || b !== ui.basis) todo.push([ui.src, t, b]); }));
+    (pw() ? ['classic'] : R.TYPES).forEach(t => BASES.forEach(b => { if (t !== ui.type || b !== ui.basis) todo.push([ui.src, t, b]); }));   // points have no Zscore type
     ['season', 'w7', 'w14', 'w30', 'avg', 'bbm', 'hs'].forEach(src => { if (src !== ui.src) todo.push([src, ui.type, ui.basis]); });
     const next = () => { const j = todo.shift(); if (!j) return; try { const rows = sourceRows(j[0]); if (rows.length) tableFor(rows, j[0], j[1], j[2]); } catch (e) {} warmTimer = setTimeout(next, 30); };
     warmTimer = setTimeout(next, 600);
@@ -276,7 +277,8 @@ tbody tr.mine:hover td{background:var(--sunk)}
 
   function draw() {
     const rows = sourceRows(), n = $('note');
-    if (LS.isPoints(SS.settings)) { $('tbl').innerHTML = ''; n.textContent = ''; return; }
+    const P_ = pw();
+    applyMode(P_);
     fillTeams(); $('hide').disabled = !rosters; $('hide').setAttribute('aria-pressed', String(ui.hide && !!rosters));
     if (WINDAYS[ui.src] && !windowOf().rows.length) { $('tbl').innerHTML = ''; n.textContent = 'No games in the box-score files yet; the table fills in as the season is played.'; return; }
     const tab0 = tableFor(rows), tab = R.withPlayoffs(tab0, rows, playoffs(), ui.poboost), byPid = new Map(rows.map(r => [r.pid, r])), own = ownersFor(rows), W = ui.cw.slice(), s = settings();
@@ -284,11 +286,11 @@ tbody tr.mine:hover td{background:var(--sunk)}
     syncW();
     const wn = winFor(rows, tab0, own), wv = pid => { const m = wn[ui.winvs].get(pid); return m ? (!win.mine || !wn.pending.includes(pid) ? m : null) : null; };
     // Zscore from the weighted categories; -1 / -2 take off the worst one or two (50% = half of it, 100% = all of it)
-    const [zd, zp] = ui.zdrop.split(',').map(Number), keep = zp / 100;
-    tab.forEach(t => { if (t.z == null) return;
+    const [zd, zp] = P_ ? [0, 0] : ui.zdrop.split(',').map(Number), keep = zp / 100;
+    tab.forEach(t => { if (t.z == null) return; if (P_) { t.zw = t.z; return; }
       const v = t.cats.map((q, c) => q * W[c]), act = v.map((q, c) => c).filter(c => W[c] > 0).sort((a, b) => v[a] - v[b]);
       t.zw = v.reduce((a, q) => a + q, 0) - (1 - keep) * act.slice(0, zd).reduce((a, c) => a + v[c], 0); });
-    const ov = t => ui.order === 'winC' ? (wv(t.pid) || {}).c : ui.order === 'winM' ? (wv(t.pid) || {}).m : t.zw;   // Win values still pending rank after the rest, by Zscore
+    const ord = P_ && ui.order === 'winC' ? 'z' : ui.order, ov = t => ord === 'winC' ? (wv(t.pid) || {}).c : ord === 'winM' ? (wv(t.pid) || {}).m : t.zw;   // Win values still pending rank after the rest, by Zscore
     const ranked = tab.filter(t => t.z != null).sort((a, b) => { const x = ov(a), y = ov(b); if (x == null || y == null) return x == null && y == null ? b.zw - a.zw : x == null ? 1 : -1; return y - x || b.zw - a.zw; }); ranked.forEach((t, i) => { t.rk = i + 1; });
     // Win M rank among players that have one; Edge = Order by rank minus Win M rank (positive: Win M likes him more)
     const wmr = new Map(); ranked.filter(t => (wv(t.pid) || {}).m != null).sort((a, b) => wv(b.pid).m - wv(a.pid).m || b.zw - a.zw).forEach((t, i) => wmr.set(t.pid, i + 1));
@@ -300,30 +302,39 @@ tbody tr.mine:hover td{background:var(--sunk)}
     if (ui.pos.length) list = list.filter(x => !x.r.pos || String(x.r.pos).split('/').some(p => ui.pos.includes(p)));   // rows with no known position (unmatched ESPN names) stay
     if (q) list = list.filter(x => String(x.r.n).toLowerCase().includes(q) || String(x.r.t).toLowerCase() === q);
     // colour scale per category: the 90th percentile of |weighted z| inside the pool
-    const sc = CATN.map((_, c) => { const a = tab.filter(t => t.inPool).map(t => Math.abs(t.cats[c] * W[c])).sort((p, q) => p - q); return Math.max(.3, a[Math.floor(a.length * .9)] || 1); });
+    const sc = P_ ? [] : CATN.map((_, c) => { const a = tab.filter(t => t.inPool).map(t => Math.abs(t.cats[c] * W[c])).sort((p, q) => p - q); return Math.max(.3, a[Math.floor(a.length * .9)] || 1); });
     const val = (x, k) => k === 'z' ? x.t.zw : k === 'n' ? x.r.n : k === 't' ? x.r.t : k === 'pos' ? x.r.pos : k === 'm' ? x.r.m : k === 'own' ? (x.own ? (teamName[x.own.owner] || x.own.owner) : '') : k === 'gp' ? (x.r.gp != null ? x.r.gp : x.r.g) : k === 'po' ? x.t.po : k === 'winC' ? (wv(x.r.pid) || {}).c : k === 'winM' ? (wv(x.r.pid) || {}).m : k === 'edge' ? edge(x)
-      : x.t.z == null ? null : (ui.stats === 'raw' ? (k === 8 ? -x.r.line.to : x.r.line[RAWK[k]]) : x.t.cats[k] * W[k]);
-    const k = ui.sort === 'z' || isNaN(+ui.sort) ? ui.sort : +ui.sort, str = typeof val(list[0] || { t: { z: 0 }, r: { n: '', t: '', pos: '', line: {} }, own: null }, k) === 'string';
+      : x.t.z == null ? null : (ui.stats === 'raw' || P_ ? (k === 8 ? -x.r.line.to : x.r.line[RAWK[k]]) : x.t.cats[k] * W[k]);
+    const sortBy = P_ && ui.sort === 'winC' ? 'z' : ui.sort, k = sortBy === 'z' || isNaN(+sortBy) ? sortBy : +sortBy, str = typeof val(list[0] || { t: { z: 0 }, r: { n: '', t: '', pos: '', line: {} }, own: null }, k) === 'string';
     list.sort((a, b) => { const x = val(a, k), y = val(b, k); if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
       return (str ? String(x).localeCompare(String(y)) : x - y) * ui.dir || (a.rank || 1e9) - (b.rank || 1e9); });
     const matched = list.length; if (ui.show) list = list.slice(0, ui.show);
     const wsc = f => { const a = [...wn[ui.winvs].values()].map(v => Math.abs(v[f])).sort((p, q) => p - q); return Math.max(1, a[Math.floor(a.length * .9)] || 1); }, wS = { c: wsc('c'), m: wsc('m') };
     const wTd = (pid, f) => { const m = wv(pid); if (!m) return '<td class="dim">' + (wn.rep.has(pid) ? '…' : '—') + '</td>'; return '<td>' + chip(m[f], wS[f], (m[f] > 0.05 ? '+' : '') + (m[f] < 0 ? '−' : '') + Math.abs(m[f]).toFixed(1)) + '</td>'; };
     const th = (key, label, cls, tip) => '<th data-k="' + key + '"' + (cls ? ' class="' + cls + '"' : '') + (tip ? ' title="' + tip + '"' : '') + (String(ui.sort) === String(key) ? ' aria-sort="' + (ui.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '>' + label + '</th>';
-    const head = '<thead><tr><th data-nosort style="cursor:default">#</th>' + th('edge', 'Edge', '', 'Order by rank minus Win M rank: positive means Win M ranks him higher than the # column does') + th('n', 'Player', 'l') + (rosters ? th('own', 'Owner', 'l') : '') + th('t', 'Team') + th('pos', 'Pos') + th('m', 'MPG', '', 'Minutes per game') + th('po', 'Playoff games') + th('gp', 'Games') + th('z', zd ? '−' + zd + ' ' + (100 - zp) + '% Zscore' : 'Zscore') + th('winC', 'Win C', '', 'Category wins added, in hundredths of a win, ' + (ui.winvs === 'avg' ? 'over an average player' : 'over a replacement-level player (as on the Draft tab)')) + th('winM', 'Win M', '', 'Matchup win chance added, in points, ' + (ui.winvs === 'avg' ? 'over an average player' : 'over a replacement-level player (as on the Draft tab)')) + CATN.map((c, i) => th(i, c, W[i] === 0 ? 'punted' : '')).join('') + '</tr></thead>';
+    const head = '<thead><tr><th data-nosort style="cursor:default">#</th>' + th('edge', 'Edge', '', 'Order by rank minus Win M rank: positive means Win M ranks him higher than the # column does') + th('n', 'Player', 'l') + (rosters ? th('own', 'Owner', 'l') : '') + th('t', 'Team') + th('pos', 'Pos') + th('m', 'MPG', '', 'Minutes per game') + th('po', 'Playoff games') + th('gp', 'Games') + th('z', P_ ? (ui.basis === 'pergame' ? 'Pts/g' : ui.basis === 'mix' ? 'Pts (mix)' : 'Pts') : zd ? '−' + zd + ' ' + (100 - zp) + '% Zscore' : 'Zscore', '', P_ ? 'Fantasy points from the point values in Settings' : '') + (P_ ? '' : th('winC', 'Win C', '', 'Category wins added, in hundredths of a win, ' + (ui.winvs === 'avg' ? 'over an average player' : 'over a replacement-level player (as on the Draft tab)'))) + th('winM', 'Win M', '', 'Matchup win chance added, in points, ' + (ui.winvs === 'avg' ? 'over an average player' : 'over a replacement-level player (as on the Draft tab)')) + CATN.map((c, i) => th(i, c, !P_ && W[i] === 0 ? 'punted' : '')).join('') + '</tr></thead>';
     const body = '<tbody>' + list.map(x => {
-      const z = x.t.z, cells = CATN.map((_, c) => z == null ? '<td class="dim">—</td>' : '<td' + (W[c] === 0 ? ' class="punted"' : '') + '>' + (ui.stats === 'raw' ? rawTxt(x.r, c) : chip(x.t.cats[c] * W[c], sc[c], zTxt(x.t.cats[c] * W[c]))) + '</td>').join('');
+      const z = x.t.z, cells = CATN.map((_, c) => z == null ? '<td class="dim">—</td>' : '<td' + (!P_ && W[c] === 0 ? ' class="punted"' : '') + '>' + (ui.stats === 'raw' || P_ ? rawTxt(x.r, c) : chip(x.t.cats[c] * W[c], sc[c], zTxt(x.t.cats[c] * W[c]))) + '</td>').join('');
       return '<tr' + (me != null && x.own && x.own.owner === me ? ' class="mine"' : '') + '><td class="dim">' + (x.rank == null ? '—' : x.rank) + '</td>' + '<td>' + (edge(x) == null ? '<span class="dim">—</span>' : (edge(x) > 0 ? '+' : edge(x) < 0 ? '−' : '') + Math.abs(edge(x))) + '</td>' + '<td class="l">' + esc(x.r.n) + '</td>' + (rosters ? '<td class="l' + (x.own ? '' : ' dim') + '">' + (x.own ? esc(teamName[x.own.owner] || x.own.owner) + (x.own.slot === 'IR' ? ' (IR)' : '') : 'Free agent') + '</td>' : '') + '<td>' + esc(x.r.t) + '</td><td>' + (esc(x.r.pos) || '—') + '</td><td>' + (x.r.m > 0 ? x.r.m.toFixed(1) : '—') + '</td><td title="' + (x.t.per ? 'Per round: ' + x.t.per.join(' / ') : '') + '">' + (x.t.po == null ? '—' : x.t.po) + '</td><td>' + (x.r.gp != null ? x.r.gp : Math.round(x.r.g)) + '</td>'
-        + '<td><b>' + (z == null ? '—' : zTxt(x.t.zw)) + '</b></td>' + wTd(x.r.pid, 'c') + wTd(x.r.pid, 'm') + cells + '</tr>'; }).join('') + '</tbody>';
+        + '<td><b>' + (z == null ? '—' : P_ ? x.t.zw.toFixed(ui.basis === 'pergame' ? 1 : 0) : zTxt(x.t.zw)) + '</b></td>' + (P_ ? '' : wTd(x.r.pid, 'c')) + wTd(x.r.pid, 'm') + cells + '</tr>'; }).join('') + '</tbody>';
     $('tbl').innerHTML = head + body;
     const K = s.teams * s.roster;
-    n.textContent = (matched < tab.length ? matched + ' players match. ' : '') + 'Win C / Win M are season-long, as on the Draft tab, against simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).' + (ui.poboost !== 'off' ? ' Playoff boost scales Zscore and each category by 1 + strength × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
+    const zeroPts = P_ && Object.values(P_).every(v => !v);
+    n.textContent = (zeroPts ? 'All point values are 0: enter your league\'s values in Settings. ' : '') + (matched < tab.length ? matched + ' players match. ' : '') + (P_ ? 'Win M is season-long, as on the Draft tab, against' : 'Win C / Win M are season-long, as on the Draft tab, against') + ' simulated league teams' + (win.mine ? '; a player takes the spot of your weakest player, and your own players show what replacing them would cost' : (SS.league && rosters && Object.keys(rosters).length !== s.teams ? '; the league has ' + Object.keys(rosters).length + ' teams but Settings says ' + s.teams + ', so no roster is used' : '; add a team in Settings to measure against your roster')) + '. ' + (WINDAYS[ui.src] ? (ui.src === 'season' ? 'Season to date: ' : '') + 'games ' + windowOf().from + ' to ' + windowOf().to + ' (box scores, per-game averages)' : 'Projections') + '. ' + (P_ ? 'Points are your Settings point values times each stat; Season multiplies by games played, Mix by the midpoint of his games and the top ' + K + ' players\' average (scaled to games played). Win M treats each team\'s week as one points total, with the engine\'s own stat noise plus measured correlations between stats (a high-scoring night is usually also a high-FG night).' : 'Zscore is calculated on the top ' + K + ' players by H2H-adjusted value (' + s.teams + ' teams × ' + s.roster + ' players).') + (ui.poboost !== 'off' ? (P_ ? ' Playoff boost scales the Points value by 1 + strength' : ' Playoff boost scales Zscore and each category by 1 + strength') + ' × (playoff games of his team ÷ the average − 1), kept within ×0.5–×1.5; the pool is chosen before it.' : '');
     prewarm();
   }
 
   const cwSel = [...document.querySelectorAll('#catw select')];
   cwSel.forEach(el => { el.innerHTML = CWV.map(v => '<option value="' + v + '"' + (v === 0 ? ' title="Punt"' : '') + '>×' + v + '</option>').join(''); });
   function syncW() { cwSel.forEach(el => { const c = +el.dataset.c, v = ui.cw[c]; el.value = String(v); el.className = v === 0 ? 'off' : v !== R.WEIGHTS[c] ? 'chg' : ''; el.disabled = c === 8 && settings().cats === 8; }); }
+  // points mode hides what only categories use: Zscore type and drop, Stats, the weights and Win C
+  function applyMode(P_) {
+    ['type', 'zdrop', 'stats'].forEach(id => { $(id).closest('label').style.display = P_ ? 'none' : ''; });
+    $('catw').style.display = P_ ? 'none' : '';
+    const wc = document.querySelector('#orderby option[value="winC"]'); wc.hidden = wc.disabled = !!P_;
+    $('orderby').value = P_ && ui.order === 'winC' ? 'z' : ui.order;
+    document.querySelector('#orderby option[value="z"]').textContent = P_ ? 'Points' : 'Zscore';
+  }
   function sync() { $('orderby').value = ui.order; $('zdrop').value = ui.zdrop; $('winvs').value = ui.winvs; $('show').value = String(ui.show); document.querySelectorAll('#posf input').forEach(i => { i.checked = ui.pos.includes(i.value); }); syncW(); $('src').value = ui.src; $('type').value = ui.type; $('basis').value = ui.basis; $('stats').value = ui.stats; $('poboost').value = ui.poboost; }
   [['src', 'src'], ['type', 'type'], ['basis', 'basis'], ['stats', 'stats'], ['poboost', 'poboost']].forEach(([id, k]) => $(id).addEventListener('change', () => { ui[k] = $(id).value; save(); draw(); }));
   $('orderby').addEventListener('change', () => { ui.order = $('orderby').value; ui.sort = ui.order; ui.dir = -1; save(); draw(); });
@@ -341,8 +352,8 @@ tbody tr.mine:hover td{background:var(--sunk)}
     save(); draw();
   });
   window.addEventListener('storage', () => {
-    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings), s0 = JSON.stringify(SS.settings), me0 = was ? LS.defaultTeam(LS.local.get, was) : null; SS = LS.load(LS.local.get);
-    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
+    const was = SS.league && SS.league.id, s0 = JSON.stringify(SS.settings), me0 = was ? LS.defaultTeam(LS.local.get, was) : null; SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
   });
   sync();
   loadBox().then(b => { box = b; draw(); loadLeague(); });

@@ -13,6 +13,7 @@
   const PUNT_SYN_PAIRS = 24;   // synergy pairs Auto may blend (2026-10-17 realistic league, titles vs 20: 24 +1.9 ± 1.4, 28/32 +2.2, 16 −0.6, 8 −2.2)
   const PUNT_TOPK = 8;         // strategies that get a full Gain pass in Auto
   const WEEKS = 24;           // season split into weekly matchups
+  const PROJ_SD = 0.12;       // projection error of a counting stat, share of the projection
   const GPW = 3.42;           // average games per NBA team per matchup week (82 / 24; 2026-10-17)
   const VAR_GAMES = 0.82;     // variance of a player's games in a week he plays (2022-26 logs, drafted players; 2026-10-17)
   const SEASON_G = 80;        // games a fantasy roster spot can fill in a season
@@ -145,24 +146,37 @@
   }
 
   // ---------- league context (pool averages, Board scaling, weekly noise) ----------
+  // The 80 simulated ADP drafts every league-context pass shares: per sim, the player indexes in pick order (min(N*R, n) picks).
+  function simDraws(players, cfg) {
+    const N = cfg.teams, R = cfg.roster, src = cfg.adpSrc, r = rng(1234 + N * 31 + R), out = [];
+    for (let s = 0; s < 80; s++) {
+      const draws = players.map((p, i) => ({ i, t: adpOf(p, src) + gauss(r) * adpSd(p, src, cfg.sdModel) })).sort((a, b) => a.t - b.t);
+      out.push(draws.slice(0, Math.min(N * R, draws.length)).map(d => d.i));
+    }
+    return out;
+  }
+  // The same drafts split by team: [sim][team] -> player indexes in pick order
+  function draftSims(players, cfg) {
+    return simDraws(players, cfg).map(sim => { const teams = Array.from({ length: cfg.teams }, () => []); sim.forEach((i, k) => teams[teamAt(k, cfg.teams, cfg.order)].push(i)); return teams; });
+  }
   // One pass of simulated ADP drafts for a given games function: pool averages and team spread.
   function scaleFor(players, cfg, ctx, gOf) {
     const N = cfg.teams, R = cfg.roster, src = cfg.adpSrc;
     const X = players.map(p => { const x = vec(p, ctx, gOf(p)); if (ctx.ilFill && ctx.pgRepl) { const miss = Math.max(0, SEASON_G - gOf(p)) * ctx.ilFill; for (let c = 0; c < NC; c++) x[c] += miss * ctx.pgRepl[c]; } return x; });
     const WV = players.map(p => weekVar(p, ctx, gOf(p)));
     const PG = players.map(p => vec(p, ctx, 1));   // per-game category vector (signed, TO negative)
-    const r = rng(1234 + N * 31 + R);
     const SIMS = 80;
+    const sims = simDraws(players, cfg);
     const sum = new Float64Array(NC), sq = new Float64Array(NC), wsum = new Float64Array(NC), dsum = new Float64Array(NC);
     const s1 = new Float64Array(NC), s2 = new Float64Array(NC), wpg = new Float64Array(NC); let rN = 0;
     let teamsN = 0, dN = 0;
     for (let s = 0; s < SIMS; s++) {
-      const draws = players.map((p, i) => ({ i, t: adpOf(p, src) + gauss(r) * adpSd(p, src, cfg.sdModel) })).sort((a, b) => a.t - b.t);
+      const draws = sims[s];
       const tot = Array.from({ length: N }, () => new Float64Array(NC));
       const wk = Array.from({ length: N }, () => new Float64Array(NC));
-      const picks = Math.min(N * R, draws.length);
+      const picks = draws.length;
       for (let k = 0; k < picks; k++) {
-        const t = teamAt(k, N, cfg.order), i = draws[k].i;
+        const t = teamAt(k, N, cfg.order), i = draws[k];
         for (let c = 0; c < NC; c++) { tot[t][c] += X[i][c]; wk[t][c] += WV[i][c]; dsum[c] += X[i][c];
           const m = PG[i][c]; s1[c] += m; s2[c] += m * m; wpg[c] += WV[i][c] - m * m * VAR_GAMES; }
         dN++; rN++;
@@ -260,7 +274,7 @@
     const gOf = mw != null ? (p => G0 + mw * (gR(p) - G0)) : ctx.basis === 'pergame' ? (() => G0) : ctx.basis === 'mix' ? (p => (gR(p) + G0) / 2) : (p => gR(p));
     const act = mw != null ? scaleFor(players, cfg, ctx, gOf) : ctx.basis === 'pergame' ? pg : ctx.basis === 'mix' ? scaleFor(players, cfg, ctx, gOf) : tot;
     players.forEach((p, i) => {
-      p.x = act.X[i]; p.wv = act.WV[i]; p.pv = projVar(p, gOf(p));
+      p.x = act.X[i]; p.wv = act.WV[i]; p.pv = projVar(p, gOf(p)); p.gUse = gOf(p);
       p.board = act.boards[i].b; p.boardRaw = act.boards[i].raw; p.boardC = act.boards[i].bc; p.z = act.boards[i].z; p.zDrop = act.boards[i].drop;
       p.zCl = act.boards[i].cl;   // true (classic) Zscore
       p.fieldV = act.boards[i].fv;   // the room's value: Standard Zscore, TO ×0.5, fixed weights
@@ -911,7 +925,7 @@
     return { cat, match, mu: [mu(a), mu(b)] };
   }
   const E2 = (...a) => evaluate(...a);
-  const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  const api = { draftSims, perGameVar, VARS: { GPW, VAR_GAMES, SIGMA_G2, SEASON_G, PROJ_SD }, FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   api.pairMatchup = pairMatchup;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);

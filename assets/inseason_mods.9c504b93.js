@@ -244,13 +244,14 @@
 
   const periodOf = (L, n) => L.periods.find(p => p.n === n);
 
-  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref, box }) {
+  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref, box, nightOf }) {
     const roster = {};
     Object.keys(rosters).forEach(t => { roster[t] = rosters[t].map(x => x.fid); });
     const projected = pool.players.filter(p => p.src === 'proj');
     const ctx = { L, pool, DAYS, me, nowMs, cur: InLeague.currentPeriod(L, nowMs), ref: ref || InPlayers.makeValueRef(projected.map(p => ({ adp: p.adp, g: p.g, line: p.line }))), roster };
     const per = periodOf(L, ctx.cur);
     ctx.curEnd = per ? per.end : 0; ctx.out = outSet(ctx, box); ctx.box = box;
+    if (nightOf) ctx.nightOf = nightOf;   // points leagues: who plays a crowded night, by the player's own value (the Matchup Analyzer never sets it)
     return ctx;
   }
 
@@ -408,7 +409,7 @@
 
   const valueOf = (ctx, pp) => InPlayers.valueZ(pp.line, pp.g, ctx.ref);
   // who plays on a crowded night: the better per-game player (a full 82-game season at his line), games played drop out
-  const nightValue = (ctx, pp) => InPlayers.valueZ(pp.line, 82, ctx.ref);
+  const nightValue = (ctx, pp) => ctx.nightOf ? ctx.nightOf(pp) : InPlayers.valueZ(pp.line, 82, ctx.ref);
   // keep: player keys on the team that are never dropped
   function lowestValue(ctx, teamId, k, keep) {
     const kept = new Set(keep || []);
