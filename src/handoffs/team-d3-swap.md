@@ -22,8 +22,8 @@ Fixed: MUST (box-score window not cached while `box` is null, `srcWin`/`srcRows`
 
 ## Next
 
-1. Rebase onto origin/main (behind: manual-league, handoff-paste-message merged), rebuild, rerun tests; push and open the PR only on the user's word.
-3. Then team-tab-next step 3: per-game / season toggle and auto-fill the top 12.
+1. Up to date with origin/main (0 behind, checked after PRs #38 and #44); built and tested. Push and open the PR only on the user's word.
+2. Then team-tab-next step 3: per-game / season toggle and auto-fill the top 12.
 
 ## Hazards / housekeeping
 
