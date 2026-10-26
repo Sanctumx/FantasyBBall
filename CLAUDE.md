@@ -85,7 +85,8 @@ They work alongside the routing above; this file takes precedence over them. Siz
 ## The user's working rules
 
 - Change files with the Edit/Write tools, not `python - <<EOF` or `sed -i` patch scripts, and run commands from the repo
-  root without a `cd` prefix; both trigger permission prompts the user is tired of (user, 2026-10-26).
+  root without a `cd` prefix; both trigger permission prompts the user is tired of (user, 2026-10-26). Enforced by the
+  `before-bash.mjs` hook (it blocks `cd` prefixes, `sed -i`, `cat > f <<EOF` and heredoc patch scripts); don't work around it.
 - Push, merge or deploy only when the user says "push" or types /release (the ask prompt above is the backstop).
 - Keep running plan tasks back to back unless something needs the user's input; the exception is the context limit
   above (user, 2026-10-20).
