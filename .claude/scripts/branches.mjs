@@ -10,6 +10,7 @@ const CONFIG = {
   main: 'main',
   ledger: 'ledger',
   staleBehind: 20,
+  staleIdleDays: 7,
   notes: b => `src/handoffs/${b}.md`,
 };
 
@@ -62,7 +63,8 @@ for (const r of others) {
     const cherry = (git('cherry', base, r.name) || '').split('\n').filter(Boolean);
     if (cherry.length && cherry.every(l => l.startsWith('-'))) { state = ' · landed (every commit is on main under other hashes)'; stale.push('landed'); }
   }
-  if (behind > CONFIG.staleBehind) stale.push(`behind ${behind}`);
+  const idleDays = (Date.now() / 1000 - parseInt(git('log', '-1', '--format=%at', r.name) || '0', 10)) / 86400;
+  if (behind > CONFIG.staleBehind && idleDays > CONFIG.staleIdleDays) stale.push(`behind ${behind}, idle ${Math.floor(idleDays)} days`);
   const next = nextLine(r.name);
   if (next === 'NO HANDOFF FILE' && ahead > 0) stale.push('no handoff');
   const flag = stale.length ? ` · STALE (${stale.join(', ')}): delete, rebase or write its handoff` : '';
