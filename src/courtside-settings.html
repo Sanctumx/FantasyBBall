@@ -361,7 +361,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   const isPoints = s => !!s && s.scoring === 'points';
   // a saved draft's league keys over the defaults; the point values stay the league's
   const draftSettings = (current, cfg) => normalize(Object.assign({}, LEAGUE_DEF, LEAGUE_KEYS.reduce((o, k) => { if (cfg && k in cfg) o[k] = cfg[k]; return o; }, {}), { pointVals: current && current.pointVals }));
-  const POINTS_NOTE_HTML = 'Points leagues aren\'t supported on this tab yet. Scoring is set to points in <a href="settings.html">Settings</a>.';
+  const POINTS_NOTE_HTML = 'Points leagues aren\'t supported on this tab yet. Scoring is set to points in <a href="settings.html">Settings</a>. Rankings and Team work in points leagues.';
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
   const api = { leagueScoring, setLeagueScoring, KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,

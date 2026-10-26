@@ -1491,7 +1491,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const isPoints = s => !!s && s.scoring === 'points';
   // a saved draft's league keys over the defaults; the point values stay the league's
   const draftSettings = (current, cfg) => normalize(Object.assign({}, LEAGUE_DEF, LEAGUE_KEYS.reduce((o, k) => { if (cfg && k in cfg) o[k] = cfg[k]; return o; }, {}), { pointVals: current && current.pointVals }));
-  const POINTS_NOTE_HTML = 'Points leagues aren\'t supported on this tab yet. Scoring is set to points in <a href="settings.html">Settings</a>.';
+  const POINTS_NOTE_HTML = 'Points leagues aren\'t supported on this tab yet. Scoring is set to points in <a href="settings.html">Settings</a>. Rankings and Team work in points leagues.';
   const NO_LEAGUE_HTML = 'Load a league in <a href="settings.html">Settings</a> to use this tab.';
   const api = { leagueScoring, setLeagueScoring, KEYS, LEAGUE_DEF, LEAGUE_KEYS, LU_MAX, SLOT_OK, slotElig, slotName, lineupSlots, sameLeague, normalize, load, save, local, POINT_STATS, POINT_LABELS, PT_MAX, isPoints, draftSettings, POINTS_NOTE_HTML,
     savedLeagues, rememberLeague, renameLeague, forgetLeague, defaultTeam, pickTeam, NO_LEAGUE_HTML,
@@ -1814,13 +1814,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   const periodOf = (L, n) => L.periods.find(p => p.n === n);
 
-  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref, box }) {
+  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref, box, nightOf }) {
     const roster = {};
     Object.keys(rosters).forEach(t => { roster[t] = rosters[t].map(x => x.fid); });
     const projected = pool.players.filter(p => p.src === 'proj');
     const ctx = { L, pool, DAYS, me, nowMs, cur: InLeague.currentPeriod(L, nowMs), ref: ref || InPlayers.makeValueRef(projected.map(p => ({ adp: p.adp, g: p.g, line: p.line }))), roster };
     const per = periodOf(L, ctx.cur);
     ctx.curEnd = per ? per.end : 0; ctx.out = outSet(ctx, box); ctx.box = box;
+    if (nightOf) ctx.nightOf = nightOf;   // points leagues: who plays a crowded night, by the player's own value (the Matchup Analyzer never sets it)
     return ctx;
   }
 
@@ -1978,7 +1979,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   const valueOf = (ctx, pp) => InPlayers.valueZ(pp.line, pp.g, ctx.ref);
   // who plays on a crowded night: the better per-game player (a full 82-game season at his line), games played drop out
-  const nightValue = (ctx, pp) => InPlayers.valueZ(pp.line, 82, ctx.ref);
+  const nightValue = (ctx, pp) => ctx.nightOf ? ctx.nightOf(pp) : InPlayers.valueZ(pp.line, 82, ctx.ref);
   // keep: player keys on the team that are never dropped
   function lowestValue(ctx, teamId, k, keep) {
     const kept = new Set(keep || []);

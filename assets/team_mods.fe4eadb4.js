@@ -244,13 +244,14 @@
 
   const periodOf = (L, n) => L.periods.find(p => p.n === n);
 
-  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref, box }) {
+  function makeCtx({ L, pool, DAYS, rosters, me, nowMs, ref, box, nightOf }) {
     const roster = {};
     Object.keys(rosters).forEach(t => { roster[t] = rosters[t].map(x => x.fid); });
     const projected = pool.players.filter(p => p.src === 'proj');
     const ctx = { L, pool, DAYS, me, nowMs, cur: InLeague.currentPeriod(L, nowMs), ref: ref || InPlayers.makeValueRef(projected.map(p => ({ adp: p.adp, g: p.g, line: p.line }))), roster };
     const per = periodOf(L, ctx.cur);
     ctx.curEnd = per ? per.end : 0; ctx.out = outSet(ctx, box); ctx.box = box;
+    if (nightOf) ctx.nightOf = nightOf;   // points leagues: who plays a crowded night, by the player's own value (the Matchup Analyzer never sets it)
     return ctx;
   }
 
@@ -408,7 +409,7 @@
 
   const valueOf = (ctx, pp) => InPlayers.valueZ(pp.line, pp.g, ctx.ref);
   // who plays on a crowded night: the better per-game player (a full 82-game season at his line), games played drop out
-  const nightValue = (ctx, pp) => InPlayers.valueZ(pp.line, 82, ctx.ref);
+  const nightValue = (ctx, pp) => ctx.nightOf ? ctx.nightOf(pp) : InPlayers.valueZ(pp.line, 82, ctx.ref);
   // keep: player keys on the team that are never dropped
   function lowestValue(ctx, teamId, k, keep) {
     const kept = new Set(keep || []);
@@ -919,23 +920,26 @@
 // the summed category chances, averaged over the opponents).
 (function (root) {
   'use strict';
-  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Team = root.Team || require('./team_core.js');
+  const Eng = root.Engine || require('./engine.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), Team = root.Team || require('./team_core.js'), Pts = root.Points || require('./points_core.js');
   const NC = Eng.NC;
 
   // the engine context of a ctx's player pool: noise and pool averages from simulated drafts of the real league (rostered players
   // first), IL fill off because Plays % already counts the games a player misses. Built once per ctx and category count.
   const ectxs = new WeakMap();
-  function engCtx(ctx, nc) {
+  // Points leagues (#137): w = the point values; the engine view puts one FP total in category slot Points.FP_SLOT and the rest is unchanged.
+  function engCtx(ctx, nc, w) {
     let by = ectxs.get(ctx); if (!by) ectxs.set(ctx, by = {});
-    if (!by[nc]) {
+    const bk = w ? 'p|' + Pts.key(w) : nc;
+    if (!by[bk]) {
       const N = Object.keys(ctx.roster).length, R = ctx.L.maxActive, adp = p => p.adp == null ? 1e9 : p.adp;
       const list = ctx.pool.players.filter(p => p.g > 0).sort((a, b) => (a.owner ? 0 : 1) - (b.owner ? 0 : 1) || adp(a) - adp(b));
       const P = Eng.prepPlayers(list.map((p, i) => Object.assign({}, p.line, { g: p.g, ftx: i + 1 })));
       const cfg = { teams: N, roster: R, slot: 1, order: '3rr', scoring: 'h2h', cats: nc, ilSpots: 0, field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '',
         catW: InPlayers.WEIGHTS.slice(), adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0, basis: 'total' };
-      by[nc] = { ctx: Eng.buildContext(P, cfg), cfg };
+      const cx = Eng.buildContext(P, cfg);
+      by[bk] = w ? { ctx: Pts.engineView(P, cx, cfg, w).ctx, cfg, w } : { ctx: cx, cfg };
     }
-    return by[nc];
+    return by[bk];
   }
 
   // one team's forecast: the sum of its entries' category vectors and projection variances. Entries are { p: stat line, games per
@@ -943,7 +947,7 @@
   function teamVec(e, entries) {
     const mu = new Float64Array(NC), v = new Float64Array(NC);
     entries.forEach(en => {
-      const s = en.sign || 1, ev = Eng.entryVec(en.p, e.ctx, en.games * Eng.WEEKS);
+      const s = en.sign || 1, ev = e.w ? Pts.entry(en.p, en.games * Eng.WEEKS, e.ctx, e.w) : Eng.entryVec(en.p, e.ctx, en.games * Eng.WEEKS);
       for (let c = 0; c < NC; c++) { mu[c] += s * ev.x[c]; v[c] += s * ev.pv[c]; }
     });
     return { mu, v };
@@ -971,10 +975,10 @@
   // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
   // opponents' forecasts are the same for every previewed roster that removes the same players from them, so they are cached per ctx
   const memos = new WeakMap();
-  function oppTeam(ctx, e, nc, tid, exclude, W) {
+  function oppTeam(ctx, e, nc, tid, exclude, W) {   // e carries the point values, so the memo key must too
     let memo = memos.get(ctx);
     if (!memo) { memo = new Map(); memos.set(ctx, memo); }
-    const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + W + '|' + nc;
+    const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '');
     if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude), W)));
     return memo.get(id);
   }
@@ -990,10 +994,14 @@
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
   // their old team's side (everyone on my roster, and a candidate I bring in)
   function matrixOf(ctx, mine, exclude, W, o) {
-    const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
+    const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o && o.points), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
     const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W)));
     const pl = tv.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
     const out = Eng.evaluate(pl, e.ctx, Object.assign({}, e.cfg, { teams: pl.length, roster: 1, slot: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
+    if (e.w) {   // one points total: the match chance is the single-slot chance; no category or Win C numbers
+      const F = Pts.FP_SLOT, teams = ids.map((id, i) => ({ id, cat: null, match: out.catProb(out.teams[0], out.teams[i + 1], F), winC: null, ppw: tv[i + 1].mu[F] / Eng.WEEKS }));
+      return { weeks: W, teams, mean: { cat: null, match: teams.reduce((s, t) => s + t.match, 0) / (teams.length || 1), winC: null, ppw: tv[0].mu[F] / Eng.WEEKS } };   // ppw = points in an average week
+    }
     const teams = ids.map((id, i) => {
       const A = out.teams[0], B = out.teams[i + 1], cat = Array.from({ length: 9 }, (_, c) => c >= nc ? null : out.catProb(A, B, c));
       return { id, cat, match: out.pairProb(A, B), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
@@ -1002,8 +1010,9 @@
     return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
   }
 
-  const dCats = (a, b) => a.mean.cat.map((v, c) => v == null ? 0 : 100 * (v - b.mean.cat[c]));
-  const gain = (a, b) => ({ c: 100 * (a.mean.winC - b.mean.winC), m: 100 * (a.mean.match - b.mean.match), dCat: dCats(a, b) });
+  const dCats = (a, b) => a.mean.cat ? a.mean.cat.map((v, c) => v == null ? 0 : 100 * (v - b.mean.cat[c])) : null;
+  const gain = (a, b) => ({ c: a.mean.winC == null ? null : 100 * (a.mean.winC - b.mean.winC), m: 100 * (a.mean.match - b.mean.match), dCat: dCats(a, b) });
+  const sub = (x, y) => x == null || y == null ? null : x - y, subV = (x, y) => x && y ? x.map((v, c) => v - y[c]) : null;
 
   // each roster player's contribution to my Win C / Win M: active and reserve = the team minus the team without him (the reserve
   // refills his nights); IL = the team with him in the reserve minus the team (hypo: true). -> { key: { c, m, dCat[9], hypo? } }
@@ -1011,7 +1020,7 @@
   // opts.baseline 'avg' (Vs average): see avgParts; my own Active / Reserve player X = the team minus (the team with X replaced by an average
   // player); my IL player = a candidate. Default 'rep' = the raw contribution.
   function playerGain(ctx, state, k, base, opts) {
-    if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };
+    if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };   // (points: the zero gain keeps its category zeros; nothing shows them)
     if (opts && opts.baseline === 'avg') {
       const ap = (opts.ap) || avgParts(ctx, state, base.weeks);
       if (ap) { const own = Team.COUNTED.includes(state.slots[k]); return own ? gain(base, avgOwn(ctx, state, ap, k, opts)) : Object.assign(gain(avgCandidate(ctx, state, ap, k, opts), base), { hypo: true }); }
@@ -1044,6 +1053,12 @@
     return matrixOf(ctx, ap.mine.filter(x => x.key !== key).concat(Object.assign({}, ap.mean, { games: e.games })), new Set(state.order), ap.W, opts);
   }
 
+  // points my counted players produce in an average remaining week: sum of FP per game x Plays % games per week
+  function pointsPerWeek(ctx, state, w) {
+    const Wk = weeksLeft(ctx); if (!(Wk > 0)) return 0;
+    return side(ctx, state, Wk).reduce((t, e) => t + Pts.perGame(e.p, w) * e.games, 0);
+  }
+
   function playerWin(ctx, state, opts) {
     const base = matrix(ctx, state, opts), res = {};
     state.order.forEach(k => { res[k] = playerGain(ctx, state, k, base, opts); });
@@ -1065,13 +1080,13 @@
   // 'rep'), so new - old = dM in both baselines.
   // opts.base / opts.pw: the matrix and per-player gains when already computed (a job gets them one piece at a time)
   function moduleSetup(ctx, state, opts) {
-    const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode }, base = o.base || matrix(ctx, state, mo);
+    const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode, points: o.points }, base = o.base || matrix(ctx, state, mo);
     if (!base.mean) return null;
     if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks); return ap ? { base, ap, mo, avg: true } : null; }
     const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state);
     if (!counted.length) return null;
     const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst];
-    return { base, pw, worst, wSlot, mo, off: { c: 0, m: 0, dCat: new Array(9).fill(0) }, avg: false };
+    return { base, pw, worst, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
   }
 
   // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team
@@ -1086,16 +1101,16 @@
       const counted = own && Team.COUNTED.includes(s), a = counted ? avgOwn(ctx, state, su.ap, key, su.mo) : avgCandidate(ctx, state, su.ap, key, su.mo), g = counted ? gain(su.base, a) : gain(a, su.base);
       return { key, owner, dM: g.m, dC: g.c, dCat: g.dCat, old: counted ? cur - g.m : cur, new: counted ? cur : cur + g.m };
     }
-    const pw = su.pw, zero = () => new Array(9).fill(0);
+    const pw = su.pw, zero = () => su.mo.points ? null : new Array(9).fill(0);
     let r;
-    if (key === su.worst) r = { c: 0, m: 0, dCat: zero() };
-    else if (own && Team.COUNTED.includes(s)) r = { c: pw[key].c - pw[su.worst].c, m: pw[key].m - pw[su.worst].m, dCat: pw[key].dCat.map((v, c) => v - pw[su.worst].dCat[c]) };
+    if (key === su.worst) r = { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
+    else if (own && Team.COUNTED.includes(s)) r = { c: sub(pw[key].c, pw[su.worst].c), m: pw[key].m - pw[su.worst].m, dCat: subV(pw[key].dCat, pw[su.worst].dCat) };
     else r = swapScore(ctx, state, su, ctx, key);
-    return { key, owner, dM: r.m - su.off.m, dC: r.c - su.off.c, dCat: r.dCat.map((v, c) => v - su.off.dCat[c]), old: cur + su.off.m, new: cur + r.m };
+    return { key, owner, dM: r.m - su.off.m, dC: sub(r.c, su.off.c), dCat: subV(r.dCat, su.off.dCat), old: cur + su.off.m, new: cur + r.m };
   }
 
   function moduleSort(rows, weights) {
-    const weighted = weights && weights.some(w => w != null && w !== 1);
+    const weighted = weights && weights.some(w => w != null && w !== 1) && rows.every(r => r.dCat);
     return rows.map((r, i) => Object.assign({}, r, { sort: weighted ? r.dCat.reduce((a, v, c) => a + v * (weights[c] == null ? 1 : weights[c]), 0) : r.dM, i }))
       .sort((a, b) => b.sort - a.sort || a.i - b.i).map(r => { delete r.i; return r; });
   }
@@ -1106,7 +1121,7 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { pointsPerWeek, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -1117,7 +1132,7 @@
 // it only when the "adjust by Plays %" box is checked (opts.adjust).
 (function (root) {
   'use strict';
-  const Team = root.Team || require('./team_core.js'), TeamWin = root.TeamWin || require('./team_win.js');
+  const Team = root.Team || require('./team_core.js'), TeamWin = root.TeamWin || require('./team_win.js'), Points = root.Points || require('./points_core.js');
   const SLOT_ORDER = Team.SLOTS;
   const COUNT = ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
 
@@ -1144,6 +1159,8 @@
         stat: scaled(pp.line, (o.view === 'ros' ? gl : 1) * f),
         cats: cats && cats.map(v => v * f), z: cats ? Team.weightedZ(cats.map(v => v * f), o.weights, nc) : null };
     });
+    // points leagues (#137): FP of the row's scaled line, so the column follows Per game / Rest of season and the Plays % box
+    if (o.points) all.forEach(r => { r.fp = Points.perGame(r.stat, o.points); });
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
     const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: plays[k].pct, hypo: plays[k].hypo })), slots);
     let avgCats = null;
@@ -1152,7 +1169,7 @@
       state.order.forEach(k => { const p = plays[k], c = o.zCats(ctx.pool.byKey.get(k)); if (!p.hypo && p.pct != null && c) c.forEach((v, i) => { avgCats[i] += p.pct * v / slots; }); });
     }
     const avgZ = avgCats ? Team.weightedZ(avgCats, o.weights, nc) : null;
-    return { groups, rows: all, avg, avgZ, avgCats };
+    return { groups, rows: all, avg, avgZ, avgCats, avgFp: o.points ? Points.perGame(avg, o.points) : null };
   }
 
   // each category's share of the weighted Z (cats x base weight x user weight), so the parts add up to Team.weightedZ
@@ -1183,7 +1200,7 @@
   // opts: baseline 'rep' | 'avg', cats (weights are not an input: they only re-sort, TeamWin.moduleSort). candidates default to the whole pool.
   // -> { done, rows (unsorted, in candidate order), n, total, step(budgetMs, clock) }; step() returns true while it did work
   function moduleJob(ctx, state, opts, candidates) {
-    const o = opts || {}, mo = { cats: o.cats }, cand = candidates || ctx.pool.players.map(p => p.key);
+    const o = opts || {}, mo = { cats: o.cats, points: o.points }, cand = candidates || ctx.pool.players.map(p => p.key);
     const counted = Team.counted(state);
     let base = null, pw = {}, su = null;
     const job = { done: false, rows: [], n: 0, total: cand.length, step(budgetMs, clock) {
@@ -1224,7 +1241,7 @@
   function createScorer() {
     const by = new WeakMap();
     const bucket = ctx => { let m = by.get(ctx); if (!m) by.set(ctx, m = new Map()); return m; };
-    const keyOf = (state, o) => signature(state) + '#' + (o.cats || '') + '#' + (o.baseline || '');
+    const keyOf = (state, o) => signature(state) + '#' + (o.cats || '') + '#' + (o.baseline || '') + '#' + (o.points ? Points.key(o.points) : '');
     return {
       get(ctx, state, opts) {
         const m = bucket(ctx), sig = keyOf(state, opts || {});

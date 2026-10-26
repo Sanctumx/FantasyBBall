@@ -21,8 +21,8 @@ async function open(seed, page) {
 }
 const text = p => p.evaluate(() => document.body.innerText);
 
-// points: every tab that can't value points yet shows the note and no player rows (Rankings handles points: rankings_page.mjs)
-for (const [page, rows] of [['index.html', '#tbody tr'], ['league.html', '#body:not([hidden]) table tr'], ['inseason.html', '#body:not([hidden]) table tr'], ['team.html', '#body:not([hidden]) table tr']]) {
+// points: every tab that can't value points yet shows the note and no player rows (Rankings and Team handle points: rankings_page.mjs, team_page.mjs)
+for (const [page, rows] of [['index.html', '#tbody tr'], ['league.html', '#body:not([hidden]) table tr'], ['inseason.html', '#body:not([hidden]) table tr']]) {
   const { p, errs, ctx } = await open(store('points'), page);
   ok((await text(p)).includes(PHRASE), page + ': points shows the not-supported note');
   ok(await p.$$eval(rows, r => r.length) === 0, page + ': points shows no rows');
@@ -47,7 +47,7 @@ for (const [page, rows] of [['index.html', '#tbody tr'], ['rankings.html', '#tbl
   await ctx.close(); }
 
 // Scoring switched in another browser tab: the open page follows without a reload, both ways
-for (const [page, rows] of [['inseason.html', '#body:not([hidden]) table tr'], ['team.html', '#body:not([hidden]) table tr']]) {
+for (const [page, rows] of [['inseason.html', '#body:not([hidden]) table tr']]) {
   const { p, ctx } = await open(store('h2h'), page);
   const w = await ctx.newPage(); await w.goto('http://localhost:' + PORT + '/robots.txt');
   const set = async scoring => { await w.evaluate(sc => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.scoring = sc; localStorage.setItem(k, JSON.stringify(o)); }, scoring); await p.waitForTimeout(1500); };
