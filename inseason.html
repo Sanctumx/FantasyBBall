@@ -38,6 +38,7 @@ button,select,input{font:inherit;color:inherit}
 header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
 header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0}
 header.top h1 .logo{width:.9em;height:.9em;flex:none}
+header.top h1{flex-wrap:wrap;row-gap:0}header.top h1 .pg{font-size:.55em;opacity:.6;margin-left:.15em;align-self:flex-end;padding-bottom:.12em}
 header.top .top-r{margin-right:24px}
 @media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}}
 main{display:flex;flex-direction:column;gap:16px}
@@ -167,7 +168,7 @@ tr.click{cursor:pointer}
 </style>
 
 <header class="top">
-  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg><span id="sect">Matchup Analyzer</span></h1>
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg><span class="wm">Courtside</span><span class="pg" id="sect">Matchup Analyzer</span></h1>
   <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
 </header>
 <dialog class="how" id="how" aria-labelledby="how-title">
@@ -427,6 +428,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     ks.forEach((k, j) => { v[j + 2] = Math.pow(0.12 * p[k] * g, 2); });
     return v;
   }
+  // One stat line at g games as a team-total entry: { x, pv }, what buildContext gives a pool player with IL fill off (Team tab, 2026-10-26).
+  function entryVec(line, ctx, g) { return { x: vec(line, ctx, g), pv: projVar(line, g) }; }
   // Per-game noise variance per player, in each category's own units (the games-played variance is separate, see pairTeam).
   function perGameVar(p) {
     const v = new Float64Array(NC);
@@ -1246,7 +1249,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { cat, match, mu: [mu(a), mu(b)] };
   }
   const E2 = (...a) => evaluate(...a);
-  const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   api.pairMatchup = pairMatchup;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);
@@ -1286,9 +1289,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
     return o;
   }
-  // Toolbar between the pages; `active` is 'kit', 'rankings', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
+  // Toolbar between the pages; `active` is 'kit', 'rankings', 'team', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
-    [['rankings', 'rankings.html', 'Rankings'], ['kit', './', 'Draft'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade'], ['settings', 'settings.html', 'Settings']]
+    [['rankings', 'rankings.html', 'Rankings'], ['team', 'team.html', 'Team'], ['kit', './', 'Draft'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade'], ['settings', 'settings.html', 'Settings']]
       .map(([k, href, label]) => '<a href="' + href + '"' + (active === k ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:5px 10px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +
@@ -1593,7 +1596,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function projLines(PLAYERS, proj) {
     return PLAYERS.map((r, i) => {
       const q = Shared.projOf(r, proj || 'avg');
-      return { id: i, n: r.n, t: r.t, pos: r.p, g: q.g, line: lineOf(q), adp: r.ftx != null ? r.ftx : (r.adp != null ? r.adp : null), rk: r.rk, src: r.src };
+      return { id: i, n: r.n, t: r.t, pos: r.p, g: q.g, m: q.m, line: lineOf(q), adp: r.ftx != null ? r.ftx : (r.adp != null ? r.adp : null), rk: r.rk, src: r.src };
     });
   }
 
@@ -1631,15 +1634,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       });
     });
     matches.forEach(({ fid, info, pm, es }) => {
-      const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row) } : null;
-      let src, line, g, pos, n, t, adp, pid = null;
-      if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; pid = pm.id; }
+      const actual = es && es.row.gp > 0 ? { gp: es.row.gp, line: espnLine(es.row), min: es.row.min } : null;
+      let src, line, g, pos, n, t, adp, mpg = null, pid = null;
+      if (pm) { const q = projP[pm.id]; src = 'proj'; line = q.line; g = q.g; pos = q.pos; n = q.n; t = q.t; adp = q.adp; pid = pm.id; mpg = q.m == null ? null : q.m; }
       else {
         src = actual ? 'actual' : 'waiver'; line = actual ? actual.line : wl.line; g = wl.g;
         pos = String(info.position || '').replace(/,/g, '/'); n = swapName(info.name); t = InLeague.toProjTeam(info.team); adp = null;
+        mpg = actual && actual.min != null ? actual.min : null;
       }
       if (!(fid in owner) && src === 'waiver') return;   // available players with no line at all are not worth listing
-      const pp = { key: fid, n, t, pos, line, g, src, actual, adp, pid, owner: owner[fid] || null, slot: slot[fid] || null, fxStatus: L.fxStatus[fid] || (fid in owner ? 'T' : null) };
+      const pp = { key: fid, n, t, pos, line, g, mpg, src, actual, adp, pid, owner: owner[fid] || null, slot: slot[fid] || null, fxStatus: L.fxStatus[fid] || (fid in owner ? 'T' : null) };
       players.push(pp); byKey.set(fid, pp);
       if (fid in owner && src !== 'proj') noProj.push(pp);
     });

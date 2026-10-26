@@ -26,3 +26,8 @@ r=open('rankings.html').read()
 mods=''.join(open(f).read()+chr(10) for f in ['inseason_league.js','inseason_players.js','rankings_core.js'])
 r=r.replace('/*__DATA__*/','const PLAYERS='+P+';').replace('/*__SCHED__*/','const SCHED='+S+';').replace('/*__ENGINE__*/',open('engine.js').read()).replace('/*__SHARED__*/',open('shared.js').read()).replace('/*__STORE__*/',open('league_store.js').read()).replace('/*__RANKINGS__*/',mods)
 open('courtside-rankings.html','w').write(r)
+# Team page (2026-10-25, #131): the in-season modules, the rankings core (Zscore) and the Team tab modules; its How it works is its own
+tm=open('team.html').read()
+mods=''.join(open(f).read()+chr(10) for f in ['inseason_league.js','inseason_players.js','matchup_core.js','rankings_core.js','team_core.js','team_win.js','team_view.js'])
+tm=tm.replace('/*__DATA__*/','const PLAYERS='+P+';').replace('/*__DAYS__*/','const SCHED_DAYS='+D+';').replace('/*__ENGINE__*/',open('engine.js').read()).replace('/*__SHARED__*/',open('shared.js').read()).replace('/*__STORE__*/',open('league_store.js').read()).replace('/*__TEAM__*/',mods)
+open('courtside-team.html','w').write(tm)

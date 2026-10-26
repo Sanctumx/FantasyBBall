@@ -26,7 +26,7 @@ const stored = p => p.evaluate(() => JSON.parse(localStorage.getItem('courtside-
 // 1. migration from the old keys, nothing loaded
 { const { p, errs, ctx } = await open({ 'courtside-board-v1': JSON.stringify(board) }, okFx);
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
-  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Draft|Rankings|League|Matchup|Trade|Settings', 'toolbar has five links');
+  ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Rankings|Team|Draft|League|Matchup|Trade|Settings', 'toolbar has seven links');
   ok(await p.$eval('#s-teams', e => e.value) === '12' && await p.$eval('#s-roster', e => e.value) === '13' && await p.$eval('#s-cats', e => e.value) === '8', 'form shows the old board settings');
   const st = await stored(p);
   ok(st && st.v === 1 && st.settings.teams === 12 && st.settings.cats === 8 && st.league === null, 'migrated store written');

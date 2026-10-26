@@ -25,6 +25,7 @@ button,select{font:inherit;color:inherit}
 header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:20px 18px;border-bottom:2px solid var(--ink);margin-bottom:16px}
 header.top h1{display:flex;align-items:center;gap:.28em;font:700 3.4rem/1 var(--f-display);letter-spacing:.01em;text-transform:uppercase;margin:0}
 header.top h1 .logo{width:.9em;height:.9em;flex:none}
+header.top h1{flex-wrap:wrap;row-gap:0}header.top h1 .pg{font-size:.55em;opacity:.6;margin-left:.15em;align-self:flex-end;padding-bottom:.12em}
 header.top .top-r{margin-right:24px}
 @media (max-width:640px){header.top h1{font-size:2.4rem}header.top .top-r{margin-right:0}}
 main{display:flex;flex-direction:column;gap:16px}
@@ -117,7 +118,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 </style>
 
 <header class="top">
-  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg>Settings</h1>
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg><span class="wm">Courtside</span><span class="pg">Settings</span></h1>
   <div class="top-r"><span id="sitenav"></span></div>
 </header>
 
@@ -378,9 +379,9 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     o.ftp = o.fta ? (raw.ftp * raw.fta + h.ftp * h.fta) / 2 / o.fta : raw.ftp;
     return o;
   }
-  // Toolbar between the pages; `active` is 'kit', 'rankings', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
+  // Toolbar between the pages; `active` is 'kit', 'rankings', 'team', 'league', 'matchup' or 'trades' (the last two are sections of inseason.html)
   const TOOLBAR_HTML = active => '<nav class="sitenav" aria-label="Pages">' +
-    [['rankings', 'rankings.html', 'Rankings'], ['kit', './', 'Draft'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade'], ['settings', 'settings.html', 'Settings']]
+    [['rankings', 'rankings.html', 'Rankings'], ['team', 'team.html', 'Team'], ['kit', './', 'Draft'], ['league', 'league.html', 'League'], ['matchup', 'inseason.html#matchup', 'Matchup'], ['trades', 'inseason.html#trades', 'Trade'], ['settings', 'settings.html', 'Settings']]
       .map(([k, href, label]) => '<a href="' + href + '"' + (active === k ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
   const TOOLBAR_CSS = '.sitenav{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}' +
     '.sitenav a{padding:5px 10px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}' +

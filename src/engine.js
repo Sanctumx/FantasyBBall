@@ -90,6 +90,8 @@
     ks.forEach((k, j) => { v[j + 2] = Math.pow(0.12 * p[k] * g, 2); });
     return v;
   }
+  // One stat line at g games as a team-total entry: { x, pv }, what buildContext gives a pool player with IL fill off (Team tab, 2026-10-26).
+  function entryVec(line, ctx, g) { return { x: vec(line, ctx, g), pv: projVar(line, g) }; }
   // Per-game noise variance per player, in each category's own units (the games-played variance is separate, see pairTeam).
   function perGameVar(p) {
     const v = new Float64Array(NC);
@@ -909,7 +911,7 @@
     return { cat, match, mu: [mu(a), mu(b)] };
   }
   const E2 = (...a) => evaluate(...a);
-  const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   api.pairMatchup = pairMatchup;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);

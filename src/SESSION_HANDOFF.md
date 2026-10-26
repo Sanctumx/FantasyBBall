@@ -1,6 +1,6 @@
 # Session handoff — Courtside Draft Kit (Fantasy BBall)
 
-_Last updated: 2026-10-22_ · Current state only, about 60 lines / 6 KB. Replace lines instead of appending; trim by moving
+_Last updated: 2026-10-26_ · Current state only, about 60 lines / 6 KB. Replace lines instead of appending; trim by moving
 text (stable reference → `src/MODEL.md`, finished detail → archive), never by deleting it.
 Every idea ever tried: `src/IDEAS.md` (one line each, search it). Full write-ups: `src/HANDOFF_ARCHIVE.md` (search `^N\.`).
 How work gets done and the user's standing rules: `CLAUDE.md`. Model, defaults, architecture, backtest world: `src/MODEL.md`.
@@ -19,6 +19,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
   Publish `courtside-draft-board.html`, **never `app.html`**.
 - **Math doc:** claude.ai/code/artifact/2d4059a8-f9ad-465d-bfa7-41ef6990e7a8 (rev 159). The board links to `math.html`:
   export the doc tab as HTML, then `python3 build_math.py <export.html> <katex folder>`.
+- **Header (2026-10-26):** every page header reads logo + "Courtside" + the page name in smaller dim text (`.wm`/`.pg` in each template; the Draft board keeps "Courtside Draft Kit").
 - **Works:** board, Fantrax live sync, saved drafts/leagues, League Dashboard, ADP/draft collector (every 6 h), Rankings tab
   (#110, PR #21, 2026-10-21; detail in archive 110b/110d).
 - **In-season tools + Settings tab (95-109, released 2026-10-21):** Matchup and Trade Analyzers (`inseason.html`), shared
@@ -46,28 +47,19 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
 7. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 combine known
    game stats with projections; (#116 done).
-8. **#136** done 2026-10-25: `src/collect/espn_fetch.mjs` retries the ESPN collectors with backoff (429/403/5xx/network, 3
+8. **#136** done 2026-10-25: `src/collect/espn_fetch.mjs` retries the ESPN collectors with backoff (429/403/5xx/network, 3
    retries) and `espn_stats` pauses 500 ms between pages.
 
 ## Next session starts with
 
-**Merged to main (PR #24, 2026-10-21; Cloudflare deploys it):** ideas 122-129 (Waiver adds panel, Team schedule, keep list,
-Hashtag refresh, 68 Hashtag-only players, box-score scoring of adds, Fantrax period dates, review fixes: saved extras carry
-`base`, a save without one counts as 234 players). 192 unit tests pass. Board artifact republished (v166). First step:
-refit
-the shrink k for Trade Analyzer future weeks (analyst designs a PM-ros arm in `calib_pair.js`, the user runs it on the PC);
-#130 done and released (Rankings: MPG, Order by, my players highlighted). **Next: the tab overhaul #131-134 (user, 2026-10-21). #134 (order; Team tab still pending) and #132 (compact tabs) merged 2026-10-22. #135 Rankings Edge column (Order by rank minus Win M rank) merged 2026-10-22. Brainstorming is under way (decisions in archive 131: Team tab = see all my stats + preview-only swaps of any number of players, incl. waiver pickups, dropdowns pick the stats view); resume it, the visual-companion offer is unanswered, then write the design doc (`docs/superpowers/specs/`), builder check, planner. Rankings left of Draft, new Team tab between them (all players with projected/real stats, average totals, Win C/M, swap a player, matchup/category matrix), a collapsible How it works panel on every tab, hover tooltips redone like the Draft tab, compact tabs that fill the space. Big feature: brainstorming with the user, then planner.** #116 and #112 are merged. Best adds/plan on remaining games.
-Left open: IR players count every future team game in the Trade Analyzer; games-played variance cap has no dedicated test;
-Playoff boost hidden, Win uses Draft field Easy, traded player's games use his preseason team, likelihood bias is a guess
-(#98); IR on the League tab (#109); week-status leftovers in archive 118b; best adds search tries only the top 20 adds against
-drops 2-5; `matchup_core` addPlan day list still runs to per.end (an extra empty day). Offered, unanswered: a "Team games left"
-column. 126 leftovers: `ftx` of the 234 BBM rows not refreshed from the Fantrax snapshot; Hashtag-only rows carry Hashtag ADP, BBM rows BBM ADP.
-Note: 6 context-hook tests fail when run inside a long session (not code).
+**Model pick and Plays % (#140 Measured, #141 Open, 2026-10-26):** the draft Model pick fills unfilled slots with a typical player at that pick (Gaussian window around the j-th best available by adpE, `engine.js:445-463`), not the end-of-draft average (that is only the Gain baseline `rep`). Plays % by roster rank (10 of 12 cap): ranks 1-10 play 99.5-100%, 11th 97.6-99.2%, 12th 94.3-97.9%, ~0.2% of team games (#80 confirmed). User wants it in the Model pick on principle: **#141** = rank-based games factor in `Engine.evaluate` for slots 11-12 (planner brief first, arm-23 parity, paired backtest expected inside noise). `stream_sim.js` gained an opt-in `opts.rankLog` (committed 2026-10-26). Do this before or after the Team tab steps: ask the user.
+
+**Team tab (#131, branch team-core, released 2026-10-26 with the logo wordmark; unreviewed since #138; spec docs/superpowers/specs/2026-10-25-team-tab-design.md, archive 131-131g and 138).** 2026-10-26 (#138): Win C / Win M now come from `Engine.evaluate` (no shrink, `Engine.entryVec` + one entry per team) with Plays % games for every team; Vs average = team - average player + him (average = Plays %-weighted mean line, games = total / 12; user spec). 272 unit + 78 browser checks pass; code and rebuilt pages committed on team-core. **Next, in order (user decisions 2026-10-26):** (1) D3 swap: a candidate from an opponent leaves that team and that opponent receives the player I send out (for Vs average the average player; for a typed swap the sent-out players, into the vacated slots); (2) Rankings Vs average from the same TeamWin code when a league is loaded (D2; Vs replacement and the no-league path unchanged; adapter in `rankings_core.js`, `rankings.html` needs SCHED_DAYS and L; test: same roster gives the same Vs average on both tabs); (3) the user's other requests: toggle per-game / season stats on the Team tab, auto-fill the top 12 into Active (decide by what: recommend Win M or Zscore, and how it treats Reserve / IL); (4) browser check, reviewer pass, then the PR (push only when the user says). **#139** (rest-of-season calibration of the shrink, analyst designs it) is for the user to start on the PC; the Team tab shows absolute Win M unshrunk until then, say so in How it works. **#137** (Yahoo / points leagues) is being brainstormed in a separate chat in a worktree off origin/main; no code yet. Browser check: copy src/tests/browser/team_page.mjs to the Playwright folder (`$TEMP/claude/.../17acf9ec-.../scratchpad/pw`), `REPO=C:/Users/Fefe/Documents/FantasyBBall node team_page.mjs`, repo root served on :8765 (`python -m http.server 8765`). Run unit tests as `node --test src/tests/*.test.js`. Tab overhaul, the rest: Rankings left of Draft, a collapsible How it works panel on every tab, hover tooltips like the Draft tab. #116 and #112 are merged. Best adds/plan on remaining games.
 
 ## This PC
 
 - `python3` isn't installed: use `python`. Bash heredocs with apostrophes break: use the Write tool for files.
-- Build: `cd src && python gen.py && python build_site.py && cp site/{index,league,inseason,settings,rankings}.html ..`
+- Build: `cd src && python gen.py && python build_site.py && cp site/{index,league,inseason,settings,rankings,team}.html ..`
 - Browser checks: Playwright (`npm i playwright@1.48.2` + `npx playwright install chromium` in a scratch folder, or an
   earlier session's scratchpad `pw/`); copy `src/tests/browser/*.mjs` there, `REPO=<repo root> node X.mjs`, repo root
   served on :8765 (`python -m http.server 8765`).
