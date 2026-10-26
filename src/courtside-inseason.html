@@ -2354,13 +2354,30 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const FROM_FANTRAX = { ACTIVE: 'active', RESERVE: 'reserve', IR: 'il' };
   // the slots that count in the team's stats, Win C and Win M
   const COUNTED = ['active', 'reserve'];
-  const counted = state => state.order.filter(k => COUNTED.includes(state.slots[k]));
+  // The Team tab (ctx.teamTab, set by TeamView.sourceCtx; the Trade Analyzer's and Rankings' plain ctxs never carry it): Reserve is only a
+  // parking place and counts for nothing; IL counts only on the seasonal bases, where availability (avail) scales its games
+  const countedSlots = ctx => !ctx || !ctx.teamTab ? COUNTED : ctx.basis === 'pergame' ? ['active'] : ['active', 'il'];
+  const counted = (state, ctx) => { const c = countedSlots(ctx); return state.order.filter(k => c.includes(state.slots[k])); };
+  // share of the team's games a player is there for: Per game compares everyone at peak non-injury performance (1), the seasonal basis uses
+  // his projected games (g/82), Mix halfway; a plain ctx has no availability
+  const avail = (ctx, pp) => {
+    if (!ctx || !ctx.teamTab || ctx.basis === 'pergame') return 1;
+    const a = Math.min(1, pp.g / 82);
+    return ctx.basis === 'mix' ? (1 + a) / 2 : a;
+  };
 
   // rows: parseRosters entries [{ fid, slot }] for my team
   function initState(rows) {
     const slots = {}, order = [];
     rows.forEach(x => { slots[x.fid] = FROM_FANTRAX[x.slot] || 'reserve'; order.push(x.fid); });
     return { slots, order, moves: [] };
+  }
+
+  // the Team tab's starting state: Courtside Active = the league's active + bench (Fantrax RESERVE), IR is il; there is no Reserve until a player is parked
+  function tabState(rows) {
+    const s = initState(rows);
+    s.order.forEach(k => { if (s.slots[k] === 'reserve') s.slots[k] = 'active'; });
+    return s;
   }
 
   function moveSlot(state, key, slot) {
@@ -2413,6 +2430,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
   function playsPct(ctx, state) {
+    if (ctx.teamTab) return tabPlays(ctx, state);
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
     const act = by('active'), bench = by('reserve'), res = {};
@@ -2430,6 +2448,29 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       const g = windowGames(ctx, bench.concat(k), used);
       done(k, g[g.length - 1], true);
     });
+    return res;
+  }
+
+  // one player's games over the window with no nightly cap (the games his own team's schedule allows him), under the same rule as playsPct
+  function soloGames(ctx, key) {
+    const pp = ctx.pool.byKey.get(key), w = window(ctx);
+    if (!ctx.teamTab || ctx.basis === 'pergame') return windowGames(ctx, [key], null)[0];
+    return InLeague.rosterGames([{ t: pp.t, a: avail(ctx, pp), from: w.from, to: w.to }], ctx.DAYS, ctx.L.maxActive, null)[0];
+  }
+
+  // Plays % on the Team tab (ctx.teamTab): Reserve is parked and plays 0%, never hypo. Per game: Active players claim the nights as above
+  // (everyone is there for every team game; IL gets none). Seasonal bases: Active and IL players are there for avail(g) of the team's games,
+  // capped per night at the league's active limit (InLeague.rosterGames); pct is the lineup share of the games a player is there for, so
+  // availability (which GL carries) is not counted twice
+  function tabPlays(ctx, state) {
+    const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k]));
+    const done = (k, played, a) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; };
+    state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
+    if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
+    else {
+      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), from: w.from, to: w.to }));
+      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, items[i].a));
+    }
     return res;
   }
 
@@ -2469,7 +2510,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, COUNTED, counted, windowGames, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2540,8 +2581,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   // a Team.initState for another team from its Fantrax slots; IL players and the excluded keys (players I brought in) are left out;
   // recv = the players it receives in a previewed trade [{ key, slot }] (see received), who join in the slot they take
+  // The Team tab (ctx.teamTab) keeps his IL players (they count on the seasonal bases) and his bench is Active, as on my side (Team.tabState)
   function oppState(ctx, teamId, exclude, recv) {
-    const rows = ctx.roster[teamId].filter(f => !(exclude && exclude.has(f)) && ctx.pool.byKey.get(f).slot !== 'IR').map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
+    if (ctx.teamTab) {
+      const rows = ctx.roster[teamId].filter(f => !(exclude && exclude.has(f))).map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
+      (recv || []).forEach(r => rows.push({ fid: r.key, slot: ctx.pool.byKey.get(r.key).slot === 'IR' ? 'IR' : 'ACTIVE' }));
+      return Team.tabState(rows);
+    }
+    const rows =ctx.roster[teamId].filter(f => !(exclude && exclude.has(f)) && ctx.pool.byKey.get(f).slot !== 'IR').map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
     (recv || []).filter(r => ctx.pool.byKey.get(r.key).slot !== 'IR').forEach(r => rows.push({ fid: r.key, slot: r.slot === 'active' ? 'ACTIVE' : 'RESERVE' }));
     return Team.initState(rows);
   }
@@ -2578,8 +2625,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
   function side(ctx, state, W) {
-    const r = Team.playsPct(ctx, state);
-    return state.order.filter(k => Team.COUNTED.includes(state.slots[k]) && !r[k].hypo)
+    const r = Team.playsPct(ctx, state), c = Team.countedSlots(ctx);
+    return state.order.filter(k => c.includes(state.slots[k]) && !r[k].hypo)
       .map(k => ({ key: k, p: ctx.pool.byKey.get(k).line, games: r[k].played / W }));
   }
 
@@ -2679,10 +2726,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };   // (points: the zero gain keeps its category zeros; nothing shows them)
     if (opts && opts.baseline === 'avg') {
       const ap = (opts.ap) || avgParts(ctx, state, base.weeks);
-      if (ap) { const own = Team.COUNTED.includes(state.slots[k]); return own ? gain(base, avgOwn(ctx, state, ap, k, opts)) : Object.assign(gain(avgCandidate(ctx, state, ap, k, opts), base), { hypo: true }); }
+      if (ap) { const own = Team.countedSlots(ctx).includes(state.slots[k]); return own ? gain(base, avgOwn(ctx, state, ap, k, opts)) : Object.assign(gain(avgCandidate(ctx, state, ap, k, opts), base), { hypo: true }); }
     }
-    const s = state.slots[k], counted = Team.COUNTED.includes(s), without = Team.applySwap(state, [k], []);
-    return counted ? gain(base, matrix(ctx, without, opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, 'reserve'), opts), base), { hypo: true });
+    // a player who does not count (IL; on the Team tab also Reserve, and IL on Per game) is scored as the one more player he would be: the plain
+    // ctx adds him to the reserve, the Team tab to Active
+    const s = state.slots[k], counted = Team.countedSlots(ctx).includes(s), without = Team.applySwap(state, [k], []);
+    return counted ? gain(base, matrix(ctx, without, opts)) : Object.assign(gain(matrix(ctx, Team.moveSlot(state, k, ctx.teamTab ? 'active' : 'reserve'), opts), base), { hypo: true });
   }
 
   // the made-up average player of Vs average (user 2026-10-26). n = my counted players, tot = their games per week, M = the Active spots
@@ -2691,14 +2740,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // -> null with no counted player or no games
   function avgParts(ctx, state, W) {
     const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
-    const allowed = Team.counted(state).reduce((a, k) => a + Team.windowGames(ctx, [k], null)[0], 0);   // each player alone: no nightly cap
+    const allowed = Team.counted(state, ctx).reduce((a, k) => a + Team.soloGames(ctx, k), 0);   // each player alone: no nightly cap
     if (!n || !(tot > 0) || !(allowed > 0)) return null;
     return { W, mine, n, tot, M, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
   }
 
   // a player not counted on my team replaces the average player: current team - average + him, his games times the share
   function avgCandidate(ctx, state, ap, key, opts) {
-    const g = Team.windowGames(ctx, [key], null)[0] / ap.W * ap.share;
+    const g = Team.soloGames(ctx, key) / ap.W * ap.share;
     const mine = ap.mine.concat(Object.assign({}, ap.mean, { sign: -1 }), { p: ctx.pool.byKey.get(key).line, games: g });
     const t = trade(ctx, state);
     return matrixOf(ctx, mine, new Set(state.order.concat([...t.gone])).add(key), ap.W, Object.assign({}, opts, { recv: t.recv }));
@@ -2740,7 +2789,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode, points: o.points }, base = o.base || matrix(ctx, state, mo);
     if (!base.mean) return null;
     if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks); return ap ? { base, ap, mo, avg: true } : null; }
-    const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state);
+    const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state, ctx);
     if (!counted.length) return null;
     const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst];
     return { base, pw, worst, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
@@ -2749,19 +2798,19 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team
   function swapScore(ctx, state, su, cx, key) {
     const s0 = key in state.slots ? Team.applySwap(state, [su.worst], []) : Team.applySwap(state, [su.worst], [key]);
-    return gain(matrix(cx, Team.moveSlot(s0, key, su.wSlot === 'reserve' ? 'active' : su.wSlot), su.mo), su.base);   // Active claims nights before the Reserve, so a Reserve slot would score him on leftovers
+    return gain(matrix(cx, Team.moveSlot(s0, key, ctx.teamTab || su.wSlot === 'reserve' ? 'active' : su.wSlot), su.mo), su.base);   // Active claims nights before the Reserve, so a Reserve slot would score him on leftovers; on the Team tab he always takes Active
   }
 
   function moduleRow(ctx, state, su, key) {
     const own = key in state.slots, s = own ? state.slots[key] : null, owner = own ? ctx.me : ((ctx.pool.byKey.get(key) || {}).owner || null), cur = 100 * su.base.mean.match;
     if (su.avg) {
-      const counted = own && Team.COUNTED.includes(s), a = counted ? avgOwn(ctx, state, su.ap, key, su.mo) : avgCandidate(ctx, state, su.ap, key, su.mo), g = counted ? gain(su.base, a) : gain(a, su.base);
+      const counted = own && Team.countedSlots(ctx).includes(s), a = counted ? avgOwn(ctx, state, su.ap, key, su.mo) : avgCandidate(ctx, state, su.ap, key, su.mo), g = counted ? gain(su.base, a) : gain(a, su.base);
       return { key, owner, dM: g.m, dC: g.c, dCat: g.dCat, old: counted ? cur - g.m : cur, new: counted ? cur : cur + g.m };
     }
     const pw = su.pw, zero = () => su.mo.points ? null : new Array(9).fill(0);
     let r;
     if (key === su.worst) r = { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
-    else if (own && Team.COUNTED.includes(s)) r = { c: sub(pw[key].c, pw[su.worst].c), m: pw[key].m - pw[su.worst].m, dCat: subV(pw[key].dCat, pw[su.worst].dCat) };
+    else if (own && Team.countedSlots(ctx).includes(s)) r = { c: sub(pw[key].c, pw[su.worst].c), m: pw[key].m - pw[su.worst].m, dCat: subV(pw[key].dCat, pw[su.worst].dCat) };
     else r = swapScore(ctx, state, su, ctx, key);
     return { key, owner, dM: r.m - su.off.m, dC: sub(r.c, su.off.c), dCat: subV(r.dCat, su.off.dCat), old: cur + su.off.m, new: cur + r.m };
   }
