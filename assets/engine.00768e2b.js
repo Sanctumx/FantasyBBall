@@ -13,6 +13,7 @@
   const PUNT_SYN_PAIRS = 24;   // synergy pairs Auto may blend (2026-10-17 realistic league, titles vs 20: 24 +1.9 ± 1.4, 28/32 +2.2, 16 −0.6, 8 −2.2)
   const PUNT_TOPK = 8;         // strategies that get a full Gain pass in Auto
   const WEEKS = 24;           // season split into weekly matchups
+  const PROJ_SD = 0.12;       // projection error of a counting stat, share of the projection
   const GPW = 3.42;           // average games per NBA team per matchup week (82 / 24; 2026-10-17)
   const VAR_GAMES = 0.82;     // variance of a player's games in a week he plays (2022-26 logs, drafted players; 2026-10-17)
   const SEASON_G = 80;        // games a fantasy roster spot can fill in a season
@@ -145,24 +146,37 @@
   }
 
   // ---------- league context (pool averages, Board scaling, weekly noise) ----------
+  // The 80 simulated ADP drafts every league-context pass shares: per sim, the player indexes in pick order (min(N*R, n) picks).
+  function simDraws(players, cfg) {
+    const N = cfg.teams, R = cfg.roster, src = cfg.adpSrc, r = rng(1234 + N * 31 + R), out = [];
+    for (let s = 0; s < 80; s++) {
+      const draws = players.map((p, i) => ({ i, t: adpOf(p, src) + gauss(r) * adpSd(p, src, cfg.sdModel) })).sort((a, b) => a.t - b.t);
+      out.push(draws.slice(0, Math.min(N * R, draws.length)).map(d => d.i));
+    }
+    return out;
+  }
+  // The same drafts split by team: [sim][team] -> player indexes in pick order
+  function draftSims(players, cfg) {
+    return simDraws(players, cfg).map(sim => { const teams = Array.from({ length: cfg.teams }, () => []); sim.forEach((i, k) => teams[teamAt(k, cfg.teams, cfg.order)].push(i)); return teams; });
+  }
   // One pass of simulated ADP drafts for a given games function: pool averages and team spread.
   function scaleFor(players, cfg, ctx, gOf) {
     const N = cfg.teams, R = cfg.roster, src = cfg.adpSrc;
     const X = players.map(p => { const x = vec(p, ctx, gOf(p)); if (ctx.ilFill && ctx.pgRepl) { const miss = Math.max(0, SEASON_G - gOf(p)) * ctx.ilFill; for (let c = 0; c < NC; c++) x[c] += miss * ctx.pgRepl[c]; } return x; });
     const WV = players.map(p => weekVar(p, ctx, gOf(p)));
     const PG = players.map(p => vec(p, ctx, 1));   // per-game category vector (signed, TO negative)
-    const r = rng(1234 + N * 31 + R);
     const SIMS = 80;
+    const sims = simDraws(players, cfg);
     const sum = new Float64Array(NC), sq = new Float64Array(NC), wsum = new Float64Array(NC), dsum = new Float64Array(NC);
     const s1 = new Float64Array(NC), s2 = new Float64Array(NC), wpg = new Float64Array(NC); let rN = 0;
     let teamsN = 0, dN = 0;
     for (let s = 0; s < SIMS; s++) {
-      const draws = players.map((p, i) => ({ i, t: adpOf(p, src) + gauss(r) * adpSd(p, src, cfg.sdModel) })).sort((a, b) => a.t - b.t);
+      const draws = sims[s];
       const tot = Array.from({ length: N }, () => new Float64Array(NC));
       const wk = Array.from({ length: N }, () => new Float64Array(NC));
-      const picks = Math.min(N * R, draws.length);
+      const picks = draws.length;
       for (let k = 0; k < picks; k++) {
-        const t = teamAt(k, N, cfg.order), i = draws[k].i;
+        const t = teamAt(k, N, cfg.order), i = draws[k];
         for (let c = 0; c < NC; c++) { tot[t][c] += X[i][c]; wk[t][c] += WV[i][c]; dsum[c] += X[i][c];
           const m = PG[i][c]; s1[c] += m; s2[c] += m * m; wpg[c] += WV[i][c] - m * m * VAR_GAMES; }
         dN++; rN++;
@@ -260,7 +274,7 @@
     const gOf = mw != null ? (p => G0 + mw * (gR(p) - G0)) : ctx.basis === 'pergame' ? (() => G0) : ctx.basis === 'mix' ? (p => (gR(p) + G0) / 2) : (p => gR(p));
     const act = mw != null ? scaleFor(players, cfg, ctx, gOf) : ctx.basis === 'pergame' ? pg : ctx.basis === 'mix' ? scaleFor(players, cfg, ctx, gOf) : tot;
     players.forEach((p, i) => {
-      p.x = act.X[i]; p.wv = act.WV[i]; p.pv = projVar(p, gOf(p));
+      p.x = act.X[i]; p.wv = act.WV[i]; p.pv = projVar(p, gOf(p)); p.gUse = gOf(p);
       p.board = act.boards[i].b; p.boardRaw = act.boards[i].raw; p.boardC = act.boards[i].bc; p.z = act.boards[i].z; p.zDrop = act.boards[i].drop;
       p.zCl = act.boards[i].cl;   // true (classic) Zscore
       p.fieldV = act.boards[i].fv;   // the room's value: Standard Zscore, TO ×0.5, fixed weights
@@ -403,6 +417,18 @@
   // Draft field: share of the room drafting by value instead of ADP. f = (kit-style + 0.5 × sharp) / 13 for opponent mixes
   // Easy 10 ADP / 2 sharp / 1 punter; Average 5 / 4 / 2 + 2 kit-style (the backtest league, = 4 kit users);
   // Strong 2 / 6 / 2 + 3; Very strong 0 / 6 / 2 + 5. Labelled guesses until fitted on a real draft against that day's ADP.
+  // Plays % by roster rank (#140): with 10 active of 12 the 11th and 12th best players of a team play 98.5% / 96% of their games.
+  // Off by default and Rejected (#141). Hard-coded to 10 active of 12 (ignores cfg.roster and the league's active limit; every rank
+  // past 12 gets 0.96). The punt pass (puntMode other than 'off') builds my team without this scaling, so turn the flag on only with punt off.
+  const PLAYS_RANK = [0.985, 0.96], ACTIVE_CAP = 10;
+  const playsF = r => r < ACTIVE_CAP ? 1 : PLAYS_RANK[Math.min(PLAYS_RANK.length - 1, r - ACTIVE_CAP)];
+  // Sum entries {val, x, v} into mu / v, ranked by val (ties keep input order); extra is one more entry competing for a rank.
+  function sumRanked(ents, extra, mu, v) {
+    const all = extra ? ents.concat([extra]) : ents.slice();
+    const idx = all.map((_, i) => i).sort((a, b) => (all[b].val - all[a].val) || (a - b));
+    mu.fill(0); v.fill(0);
+    idx.forEach((i, r) => { const f = playsF(r), f2 = f * f, e = all[i]; for (let c = 0; c < NC; c++) { mu[c] += f * e.x[c]; v[c] += f2 * e.v[c]; } });
+  }
   const FIELD_F = { easy: 0.08, average: 0.31, strong: 0.46, vstrong: 0.62 };
   function evaluate(players, ctx, cfg, state) {
     const N = cfg.teams, R = cfg.roster, me = cfg.slot - 1, total = N * R;
@@ -440,16 +466,16 @@
 
     // typical player at the j-th upcoming pick
     const M = unfilled.length;
-    const typMean = [], typVar = [], typPv = [];
+    const typMean = [], typVar = [], typPv = [], typVal = [];
     const A = avail.length;
     for (let j = 0; j < M; j++) {
       const mean = new Float64Array(NC), vr = new Float64Array(NC), pv = new Float64Array(NC);
-      if (A === 0) { typMean.push(mean); typVar.push(vr); typPv.push(pv); continue; }
+      if (A === 0) { typMean.push(mean); typVar.push(vr); typPv.push(pv); typVal.push(0); continue; }
       const c0 = Math.min(j, A - 1), w = 1.5 + 0.12 * j;
       const lo = Math.max(0, Math.floor(c0 - 3 * w)), hi = Math.min(A - 1, Math.ceil(c0 + 3 * w));
-      let ws = 0;
+      let ws = 0, vs = 0;
       for (let i = lo; i <= hi; i++) {
-        const wt = Math.exp(-0.5 * Math.pow((i - c0) / w, 2)); ws += wt;
+        const wt = Math.exp(-0.5 * Math.pow((i - c0) / w, 2)); ws += wt; vs += wt * avail[i].boardRaw;
         const x = avail[i].x, q = avail[i].pv;
         for (let c = 0; c < NC; c++) { mean[c] += wt * x[c]; pv[c] += wt * q[c]; }
       }
@@ -459,23 +485,28 @@
         for (let c = 0; c < NC; c++) vr[c] += wt * Math.pow(x[c] - mean[c], 2);
       }
       for (let c = 0; c < NC; c++) vr[c] /= ws;
-      typMean.push(mean); typVar.push(vr); typPv.push(pv);
+      typMean.push(mean); typVar.push(vr); typPv.push(pv); typVal.push(vs / ws);
     }
     const jOf = new Map(); unfilled.forEach((k, j) => jOf.set(k, j));
 
     // team forecasts
-    const teams = Array.from({ length: N }, (_, t) => ({ t, mu: new Float64Array(NC), v: new Float64Array(NC), roster: [], left: 0 }));
+    // cfg.playsRank (#141): the 11th and 12th best entries of a team play fewer games (10 active of 12), see PLAYS_RANK
+    const pr = !!cfg.playsRank;
+    const teams = Array.from({ length: N }, (_, t) => ({ t, mu: new Float64Array(NC), v: new Float64Array(NC), roster: [], left: 0, ents: [] }));
     for (let k = 0; k < total; k++) {
       const t = tAt(k), T = teams[t];
       const pid = state.picks[k];
       if (pid != null) {
         const p = players[pid]; T.roster.push({ pick: k, p });
-        for (let c = 0; c < NC; c++) { T.mu[c] += p.x[c]; T.v[c] += p.pv[c]; }
+        if (pr) T.ents.push({ val: p.boardRaw, x: p.x, v: p.pv, slot: k });
+        else for (let c = 0; c < NC; c++) { T.mu[c] += p.x[c]; T.v[c] += p.pv[c]; }
       } else {
         const j = jOf.get(k); T.left++;
-        for (let c = 0; c < NC; c++) { T.mu[c] += typMean[j][c]; T.v[c] += 2 * typVar[j][c] + typPv[j][c]; }
+        if (pr) { const v = new Float64Array(NC); for (let c = 0; c < NC; c++) v[c] = 2 * typVar[j][c] + typPv[j][c]; T.ents.push({ val: typVal[j], x: typMean[j], v, slot: k }); }
+        else for (let c = 0; c < NC; c++) { T.mu[c] += typMean[j][c]; T.v[c] += 2 * typVar[j][c] + typPv[j][c]; }
       }
     }
+    if (pr) teams.forEach(T => { sumRanked(T.ents, null, T.mu, T.v); });
     const noise = cfg.scoring === 'roto' ? new Float64Array(NC) : ctx.h2hNoise;
     const corrOn = cfg.scoring !== 'roto' && cfg.corr !== 'off' && ctx.corr;
     // marginal category win chance: with the games factor its full variance is idiosyncratic + factor
@@ -528,9 +559,10 @@
     // Baseline: the slot filled by a replacement-level player (best of what is left once the draft ends),
     // so Gain reads as how much a player raises your chances over leaving the pick to waivers.
     const rep = new Float64Array(NC), repPv = new Float64Array(NC);
+    let repVal = 0;
     { const c0 = Math.min(M, A - 1), lo = Math.max(0, c0 - 4), hi = Math.min(A - 1, c0 + 4); let n = 0;
-      for (let i = lo; i <= hi; i++) { n++; for (let c = 0; c < NC; c++) { rep[c] += avail[i].x[c]; repPv[c] += avail[i].pv[c]; } }
-      for (let c = 0; c < NC; c++) { rep[c] /= n; repPv[c] /= n; } }
+      for (let i = lo; i <= hi; i++) { n++; repVal += avail[i].boardRaw; for (let c = 0; c < NC; c++) { rep[c] += avail[i].x[c]; repPv[c] += avail[i].pv[c]; } }
+      for (let c = 0; c < NC; c++) { rep[c] /= n; repPv[c] /= n; } repVal /= n || 1; }
     // With weekly adds, the slot you are filling is worth at least a streaming spot all season
     // streamer baseline (cfg.streamBase = adds/week): not exposed, backtest showed no change in picks
     if ((+cfg.streamBase || 0) > 0 && ctx.pgRepl) { const sg = STREAM_G * Math.min(1, (+cfg.streamBase) / 4); for (let c = 0; c < NC; c++) rep[c] = Math.max(rep[c], ctx.pgRepl[c] * sg); }
@@ -541,9 +573,11 @@
     const L = cand.length;
     // Gains for one forecast of my team: meMu/meV is my full forecast, slot* is what it assumed at my next pick,
     // mask[c] = 1 for categories that count toward Gain C (0 = punted under a strategy)
-    function gainsFor(meMu, meV, slotMean, slotVar, slotPv, mask, inSub) {
+    // rk (cfg.playsRank, Model pick pass only): my other entries, so the candidate and the baseline are ranked among them
+    function gainsFor(meMu, meV, slotMean, slotVar, slotPv, mask, inSub, rk) {
       const baseMu = meMu.slice(), baseV = meV.slice();
-      for (let c = 0; c < NC; c++) { baseMu[c] += rep[c] - slotMean[c]; baseV[c] += repPv[c] - slotPv[c] - 2 * slotVar[c]; }
+      if (rk) sumRanked(rk, { val: repVal, x: rep, v: repPv }, baseMu, baseV);
+      else for (let c = 0; c < NC; c++) { baseMu[c] += rep[c] - slotMean[c]; baseV[c] += repPv[c] - slotPv[c] - 2 * slotVar[c]; }
       // baseline probabilities and (for most-cats) how often each category decides the week
       const baseP = opps.map(B => { const a = new Float64Array(NC); for (let c = 0; c < NC; c++) a[c] = winP(baseMu, baseV, B.mu, B.v, c); return a; });
       // Gain M baseline: chance of winning the whole matchup (more categories than the opponent, ties count half)
@@ -569,7 +603,8 @@
       for (let i = 0; i < L; i++) {
         if (inSub && !inSub[i]) continue;
         const p = cand[i];
-        for (let c = 0; c < NC; c++) { mu[c] = baseMu[c] - rep[c] + p.x[c]; v[c] = baseV[c] - repPv[c] + p.pv[c]; }
+        if (rk) sumRanked(rk, { val: p.boardRaw, x: p.x, v: p.pv }, mu, v);
+        else for (let c = 0; c < NC; c++) { mu[c] = baseMu[c] - rep[c] + p.x[c]; v[c] = baseV[c] - repPv[c] + p.pv[c]; }
         let gm = 0;
         opps.forEach((B, oi) => {
           for (let c = 0; c < nc; c++) {
@@ -587,7 +622,7 @@
       return { G, GM, GC };
     }
     const allOn = new Array(NC).fill(1);
-    let res0 = gainsFor(meT.mu, meT.v, typMean[j1], typVar[j1], typPv[j1], allOn);
+    let res0 = gainsFor(meT.mu, meT.v, typMean[j1], typVar[j1], typPv[j1], allOn, null, pr ? meT.ents.filter(e => e.slot !== p1) : null);
 
     // ---------- punt strategies ----------
     // For each strategy, my open picks are forecast as players near their ADP, tilted toward players
@@ -911,7 +946,7 @@
     return { cat, match, mu: [mu(a), mu(b)] };
   }
   const E2 = (...a) => evaluate(...a);
-  const api = { FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  const api = { draftSims, perGameVar, VARS: { GPW, VAR_GAMES, SIGMA_G2, SEASON_G, PROJ_SD }, FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   api.pairMatchup = pairMatchup;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);

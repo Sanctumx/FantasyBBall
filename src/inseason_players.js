@@ -110,6 +110,8 @@
     return ref;
   }
   const valueZ = (line, g, ref) => (rawValue(total(line, g, ref), ref) - ref.vMean) / ref.vSd;
+  // g games of `line` plus G - g games of `fill` (a player who misses games is replaced by the team's worst player for them)
+  const valueZFill = (line, g, fill, G, ref) => { const a = total(line, g, ref), b = total(fill, Math.max(0, G - g), ref); return (rawValue(a.map((v, c) => v + b[c]), ref) - ref.vMean) / ref.vSd; };
   // per-game z in each category, positive = good for the team (turnovers flipped)
   const catZ = (line, ref) => total(line, 1, ref).map((v, c) => (c === 8 ? -1 : 1) * (v - ref.pgMean[c]) / ref.pgSd[c]);
 
@@ -122,6 +124,6 @@
       ast: mix(a.ast, b.ast), stl: mix(a.stl, b.stl), blk: mix(a.blk, b.blk), to: mix(a.to, b.to) };
   }
 
-  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, waiverLevel, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, catZ, curLine };
+  const api = { SHRINK_GAMES, WEIGHTS, OVERRIDES, swapName, espnLine, projLines, waiverLevel, matchTo, buildPool, zscoreOf, makeValueRef, valueZ, valueZFill, catZ, curLine };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InPlayers = api;
 })(this);

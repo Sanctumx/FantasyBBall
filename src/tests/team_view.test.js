@@ -287,6 +287,30 @@ test('scorer: the same roster reached by different trades is not the same job', 
   assert.strictEqual(sc.get(ctx, x, {}), sc.get(ctx, x, {}));
 });
 
+// ---- points mode (#137) ----
+test('rows: with point values each row has its FP per game (follows the view and the Plays % box); categories give none', () => {
+  const ctx = mk(), st = stateOf(), w = { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 };
+  const pg = V.rows(ctx, st, { points: w }), pc = V.rows(ctx, st, { points: w, adjust: true }), ros = V.rows(ctx, st, { points: w, view: 'ros' }), cat = V.rows(ctx, st, {});
+  pg.rows.forEach((r, i) => {
+    const l = ctx.pool.byKey.get(r.key).line;
+    assert.ok(near(r.fp, l.pts + 1.2 * l.reb + 1.5 * l.ast + 3 * l.stl + 3 * l.blk - l.to, 1e-9), r.key);
+    assert.ok(near(pc.rows[i].fp, r.fp * (r.pct == null ? 0 : r.pct), 1e-9));
+    assert.ok(near(ros.rows[i].fp, r.fp * r.gl, 1e-9));
+  });
+  assert.ok(Number.isFinite(pg.avgFp)); assert.strictEqual(cat.avgFp, null); assert.ok(cat.rows.every(r => r.fp === undefined));
+});
+
+test('the scoring job cache keeps point values apart', () => {
+  const ctx = mk(), st = stateOf(), job = a => V.winJob(ctx, st, { points: a }), run = j => { while (j.step()); return j.matrix.mean.match; };
+  assert.notStrictEqual(run(job({ pts: 1 })), run(job({ ast: 5 })));
+});
+
+test('createScorer keeps point values apart: same ctx and roster, other values give another job; the same values give the same job', () => {
+  const ctx = mk(), st = stateOf(), sc = V.createScorer(), a = sc.get(ctx, st, { points: { pts: 1 } }), b = sc.get(ctx, st, { points: { ast: 5 } });
+  assert.notStrictEqual(a, b); assert.strictEqual(sc.get(ctx, st, { points: { pts: 1, reb: 0 } }), a); assert.notStrictEqual(sc.get(ctx, st, {}), a);
+  assert.notStrictEqual(sc.getModule(ctx, st, { points: { pts: 1 } }), sc.getModule(ctx, st, { points: { ast: 5 } }));
+});
+
 // sources on the Team tab (2026-10-26): one context per source, the TeamWin math untouched
 const Rk = require('../rankings_core.js'), FXP = fx('fx_players.json');
 const baseArgs = () => ({ L, pool, DAYS: games(last.start, last.end), rosters: ROS, me, nowMs: last.start, box: [] });

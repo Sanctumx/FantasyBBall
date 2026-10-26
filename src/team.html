@@ -144,10 +144,12 @@ tr.lrow{cursor:pointer}
     </div>
     <div class="how-col">
     <section class="how-card">
+      <h3>Points leagues</h3>
+      <p>When Settings has Scoring on points, the Zscore view, the category weights and Win C are replaced by fantasy points from your point values: each player's line times the values (Pts/g, or Points over his games left in the Rest of season view; the Plays % box applies as before). Win M is the chance to win the week when each team's week is one points total: the spread comes from the engine's own stat noise plus measured correlations between stats, and a crowded night goes to the better points player. The matrix shows each team's points in an average week and your Win M against it; the card shows your points per week. The table's last row is still your average per lineup slot. Win M is not yet calibrated on real points weeks.</p>
       <h3>Win C, Win M and the matrix</h3>
       <p>The matrix is your previewed team against every other team in the league, one column each. A category cell is your chance to win that category, Win C is the expected number of categories won and Win M is the chance to win the match.</p>
       <h4>How the chances are computed</h4>
-      <p>The same engine as the Rankings and Draft tabs, with no shrink toward 50%. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer instead averages the real matchups still to come, so the two tabs' Win M can differ.</p>
+      <p>The same engine as the Rankings and Draft tabs. Every team in the league, yours and each opponent's, is built from its Active and Reserve players: a player counts for his remaining Plays % games (his team's schedule, the nightly lineup cap and the Reserve refilling nights), turned into a season-equivalent total. The engine then compares the team totals with its own noise, including its games-played variance. The Trade Analyzer uses the same forecast with both rosters changed (opponents weighted equally), so its Win M matches this tab's. In category leagues the chances are then pulled toward 50% (by 0.6 for the match, 0.75 for each category); points leagues are not pulled yet. In backtests of three seasons the raw rest-of-season odds were about twice too confident: matchups called 85% were won only 63-72% of the time. The backtest keeps draft rosters and preseason lines, so the true correction in a live league is probably a little smaller. Player gains scale by the same factors; the order of the lists does not change.</p>
       <h4>Win C and Win M per player</h4>
       <p>What he adds to your Win C (hundredths) and Win M (points) over an average player: your team minus a made-up average player plus him. The average player is the Plays %-weighted mean line of your Active and Reserve players with your team's total games divided by your Active spots, so he is one slot's worth of your team; the incoming player's games are his own remaining games times the share of schedulable games your lineup gets. For a player already on your Active or Reserve it is what you lose if an average-line player with his games stood in his place; for IL it is what he would add. Same as Vs average in the player list.</p>
      </section>
@@ -233,6 +235,7 @@ tr.lrow{cursor:pointer}
 
 <script>/*__DATA__*/
 /*__DAYS__*/</script>
+<script>/*__SCHED__*/</script>
 <script>/*__ENGINE__*/</script>
 <script>/*__SHARED__*/</script>
 <script>/*__STORE__*/</script>
@@ -265,7 +268,7 @@ tr.lrow{cursor:pointer}
   let SS = LS.load(LS.local.get), L = null, rosters = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
   let me = null, base = null, state = null, zmap = new Map(), scorer = TV.createScorer(), outs = [], ins = [], log = [], tickSeq = 0;
 
-  const FXC = FxCache.create({});   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
+  const FXC = FxCache.create({ manual: LeagueStore.manualHook(LeagueStore.local.get, () => SCHED) });   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
   let fxChecking = false;
   const transient = e => e.message === 'offline' || e.status === 429 || e.status >= 500;
   async function loadStats() {
@@ -275,7 +278,6 @@ tr.lrow{cursor:pointer}
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer);
     $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; pool = null; ctx = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
-    if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
     say('Loading the league from Fantrax…');
     const stats = loadStats(); let shown = false;
@@ -319,18 +321,21 @@ tr.lrow{cursor:pointer}
   // scoring switched in another tab: the page follows without a reload
   window.addEventListener('storage', e => {
     if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
-    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings); SS = LS.load(LS.local.get);
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings), key0 = ptKey(); SS = LS.load(LS.local.get);
     if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) load();
+    else if (ctx && ptKey() !== key0) { mkCtx(); render(); }   // other point values: new night order and numbers, the swaps stay
   });
   const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
-  const winOpts = () => ({ cats: nCats(), baseline: 'avg' });
+  // points leagues (#137): the point values, or null in categories
+  const pw = () => LS.isPoints(SS.settings) ? SS.settings.pointVals : null, ptKey = () => pw() ? Points.key(pw()) : '';
+  const winOpts = () => ({ cats: nCats(), baseline: 'avg', points: pw() });
   const teamName = id => { const t = L.teams.find(q => q.id === id); return t ? t.name : id; };
   const zCats = pp => (pp.pid != null && zmap.has(pp.pid) ? zmap.get(pp.pid) : null);
 
   function start() {
     const s = SS.settings || {};
-    const tab = R.table(R.projSource(PLAYERS, 'avg'), { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: 'pergame' });
-    zmap = new Map(); tab.forEach(x => { if (x.cats) zmap.set(x.pid, x.cats); });
+    zmap = new Map();
+    if (!pw()) R.table(R.projSource(PLAYERS, 'avg'), { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: 'pergame' }).forEach(x => { if (x.cats) zmap.set(x.pid, x.cats); });
     const ids = L.teams.map(t => t.id);
     $('team').innerHTML = ids.map(id => '<option value="' + esc(id) + '">' + esc(teamName(id)) + '</option>').join('');
     me = LS.pickTeam(ui.team, ids, LS.defaultTeam(LS.local.get, SS.league.id)); $('team').value = me;
@@ -349,11 +354,17 @@ tr.lrow{cursor:pointer}
     parts.push('<span>Projections: BBM + Hashtag average</span>');
     $('fresh').innerHTML = parts.join('');
   }
-  // a new team or Reset: a fresh context (never mutated afterwards), the saved roster as the preview
+  // a fresh context (never mutated afterwards); in points a crowded night goes to the better points player. Its scorer cache goes with it.
+  function mkCtx() {
+    const w = pw();
+    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [], nightOf: w ? pp => Points.perGame(pp.line, w) : undefined });
+    scorer = TV.createScorer();
+  }
+  // a new team or Reset: the saved roster as the preview
   function setTeam(id) {
     me = id; ui.team = id; save();
-    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [] });
-    scorer = TV.createScorer(); base = TC.initState(rosters[me] || []); state = base; outs = []; ins = []; log = [];
+    mkCtx();
+    base = TC.initState(rosters[me] || []); state = base; outs = []; ins = []; log = [];
     ownerOptions(); $('swap-msg').textContent = ''; render();
   }
 
@@ -365,16 +376,17 @@ tr.lrow{cursor:pointer}
   function sortedRows(rows, job, zv, parts) {
     if (!ui.sort) return rows;
     const c = ui.sort.col, w = x => job.players[x.key];
-    const val = c === 'n' ? x => x.n : c === 'gl' ? x => x.gl : c === 'pct' ? x => x.pct : c === 'mpg' ? x => x.mpg : c === 'z' ? x => x.z : c === 'wc' ? x => w(x) && w(x).c : c === 'wm' ? x => w(x) && w(x).m
+    const val = c === 'n' ? x => x.n : c === 'gl' ? x => x.gl : c === 'pct' ? x => x.pct : c === 'mpg' ? x => x.mpg : c === 'z' ? x => x.z : c === 'fp' ? x => x.fp : c === 'wc' ? x => w(x) && w(x).c : c === 'wm' ? x => w(x) && w(x).m
       : x => zv ? (x.cats ? parts(x)[+c.slice(1)] : null) : x.stat[RAWK[+c.slice(1)]];
     return TV.sortRows(rows, val, ui.sort.dir);
   }
   function rosterHtml(r, job) {
+    const P_ = pw();
     const th = (col, label, title, cls) => '<th class="sortable' + (cls ? ' ' + cls : '') + '" data-col="' + col + '" title="' + esc(title) + ' (click to sort)"' + (ui.sort && ui.sort.col === col ? ' aria-sort="' + (ui.sort.dir === 'asc' ? 'ascending' : 'descending') + '"' : '') + '>' + label + (ui.sort && ui.sort.col === col ? (ui.sort.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</th>';
     const head = '<thead><tr>' + th('n', 'Player', 'Player name', 'l') + th('gl', 'GL', 'Projected remaining games') + th('pct', 'Plays %', 'Share of his team games he gets a lineup slot for') + th('mpg', 'MPG', 'Projected minutes per game') +
       CATN.slice(0, nCats()).map((c, i) => th('c' + i, c, ui.zview === 'z' ? c + ': his weighted Zscore in this category' : c + ': projected ' + (ui.view === 'ros' ? 'rest-of-season total' : 'per-game value'))).join('') +
-      th('z', 'Zscore', 'Zscore, weighted by the category weights') + th('wc', 'Win C', 'Win C (hundredths) he adds over an average player in his place') + th('wm', 'Win M', 'Win M (points) he adds over an average player in his place') + '</tr></thead>';
-    const nc = nCats(), cols = 4 + nc + 3, body = [], zv = ui.zview === 'z', wts = ui.weights, parts = x => TV.zParts(x.cats, wts, nc);
+      (P_ ? th('fp', ui.view === 'ros' ? 'Points' : 'Pts/g', 'Fantasy points from your Settings point values, for the line shown') : th('z', 'Zscore', 'Zscore, weighted by the category weights') + th('wc', 'Win C', 'Win C (hundredths) he adds over an average player in his place')) + th('wm', 'Win M', 'Win M (points) he adds over an average player in his place') + '</tr></thead>';
+    const nc = nCats(), cols = 4 + nc + (P_ ? 2 : 3), body = [], zv = ui.zview === 'z' && !P_, wts = ui.weights, parts = x => TV.zParts(x.cats, wts, nc);
     const cnt = TV.slotCounts(state, ctx.L.maxPlayers || ctx.L.maxActive);
     r.groups.forEach(g => {
       const c = cnt[g.slot], lim = g.slot === 'active' ? ' / ' + (ctx.L.maxPlayers || ctx.L.maxActive) : '';
@@ -385,14 +397,14 @@ tr.lrow{cursor:pointer}
           '<select class="slot" data-key="' + esc(x.key) + '" aria-label="Slot for ' + esc(x.n) + '" title="Move ' + esc(x.n) + ' to another slot (or drag the row onto a group header)">' + Object.keys(SLOT_NAME).map(sl => '<option value="' + sl + '"' + (sl === x.slot ? ' selected' : '') + '>' + SLOT_NAME[sl] + '</option>').join('') + '</select></td><td>' + x.gl.toFixed(0) + '</td>' +
           '<td' + (x.hypo ? ' class="dim" title="What he would get as one more reserve player"' : '') + '>' + pctTxt(x.pct) + '</td><td>' + (x.mpg == null ? '–' : x.mpg.toFixed(1)) + '</td>' +
           RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo || (zv && wts[c] === 0) ? ' class="dim"' : '') + '>' + (zv ? (x.cats ? signed(parts(x)[c], 2) : '–') : fmtStat(x.stat[k], c)) + '</td>').join('') +
-          '<td>' + (x.z == null ? '–' : signed(x.z, 2)) + '</td>' +
-          (w ? '<td' + dim + '><span class="' + sgn(w.c) + '">' + signed(w.c) + '</span></td><td' + dim + '><span class="' + sgn(w.m) + '">' + signed(w.m) + '</span></td>' : '<td>…</td><td>…</td>') + '</tr>');
+          (P_ ? '<td>' + (x.fp == null ? '–' : x.fp.toFixed(ui.view === 'ros' ? 0 : 1)) + '</td>' : '<td>' + (x.z == null ? '–' : signed(x.z, 2)) + '</td>') +
+          (w ? (P_ ? '' : '<td' + dim + '><span class="' + sgn(w.c) + '">' + signed(w.c) + '</span></td>') + '<td' + dim + '><span class="' + sgn(w.m) + '">' + signed(w.m) + '</span></td>' : P_ ? '<td>…</td>' : '<td>…</td><td>…</td>') + '</tr>');
       });
     });
     const mean = job.matrix && job.matrix.mean;
     const avgParts = zv && r.avgCats ? TV.zParts(r.avgCats, ui.weights, nc) : null;
     body.push('<tr class="tot"><td class="l">Team average (per slot)</td><td></td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td' + (zv && wts[c] === 0 ? ' class="dim"' : '') + '>' + (zv ? (avgParts ? signed(avgParts[c], 2) : '–') : fmtStat(r.avg[k], c)) + '</td>').join('') +
-      '<td>' + (r.avgZ == null ? '–' : signed(r.avgZ, 2)) + '</td><td>' + (mean ? mean.winC.toFixed(1) : '…') + '</td><td>' + (mean && mean.match != null ? Math.round(mean.match * 100) + '%' : '…') + '</td></tr>');
+      (P_ ? '<td>' + (r.avgFp == null ? '–' : r.avgFp.toFixed(1)) + '</td>' : '<td>' + (r.avgZ == null ? '–' : signed(r.avgZ, 2)) + '</td><td>' + (mean ? mean.winC.toFixed(1) : '…') + '</td>') + '<td>' + (mean && mean.match != null ? Math.round(mean.match * 100) + '%' : '…') + '</td></tr>');
     return head + '<tbody>' + body.join('') + '</tbody>';
   }
   function matrixHtml(job) {
@@ -401,7 +413,8 @@ tr.lrow{cursor:pointer}
     if (!m.mean) return '<tbody><tr><td class="l">No regular-season weeks are left.</td></tr></tbody>';
     const cell = (p, tip) => p == null ? '–' : chip(p, (p * 100).toFixed(0) + '%', tip);
     let h = '<thead><tr><th class="l"></th>' + m.teams.map(t => '<th title="' + esc(teamName(t.id)) + '">' + esc(teamName(t.id).slice(0, 12)) + '</th>').join('') + '<th title="Your average over all the other teams">Average</th></tr></thead><tbody>';
-    for (let c = 0; c < nc; c++) h += '<tr><td class="l">' + CATN[c] + '</td>' + m.teams.map(t => '<td>' + cell(t.cat[c], 'Your chance to win ' + CATN[c] + ' against ' + teamName(t.id)) + '</td>').join('') + '<td>' + cell(m.mean.cat[c], 'Your average chance to win ' + CATN[c] + ' over all teams') + '</td></tr>';
+    if (pw()) h += '<tr><td class="l" title="Fantasy points a team scores in an average remaining week">Points / wk</td>' + m.teams.map(t => '<td>' + t.ppw.toFixed(0) + '</td>').join('') + '<td>' + m.mean.ppw.toFixed(0) + ' (you)</td></tr>';
+    else for (let c = 0; c < nc; c++) h += '<tr><td class="l">' + CATN[c] + '</td>' + m.teams.map(t => '<td>' + cell(t.cat[c], 'Your chance to win ' + CATN[c] + ' against ' + teamName(t.id)) + '</td>').join('') + '<td>' + cell(m.mean.cat[c], 'Your average chance to win ' + CATN[c] + ' over all teams') + '</td></tr>';
     h += '<tr class="tot"><td class="l">Win M</td>' + m.teams.map(t => '<td>' + cell(t.match, 'Your chance to win the match against ' + teamName(t.id)) + '</td>').join('') + '<td>' + cell(m.mean.match, 'Your average chance to win a match over all teams') + '</td></tr></tbody>';
     return h;
   }
@@ -409,12 +422,13 @@ tr.lrow{cursor:pointer}
   function draw() {
     if (!ctx) return;
     const job = scorer.get(ctx, state, winOpts());
-    const r = TV.rows(ctx, state, { zCats, weights: ui.weights, cats: nCats(), adjust: ui.adjust, view: ui.view });
+    const r = TV.rows(ctx, state, { zCats, weights: ui.weights, cats: nCats(), adjust: ui.adjust, view: ui.view, points: pw() });
+    applyMode();
     $('roster').innerHTML = rosterHtml(r, job);
     $('matrix').innerHTML = matrixHtml(job);
     $('cards').innerHTML = cardsHtml(r, job);
     drawLog();
-    $('rost-meta').textContent = job.done ? '' : 'Scoring Win C / Win M…';
+    $('rost-meta').textContent = job.done ? '' : pw() ? 'Scoring Win M…' : 'Scoring Win C / Win M…';
     $('rost-note').textContent = (ui.view === 'ros' ? 'Rest of season: per-game line × projected games left' + (ui.adjust ? ' × Plays %' : '') : 'Per game' + (ui.adjust ? ', × Plays %' : '')) + '. The team rows always use Plays %.';
     return job;
   }
@@ -434,28 +448,33 @@ tr.lrow{cursor:pointer}
   }
   // Old vs New for the swap: the saved roster against the preview (Team Z, Win C, Win M)
   function cardsHtml(r, job) {
-    const bj = scorer.get(ctx, base, winOpts()), br = TV.rows(ctx, base, { zCats, weights: ui.weights, cats: nCats(), adjust: ui.adjust, view: ui.view });
+    const bj = scorer.get(ctx, base, winOpts()), br = TV.rows(ctx, base, { zCats, weights: ui.weights, cats: nCats(), adjust: ui.adjust, view: ui.view, points: pw() });
     const mean = job.matrix && job.matrix.mean, bm = bj.matrix && bj.matrix.mean;
     const card = (k, tip, now, was, d, fmt, dd) => '<div class="card" title="' + esc(tip) + '"><span class="k">' + k + '</span><span class="v">' + (now == null ? '…' : fmt(now)) + (now != null && was != null ? '<small class="' + sgn(d) + '">' + signed(d, dd) + '</small>' : '') + '</span><span class="was">' + (was == null ? '' : 'was ' + fmt(was)) + '</span></div>';
     const z = v => v.toFixed(1), c = v => v.toFixed(1), m = v => Math.round(v * 100) + '%';
     const ok = bj.done && job.done && mean && bm;
+    if (pw()) {   // points: the team's points in an average week and Win M; no Zscore or Win C
+      const pp = v => v.toFixed(0);
+      return card('Points / wk', 'Fantasy points your counted players produce in an average remaining week, with Plays %', mean ? mean.ppw : null, bm ? bm.ppw : null, mean && bm ? mean.ppw - bm.ppw : 0, pp, 0) +
+        card('Win M (season)', 'Your average chance to win a match; change in points', ok ? mean.match : null, ok ? bm.match : null, ok ? 100 * (mean.match - bm.match) : 0, m, 1);
+    }
     return card('Team Zscore', 'Weighted Z per lineup slot, with Plays %', r.avgZ, br.avgZ, r.avgZ - br.avgZ, z, 1) +
       card('Win C (of ' + nCats() + ')', 'Expected categories won in a typical week, from the games left', ok ? mean.winC : null, ok ? bm.winC : null, ok ? mean.winC - bm.winC : 0, c, 1) +
       card('Win M (season)', 'Your average chance to win a match; change in points', ok ? mean.match : null, ok ? bm.match : null, ok ? 100 * (mean.match - bm.match) : 0, m, 1);
   }
 
   // ---- the player list ----
-  const listOpts = () => ({ cats: nCats(), baseline: ui.listVs });
+  const listOpts = () => ({ cats: nCats(), baseline: ui.listVs, points: pw() });
   function drawList() {
     if (!ctx) return;
     const job = scorer.getModule(ctx, state, listOpts());
     if (!job.done) { $('lmeta').textContent = 'Scoring ' + job.n + ' / ' + job.total + '…'; return; }
     if (!job.rows.length) { $('lmeta').textContent = ''; $('ltable').innerHTML = '<tbody><tr><td class="l">No regular-season weeks are left.</td></tr></tbody>'; return; }
-    const weighted = ui.weights.some(w => w !== 1), rows = TW.moduleSort(job.rows, weighted ? ui.weights : null);
+    const weighted = !pw() && ui.weights.some(w => w !== 1), rows = TW.moduleSort(job.rows, weighted ? ui.weights : null);
     const r0 = job.rows[0], nowM = ui.listVs === 'avg' && r0.key in state.slots && ['active', 'reserve'].includes(state.slots[r0.key]) ? r0.new : r0.old;   // old is the current Win M, except for my own counted player in Vs average
     const v = TV.moduleView(rows, ctx, state, { owner: ui.lown, query: $('lq').value });
     $('lmeta').textContent = v.total + ' players · Win M now ' + Math.round(nowM) + '%';
-    $('lhint').textContent = (ui.listVs === 'avg' ? 'Change in your Win M if he replaces a made-up average player of your team (your team games scaled down to make room).' : 'Change in your Win M if he replaces your worst Active or Reserve player.') + (weighted ? ' Sorted by the weighted change in category chances; the change shown is the real Win M change.' : '') + ' Click to bring him in (yours go to Send out); drag onto a roster row to swap.';
+    $('lhint').textContent = (ui.listVs === 'avg' ? 'Change in your Win M if he replaces a made-up average player of your team (your team games scaled down to make room).' : 'Change in your Win M if he replaces your worst Active or Reserve player.') + (weighted ? ' Sorted by the weighted change in category chances; the change shown is the real Win M change.' : '') + (pw() ? ' Points league: a crowded night goes to the better points player.' : '') + ' Click to bring him in (yours go to Send out); drag onto a roster row to swap.';
     const mine = r => r.label.indexOf('You') === 0;
     $('ltable').innerHTML = '<thead><tr><th class="l">Player</th><th class="l">Owner</th><th title="Your Win M after the swap">Win M</th><th title="Change in your Win M, in points">Change</th></tr></thead><tbody>' +
       v.rows.map(r => '<tr class="lrow" data-key="' + esc(r.key) + '" data-own="' + (mine(r) ? '1' : '') + '" draggable="true" title="Click to ' + (mine(r) ? 'send ' + esc(r.n) + ' out' : 'bring ' + esc(r.n) + ' in') + '; drag onto a roster row to swap"><td class="l">' + esc(r.n) + '<small>' + esc(r.t || '') + ' ' + esc(r.pos || '') + '</small></td><td class="l">' + esc(r.label) + '</td><td>' + Math.round(r.new) + '%</td><td><span class="' + sgn(r.dM) + '">' + signed(r.dM) + '</span></td></tr>').join('') +
@@ -544,6 +563,8 @@ tr.lrow{cursor:pointer}
   $('lq').addEventListener('input', () => drawList());
 
   // ---- controls ----
+  // points leagues have no Zscore view, no category weights and no Win C
+  function applyMode() { const p = !!pw(); $('zview').hidden = p; document.querySelector('details.wts').hidden = p; }
   function viewButtons() { document.querySelectorAll('#view button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.view)); document.querySelectorAll('#zview button').forEach(b => b.classList.toggle('on', b.dataset.z === ui.zview)); }
   $('zview').addEventListener('click', e => { const b = e.target.closest('button[data-z]'); if (!b) return; ui.zview = b.dataset.z; save(); viewButtons(); draw(); });
   $('view').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (!b) return; ui.view = b.dataset.v; save(); viewButtons(); draw(); });

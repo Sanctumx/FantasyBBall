@@ -25,7 +25,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 - **In-season tools + Settings tab (95-109, released 2026-10-21):** Matchup and Trade Analyzers (`inseason.html`), shared
   store `league_store.js`; Win M, shrink and no-projection decisions in force: archive "Handoff lines trimmed 2026-10-26".
 
-- **Tab speed (#142, released 2026-10-26, PR #32):** `src/fx_cache.js` caches Fantrax answers in localStorage (draw at once, refresh in the background); the pages link Engine, data and shared code as hashed `assets/` files (`_headers`: immutable). Board artifact unchanged. Details and timings: archive 142.
+- **Tab speed (#142, released 2026-10-26, PR #32):** `src/fx_cache.js` caches Fantrax answers in localStorage (draw at once, refresh in the background); the pages link Engine, data and shared code as hashed `assets/` files (`_headers`: immutable); `gen.py` clears `src/site/assets` before each build. Leftovers: cache `stats/espn.json` and box files, skip the live `players` call when cached, purge cache on Unload. Board artifact unchanged. Details and timings: archive 142.
 
 ## Open items (details in IDEAS.md)
 
@@ -49,8 +49,10 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 Run `node .claude/scripts/branches.mjs` (every branch, ahead/behind main, pushed, landed, worktree, its Next line); notes are
 `src/handoffs/<branch>.md`. Shared records (this file, IDEAS, archive) change only in the ledger worktree: `docs/release-handoff.md`, "Parallel sessions".
-Pushing needs the user's word. Branches known on 2026-10-26: calib-ros (#139 shrink 0.6 / 0.75 shipped on the branch, unmerged),
-plays-rank (#141 Rejected, unmerged), yahoo-points-137 (PR #30), team-tab-next (not started), fix-136-espn-retry, data-hashtag-1025.
+Pushing needs the user's word. Branches known on 2026-10-26: calib-ros (PR #37; #139 shrink 0.6 / 0.75; follow-ups #144-#147 Open; waiting on the Trade Analyzer / one-k decision, #147), manual-league (PR #38; reviewer's MUSTs fixed),
+team-d3-swap (4 commits, not on origin, needs triage), team-tab-next (not started). Merged and removed 2026-10-26: plays-rank (code and tests on main via PR #41, flag off, #141 Rejected), Hashtag 10-25 data (PR #43), fix-136-espn-retry (already on main), block-bash-prompts, branch-hygiene (PR #40).
+
+**Next session starts with (clean-up plan, user 2026-10-26: merge everything so parallel work restarts cleanly):** 1. rebase `manual-league` onto main, rebuild, tests, merge PR #38. 2. `calib-ros` (PR #37): decide #147 first, planner, reviewer on high effort, then merge. 3. triage `team-d3-swap` (rebase and PR, or drop). 4. **last:** #148 reorganize `src/tests/` into subfolders (engine, league, team, collect, tooling), once no branch is editing tests. Merging two branches that both rebuilt the pages conflicts on built files: rebase and rebuild the second.
 
 ## This PC
 

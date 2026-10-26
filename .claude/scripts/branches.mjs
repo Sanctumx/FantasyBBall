@@ -9,6 +9,8 @@ import path from 'node:path';
 const CONFIG = {
   main: 'main',
   ledger: 'ledger',
+  staleBehind: 20,
+  staleIdleDays: 7,
   notes: b => `src/handoffs/${b}.md`,
 };
 
@@ -21,10 +23,14 @@ if (!process.argv.includes('--no-fetch')) spawnSync('git', ['fetch', '-q', '--pr
 const base = git('rev-parse', '--verify', '-q', `origin/${CONFIG.main}`) ? `origin/${CONFIG.main}` : CONFIG.main;
 
 const worktrees = {};
-let cur = null;
+let cur = null, mainCheckout = null;
 for (const line of (git('worktree', 'list', '--porcelain') || '').split('\n')) {
-  if (line.startsWith('worktree ')) cur = line.slice(9);
-  else if (line.startsWith('branch refs/heads/') && cur) worktrees[line.slice(18)] = cur;
+  if (line.startsWith('worktree ')) { cur = line.slice(9); if (!mainCheckout) mainCheckout = { path: cur, branch: null, detached: false }; }
+  else if (line === 'detached' && cur === mainCheckout.path) mainCheckout.detached = true;
+  else if (line.startsWith('branch refs/heads/') && cur) {
+    worktrees[line.slice(18)] = cur;
+    if (cur === mainCheckout.path) mainCheckout.branch = line.slice(18);
+  }
 }
 
 const refs = (git('for-each-ref', '--format=%(refname:short)|%(upstream)|%(upstream:track)', 'refs/heads') || '')
@@ -52,13 +58,25 @@ for (const r of others) {
   const ahead = count(base, r.name), behind = count(r.name, base);
   const pushed = !r.upstream ? 'not pushed' : /gone/.test(r.track) ? 'upstream gone' : /ahead/.test(r.track) ? `pushed, ${r.track.replace(/[\[\]]/g, '')}` : 'pushed';
   let state = '';
-  if (ahead === 0) state = ' · merged (nothing ahead of main)';
+  const stale = [];
+  // Committer date, not author date: a rebase or cherry-pick keeps the author date but is real activity.
+  const idleDays = (Date.now() / 1000 - parseInt(git('log', '-1', '--format=%ct', r.name) || '0', 10)) / 86400;
+  // A merged or landed branch is only cleanup debris if nobody has it checked out (a branch just cut from main is also "merged").
+  const unused = !worktrees[r.name] || idleDays > CONFIG.staleIdleDays;
+  if (ahead === 0) { state = ' · merged (nothing ahead of main)'; if (unused) stale.push('merged'); }
   else {
     const cherry = (git('cherry', base, r.name) || '').split('\n').filter(Boolean);
-    if (cherry.length && cherry.every(l => l.startsWith('-'))) state = ' · landed (every commit is on main under other hashes)';
+    if (cherry.length && cherry.every(l => l.startsWith('-'))) { state = ' · landed (every commit is on main under other hashes)'; if (unused) stale.push('landed'); }
   }
-  out.push(`${r.name} ahead ${ahead} / behind ${behind} · ${pushed}${state}${worktrees[r.name] ? ` · worktree ${worktrees[r.name]}` : ''}`);
-  out.push(`    Next: ${nextLine(r.name)}`);
+  if (behind > CONFIG.staleBehind && idleDays > CONFIG.staleIdleDays) stale.push(`behind ${behind}, idle ${Math.floor(idleDays)} days`);
+  const next = nextLine(r.name);
+  if (next === 'NO HANDOFF FILE' && ahead > 0) stale.push('no handoff');
+  const flag = stale.length ? ` · STALE (${stale.join(', ')}): delete, rebase or write its handoff` : '';
+  out.push(`${r.name} ahead ${ahead} / behind ${behind} · ${pushed}${state}${worktrees[r.name] ? ` · worktree ${worktrees[r.name]}` : ''}${flag}`);
+  out.push(`    Next: ${next}`);
+}
+if (mainCheckout && (mainCheckout.detached || (mainCheckout.branch && mainCheckout.branch !== CONFIG.main && mainCheckout.branch !== CONFIG.ledger))) {
+  out.push(`WARNING: the main checkout (${mainCheckout.path}) is ${mainCheckout.detached ? 'on a detached HEAD' : `on ${mainCheckout.branch}`}, not ${CONFIG.main}. Another session may be using it: do feature work in its own worktree (git worktree add), not by switching this one.`);
 }
 if (!others.length) out.push(`No other branches besides ${CONFIG.main}.`);
 

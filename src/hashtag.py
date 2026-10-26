@@ -1,8 +1,9 @@
-# Hashtag Basketball 2026-27 projections (per game, exported 2026-10-21, data/hashtag_2026-10-21.xlsx) → players.json 'hs'.
+# Hashtag Basketball 2026-27 projections (per game, newest data/hashtag_YYYY-MM-DD.xlsx) → players.json 'hs'.
 # Matched to BBM players by normalized name; FG%/FT% from the percentage, attempts from the "(made/att)" text.
-import json, re, unicodedata, pandas as pd
+import json, re, unicodedata, glob, pandas as pd
 norm = lambda s: re.sub(r'[^a-z ]', '', ''.join(ch for ch in unicodedata.normalize('NFKD', str(s)) if not unicodedata.combining(ch)).lower().replace(' jr', '').replace(' iii', '').replace(' ii', '').replace(' iv', '')).replace('  ', ' ').strip()
-X = pd.read_excel('data/hashtag_2026-10-21.xlsx')
+SRC = sorted(glob.glob('data/hashtag_*.xlsx'))[-1]; print('Hashtag file:', SRC)
+X = pd.read_excel(SRC)
 X = X[X['PLAYER'].astype(str) != 'PLAYER']
 def shot(s):
     m = re.match(r'\s*([\d.]+)\s*\(([\d.]+)/([\d.]+)\)', str(s)); return (float(m.group(1)), float(m.group(3))) if m else (None, None)
@@ -21,6 +22,7 @@ for p in P:
     if h: p['hs'] = {kk: v for kk, v in h.items() if kk != 'name'}; hit += 1
     else: p.pop('hs', None); miss.append(p['n'])
 ADD_TO_RANK = 300   # Hashtag-only players up to this Hashtag rank are added (idea 126)
+POS_FIX = {'Mario Hezonja': 'SF'}   # Hashtag leaves POS blank (2026-10-25 export); position by hand
 TEAM = {'GS': 'GSW', 'NO': 'NOR', 'NY': 'NYK', 'SA': 'SAS', 'PHX': 'PHO', 'BKN': 'BKN'}
 # idempotent: drop rows added by an earlier run, then add every Hashtag player BBM lacks
 P = [p for p in P if p.get('src') != 'hs']
@@ -37,11 +39,13 @@ for _, r in X.iterrows():
     if k in have or k not in H or int(str(r['R#']).split()[0]) > ADD_TO_RANK: continue
     h = H[k]; rk += 1
     adp = float(r['ADP']) if str(r['ADP']) not in ('nan', '', '-') else None
-    P.append(dict(n=h['name'], t=TEAM.get(r['TEAM'], r['TEAM']), p=str(r['POS']).replace(',', '/'), **{kk: v for kk, v in h.items() if kk != 'name'},
+    P.append(dict(n=h['name'], t=TEAM.get(r['TEAM'], r['TEAM']), p=POS_FIX.get(h['name']) or str(r['POS']).replace(',', '/'), **{kk: v for kk, v in h.items() if kk != 'name'},
                   adp=adp, ftx=fx.get(k), rk=rk, inj='', risk='', note='Hashtag only (no BBM projection).', src='hs',
                   hs={kk: v for kk, v in h.items() if kk != 'name'}))
     added.append(h['name'])
 print('Hashtag-only players added:', len(added))
+blank = [q['n'] for q in P if q.get('src') == 'hs' and q['p'] in ('nan', '')]
+if blank: print('::warning::blank position for', blank, '- add to POS_FIX')
 json.dump(P, open('players.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 print('hashtag rows', len(H), '| BBM players', len(P), '| matched', hit)
 print('BBM players with no Hashtag projection:', miss)

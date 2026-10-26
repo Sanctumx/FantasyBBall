@@ -84,11 +84,18 @@ They work alongside the routing above; this file takes precedence over them. Siz
 
 ## The user's working rules
 
+- Change files with the Edit/Write tools, not `python - <<EOF` or `sed -i` patch scripts, and run commands from the repo
+  root without a `cd` prefix; both trigger permission prompts the user is tired of (user, 2026-10-26). Enforced by the
+  `before-bash.mjs` hook (it blocks `cd` prefixes, `sed -i`, `cat > f <<EOF` and heredoc patch scripts); don't work around it.
+- A branch's handoff note covers only that branch (state, Next, and hazards it created for others). Other branches' status
+  is read from `branches.mjs`, not copied into notes (user, 2026-10-26).
 - Push, merge or deploy only when the user says "push" or types /release (the ask prompt above is the backstop).
 - Keep running plan tasks back to back unless something needs the user's input; the exception is the context limit
   above (user, 2026-10-20).
 - Using the user's computer (copying files there, staging results back) is allowed without asking each time (user,
   2026-10-18) until the user withdraws it. The user still starts PC backtest runs themselves.
+- Bat files the user runs on the PC show only one updating "Estimated time remaining" line and close on their own when
+  finished: quiet console, everything else to the results file, no `pause` (user, 2026-10-26).
 - Every improvement to the workflow (CLAUDE.md, skills, subagents, settings, hooks) is also generalized for other
   projects where possible: the general version goes in `Sanctumx/Claude-Workflow` (templates under `template/`, rules
   in `template/GUIDELINES.md`) and in the shared skills (user, 2026-10-20).
@@ -104,9 +111,10 @@ They work alongside the routing above; this file takes precedence over them. Siz
 3. **Test first.** Write the failing test, watch it fail, then make it pass.
    - Unit tests: `node --test 'src/tests/*.test.js'` from the repo root.
    - Browser checks: `src/tests/browser/*.mjs`. They need Playwright, run from a folder where it is installed, with the
-     repo root served by `python3 -m http.server 8765`.
+     repo root served by `python3 -m http.server 8765` (`python` on the Windows PC, which has no `python3`).
 4. **Build.** The site serves the repo root, so built pages are committed:
-   `cd src && python3 gen.py && python3 build_site.py && rm -rf ../assets && cp -r site/assets ../assets && cp site/index.html ../index.html && cp site/league.html ../league.html && cp site/inseason.html ../inseason.html && cp site/settings.html ../settings.html && cp site/rankings.html ../rankings.html && cp site/team.html ../team.html`.
+   `node .claude/scripts/build.mjs` (runs `gen.py` and `build_site.py` in `src/`, then replaces `assets/` and copies the six
+   pages to the repo root; it deletes nothing else).
 5. **Commit** in small steps with a type prefix: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. Record ideas and results in
    `src/IDEAS.md` (and the archive), and current-state changes in `src/SESSION_HANDOFF.md` (keep it under ~150 lines). Those three change only through the ledger worktree (`node .claude/scripts/ledger.mjs setup | next | land`), never on a feature branch; the branch writes `src/handoffs/<branch>.md` instead.
 6. **Review.** Before merging a feature, the `reviewer` subagent reads the whole branch diff. Fix what matters, each fix with a

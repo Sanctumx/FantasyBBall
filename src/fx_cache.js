@@ -29,7 +29,11 @@
     const key = (what, id) => PREFIX + what + ':' + (id || '');
 
     // the saved answer, or null when there is none, it is unreadable or it is too old to show
-    function peek(what, id) {
+    // A manual league (typed in or pasted, no Fantrax) answers from its own data: opts.manual(what, leagueId) gives the body, or
+    // null for a Fantrax league. Those answers are never stored; `players` borrows the league id of the pieces asked with it.
+    const man = (what, id, lid) => { const b = opts.manual ? opts.manual(what, id || lid) : null; return b ? { body: b, at: now(), json: JSON.stringify(b) } : null; };
+    function peek(what, id, lid) {
+      const m = man(what, id, lid); if (m) return m;
       if (NEVER[what]) return null;
       let e; try { e = JSON.parse(st.get(key(what, id)) || 'null'); } catch (x) { return null; }
       if (!e || typeof e.at !== 'number' || typeof e.json !== 'string' || now() - e.at > (MAX_AGE[what] || DEF_AGE)) return null;
@@ -42,7 +46,8 @@
       try { st.keys().forEach(x => { if (x.startsWith(lead) && x !== k) st.remove(x); }); } catch (e) {}
       try { st.set(k, JSON.stringify({ at: now(), json })); } catch (e) {}
     }
-    async function fetchOne(what, id) {
+    async function fetchOne(what, id, lid) {
+      const m = man(what, id, lid); if (m) return { body: m.body, json: m.json };
       const body = await fetcher(what, id);
       if (NEVER[what]) return { body };
       const json = JSON.stringify(body);
@@ -54,8 +59,9 @@
     // specs = [[what, leagueId?], ...]. onCached(bodies, at) only if every piece is saved; onFresh(bodies, at, changed) after
     // the live answers; onError(error, hadCached) if a live call fails (the cached view stays).
     async function swr(specs, hooks) {
-      const hit = specs.map(s => peek(s[0], s[1])), had = hit.every(Boolean);
-      const fresh = Promise.all(specs.map(s => fetchOne(s[0], s[1]))); fresh.catch(() => {});   // started before drawing; handled below
+      const lid = (specs.find(s => s[1]) || [])[1];
+      const hit = specs.map(s => peek(s[0], s[1], lid)), had = hit.every(Boolean);
+      const fresh = Promise.all(specs.map(s => fetchOne(s[0], s[1], lid))); fresh.catch(() => {});   // started before drawing; handled below
       if (had) await hooks.onCached(hit.map(h => h.body), Math.min.apply(null, hit.map(h => h.at)));
       let res; try { res = await fresh; } catch (e) { await hooks.onError(e, had); return; }
       await hooks.onFresh(res.map(r => r.body), now(), !had || res.some((r, i) => r.json !== hit[i].json));   // against what the page drew, not what storage holds now
