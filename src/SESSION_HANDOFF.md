@@ -49,8 +49,10 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 Run `node .claude/scripts/branches.mjs` (every branch, ahead/behind main, pushed, landed, worktree, its Next line); notes are
 `src/handoffs/<branch>.md`. Shared records (this file, IDEAS, archive) change only in the ledger worktree: `docs/release-handoff.md`, "Parallel sessions".
-Pushing needs the user's word. Branches known on 2026-10-26: calib-ros (#139 shrink 0.6 / 0.75 on the branch, merged with main 2026-10-26, reviewer running, unpushed; follow-ups #144-#146 Open),
-plays-rank (#141 Rejected, unmerged), yahoo-points-pr2 (merged, PR #36), team-tab-next (not started), fix-136-espn-retry, data-hashtag-1025.
+Pushing needs the user's word. Branches known on 2026-10-26: calib-ros (PR #37; #139 shrink 0.6 / 0.75; follow-ups #144-#147 Open; waiting on the Trade Analyzer / one-k decision, #147), manual-league (PR #38; reviewer's MUSTs fixed),
+team-d3-swap (4 commits, not on origin, needs triage), team-tab-next (not started). Merged and removed 2026-10-26: plays-rank (code and tests on main via PR #41, flag off, #141 Rejected), Hashtag 10-25 data (PR #43), fix-136-espn-retry (already on main), block-bash-prompts, branch-hygiene (PR #40).
+
+**Next session starts with (clean-up plan, user 2026-10-26: merge everything so parallel work restarts cleanly):** 1. rebase `manual-league` onto main, rebuild, tests, merge PR #38. 2. `calib-ros` (PR #37): decide #147 first, planner, reviewer on high effort, then merge. 3. triage `team-d3-swap` (rebase and PR, or drop). 4. **last:** #148 reorganize `src/tests/` into subfolders (engine, league, team, collect, tooling), once no branch is editing tests. Merging two branches that both rebuilt the pages conflicts on built files: rebase and rebuild the second.
 
 ## This PC
 
