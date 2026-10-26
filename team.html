@@ -125,14 +125,14 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
    <div class="how-col">
     <section class="how-card">
       <h3>The roster table</h3>
-      <h4>Projected games left (GL)</h4>
-      <p>The games the player is projected to play from now to the end of the regular season: his team's remaining games times his projected games over 82. That already covers injuries and rest, so Plays % is not applied to it.</p>
+      <h4>Projected remaining games (GL)</h4>
+      <p>The games the player is projected to play from now to the end of the NBA season (not just the league's last regular week): his team's remaining games times his projected games over 82. That already covers injuries and rest, so Plays % is not applied to it.</p>
       <h4>Plays %</h4>
       <p>A measure of your team's makeup, not of the player's health. Each night only as many players as the league's active limit can start, so with more players than slots the best per-game players take the slots and the rest sit. Plays % is the share of his team's remaining games he gets a slot for: your best players are near 100%, your worst get the least. Bench players get the nights the active players leave open. IL and Reserve rows are dimmed: they show what the player would get as one more bench player, and they count for nothing until moved.</p>
       <h4>Stats and the Plays % box</h4>
       <p>Per game shows each player's projected line. Rest of season multiplies it by his projected games left. With "Adjust player stats by Plays %" checked, every player's stats and Z are also multiplied by his Plays %. Unchecked, the player rows are untouched and only the team values use Plays %.</p>
-      <h4>Team average and total</h4>
-      <p>These always use Plays %: a player adds his line in proportion to how often he plays. The average is per lineup slot; the total is the whole lineup per night. Reserve and IL players add nothing.</p>
+      <h4>Team average</h4>
+      <p>The last row of the table. It always uses Plays %: a player adds his line in proportion to how often he plays, per lineup slot. Its Z is the same Plays %-weighted average of the players' Z; its Win C and Win M are your average over all opponents (the Average column of the matrix). Reserve and IL players add nothing.</p>
      </section>
     </div>
     <div class="how-col">
@@ -2060,6 +2060,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return (G[team] || []).filter(s => s * 1000 >= w.from && s * 1000 < w.to).length;
   }
 
+  // team games from now to the end of the NBA schedule (past the league's last regular week); the GL column reads this
+  function seasonGamesLeft(ctx, team) {
+    const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {};
+    return (G[team] || []).filter(s => s * 1000 >= ctx.nowMs).length;
+  }
+
   // games per key over the window. segGames zeroes an "out" player's segment when it starts before ctx.curEnd, which is meant
   // for the rest of the current week only, so the window is cut at curEnd and the two parts are summed
   function windowGames(ctx, keys, used) {
@@ -2129,7 +2135,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, initState, moveSlot, applySwap, window, gamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2266,10 +2272,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
-// Team tab page logic (#131 PR 3, 2026-10-25): the roster table rows and totals, the stepwise Win scoring job with its cache, and the
+// Team tab page logic (#131 PR 3, 2026-10-25): the roster table rows and team average, the stepwise Win scoring job with its cache, and the
 // swap-box helpers. Pure; browser and Node. team.html only draws what this returns. Nothing here touches ctx, the pool or the saved league.
 // Plays % is a team-makeup share (who gets a lineup slot each night); GL is projected games left (team games x g/82, which already
-// covers injuries and rest), so GL is never multiplied by Plays %. Only the team totals and Win always use Plays %; the player rows use
+// covers injuries and rest), so GL is never multiplied by Plays %. Only the team average and Win always use Plays %; the player rows use
 // it only when the "adjust by Plays %" box is checked (opts.adjust).
 (function (root) {
   'use strict';
@@ -2277,8 +2283,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const SLOT_ORDER = Team.SLOTS;
   const COUNT = ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
 
-  // projected games left: the team's remaining games times the player's availability (g/82, as the Trade Analyzer reads it)
-  const gamesLeft = (ctx, pp) => Team.gamesLeft(ctx, pp.t) * Math.min(1, pp.g / 82);
+  // projected remaining games: the team's games to the end of the NBA season times the player's availability (g/82)
+  const gamesLeft = (ctx, pp) => Team.seasonGamesLeft(ctx, pp.t) * Math.min(1, pp.g / 82);
 
   // a per-game line times f; percentages stay, attempts and counting stats scale
   function scaled(line, f) {
@@ -2288,13 +2294,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // opts: zCats (pool player -> per-game category Zs[9], or null), weights (0-1 per category), cats (9 | 8), adjust (bool),
-  // view 'game' (per game) | 'ros' (per game x GL). -> { groups: [{ slot, rows }], rows, avg, total }
+  // view 'game' (per game) | 'ros' (per game x GL). -> { groups: [{ slot, rows }], rows, avg, avgZ }
   // row: { key, n, t, pos, slot, gl, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
-  // total is the same per night for the whole lineup (counting stats x the active limit)
+  // avgZ is the Plays % weighted Z per lineup slot (null without zCats)
   function rows(ctx, state, opts) {
     const o = opts || {}, plays = Team.playsPct(ctx, state), nc = o.cats === 8 ? 8 : 9, slots = ctx.L.maxActive;
     const all = state.order.map(key => {
-      const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust && p.pct != null ? p.pct : 1;
+      const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust ? (p.pct == null ? 0 : p.pct) : 1;
       const cats = o.zCats ? o.zCats(pp) : null;
       return { key, n: pp.n, t: pp.t, pos: pp.pos, slot: state.slots[key], gl, pct: p.pct, hypo: !!p.hypo,
         stat: scaled(pp.line, (o.view === 'ros' ? gl : 1) * f),
@@ -2302,9 +2308,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
     const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: plays[k].pct, hypo: plays[k].hypo })), slots);
-    const total = Object.assign({}, avg, { fga: avg.fga * slots, fta: avg.fta * slots });
-    COUNT.forEach(k => { total[k] = avg[k] * slots; });
-    return { groups, rows: all, avg, total };
+    const avgZ = o.zCats ? state.order.reduce((s, k) => { const p = plays[k], pp = ctx.pool.byKey.get(k), c = o.zCats(pp); return p.hypo || p.pct == null || !c ? s : s + p.pct * Team.weightedZ(c, o.weights, nc); }, 0) / slots : null;
+    return { groups, rows: all, avg, avgZ };
   }
 
   // ---- Win scoring, one piece per step() so the page stays responsive: the matrix first, then one roster player per step ----
@@ -2325,12 +2330,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   const signature = state => state.order.map(k => k + ':' + state.slots[k]).join('|');
 
-  // finished and half-finished jobs by ctx object and roster; the weights are not an input, so moving a slider never rescores
+  // finished and half-finished jobs by ctx object, roster and win options (cats, mode); the weights are not an input, so moving a slider never rescores
   function createScorer() {
     const by = new WeakMap();
     return { get(ctx, state, opts) {
       let m = by.get(ctx); if (!m) by.set(ctx, m = new Map());
-      const sig = signature(state);
+      const o = opts || {}, sig = signature(state) + '#' + (o.cats || '') + '#' + (o.mode || '');
       if (!m.has(sig)) m.set(sig, winJob(ctx, state, opts));
       return m.get(sig);
     } };
@@ -2447,7 +2452,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const pctTxt = p => p == null ? '–' : Math.round(p * 100) + '%';
 
   function rosterHtml(r, job) {
-    const head = '<thead><tr><th class="l">Player</th><th title="Projected games left">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th>' + c + '</th>').join('') +
+    const head = '<thead><tr><th class="l">Player</th><th title="Projected remaining games">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th>' + c + '</th>').join('') +
       '<th class="sortable" id="th-z" title="Zscore, weighted by the category weights; click to sort by it"' + (ui.sortZ ? ' aria-sort="descending"' : '') + '>Z</th><th title="Change in your Win C (hundredths) from having him">Win C</th><th title="Change in your Win M (points) from having him">Win M</th></tr></thead>';
     const nc = nCats(), cols = 3 + nc + 3, body = [];
     r.groups.forEach(g => {
@@ -2462,8 +2467,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
           (w ? '<td' + dim + '><span class="' + sgn(w.c) + '">' + signed(w.c) + '</span></td><td' + dim + '><span class="' + sgn(w.m) + '">' + signed(w.m) + '</span></td>' : '<td>…</td><td>…</td>') + '</tr>');
       });
     });
-    const tot = (label, s) => '<tr class="tot"><td class="l">' + label + '</td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td>' + fmtStat(s[k], c) + '</td>').join('') + '<td></td><td></td><td></td></tr>';
-    body.push(tot('Team average (per slot)', r.avg), tot('Team total (per night)', r.total));
+    const mean = job.matrix && job.matrix.mean;
+    body.push('<tr class="tot"><td class="l">Team average (per slot)</td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td>' + fmtStat(r.avg[k], c) + '</td>').join('') +
+      '<td>' + (r.avgZ == null ? '–' : signed(r.avgZ, 2)) + '</td><td>' + (mean ? mean.winC.toFixed(1) : '…') + '</td><td>' + (mean && mean.match != null ? Math.round(mean.match * 100) + '%' : '…') + '</td></tr>');
     return head + '<tbody>' + body.join('') + '</tbody>';
   }
   function matrixHtml(job) {
@@ -2473,7 +2479,6 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const cell = p => p == null ? '–' : chip(p, (p * 100).toFixed(0) + '%');
     let h = '<thead><tr><th class="l"></th>' + m.teams.map(t => '<th title="' + esc(teamName(t.id)) + '">' + esc(teamName(t.id).slice(0, 12)) + '</th>').join('') + '<th>Average</th></tr></thead><tbody>';
     for (let c = 0; c < nc; c++) h += '<tr><td class="l">' + CATN[c] + '</td>' + m.teams.map(t => '<td>' + cell(t.cat[c]) + '</td>').join('') + '<td>' + cell(m.mean.cat[c]) + '</td></tr>';
-    h += '<tr class="tot"><td class="l">Win C (categories)</td>' + m.teams.map(t => '<td>' + t.winC.toFixed(1) + '</td>').join('') + '<td>' + m.mean.winC.toFixed(1) + '</td></tr>';
     h += '<tr class="tot"><td class="l">Win M</td>' + m.teams.map(t => '<td>' + cell(t.match) + '</td>').join('') + '<td>' + cell(m.mean.match) + '</td></tr></tbody>';
     return h;
   }
@@ -2493,7 +2498,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function ensureTick(job) {
     if (!job || job.done || tickJob === job) return;
     tickJob = job; const seq = ++tickSeq;
-    const tick = () => { if (seq !== tickSeq) return; if (job.step()) { draw(); setTimeout(tick, 0); } else { draw(); if (tickJob === job) tickJob = null; } };
+    const tick = () => {
+      if (seq !== tickSeq) return;
+      try { if (job.step()) { draw(); setTimeout(tick, 0); } else { draw(); if (tickJob === job) tickJob = null; } }
+      catch (e) { if (tickJob === job) tickJob = null; $('rost-meta').textContent = 'Scoring failed: ' + (e && e.message || e); }
+    };
     setTimeout(tick, 0);
   }
   function render() { renderSwap(); ensureTick(draw()); }

@@ -43,6 +43,12 @@
     return (G[team] || []).filter(s => s * 1000 >= w.from && s * 1000 < w.to).length;
   }
 
+  // team games from now to the end of the NBA schedule (past the league's last regular week); the GL column reads this
+  function seasonGamesLeft(ctx, team) {
+    const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {};
+    return (G[team] || []).filter(s => s * 1000 >= ctx.nowMs).length;
+  }
+
   // games per key over the window. segGames zeroes an "out" player's segment when it starts before ctx.curEnd, which is meant
   // for the rest of the current week only, so the window is cut at curEnd and the two parts are summed
   function windowGames(ctx, keys, used) {
@@ -112,6 +118,6 @@
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, initState, moveSlot, applySwap, window, gamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, initState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);

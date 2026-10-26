@@ -1,7 +1,7 @@
-// Team tab page logic (#131 PR 3, 2026-10-25): the roster table rows and totals, the stepwise Win scoring job with its cache, and the
+// Team tab page logic (#131 PR 3, 2026-10-25): the roster table rows and team average, the stepwise Win scoring job with its cache, and the
 // swap-box helpers. Pure; browser and Node. team.html only draws what this returns. Nothing here touches ctx, the pool or the saved league.
 // Plays % is a team-makeup share (who gets a lineup slot each night); GL is projected games left (team games x g/82, which already
-// covers injuries and rest), so GL is never multiplied by Plays %. Only the team totals and Win always use Plays %; the player rows use
+// covers injuries and rest), so GL is never multiplied by Plays %. Only the team average and Win always use Plays %; the player rows use
 // it only when the "adjust by Plays %" box is checked (opts.adjust).
 (function (root) {
   'use strict';
@@ -9,8 +9,8 @@
   const SLOT_ORDER = Team.SLOTS;
   const COUNT = ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
 
-  // projected games left: the team's remaining games times the player's availability (g/82, as the Trade Analyzer reads it)
-  const gamesLeft = (ctx, pp) => Team.gamesLeft(ctx, pp.t) * Math.min(1, pp.g / 82);
+  // projected remaining games: the team's games to the end of the NBA season times the player's availability (g/82)
+  const gamesLeft = (ctx, pp) => Team.seasonGamesLeft(ctx, pp.t) * Math.min(1, pp.g / 82);
 
   // a per-game line times f; percentages stay, attempts and counting stats scale
   function scaled(line, f) {
@@ -20,9 +20,9 @@
   }
 
   // opts: zCats (pool player -> per-game category Zs[9], or null), weights (0-1 per category), cats (9 | 8), adjust (bool),
-  // view 'game' (per game) | 'ros' (per game x GL). -> { groups: [{ slot, rows }], rows, avg, total }
+  // view 'game' (per game) | 'ros' (per game x GL). -> { groups: [{ slot, rows }], rows, avg, avgZ }
   // row: { key, n, t, pos, slot, gl, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
-  // total is the same per night for the whole lineup (counting stats x the active limit)
+  // avgZ is the Plays % weighted Z per lineup slot (null without zCats)
   function rows(ctx, state, opts) {
     const o = opts || {}, plays = Team.playsPct(ctx, state), nc = o.cats === 8 ? 8 : 9, slots = ctx.L.maxActive;
     const all = state.order.map(key => {
@@ -34,9 +34,8 @@
     });
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
     const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: plays[k].pct, hypo: plays[k].hypo })), slots);
-    const total = Object.assign({}, avg, { fga: avg.fga * slots, fta: avg.fta * slots });
-    COUNT.forEach(k => { total[k] = avg[k] * slots; });
-    return { groups, rows: all, avg, total };
+    const avgZ = o.zCats ? state.order.reduce((s, k) => { const p = plays[k], pp = ctx.pool.byKey.get(k), c = o.zCats(pp); return p.hypo || p.pct == null || !c ? s : s + p.pct * Team.weightedZ(c, o.weights, nc); }, 0) / slots : null;
+    return { groups, rows: all, avg, avgZ };
   }
 
   // ---- Win scoring, one piece per step() so the page stays responsive: the matrix first, then one roster player per step ----

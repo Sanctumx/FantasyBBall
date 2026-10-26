@@ -27,8 +27,18 @@ test('rows: GL is projected games left (team games x g/82), never times Plays %'
   const ctx = mk(), st = stateOf(), r = V.rows(ctx, st, { zCats }), plays = T.playsPct(ctx, st);
   r.rows.forEach(x => {
     const pp = pool.byKey.get(x.key);
-    assert.ok(near(x.gl, T.gamesLeft(ctx, pp.t) * Math.min(1, pp.g / 82)), x.key);
+    assert.ok(near(x.gl, T.seasonGamesLeft(ctx, pp.t) * Math.min(1, pp.g / 82)), x.key);
     assert.strictEqual(x.pct, plays[x.key].pct);
+  });
+});
+
+test('rows: GL counts team games to the real season end, past the last league week', () => {
+  const ctx = M.makeCtx({ L, pool, DAYS: games(last.start, last.end + 60 * 86400e3), rosters: ROS, me, nowMs: last.start });
+  const r = V.rows(ctx, stateOf(), { zCats });
+  r.rows.forEach(x => {
+    const pp = pool.byKey.get(x.key), n = ctx.DAYS.games[pp.t].filter(s => s * 1000 >= ctx.nowMs).length;
+    assert.ok(n > T.gamesLeft(ctx, pp.t), x.key);
+    assert.ok(near(x.gl, n * Math.min(1, pp.g / 82)), x.key);
   });
 });
 
@@ -69,7 +79,16 @@ test('totals: the checkbox does not change them; Reserve and IL add nothing', ()
   const k = st.order.find(q => st.slots[q] === 'bench' || st.slots[q] === 'active'), gone = V.rows(ctx, T.moveSlot(st, k, 'reserve'), { zCats });
   assert.notDeepStrictEqual(gone.avg, a.avg);
   assert.deepStrictEqual(gone.avg, V.rows(ctx, T.applySwap(st, [k], []), { zCats }).avg);
-  assert.ok(near(a.total.pts, a.avg.pts * ctx.L.maxActive));
+  assert.strictEqual(a.total, undefined);
+});
+
+test('totals: avgZ is the Plays % weighted Z per lineup slot; the checkbox and IL/Reserve rows leave it alone', () => {
+  const ctx = mk(), st = stateOf(), a = V.rows(ctx, st, { zCats }), b = V.rows(ctx, st, { zCats, adjust: true }), plays = T.playsPct(ctx, st);
+  const exp = st.order.reduce((s, k) => s + (plays[k].hypo || plays[k].pct == null ? 0 : plays[k].pct * T.weightedZ(zCats(pool.byKey.get(k)), undefined, 9)), 0) / ctx.L.maxActive;
+  assert.ok(near(a.avgZ, exp, 1e-9));
+  assert.ok(near(b.avgZ, exp, 1e-9));
+  const w = Array(9).fill(0.5), h = V.rows(ctx, st, { zCats, weights: w });
+  assert.ok(near(h.avgZ, a.avgZ / 2, 1e-9));
 });
 
 test('totals: a 2-for-1 swap changes the totals by the hand computed amount', () => {

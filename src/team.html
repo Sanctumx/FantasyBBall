@@ -112,14 +112,14 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
    <div class="how-col">
     <section class="how-card">
       <h3>The roster table</h3>
-      <h4>Projected games left (GL)</h4>
-      <p>The games the player is projected to play from now to the end of the regular season: his team's remaining games times his projected games over 82. That already covers injuries and rest, so Plays % is not applied to it.</p>
+      <h4>Projected remaining games (GL)</h4>
+      <p>The games the player is projected to play from now to the end of the NBA season (not just the league's last regular week): his team's remaining games times his projected games over 82. That already covers injuries and rest, so Plays % is not applied to it.</p>
       <h4>Plays %</h4>
       <p>A measure of your team's makeup, not of the player's health. Each night only as many players as the league's active limit can start, so with more players than slots the best per-game players take the slots and the rest sit. Plays % is the share of his team's remaining games he gets a slot for: your best players are near 100%, your worst get the least. Bench players get the nights the active players leave open. IL and Reserve rows are dimmed: they show what the player would get as one more bench player, and they count for nothing until moved.</p>
       <h4>Stats and the Plays % box</h4>
       <p>Per game shows each player's projected line. Rest of season multiplies it by his projected games left. With "Adjust player stats by Plays %" checked, every player's stats and Z are also multiplied by his Plays %. Unchecked, the player rows are untouched and only the team values use Plays %.</p>
-      <h4>Team average and total</h4>
-      <p>These always use Plays %: a player adds his line in proportion to how often he plays. The average is per lineup slot; the total is the whole lineup per night. Reserve and IL players add nothing.</p>
+      <h4>Team average</h4>
+      <p>The last row of the table. It always uses Plays %: a player adds his line in proportion to how often he plays, per lineup slot. Its Z is the same Plays %-weighted average of the players' Z; its Win C and Win M are your average over all opponents (the Average column of the matrix). Reserve and IL players add nothing.</p>
      </section>
     </div>
     <div class="how-col">
@@ -294,7 +294,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   const pctTxt = p => p == null ? '–' : Math.round(p * 100) + '%';
 
   function rosterHtml(r, job) {
-    const head = '<thead><tr><th class="l">Player</th><th title="Projected games left">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th>' + c + '</th>').join('') +
+    const head = '<thead><tr><th class="l">Player</th><th title="Projected remaining games">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th>' + c + '</th>').join('') +
       '<th class="sortable" id="th-z" title="Zscore, weighted by the category weights; click to sort by it"' + (ui.sortZ ? ' aria-sort="descending"' : '') + '>Z</th><th title="Change in your Win C (hundredths) from having him">Win C</th><th title="Change in your Win M (points) from having him">Win M</th></tr></thead>';
     const nc = nCats(), cols = 3 + nc + 3, body = [];
     r.groups.forEach(g => {
@@ -309,8 +309,9 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
           (w ? '<td' + dim + '><span class="' + sgn(w.c) + '">' + signed(w.c) + '</span></td><td' + dim + '><span class="' + sgn(w.m) + '">' + signed(w.m) + '</span></td>' : '<td>…</td><td>…</td>') + '</tr>');
       });
     });
-    const tot = (label, s) => '<tr class="tot"><td class="l">' + label + '</td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td>' + fmtStat(s[k], c) + '</td>').join('') + '<td></td><td></td><td></td></tr>';
-    body.push(tot('Team average (per slot)', r.avg), tot('Team total (per night)', r.total));
+    const mean = job.matrix && job.matrix.mean;
+    body.push('<tr class="tot"><td class="l">Team average (per slot)</td><td></td><td></td>' + RAWK.slice(0, nc).map((k, c) => '<td>' + fmtStat(r.avg[k], c) + '</td>').join('') +
+      '<td>' + (r.avgZ == null ? '–' : signed(r.avgZ, 2)) + '</td><td>' + (mean ? mean.winC.toFixed(1) : '…') + '</td><td>' + (mean && mean.match != null ? Math.round(mean.match * 100) + '%' : '…') + '</td></tr>');
     return head + '<tbody>' + body.join('') + '</tbody>';
   }
   function matrixHtml(job) {
@@ -320,7 +321,6 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
     const cell = p => p == null ? '–' : chip(p, (p * 100).toFixed(0) + '%');
     let h = '<thead><tr><th class="l"></th>' + m.teams.map(t => '<th title="' + esc(teamName(t.id)) + '">' + esc(teamName(t.id).slice(0, 12)) + '</th>').join('') + '<th>Average</th></tr></thead><tbody>';
     for (let c = 0; c < nc; c++) h += '<tr><td class="l">' + CATN[c] + '</td>' + m.teams.map(t => '<td>' + cell(t.cat[c]) + '</td>').join('') + '<td>' + cell(m.mean.cat[c]) + '</td></tr>';
-    h += '<tr class="tot"><td class="l">Win C (categories)</td>' + m.teams.map(t => '<td>' + t.winC.toFixed(1) + '</td>').join('') + '<td>' + m.mean.winC.toFixed(1) + '</td></tr>';
     h += '<tr class="tot"><td class="l">Win M</td>' + m.teams.map(t => '<td>' + cell(t.match) + '</td>').join('') + '<td>' + cell(m.mean.match) + '</td></tr></tbody>';
     return h;
   }
