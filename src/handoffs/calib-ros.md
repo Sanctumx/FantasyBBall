@@ -31,7 +31,14 @@ Decisions (user, 2026-10-26): opponents weighted equally (not by schedule) until
 - Not done: the Trade page still scores 9 categories (no `cats` / `points` passed); Draft tab and Model pick untouched (needs a preseason check and a paired backtest with the analyst). Browser `rankings_page.mjs` "projections list all 302 players" fails on main too (303 players now), unrelated.
 - Hazard: when D2 (Rankings Vs average through TeamWin, team-tab-next) lands its league path must not also take `o.shrink` (double shrink).
 
+## Review of #147 (done 2026-10-26, effort high; nothing fixed yet)
+
+Fine: memo and cache keys, pairwise chances, Rankings k scale, bundle order, speed (~0.7 s per give), engine / Draft / golden untouched.
+- **MUST, needs the user's decision:** IL players dominate the trade finder. `tradeState` (`team_win.js`) counts an IL player for nothing, but `tradeCandidates` still offers my IL players as gives, so giving one costs 0 Win M while the other team sees his full value: 24 of the top 25 rows give an IL player (main: 13), top likelihood 84% (the 70% cap in `trade_finder.test.js` only holds because that test searches `roster.slice(0,4)`). Options: (a) count a traded IL player as reserve with his Plays % games; (b) drop IL players from the finder's gives and targets. Add a test that searches every give.
+- **MUST:** help text is stale: `src/app.html:352` and `src/team.html:152` still say Trade Win M averages the real matchups and differs from the Team tab; `src/app.html:354/358` (Rankings help) don't say the Win columns are shrunk.
+- **Should:** `tradeState` gives freed slots in `fids` order but the `leagueWin` memo key sorts fids, so a 2-for-2 in a different order can reuse the wrong slots: sort the incoming players first. An IL-for-healthy swap grows the counted roster by one (reserve). Revisit the 70% cap after the IL fix (back to 60% if it fits).
+
 ## Next
 
-1. Review (reviewer, effort high), fix, merge on the user's word, then `ledger.mjs land` (ledger holds the #139 row, archive 139, #144-#146; update the #147 row to Partly done: Trade and Rankings built, Draft open).
+1. Ask the user (a) or (b) for IL players, fix the items above test-first, rebuild, rerun the tests, merge on the user's word, then `ledger.mjs land` (ledger holds the #139 row, archive 139, #144-#146; update the #147 row to Partly done: Trade and Rankings built, Draft open).
 2. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`); do not shrink twice.
