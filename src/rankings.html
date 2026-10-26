@@ -324,8 +324,8 @@ tbody tr.mine:hover td{background:var(--sunk)}
     save(); draw();
   });
   window.addEventListener('storage', () => {
-    const was = SS.league && SS.league.id, s0 = JSON.stringify(SS.settings), me0 = was ? LS.defaultTeam(LS.local.get, was) : null; SS = LS.load(LS.local.get);
-    if ((SS.league && SS.league.id) !== was) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings), s0 = JSON.stringify(SS.settings), me0 = was ? LS.defaultTeam(LS.local.get, was) : null; SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) loadLeague(); else if (JSON.stringify(SS.settings) !== s0 || (was && LS.defaultTeam(LS.local.get, was) !== me0)) draw();
   });
   sync();
   loadBox().then(b => { box = b; draw(); loadLeague(); });

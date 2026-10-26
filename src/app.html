@@ -501,6 +501,7 @@ const P = E.prepPlayers(PLAYERS);
 const KEY = 'courtside-board-v1';
 // League keys (teams, roster, scoring, cats, playoffs, IL, lineup) come from the shared store's defaults
 const DEF = Object.assign({ b2b: 'off', b2bOv: {}, field: 'easy', puntMode: 'off', puntLock: '', stats: 'raw', poBoost: 'off', scarZ: 'off', scarP: 'off', catW: [1, 1, 1, 1, 1, 1, 1, 1, 0.5], shown: 0, orderBy: 'z', edgeBy: 'z', zdrop: 0, slot: 1, order: '3rr', adpSrc: 'ftx', basis: 'pergame', proj: 'avg', zdropPct: 0, zScale: 'classic', fieldZ: 'std', basisV: 12 }, LS.LEAGUE_DEF);
+delete DEF.pointVals;   // point values live in the league settings, never in a draft or the shared defaults
 let cfg = Object.assign({}, DEF, { catW: DEF.catW.slice() }), picks = [], log = [];
 // Saved settings are the user's: defaults (DEF) apply only on a first visit, and a new version of the page never changes a
 // saved choice (user rule, 2026-10-18). migrate() only repairs what a saved board can't hold any more: removed options and
@@ -1449,7 +1450,7 @@ function playerFirst() {
     if (oc) tr.insertBefore(oc, pc.nextSibling);
   }
 }
-try { PHONE.addEventListener('change', () => renderTable()); } catch (e) {}
+try { PHONE.addEventListener('change', () => { if (res && !LS.isPoints(SS.settings)) renderTable(); }); } catch (e) {}
 
 fit(); syncSetup(); renderFx(); renderSaves(); renderFxLeague();
 // a saved draft's sync resumes only while its league is the one loaded in Settings

@@ -2483,8 +2483,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // Settings changed in another tab (a different league, or other settings): load again
   window.addEventListener('storage', e => {   // reload only for another league or other settings
     if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
-    const was = SS.league && SS.league.id; SS = LS.load(LS.local.get);
-    if ((SS.league && SS.league.id) !== was) load();
+    const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings); SS = LS.load(LS.local.get);
+    if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) load();
   });
   $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });

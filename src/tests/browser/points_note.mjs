@@ -14,7 +14,7 @@ async function open(seed, page) {
   const ctx = await b.newContext({ viewport: { width: 1400, height: 1000 } });
   await ctx.route(/fonts\.g/, r => r.fulfill({ body: '', contentType: 'text/css' }));
   await ctx.route(/api\/fantrax/, r => r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"x"}' }));
-  await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.clear(); Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)); sessionStorage.setItem('seeded', '1'); } }, seed);
+  await ctx.addInitScript(s => { if (!localStorage.getItem('__seeded')) { localStorage.clear(); Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)); localStorage.setItem('__seeded', '1'); } }, seed);
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto('http://localhost:' + PORT + '/' + page); await p.waitForTimeout(1500);
   return { p, errs, ctx };
@@ -45,6 +45,18 @@ for (const [page, rows] of [['index.html', '#tbody tr'], ['rankings.html', '#tbl
   ok(st.settings.teams === 12 && st.settings.pointVals && st.settings.pointVals.to === -1, 'loading a saved draft keeps the point values: ' + JSON.stringify([st.settings.teams, st.settings.pointVals && st.settings.pointVals.to]));
   ok(errs.length === 0, 'saved draft load: no page errors ' + errs.join('; '));
   await ctx.close(); }
+
+// Scoring switched in another browser tab: the open page follows without a reload, both ways
+for (const [page, rows] of [['inseason.html', '#body:not([hidden]) table tr'], ['rankings.html', '#tbl tbody tr']]) {
+  const { p, ctx } = await open(store('h2h'), page);
+  const w = await ctx.newPage(); await w.goto('http://localhost:' + PORT + '/robots.txt');
+  const set = async scoring => { await w.evaluate(sc => { const k = 'courtside-settings-v1', o = JSON.parse(localStorage.getItem(k)); o.settings.scoring = sc; localStorage.setItem(k, JSON.stringify(o)); }, scoring); await p.waitForTimeout(1500); };
+  await set('points');
+  ok((await text(p)).includes(PHRASE), page + ': switching to points in another tab shows the note');
+  await set('h2h');
+  ok(!(await text(p)).includes(PHRASE), page + ': switching back clears the note');
+  await ctx.close();
+}
 
 await b.close();
 console.log(fails.length ? 'FAILED: ' + fails.length : 'ALL PASS'); process.exit(fails.length ? 1 : 0);
