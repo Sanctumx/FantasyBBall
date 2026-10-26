@@ -34,6 +34,54 @@
   function weekVar(l, g, w) { const m = perGame(l, w); return (V.GPW * g / 82) * pgVar(l, w) + m * m * V.VAR_GAMES; }
   const key = w => wOf(w).join(',');
 
-  const api = { STATS, RHO, DISP, statsOf, perGame, pgVar, projVar, weekVar, key };
+
+  // ---------- the engine view: one FP total in category slot FP_SLOT, zeros elsewhere ----------
+  // Engine.evaluate then runs unchanged: its single-category chance for FP_SLOT is the normal chance one weekly total beats another,
+  // and Win M = 100 x gainC[FP_SLOT]. Never read gainM (it runs over 9 slots with 8 tied).
+  const FP_SLOT = 3;
+  const WEEKS = Eng.WEEKS;
+
+  // team noise in the units of ctx.idioNoise / loadS / h2hNoise, from the engine's own 80 simulated ADP drafts
+  // (the draws, SIGMA_G2 factor and formulas of the engine's scaleFor, for the FP total only)
+  function noise(P, ctx, cfg, w) {
+    const sims = Eng.draftSims(P, cfg), N = cfg.teams, teamsN = sims.length * N;
+    const m = P.map(p => perGame(p, w)), WV = P.map((p, i) => weekVar(p, p.gUse, w));
+    let s1 = 0, s2 = 0, wpg = 0, wsum = 0, picks = 0;
+    sims.forEach(sim => sim.forEach(team => team.forEach(i => { s1 += m[i]; s2 += m[i] * m[i]; wpg += WV[i] - m[i] * m[i] * V.VAR_GAMES; wsum += WV[i]; picks++; })));
+    const nT = picks / teamsN, S1 = s1 / teamsN, S2 = s2 / teamsN, PGv = wpg / teamsN, nk = cfg.noiseK != null ? +cfg.noiseK : 1;
+    const idio = Math.max(1e-9, PGv + V.SIGMA_G2 * Math.max(0, S2 - S1 * S1 / nT));
+    return { idio: 2 * idio * WEEKS * WEEKS * nk, load: S1 / nT * WEEKS, h2h: 2 * (wsum / teamsN) * WEEKS * WEEKS * nk };
+  }
+
+  // mean per-game FP of the free-agent tier, the engine's pgRepl for FP: ADP ranks N*R+1 .. N*R+20
+  function replFP(P, cfg, w) {
+    const byAdp = P.slice().sort((a, b) => Eng.adpOf(a, cfg.adpSrc) - Eng.adpOf(b, cfg.adpSrc));
+    const fa = byAdp.slice(Math.min(byAdp.length - 1, cfg.teams * cfg.roster), Math.min(byAdp.length, cfg.teams * cfg.roster + 20));
+    return fa.reduce((t, p) => t + perGame(p, w), 0) / (fa.length || 1);
+  }
+
+  // P: prepped players after Engine.buildContext(P, cfg) (they carry gUse); returns copies for Engine.evaluate
+  function engineView(P, ctx, cfg, w) {
+    const rep = replFP(P, cfg, w), nz = noise(P, ctx, cfg, w);
+    const view = P.map(p => {
+      const m = perGame(p, w), x = new Float64Array(Eng.NC), pv = new Float64Array(Eng.NC);
+      x[FP_SLOT] = m * p.gUse + Math.max(0, V.SEASON_G - p.gUse) * ctx.ilFill * rep;
+      pv[FP_SLOT] = projVar(p, p.gUse, w);
+      return Object.assign({}, p, { x, pv, fieldV: x[FP_SLOT], boardRaw: x[FP_SLOT] });
+    });
+    const vctx = Object.assign({}, ctx), set = (a, v) => { const o = new Float64Array(Eng.NC); o[FP_SLOT] = v; return o; };
+    vctx.idioNoise = set(0, nz.idio); vctx.loadS = set(0, nz.load); vctx.h2hNoise = set(0, nz.h2h);
+    vctx.pgRepl = set(0, rep); vctx.streamK = new Float64Array(Eng.NC).fill(1);
+    return { P: view, ctx: vctx };
+  }
+
+  // a stat line at `games` season games as a team-total entry (IL fill off): the points version of Engine.entryVec
+  function entry(l, games, ctx, w) {
+    const x = new Float64Array(Eng.NC), pv = new Float64Array(Eng.NC);
+    x[FP_SLOT] = perGame(l, w) * games; pv[FP_SLOT] = projVar(l, games, w);
+    return { x, pv };
+  }
+
+  const api = { FP_SLOT, noise, engineView, entry, STATS, RHO, DISP, statsOf, perGame, pgVar, projVar, weekVar, key };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Points = api;
 })(this);
