@@ -101,6 +101,27 @@ const before = {};
   // a second quick swap leaves no stale cells
   await p.click('#reset'); await scored(p);
   ok((await keys(p)).join() === before.keys.join() && (await winCol(p)).join() === before.win.join(), 'Reset restores the saved roster and its Win numbers');
+
+  // moving players: the slot select, drag onto a group header, the over-limit warning
+  const grp = async slot => p.$eval('tr.grp[data-slot="' + slot + '"] td', e => e.textContent);
+  const nActive = async () => +(/\((\d+)/.exec(await grp('active')) || [])[1];
+  ok((await p.$$eval('tr.grp', g => g.length)) === 4, 'all four slot headers show');
+  const a0 = await nActive(), benchBefore = await grp('bench');
+  const mv = await p.$eval('tr[data-key] select.slot', s => { const o = [...s.options].find(x => x.value !== s.value); return { key: s.dataset.key, to: o.value, from: s.value }; });
+  await p.selectOption('select.slot[data-key="' + mv.key + '"]', mv.to); await scored(p);
+  ok((await p.$eval('select.slot[data-key="' + mv.key + '"]', s => s.value)) === mv.to, 'the slot select moves the player');
+  ok((await p.$$eval('select.slot', s => s.every(x => x.title && x.getAttribute('aria-label')))), 'every slot select has a tooltip and a label');
+  await p.click('#reset'); await scored(p);
+  ok(await nActive() === a0 && (await grp('bench')) === benchBefore, 'Reset restores the slot counts');
+  const benchKey = await p.$eval('tr[data-key] select.slot option[value="bench"]:checked', o => o.parentElement.dataset.key).catch(() => null);
+  if (benchKey) {
+    await p.dragAndDrop('tr[data-key="' + benchKey + '"]', 'tr.grp[data-slot="active"]'); await scored(p);
+    ok((await p.$eval('select.slot[data-key="' + benchKey + '"]', s => s.value)) === 'active' && await nActive() === a0 + 1, 'dragging a row onto a group header moves it');
+  }
+  for (const k of await p.$$eval('select.slot', s => s.map(x => x.dataset.key))) { await p.selectOption('select.slot[data-key="' + k + '"]', 'active'); }
+  ok(/over the limit/.test(await grp('active')) && /\d+ \/ \d+/.test(await grp('active')), 'Active over the league limit shows the warning');
+  ok((await p.$$eval('tr.grp td', t => t.every(x => x.title))), 'every group header has a tooltip');
+  await p.click('#reset'); await scored(p);
   ok(await p.evaluate(() => localStorage.getItem('courtside-settings-v1') + localStorage.getItem('courtside-leagues-v1')) === before.ls, 'the saved league is untouched');
   ok(errs.length === 0, 'no page errors after swaps ' + errs.join('; '));
 

@@ -60,6 +60,10 @@ td.l small{color:var(--muted);font-size:.72rem;margin-left:6px}
 tbody tr:hover td{background:var(--sunk)}
 tr.grp td{text-align:left;background:var(--sunk);font:600 .78rem var(--f-body);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 tr.tot td{font-weight:600;border-top:1px solid var(--ink)}
+tr.grp td.over{color:var(--warn)}
+tr.grp.drop td{outline:2px dashed var(--accent);outline-offset:-2px}
+tr[draggable=true]{cursor:grab}
+select.slot{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:1px 2px;font-size:.78rem;margin-left:6px;color:var(--ink)}
 td.dim,tr.hypo td.hy{opacity:.5}
 .chip{display:inline-block;min-width:3.4em;padding:2px 5px;border-radius:4px;font-weight:500;text-align:center;line-height:1.3}
 .pos-n{color:var(--good)}.neg-n{color:var(--bad)}
@@ -118,6 +122,8 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
       <p>A measure of your team's makeup, not of the player's health. Each night only as many players as the league's active limit can start, so with more players than slots the best per-game players take the slots and the rest sit. Plays % is the share of his team's remaining games he gets a slot for: your best players are near 100%, your worst get the least. Bench players get the nights the active players leave open. IL and Reserve rows are dimmed: they show what the player would get as one more bench player, and they count for nothing until moved.</p>
       <h4>Stats and the Plays % box</h4>
       <p>Per game shows each player's projected line. Rest of season multiplies it by his projected games left. With "Adjust player stats by Plays %" checked, every player's stats and Z are also multiplied by his Plays %. Unchecked, the player rows are untouched and only the team values use Plays %.</p>
+      <h4>Moving players</h4>
+      <p>Each row has a slot select (Active, Bench, IL, Reserve); you can also drag a row onto another group's header. Moves are a preview, and Plays %, the team average, Win C, Win M and the matrix all follow. Active may go over the league's limit: the header turns orange ("Active (11 / 10)") and the extra players simply sit some nights, as Plays % shows.</p>
       <h4>Team average</h4>
       <p>The last row of the table. It always uses Plays %: a player adds his line in proportion to how often he plays, per lineup slot. Its Z is the same Plays %-weighted average of the players' Z; its Win C and Win M are your average over all opponents (the Average column of the matrix). Reserve and IL players add nothing.</p>
      </section>
@@ -133,7 +139,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
      </section>
     <section class="how-card">
       <h3>Z and category weights</h3>
-      <p>Z is the Rankings Zscore (Standard, per game). The weights are a punt lens: 1 counts a category fully, 0 leaves it out of the Z total. They only change Z and the Z order; Win C, Win M and the matrix always count every category.</p>
+      <p>Z is the Rankings Zscore (Standard, per game). The Z button above the table swaps the stat columns for each category's weighted Z, which add up to the Z column. The weights are a punt lens: 1 counts a category fully, 0 leaves it out of the Z total. They only change Z and the Z order; Win C, Win M and the matrix always count every category.</p>
       <h3 style="margin-top:14px">Swapping players</h3>
       <p>Type part of a name in Send out (your roster) and Bring in (every other player), press Enter or click to add chips, then Apply swap. Any number can go out and in. Incoming players land on the bench. Accents and capitals don't matter.</p>
     </section>
@@ -145,7 +151,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   <section class="panel" aria-label="League and team">
     <div class="ctl">
       <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
-      <label class="f" for="team">Your team<select id="team"></select></label>
+      <label class="f" for="team">Your team<select id="team" title="Preview another team's roster"></select></label>
     </div>
     <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
     <div class="fresh" id="fresh"></div>
@@ -158,12 +164,12 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
         <span class="seg" id="view" role="group" aria-label="Stat view"><button type="button" data-v="game">Per game</button><button type="button" data-v="ros">Rest of season</button></span>
         <span class="seg" id="zview" role="group" aria-label="Columns show"><button type="button" data-z="stats" title="Show each player's projected stats">Stats</button><button type="button" data-z="z" title="Show each category's Z score, weighted, adding up to the Z column">Z</button></span>
         <label class="chk" for="adj" title="Multiply each player's stats and Z by his Plays %"><input type="checkbox" id="adj"> Adjust player stats by Plays %</label>
-        <button class="btn" type="button" id="reset">Reset roster</button>
+        <button class="btn" type="button" id="reset" title="Put back the roster saved on Fantrax">Reset roster</button>
       </div>
-      <details class="wts"><summary>Category weights (punt lens)</summary>
+      <details class="wts"><summary title="Sliders that leave categories out of the Z total (a punt lens)">Category weights (punt lens)</summary>
         <div class="wgrid" id="wgrid"></div>
         <p class="hint">Weights change Z and the Z order only, never Win C or Win M.</p>
-        <button class="btn" type="button" id="wreset" style="margin-top:8px">Reset weights</button>
+        <button class="btn" type="button" id="wreset" title="Set every category weight back to 1" style="margin-top:8px">Reset weights</button>
       </details>
       <div class="scroll"><table id="roster"></table></div>
       <p class="hint" id="rost-note"></p>
@@ -172,10 +178,10 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
     <section class="panel" aria-label="Swap players">
       <h2>Swap players <span class="meta">Preview only</span></h2>
       <div class="swap">
-        <div class="swapbox"><label class="f" for="out-in">Send out<input type="text" id="out-in" placeholder="Type a name" autocomplete="off"></label><ul class="suggest" id="out-sug"></ul><ul class="chiplist" id="out-chips"></ul></div>
-        <div class="swapbox"><label class="f" for="in-in">Bring in<input type="text" id="in-in" placeholder="Type a name" autocomplete="off"></label><ul class="suggest" id="in-sug"></ul><ul class="chiplist" id="in-chips"></ul></div>
+        <div class="swapbox"><label class="f" for="out-in">Send out<input type="text" id="out-in" title="Type part of a name; Enter adds the top match" placeholder="Type a name" autocomplete="off"></label><ul class="suggest" id="out-sug"></ul><ul class="chiplist" id="out-chips"></ul></div>
+        <div class="swapbox"><label class="f" for="in-in">Bring in<input type="text" id="in-in" title="Type part of a name; Enter adds the top match" placeholder="Type a name" autocomplete="off"></label><ul class="suggest" id="in-sug"></ul><ul class="chiplist" id="in-chips"></ul></div>
       </div>
-      <div class="ctl"><button class="btn primary" type="button" id="apply" disabled>Apply swap</button></div>
+      <div class="ctl"><button class="btn primary" type="button" id="apply" disabled title="Make the swap in the preview (nothing is sent to Fantrax)">Apply swap</button></div>
       <p class="msg" id="swap-msg" role="status"></p>
     </section>
 
@@ -215,9 +221,9 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
   const signed = (v, d) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(d == null ? 1 : d);
   const sgn = v => v > 0.005 ? 'pos-n' : v < -0.005 ? 'neg-n' : '';
-  const chip = (q, txt) => { const d = q - .5, t = Math.min(1, Math.abs(d) / .25);
+  const chip = (q, txt, tip) => { const d = q - .5, t = Math.min(1, Math.abs(d) / .25);
     const bg = Math.abs(d) < .015 ? 'transparent' : 'color-mix(in oklab, var(' + (d > 0 ? '--good' : '--bad') + ') ' + Math.round(12 + 58 * t) + '%, var(--surface))';
-    return '<span class="chip" style="background:' + bg + '">' + txt + '</span>'; };
+    return '<span class="chip" style="background:' + bg + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + txt + '</span>'; };
 
   let SS = LS.load(LS.local.get), L = null, rosters = null, pool = null, ctx = null, espn = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0, fetchedAt = null;
   let me = null, base = null, state = null, zmap = new Map(), scorer = TV.createScorer(), outs = [], ins = [], tickJob = null, tickSeq = 0;
@@ -295,15 +301,17 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   const pctTxt = p => p == null ? '–' : Math.round(p * 100) + '%';
 
   function rosterHtml(r, job) {
-    const head = '<thead><tr><th class="l">Player</th><th title="Projected remaining games">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th>' + c + '</th>').join('') +
+    const head = '<thead><tr><th class="l">Player</th><th title="Projected remaining games">GL</th><th title="Share of his team\'s games he gets a lineup slot for">Plays %</th>' + CATN.slice(0, nCats()).map(c => '<th title="' + (ui.zview === 'z' ? c + ': his weighted Z in this category' : c + ': projected ' + (ui.view === 'ros' ? 'rest-of-season total' : 'per-game value')) + '">' + c + '</th>').join('') +
       '<th class="sortable" id="th-z" title="Zscore, weighted by the category weights; click to sort by it"' + (ui.sortZ ? ' aria-sort="descending"' : '') + '>Z</th><th title="Win C (hundredths) he adds over an average player in his place">Win C</th><th title="Win M (points) he adds over an average player in his place">Win M</th></tr></thead>';
     const nc = nCats(), cols = 3 + nc + 3, body = [], zv = ui.zview === 'z', wts = ui.weights, parts = x => TV.zParts(x.cats, wts, nc);
+    const cnt = TV.slotCounts(state, ctx.L.maxActive);
     r.groups.forEach(g => {
-      if (!g.rows.length) return;
-      body.push('<tr class="grp"><td colspan="' + cols + '">' + SLOT_NAME[g.slot] + ' (' + g.rows.length + ')</td></tr>');
+      const c = cnt[g.slot], lim = g.slot === 'active' ? ' / ' + ctx.L.maxActive : '';
+      body.push('<tr class="grp" data-slot="' + g.slot + '"><td colspan="' + cols + '"' + (c.over ? ' class="over" title="More Active players than the league allows each night; the extra ones sit some nights"' : ' title="Drop a player here to move him to ' + SLOT_NAME[g.slot] + '"') + '>' + SLOT_NAME[g.slot] + ' (' + g.rows.length + lim + ')' + (c.over ? ' · over the limit' : '') + '</td></tr>');
       (ui.sortZ ? g.rows.slice().sort((a, b) => (b.z == null ? -1e9 : b.z) - (a.z == null ? -1e9 : a.z)) : g.rows).forEach(x => {
         const w = job.players[x.key], dim = x.hypo ? ' class="hy"' : '';
-        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + '</small></td><td>' + x.gl.toFixed(0) + '</td>' +
+        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + '</small>' +
+          '<select class="slot" data-key="' + esc(x.key) + '" aria-label="Slot for ' + esc(x.n) + '" title="Move ' + esc(x.n) + ' to another slot (or drag the row onto a group header)">' + Object.keys(SLOT_NAME).map(sl => '<option value="' + sl + '"' + (sl === x.slot ? ' selected' : '') + '>' + SLOT_NAME[sl] + '</option>').join('') + '</select></td><td>' + x.gl.toFixed(0) + '</td>' +
           '<td' + (x.hypo ? ' class="dim" title="What he would get as one more bench player"' : '') + '>' + pctTxt(x.pct) + '</td>' +
           RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo || (zv && wts[c] === 0) ? ' class="dim"' : '') + '>' + (zv ? (x.cats ? signed(parts(x)[c], 2) : '–') : fmtStat(x.stat[k], c)) + '</td>').join('') +
           '<td>' + (x.z == null ? '–' : signed(x.z, 2)) + '</td>' +
@@ -320,10 +328,10 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
     const m = job.matrix, nc = nCats();
     if (!job.matrix) return '<tbody><tr><td class="l">Scoring…</td></tr></tbody>';
     if (!m.mean) return '<tbody><tr><td class="l">No regular-season weeks are left.</td></tr></tbody>';
-    const cell = p => p == null ? '–' : chip(p, (p * 100).toFixed(0) + '%');
-    let h = '<thead><tr><th class="l"></th>' + m.teams.map(t => '<th title="' + esc(teamName(t.id)) + '">' + esc(teamName(t.id).slice(0, 12)) + '</th>').join('') + '<th>Average</th></tr></thead><tbody>';
-    for (let c = 0; c < nc; c++) h += '<tr><td class="l">' + CATN[c] + '</td>' + m.teams.map(t => '<td>' + cell(t.cat[c]) + '</td>').join('') + '<td>' + cell(m.mean.cat[c]) + '</td></tr>';
-    h += '<tr class="tot"><td class="l">Win M</td>' + m.teams.map(t => '<td>' + cell(t.match) + '</td>').join('') + '<td>' + cell(m.mean.match) + '</td></tr></tbody>';
+    const cell = (p, tip) => p == null ? '–' : chip(p, (p * 100).toFixed(0) + '%', tip);
+    let h = '<thead><tr><th class="l"></th>' + m.teams.map(t => '<th title="' + esc(teamName(t.id)) + '">' + esc(teamName(t.id).slice(0, 12)) + '</th>').join('') + '<th title="Your average over all the other teams">Average</th></tr></thead><tbody>';
+    for (let c = 0; c < nc; c++) h += '<tr><td class="l">' + CATN[c] + '</td>' + m.teams.map(t => '<td>' + cell(t.cat[c], 'Your chance to win ' + CATN[c] + ' against ' + teamName(t.id)) + '</td>').join('') + '<td>' + cell(m.mean.cat[c], 'Your average chance to win ' + CATN[c] + ' over all teams') + '</td></tr>';
+    h += '<tr class="tot"><td class="l">Win M</td>' + m.teams.map(t => '<td>' + cell(t.match, 'Your chance to win the match against ' + teamName(t.id)) + '</td>').join('') + '<td>' + cell(m.mean.match, 'Your average chance to win a match over all teams') + '</td></tr></tbody>';
     return h;
   }
 
@@ -366,7 +374,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   }
   function renderSwap() {
     [['out', outs], ['in', ins]].forEach(([w, chips]) => {
-      $(w + '-chips').innerHTML = chips.map(c => '<li>' + esc(c.n) + '<button type="button" data-k="' + esc(c.key) + '" aria-label="Remove ' + esc(c.n) + '">×</button></li>').join('');
+      $(w + '-chips').innerHTML = chips.map(c => '<li>' + esc(c.n) + '<button type="button" data-k="' + esc(c.key) + '" title="Remove ' + esc(c.n) + ' from the swap" aria-label="Remove ' + esc(c.n) + '">×</button></li>').join('');
     });
     $('apply').disabled = !(outs.length || ins.length);
   }
@@ -382,6 +390,14 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   });
   $('reset').addEventListener('click', () => { state = base; outs = []; ins = []; $('swap-msg').textContent = ''; render(); });
 
+  // ---- moving players between slots: the row's select, or drag the row onto a group header ----
+  const moveTo = (key, slot) => { if (!(key in state.slots) || !SLOT_NAME[slot]) return; const s2 = TV.move(state, key, slot); if (s2 !== state) { state = s2; render(); } };
+  $('roster').addEventListener('change', e => { const s = e.target.closest('select.slot'); if (s) moveTo(s.dataset.key, s.value); });
+  $('roster').addEventListener('dragstart', e => { const tr = e.target.closest && e.target.closest('tr[data-key]'); if (!tr) return; e.dataTransfer.setData('text/plain', tr.dataset.key); e.dataTransfer.effectAllowed = 'move'; });
+  $('roster').addEventListener('dragover', e => { const g = e.target.closest('tr.grp'); if (!g) return; e.preventDefault(); g.classList.add('drop'); });
+  $('roster').addEventListener('dragleave', e => { const g = e.target.closest('tr.grp'); if (g) g.classList.remove('drop'); });
+  $('roster').addEventListener('drop', e => { const g = e.target.closest('tr.grp'); if (!g) return; e.preventDefault(); g.classList.remove('drop'); moveTo(e.dataTransfer.getData('text/plain'), g.dataset.slot); });
+
   // ---- controls ----
   function viewButtons() { document.querySelectorAll('#view button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.view)); document.querySelectorAll('#zview button').forEach(b => b.classList.toggle('on', b.dataset.z === ui.zview)); }
   $('zview').addEventListener('click', e => { const b = e.target.closest('button[data-z]'); if (!b) return; ui.zview = b.dataset.z; save(); viewButtons(); draw(); });
@@ -389,7 +405,7 @@ details.wts summary{cursor:pointer;font-weight:600;font-size:.9rem}
   $('adj').checked = ui.adjust; viewButtons();
   $('adj').addEventListener('change', () => { ui.adjust = $('adj').checked; save(); draw(); });
   function weightsHtml() {
-    $('wgrid').innerHTML = CATN.map((c, i) => '<label>' + c + ' <output id="wo' + i + '">' + ui.weights[i].toFixed(2) + '</output><input type="range" min="0" max="1" step="0.05" value="' + ui.weights[i] + '" data-c="' + i + '" aria-label="' + c + ' weight"></label>').join('');
+    $('wgrid').innerHTML = CATN.map((c, i) => '<label>' + c + ' <output id="wo' + i + '">' + ui.weights[i].toFixed(2) + '</output><input type="range" min="0" max="1" step="0.05" value="' + ui.weights[i] + '" data-c="' + i + '" title="' + c + ' weight: 1 counts it fully in Z, 0 leaves it out" aria-label="' + c + ' weight"></label>').join('');
   }
   weightsHtml();
   $('wgrid').addEventListener('input', e => { const i = e.target.dataset.c; if (i == null) return; ui.weights[+i] = +e.target.value; $('wo' + i).textContent = (+e.target.value).toFixed(2); save(); draw(); });
