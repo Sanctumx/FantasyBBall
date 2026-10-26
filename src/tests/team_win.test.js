@@ -231,3 +231,13 @@ test('avg: no worst-player rule (nobody is forced to 0); rep still has one', () 
   assert.ok(avg.filter(r => st.slots[r.key] === 'active').every(r => r.dM !== 0));   // a Reserve player with no nights adds exactly 0 either way
   assert.ok(rep.some(r => r.dM === 0));
 });
+
+test('engCtxFrom / evalVecs: the pieces calib_ros.js reuses give the matrix numbers', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), Wk = W.weeksLeft(ctx);
+  assert.strictEqual(typeof W.engCtxFrom, 'function'); assert.strictEqual(typeof W.evalVecs, 'function'); assert.strictEqual(typeof W.teamVec, 'function');
+  const e = W.engCtxFrom(ctx.pool.players.filter(p => p.g > 0).map(p => Object.assign({}, p.line, { g: p.g })), Object.keys(ctx.roster).length, ctx.L.maxActive, 9);
+  const vecs = [W.teamVec(e, W.side(ctx, st, Wk))].concat(Object.keys(ctx.roster).filter(t => t !== ctx.me).map(t => W.teamVec(e, W.side(ctx, W.oppState(ctx, t, new Set(st.order)), Wk))));
+  const out = W.evalVecs(e, vecs), m = W.matrix(ctx, st, {});
+  assert.ok(Math.abs(out.pairProb(out.teams[0], out.teams[1]) - m.teams[0].match) < 0.02);   // a different pool order gives a nearby context, not an identical one
+  assert.ok(Math.abs(out.catProb(out.teams[0], out.teams[1], 0) + out.catProb(out.teams[1], out.teams[0], 0) - 1) < 1e-9);
+});

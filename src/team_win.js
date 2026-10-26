@@ -19,12 +19,17 @@
     if (!by[nc]) {
       const N = Object.keys(ctx.roster).length, R = ctx.L.maxActive, adp = p => p.adp == null ? 1e9 : p.adp;
       const list = ctx.pool.players.filter(p => p.g > 0).sort((a, b) => (a.owner ? 0 : 1) - (b.owner ? 0 : 1) || adp(a) - adp(b));
-      const P = Eng.prepPlayers(list.map((p, i) => Object.assign({}, p.line, { g: p.g, ftx: i + 1 })));
-      const cfg = { teams: N, roster: R, slot: 1, order: '3rr', scoring: 'h2h', cats: nc, ilSpots: 0, field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '',
-        catW: InPlayers.WEIGHTS.slice(), adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0, basis: 'total' };
-      by[nc] = { ctx: Eng.buildContext(P, cfg), cfg };
+      by[nc] = engCtxFrom(list.map(p => Object.assign({}, p.line, { g: p.g })), N, R, nc);
     }
     return by[nc];
+  }
+
+  // the engine context of a list of stat lines (with g) in draft order: N teams of R players, nc categories. engCtx's body, shared with calib_ros.js
+  function engCtxFrom(lines, N, R, nc) {
+    const P = Eng.prepPlayers(lines.map((p, i) => Object.assign({}, p, { ftx: i + 1 })));
+    const cfg = { teams: N, roster: R, slot: 1, order: '3rr', scoring: 'h2h', cats: nc, ilSpots: 0, field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '',
+      catW: InPlayers.WEIGHTS.slice(), adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0, basis: 'total' };
+    return { ctx: Eng.buildContext(P, cfg), cfg };
   }
 
   // one team's forecast: the sum of its entries' category vectors and projection variances. Entries are { p: stat line, games per
@@ -81,14 +86,19 @@
   function matrixOf(ctx, mine, exclude, W, o) {
     const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc), ids = Object.keys(ctx.roster).filter(t => t !== ctx.me);
     const tv = [teamVec(e, mine)].concat(ids.map(id => oppTeam(ctx, e, nc, id, exclude, W)));
-    const pl = tv.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
-    const out = Eng.evaluate(pl, e.ctx, Object.assign({}, e.cfg, { teams: pl.length, roster: 1, slot: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
+    const out = evalVecs(e, tv);
     const teams = ids.map((id, i) => {
       const A = out.teams[0], B = out.teams[i + 1], cat = Array.from({ length: 9 }, (_, c) => c >= nc ? null : out.catProb(A, B, c));
       return { id, cat, match: out.pairProb(A, B), winC: cat.reduce((s, v) => s + (v == null ? 0 : v), 0) };
     });
     const avg = f => teams.reduce((s, t) => s + f(t), 0) / (teams.length || 1);
     return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
+  }
+
+  // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb
+  function evalVecs(e, vecs) {
+    const pl = vecs.map((t, i) => ({ id: i, x: t.mu, pv: t.v, adpUse: 1, sd: 1, adpE: 1, sdE: 1, fieldV: 0, boardRaw: 0 }));
+    return Eng.evaluate(pl, e.ctx, Object.assign({}, e.cfg, { teams: pl.length, roster: 1, slot: 1 }), { picks: pl.map((_, i) => i), owner: pl.map((_, i) => i) });
   }
 
   const dCats = (a, b) => a.mean.cat.map((v, c) => v == null ? 0 : 100 * (v - b.mean.cat[c]));
@@ -195,6 +205,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { engCtxFrom, teamVec, evalVecs, weeksLeft, oppState, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
