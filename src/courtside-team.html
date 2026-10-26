@@ -58,6 +58,7 @@ th[aria-sort="descending"]::after{content:" ▼";font-size:.6rem}
 td.l,th.l{text-align:left}
 td.l{font:13px var(--f-body);padding-right:10px}
 td.l small{color:var(--muted);font-size:.72rem;margin-left:6px}
+td.l small b{color:var(--warn);font-weight:600}
 tbody tr:hover td{background:var(--sunk)}
 tr.grp td{text-align:left;background:var(--sunk);font:600 .78rem var(--f-body);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 tr.tot td{font-weight:600;border-top:1px solid var(--ink)}
@@ -134,6 +135,8 @@ tr.lrow{cursor:pointer}
       <p>The games the player is projected to play from now to the end of the NBA season (not just the league's last regular week): his team's remaining games times his projected games over 82. That already covers injuries and rest, so Plays % is not applied to it.</p>
       <h4>Plays %</h4>
       <p>A measure of your team's makeup, not of the player's health. Each night only as many players as the league's active limit can start, so with more players than slots the best per-game players take the slots and the rest sit. Plays % is the share of his team's remaining games he gets a slot for: your best players are near 100%, your worst get the least. Reserve players get the nights the active players leave open. IL rows are dimmed: they show what the player would get as one more reserve player, and they count for nothing until moved.</p>
+      <h4>Source</h4>
+      <p>Which lines judge the players. Projections (Average, BBM or Hashtag; the default is the average) are what the Win numbers were calibrated on. Season to date and the recent-games windows (last week, 2 weeks, month) use the 2026-27 box scores: stats, Zscore, Plays %, Win C and Win M all follow, but games left still come from the projections, and the Win numbers from recent games are uncalibrated (small samples swing them). A player with no game in the window keeps his projection line and is marked proj. Switching source keeps your swaps and the Changes list; the Rankings tab has its own Source.</p>
       <h4>Stats and the Plays % box</h4>
       <p>Per game shows each player's projected line. Rest of season multiplies it by his projected games left. With "Adjust player stats by Plays %" checked, every player's stats and Z are also multiplied by his Plays %. Unchecked, the player rows are untouched and only the team values use Plays %.</p>
       <h4>Moving players</h4>
@@ -173,6 +176,10 @@ tr.lrow{cursor:pointer}
     <div class="ctl">
       <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
       <label class="f" for="team">Your team<select id="team" title="Preview another team's roster"></select></label>
+      <label class="f" for="src">Source<select id="src" title="Which lines judge the players. Projections (the default) are what the Win numbers were calibrated on; the box-score sources show recent form, and their Win numbers are uncalibrated. A player with no game in the source keeps his projection line (marked proj).">
+        <option value="season">Season to date</option>
+        <optgroup label="Recent games"><option value="w7">Last week</option><option value="w14">Last 2 weeks</option><option value="w30">Last month</option></optgroup>
+        <optgroup label="Projections"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></optgroup></select></label>
     </div>
     <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
     <div class="fresh" id="fresh"></div>
@@ -3111,9 +3118,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   $('sitenav').outerHTML = Shared.TOOLBAR_HTML('team');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-team-v1';
-  let ui = { view: 'game', zview: 'stats', adjust: false, weights: null, sort: null, team: null, listVs: 'rep', lown: 'all' };
+  let ui = { view: 'game', zview: 'stats', adjust: false, weights: null, sort: null, team: null, listVs: 'rep', lown: 'all', src: 'avg' };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.view = ui.view === 'ros' ? 'ros' : 'game'; ui.zview = ui.zview === 'z' ? 'z' : 'stats'; ui.adjust = !!ui.adjust; if (ui.sortZ) ui.sort = { col: 'z', dir: 'desc' }; delete ui.sortZ; ui.sort = ui.sort && /^(n|gl|pct|mpg|z|wc|wm|c[0-8])$/.test(ui.sort.col) ? { col: ui.sort.col, dir: ui.sort.dir === 'asc' ? 'asc' : 'desc' } : null; ui.team = typeof ui.team === 'string' ? ui.team : null;
+  ui.src = R.SOURCES.includes(ui.src) ? ui.src : 'avg';
   ui.listVs = ui.listVs === 'avg' ? 'avg' : 'rep'; ui.lown = typeof ui.lown === 'string' ? ui.lown : 'all';
   ui.weights = Array.isArray(ui.weights) && ui.weights.length === 9 && ui.weights.every(v => v >= 0 && v <= 1) ? ui.weights.map(Number) : new Array(9).fill(1);
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
@@ -3144,7 +3152,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const stats = loadStats(); let shown = false;
     // draws the page from [league, rosters, players] fetched at `at`
     const build = async (b, at) => {
-      const sp = await stats; if (seq !== loadSeq) return false;
+      const sp = await stats; await needBox(); if (seq !== loadSeq) return false;
       L = InL.parseLeague(b[0]); rosters = InL.parseRosters(b[1]); fxPlayers = b[2]; espn = sp; fetchedAt = new Date(at);
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
       fxWait = 0; say(''); start(); return true;
@@ -3191,12 +3199,23 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const pw = () => LS.isPoints(SS.settings) ? SS.settings.pointVals : null, ptKey = () => pw() ? Points.key(pw()) : '';
   const winOpts = () => ({ cats: nCats(), baseline: 'avg', points: pw() });
   const teamName = id => { const t = L.teams.find(q => q.id === id); return t ? t.name : id; };
-  const zCats = pp => (pp.pid != null && zmap.has(pp.pid) ? zmap.get(pp.pid) : null);
+  const zCats = pp => (zmap.has(pp.key) ? zmap.get(pp.key) : null);
+
+  // sources (2026-10-26): the monthly box-score files load only when a box-score source is picked; rows and Zscore tables are kept per source
+  let box = null, boxP = null;
+  const needBox = () => R.WINDAYS[ui.src] ? (boxP = boxP || R.loadBox(fetch).then(b => (box = b))) : Promise.resolve();
+  const srcCache = new Map(), srcWin = src => { const k = 'win:' + src; if (!srcCache.has(k)) srcCache.set(k, R.windowSource(box || [], R.WINDAYS[src], PLAYERS)); return srcCache.get(k); };
+  const srcRows = src => { const k = 'rows:' + src; if (!srcCache.has(k)) srcCache.set(k, R.WINDAYS[src] ? srcWin(src).rows : R.projSource(PLAYERS, src)); return srcCache.get(k); };
+  const SRC_NAME = { season: 'Season to date', w7: 'Last week', w14: 'Last 2 weeks', w30: 'Last month', avg: 'BBM + Hashtag average', bbm: 'BBM', hs: 'Hashtag' };
+  // the category Zscores of the roster table: the source's own table; a player with no game in it keeps his projection Zscore
+  function mkZ() {
+    zmap = new Map(); if (pw()) return;
+    const s = SS.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: 'pergame' };
+    const add = (src, over) => { const rows = srcRows(src), byPid = R.matchRows(src, rows, pool, fxPlayers).byPid; R.table(rows, opt).forEach(x => { if (!x.cats) return; const k = byPid.get(x.pid); if (k && (over || !zmap.has(k))) zmap.set(k, x.cats); }); };
+    add(ui.src, true); if (ui.src !== 'avg') add('avg', false);
+  }
 
   function start() {
-    const s = SS.settings || {};
-    zmap = new Map();
-    if (!pw()) R.table(R.projSource(PLAYERS, 'avg'), { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: 'pergame' }).forEach(x => { if (x.cats) zmap.set(x.pid, x.cats); });
     const ids = L.teams.map(t => t.id);
     $('team').innerHTML = ids.map(id => '<option value="' + esc(id) + '">' + esc(teamName(id)) + '</option>').join('');
     me = LS.pickTeam(ui.team, ids, LS.defaultTeam(LS.local.get, SS.league.id)); $('team').value = me;
@@ -3212,15 +3231,23 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const parts = [];
     parts.push('<span>' + (fxChecking ? 'Rosters from ' + fetchedAt.toTimeString().slice(0, 5) + ', checking Fantrax…' : 'Rosters fetched at ' + fetchedAt.toTimeString().slice(0, 5)) + '</span>');
     parts.push(espn ? '<span>Stats: ESPN ' + esc(espn.label) + '</span>' : '<span class="warn">No actual stats loaded</span>');
-    parts.push('<span>Projections: BBM + Hashtag average</span>');
+    if (R.WINDAYS[ui.src]) {
+      const wn = srcWin(ui.src);
+      parts.push(wn.rows.length ? '<span>Source: ' + SRC_NAME[ui.src] + ' (' + esc(wn.from) + ' to ' + esc(wn.to) + ')</span><span class="warn" title="The Win numbers were calibrated on projections">Win numbers from recent games are uncalibrated</span>' : '<span class="warn">No games in the box-score files yet; players keep their projections</span>');
+    } else parts.push('<span>Projections: ' + SRC_NAME[ui.src] + '</span>');
     $('fresh').innerHTML = parts.join('');
   }
   // a fresh context (never mutated afterwards); in points a crowded night goes to the better points player. Its scorer cache goes with it.
-  function mkCtx() {
-    const w = pw();
-    ctx = Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [], nightOf: w ? pp => Points.perGame(pp.line, w) : undefined });
-    scorer = TV.createScorer();
+  // One context per source, kept until the roster data, the team or the point values change; switching back to a source reuses its scored jobs.
+  let ctxs = new Map();
+  function srcCtx() {
+    if (!ctxs.has(ui.src)) {
+      const w = pw();
+      ctxs.set(ui.src, TV.sourceCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me, nowMs: Date.now(), box: [], nightOf: w ? pp => Points.perGame(pp.line, w) : undefined }, ui.src, srcRows(ui.src), fxPlayers));
+    }
+    ctx = ctxs.get(ui.src); mkZ();
   }
+  function mkCtx() { ctxs = new Map(); srcCtx(); scorer = TV.createScorer(); }
   // a new team or Reset: the saved roster as the preview
   function setTeam(id) {
     me = id; ui.team = id; save();
@@ -3231,7 +3258,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? String(Math.round(v)) : v.toFixed(1));
   const statCells = s => RAWK.map((k, c) => '<td>' + fmtStat(s[k], c) + '</td>').join('');
-  const pctTxt = p => p == null ? '–' : Math.round(p * 100) + '%';
+  const fb = key => { const pp = ctx.pool.byKey.get(key); return !!(pp && pp.lineFb); };
+  const pctTxt =p => p == null ? '–' : Math.round(p * 100) + '%';
 
   // the roster table's click-to-sort: first click = the column's natural order (names A-Z, numbers high first), second flips it, third clears
   function sortedRows(rows, job, zv, parts) {
@@ -3254,7 +3282,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       body.push('<tr class="grp" data-slot="' + g.slot + '"><td colspan="' + cols + '"' + (c.over ? ' class="over" title="More Active players than the roster allows"' : ' title="Drop a player here to move him to ' + SLOT_NAME[g.slot] + '"') + '>' + SLOT_NAME[g.slot] + ' (' + g.rows.length + lim + ')' + (c.over ? ' · over the limit' : '') + '</td></tr>');
       sortedRows(g.rows, job, zv, parts).forEach(x => {
         const w = job.players[x.key], dim = x.hypo ? ' class="hy"' : '';
-        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + '</small>' +
+        body.push('<tr' + (x.hypo ? ' class="hypo"' : '') + ' data-key="' + esc(x.key) + '" draggable="true"><td class="l">' + esc(x.n) + '<small>' + esc(x.t || '') + ' ' + esc(x.pos || '') + (fb(x.key) ? ' <b title="No game in this source; his projection line is used">proj</b>' : '') + '</small>' +
           '<select class="slot" data-key="' + esc(x.key) + '" aria-label="Slot for ' + esc(x.n) + '" title="Move ' + esc(x.n) + ' to another slot (or drag the row onto a group header)">' + Object.keys(SLOT_NAME).map(sl => '<option value="' + sl + '"' + (sl === x.slot ? ' selected' : '') + '>' + SLOT_NAME[sl] + '</option>').join('') + '</select></td><td>' + x.gl.toFixed(0) + '</td>' +
           '<td' + (x.hypo ? ' class="dim" title="What he would get as one more reserve player"' : '') + '>' + pctTxt(x.pct) + '</td><td>' + (x.mpg == null ? '–' : x.mpg.toFixed(1)) + '</td>' +
           RAWK.slice(0, nc).map((k, c) => '<td' + (x.hypo || (zv && wts[c] === 0) ? ' class="dim"' : '') + '>' + (zv ? (x.cats ? signed(parts(x)[c], 2) : '–') : fmtStat(x.stat[k], c)) + '</td>').join('') +
@@ -3419,6 +3447,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // ---- the list: click adds him to the swap boxes, drag swaps him in, the selects and search filter ----
   $('ltable').addEventListener('click', e => { const tr = e.target.closest('tr[data-key]'); if (!tr) return; pickFrom(tr.dataset.own ? 'out' : 'in', ctx.pool.byKey.get(tr.dataset.key)); });
   $('ltable').addEventListener('dragstart', e => { const tr = e.target.closest && e.target.closest('tr[data-key]'); if (!tr) return; e.dataTransfer.setData('text/plain', 'list:' + tr.dataset.key); e.dataTransfer.effectAllowed = 'move'; });
+  $('src').value = ui.src;
+  $('src').addEventListener('change', async () => {
+    ui.src = $('src').value; save(); await needBox();
+    if (!ctx || $('src').value !== ui.src) return;   // no league yet, or the select moved on while the box files loaded
+    srcCtx(); freshness(); render();   // the swaps, chips and Changes log stay; only the lines and the scorer's context change
+  });
   $('lvs').addEventListener('change', () => { ui.listVs = $('lvs').value; save(); drawList(); pump(); });
   $('lown').addEventListener('change', () => { ui.lown = $('lown').value; save(); drawList(); });
   $('lq').addEventListener('input', () => drawList());
