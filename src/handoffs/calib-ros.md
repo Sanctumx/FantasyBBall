@@ -38,7 +38,15 @@ Fine: memo and cache keys, pairwise chances, Rankings k scale, bundle order, spe
 - **MUST:** help text is stale: `src/app.html:352` and `src/team.html:152` still say Trade Win M averages the real matchups and differs from the Team tab; `src/app.html:354/358` (Rankings help) don't say the Win columns are shrunk.
 - **Should:** `tradeState` gives freed slots in `fids` order but the `leagueWin` memo key sorts fids, so a 2-for-2 in a different order can reuse the wrong slots: sort the incoming players first. An IL-for-healthy swap grows the counted roster by one (reserve). Revisit the 70% cap after the IL fix (back to 60% if it fits).
 
+## #147 review fixes (done 2026-10-26, committed, not pushed; 405 unit tests pass, pages rebuilt)
+
+The user dropped option (a) for a stronger rule: **an IL player counts as healthy** (Hashtag projected games already include the time he misses). Done:
+- `tradeState` (`team_win.js`): IL players (kept or incoming) take Active slots with their projected games, the Reserve refills the rest; incoming players are sorted so slots do not depend on `fids` order. Applies to every team in `leagueWin`.
+- `perceived` (`trade_core.js`): an IL player's season value = g games of his line + (82 - g) games of his owner's worst non-IL player (`InPlayers.valueZFill`); healthy players unchanged. The top-25 list no longer fills with IL targets (likelihood 34-48%).
+- Stale help text fixed (`app.html`, `team.html`). `trade_finder.test.js` likelihood test now searches every give with the cap test median < 50%, max < 70% (the old median < 30% only held on the first four gives; with IL included it still passes).
+- Team tab NOT changed: `matrix`, `oppState`, `playerWin` still leave IL out (idea #149, in the ledger, Open). So `leagueWin` equals `matrix` only without IL players (the test builds a ctx with IL set to reserve).
+
 ## Next
 
-1. User chose (a) (2026-10-26): a traded IL player counts as reserve with his Plays % games (leftover nights only; Team.playsPct already handles `il` rows as hypo reserve). Fix the items above test-first, rebuild, rerun the tests, merge on the user's word, then `ledger.mjs land` (ledger holds the #139 row, archive 139, #144-#146; update the #147 row to Partly done: Trade and Rankings built, Draft open).
+1. Wait for the user's "merge"/"push": push, PR, merge, then `ledger.mjs land` (ledger holds the #139 row, archive 139, #144-#146, #149; update the #147 row to Partly done: Trade and Rankings built, IL counted as healthy, Draft open). Run the browser checks (Team, Matchup, Trade) before the PR; `rankings_page.mjs` fails on main too (302 vs 303 players).
 2. Rankings Vs average (D2) must use `TeamWin` so it inherits the k (see `team-tab-next.md`); do not shrink twice.
