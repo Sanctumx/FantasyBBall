@@ -86,6 +86,7 @@ function scoreLeague(season, rosters, opts = {}) {
       if (slots) playing = fillSlots(playing.sort((a, b) => val[b] - val[a]), slots, opts.pos);
       else if (playing.length > active) playing = playing.sort((a, b) => val[b] - val[a]).slice(0, active);
       played[t] += playing.length;
+      if (opts.rankLog) { const ps = new Set(playing); roster.slice().sort((a, b) => val[b] - val[a]).forEach((pid, k) => { const L = opts.rankLog; L.has[k] = (L.has[k] || 0) + (byDay[pid] && byDay[pid].has(d) ? 1 : 0); L.played[k] = (L.played[k] || 0) + (ps.has(pid) ? 1 : 0); }); }
       playing.forEach(pid => { const s = byDay[pid].get(d); for (let c = 0; c < 11; c++) weekTot[t][w][c] += s[c]; });
     }
   }
