@@ -311,6 +311,12 @@ test('received: getting my own sent-out player back from his new team hands the 
   assert.deepStrictEqual(W.received(ctx, s2), { [other]: [{ key: o2, slot: 'active' }] });
 });
 
+test('oppState: the received players join in key order, so the state matches the sorted cache key', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), [o1, o2] = st.order;
+  const r = [{ key: o1, slot: 'active' }, { key: o2, slot: 'reserve' }];
+  assert.deepStrictEqual(W.oppState(ctx, other, null, r).order, W.oppState(ctx, other, null, r.slice().reverse()).order);
+});
+
 test('avg: after a trade the Vs average rows use the same opponents as the matrix (what they received, what left)', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), o1 = st.order.find(k => st.slots[k] === 'active'), a = oppActive(other);
   const sw = T.applySwap(st, [o1], [a]), su = W.moduleSetup(ctx, sw, { baseline: 'avg' }), own = sw.order.find(k => k !== a && T.COUNTED.includes(sw.slots[k]));

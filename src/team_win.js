@@ -56,7 +56,7 @@
   // recv = the players it receives in a previewed trade [{ key, slot }] (see received), who join in the slot they take
   function oppState(ctx, teamId, exclude, recv) {
     const rows = ctx.roster[teamId].filter(f => !(exclude && exclude.has(f)) && ctx.pool.byKey.get(f).slot !== 'IR').map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
-    (recv || []).filter(r => ctx.pool.byKey.get(r.key).slot !== 'IR').forEach(r => rows.push({ fid: r.key, slot: r.slot === 'active' ? 'ACTIVE' : 'RESERVE' }));
+    (recv || []).filter(r => ctx.pool.byKey.get(r.key).slot !== 'IR').sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0).forEach(r => rows.push({ fid: r.key, slot: r.slot === 'active' ? 'ACTIVE' : 'RESERVE' }));
     return Team.initState(rows);
   }
 
