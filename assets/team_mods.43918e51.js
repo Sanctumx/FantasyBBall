@@ -1070,13 +1070,14 @@
   // recv = the players it receives in a previewed trade [{ key, slot }] (see received), who join in the slot they take
   // The Team tab (ctx.teamTab) keeps his IL players (they count on the seasonal bases) and his bench is Active, as on my side (Team.tabState)
   function oppState(ctx, teamId, exclude, recv) {
+    const byKey = (a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0;   // the received players join in key order, as the cache key sorts them
     if (ctx.teamTab) {
       const rows = ctx.roster[teamId].filter(f => !(exclude && exclude.has(f))).map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
-      (recv || []).forEach(r => rows.push({ fid: r.key, slot: ctx.pool.byKey.get(r.key).slot === 'IR' ? 'IR' : 'ACTIVE' }));
+      (recv || []).slice().sort(byKey).forEach(r => rows.push({ fid: r.key, slot: ctx.pool.byKey.get(r.key).slot === 'IR' ? 'IR' : 'ACTIVE' }));
       return Team.tabState(rows);
     }
-    const rows =ctx.roster[teamId].filter(f => !(exclude && exclude.has(f)) && ctx.pool.byKey.get(f).slot !== 'IR').map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
-    (recv || []).filter(r => ctx.pool.byKey.get(r.key).slot !== 'IR').forEach(r => rows.push({ fid: r.key, slot: r.slot === 'active' ? 'ACTIVE' : 'RESERVE' }));
+    const rows = ctx.roster[teamId].filter(f => !(exclude && exclude.has(f)) && ctx.pool.byKey.get(f).slot !== 'IR').map(f => ({ fid: f, slot: ctx.pool.byKey.get(f).slot }));
+    (recv || []).filter(r => ctx.pool.byKey.get(r.key).slot !== 'IR').sort(byKey).forEach(r => rows.push({ fid: r.key, slot: r.slot === 'active' ? 'ACTIVE' : 'RESERVE' }));
     return Team.initState(rows);
   }
 
