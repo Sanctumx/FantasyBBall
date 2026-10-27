@@ -1,9 +1,10 @@
 // Start-of-session report: every local branch other than main, with how far it is from origin/main, whether it is
 // pushed, whether its work already landed, where its worktree is, and the first line of "## Next" in its notes file
 // (src/handoffs/<branch>.md). Also says when the ledger branch holds records that are not on main yet.
-// Run from any checkout of the repo: node .claude/scripts/branches.mjs [--no-fetch]. Read-only.
+// Run from any checkout of the repo: node .claude/scripts/branches.mjs [--no-fetch]. Read-only except that it adds the
+// sibling worktrees to additionalDirectories in the untracked .claude/settings.local.json (see the end of the file).
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const CONFIG = {
@@ -85,3 +86,21 @@ if (refs.some(r => r.name === CONFIG.ledger)) {
   if (n > 0) out.push(`${CONFIG.ledger} has ${n} commit${n === 1 ? '' : 's'} not on ${CONFIG.main}: records waiting to land (node .claude/scripts/ledger.mjs land).`);
 }
 console.log(out.join('\n'));
+
+// Let this checkout read and search its sibling worktrees without a prompt: add them to permissions.additionalDirectories
+// in the untracked .claude/settings.local.json (Claude Code reloads it mid-session). Only adds; never removes entries.
+try {
+  const top = git('rev-parse', '--show-toplevel');
+  const siblings = Object.values(worktrees).concat(mainCheckout ? [mainCheckout.path] : [])
+    .filter((p, i, a) => a.indexOf(p) === i && path.resolve(p) !== path.resolve(top))
+    .map(p => path.resolve(p));
+  const file = path.join(top, '.claude', 'settings.local.json');
+  const cfg = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  const dirs = ((cfg.permissions ||= {}).additionalDirectories ||= []);
+  const have = new Set(dirs.map(d => path.resolve(d).toLowerCase()));
+  const add = siblings.filter(p => !have.has(p.toLowerCase()));
+  if (add.length) {
+    dirs.push(...add);
+    writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n');
+  }
+} catch { /* best effort */ }
