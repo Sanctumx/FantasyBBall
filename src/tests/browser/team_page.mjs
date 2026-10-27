@@ -272,6 +272,32 @@ for (const [w, side] of [[1440, true], [1200, false]]) {
   ok(errs.length === 0, 'points: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
+// Source switch (2026-10-26): a box-score source changes the lines and the Win numbers, switching back restores them, the choice survives a reload, a pending chip stays
+{ const { p, errs, ctx } = await open();
+  await scored(p);
+  const snap = async () => ({ pts: (await col(p, 3 + 5)).join(), win: (await winCol(p)).join(), tot: (await totalRow(p)).join(), m: await p.textContent('#matrix') });
+  ok(await p.$eval('#src', s => s.value) === 'avg', 'Source starts on Projections · Average');
+  ok(/Projections: BBM \+ Hashtag average/.test(await p.textContent('#fresh')), 'freshness names the projection source');
+  const a0 = await snap();
+  await p.fill('#out-in', 'a'); await p.press('#out-in', 'Enter'); await p.waitForTimeout(100);
+  const chips0 = await p.$$eval('#out-chips li', l => l.length);
+  await p.selectOption('#src', 'w7'); await scored(p); await p.waitForTimeout(500);
+  const a1 = await snap();
+  ok(a1.pts !== a0.pts, 'Last week changes the stat cells');
+  ok(a1.win !== a0.win || a1.m !== a0.m, 'Last week changes the Win M numbers');
+  const fresh1 = await p.textContent('#fresh');
+  ok(/Last week \(20\d\d-\d\d-\d\d to 20\d\d-\d\d-\d\d\)/.test(fresh1) && /uncalibrated/.test(fresh1), 'freshness names the window dates and the uncalibrated note: ' + fresh1.slice(-120));
+  ok(chips0 === 1 && await p.$$eval('#out-chips li', l => l.length) === 1, 'a pending chip stays through a source change');
+  await p.click('#out-chips button');
+  await p.selectOption('#src', 'avg'); await scored(p); await p.waitForTimeout(500);
+  const a2 = await snap();
+  ok(a2.pts === a0.pts && a2.win === a0.win && a2.tot === a0.tot && a2.m === a0.m, 'switching back restores the exact earlier values');
+  await p.selectOption('#src', 'w14'); await scored(p);
+  await p.reload(); await p.waitForSelector('#body:not([hidden])', { timeout: 20000 }); await scored(p);
+  ok(await p.$eval('#src', s => s.value) === 'w14' && /Last 2 weeks/.test(await p.textContent('#fresh')), 'the Source choice survives a reload');
+  ok(errs.length === 0, 'source: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+
 // phone width: no horizontal page scroll
 { const { p, errs, ctx } = await open({ vp: { width: 390, height: 800 } });
   await scored(p);

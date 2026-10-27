@@ -280,6 +280,13 @@ test('sortRows: by a value getter, either way, missing last, ties keep roster or
   assert.strictEqual(JSON.stringify(rows), snap);
 });
 
+test('scorer: the same roster reached by different trades is not the same job', () => {
+  const ctx = mk(), st = stateOf(), sc = V.createScorer(), [o1, o2] = st.order, a = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  const x = T.applySwap(st, [o1, o2], [a]), y = T.applySwap(st, [o2, o1], [a]);
+  assert.notStrictEqual(sc.get(ctx, x, {}), sc.get(ctx, y, {}));
+  assert.strictEqual(sc.get(ctx, x, {}), sc.get(ctx, x, {}));
+});
+
 // ---- points mode (#137) ----
 test('rows: with point values each row has its FP per game (follows the view and the Plays % box); categories give none', () => {
   const ctx = mk(), st = stateOf(), w = { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 };

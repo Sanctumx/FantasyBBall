@@ -14,16 +14,17 @@
   function initState(rows) {
     const slots = {}, order = [];
     rows.forEach(x => { slots[x.fid] = FROM_FANTRAX[x.slot] || 'reserve'; order.push(x.fid); });
-    return { slots, order };
+    return { slots, order, moves: [] };
   }
 
   function moveSlot(state, key, slot) {
     if (!(key in state.slots)) throw new Error('player not on the preview roster: ' + key);
     if (!SLOTS.includes(slot)) throw new Error('unknown slot: ' + slot);
-    return { slots: Object.assign({}, state.slots, { [key]: slot }), order: state.order.slice() };
+    return { slots: Object.assign({}, state.slots, { [key]: slot }), order: state.order.slice(), moves: state.moves || [] };
   }
 
-  // any number of players out and in; incoming players start in the reserve
+  // any number of players out and in; incoming players start in the reserve. state.moves records each swap ({ out, in }) so the Team tab
+  // can hand the players I send out to the teams the incoming ones came from (TeamWin.received); an empty swap records nothing
   function applySwap(state, outKeys, inKeys) {
     outKeys.forEach(k => { if (!(k in state.slots)) throw new Error('player not on the preview roster: ' + k); });
     if (new Set(outKeys).size !== outKeys.length || new Set(inKeys).size !== inKeys.length) throw new Error('duplicate player in swap');
@@ -31,7 +32,8 @@
     const slots = Object.assign({}, state.slots), out = new Set(outKeys);
     outKeys.forEach(k => { delete slots[k]; });
     inKeys.forEach(k => { slots[k] = 'reserve'; });
-    return { slots, order: state.order.filter(k => !out.has(k)).concat(inKeys.filter(k => !state.order.includes(k) || out.has(k))) };
+    const moves = (state.moves || []).concat(outKeys.length && inKeys.length ? [{ out: outKeys.slice(), in: inKeys.slice() }] : []);
+    return { slots, order: state.order.filter(k => !out.has(k)).concat(inKeys.filter(k => !state.order.includes(k) || out.has(k))), moves };
   }
 
   // remaining regular season: from now to the end of the last regular period (schedule times are in seconds, ctx times in ms)
