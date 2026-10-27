@@ -109,7 +109,7 @@ They work alongside the routing above; this file takes precedence over them. Siz
    planner's plan in the chat; a big feature gets a design in `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`,
    approved by the user, then a plan in `docs/superpowers/plans/`.
 3. **Test first.** Write the failing test, watch it fail, then make it pass.
-   - Unit tests: `node --test 'src/tests/*.test.js'` from the repo root.
+   - Unit tests: `node --test src/tests/` from the repo root (subfolders `engine`, `league`, `team`, `collect`, `tooling`; fixtures in `src/tests/fixtures/`).
    - Browser checks: `src/tests/browser/*.mjs`. They need Playwright, run from a folder where it is installed, with the
      repo root served by `python3 -m http.server 8765` (`python` on the Windows PC, which has no `python3`).
 4. **Build.** The site serves the repo root, so built pages are committed:
