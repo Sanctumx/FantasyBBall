@@ -1,4 +1,4 @@
-# team-tab-next (Team tab #131 follow-ups, step 3; BUILT 2026-10-26, in review; not pushed)
+# team-tab-next (Team tab #131 follow-ups, step 3; BUILT 2026-10-26, in review; rebased on main 2026-10-27)
 
 **State:** steps 0-6 of the revised plan are committed (7c84fff..a6fb4e2): golden pins (Trade Analyzer, plain `playsPct`, no-team `winStart` on all bases), `ctx.teamTab` flag + `Team.tabState/countedSlots/avail/soloGames`, Team-tab `playsPct`, `team_win.js` under the flag, `TV.fillProbe/autoFill`, full-Active block (`move/dropIn/apply` take `max`), `team.html` (basis follows the toggle, Fill Active, How it works), Rankings with a team = Team tab in both Vs modes (`d2For`). 436 unit tests pass; browser: `team_page`, `inseason_page`, `rankings_team_parity` (6 combos) pass, `rankings_page` fails only the known 302 vs 303. Built pages rebuilt. Reviewer (Opus, effort high) was dispatched on `a09193e..HEAD`; fix what it finds, each fix test-first, then rebuild. Still to do: ledger rows (#149 update, #147 D2 part, new rows: Team-tab Reserve/availability rules, **fit k for the new Win (analyst, `calib_ros.js` g82 arms)**, **analyze the Trade Analyzer for congruency with Rankings/Team (analyst)**, Trade Analyzer `tradeState` comment says IL games "from the projection" but the code gives every team game), via the ledger worktree. Rebase onto `origin/main` after PR #45 merges; rebuild, do not hand-resolve built pages.
 
@@ -52,7 +52,7 @@ Open for the next session: have the `explorer` find every use of the reserve slo
 
 ## Next
 
-Built and review fixes done (443 unit tests). 1. Land the ledger rows (#149-#152, committed in the ledger worktree: `node .claude/scripts/ledger.mjs land`) if the user agrees. 2. After PR #45 merges: `git fetch && git rebase origin/main` in this worktree, `node .claude/scripts/build.mjs` (do not hand-resolve built pages), unit + browser checks (serve on a free port; 8765 had a stale server). 3. PR only on the user's word.
+Built, review fixes done, rebased onto main after PR #45 (2026-10-27; one conflict in `oppState`, kept the teamTab branch and the key-order sort), pages rebuilt (4815cdd), 444 unit tests pass; browser: team_page, inseason_page, rankings_team_parity pass, rankings_page only the known 302 vs 303. 1. Push and open the PR (user said go, 2026-10-27). 2. Land the ledger rows (#149-#152, committed in the ledger worktree: `node .claude/scripts/ledger.mjs land`). 3. Then #148 (reorganize `src/tests/`).
 
 ## Hazards
 
