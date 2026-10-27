@@ -25,7 +25,7 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 - **In-season tools + Settings tab (95-109, released 2026-10-21):** Matchup and Trade Analyzers (`inseason.html`), shared
   store `league_store.js`; Win M, shrink and no-projection decisions in force: archive "Handoff lines trimmed 2026-10-26".
 
-- **Tab speed (#142, released 2026-10-26, PR #32):** `src/fx_cache.js` caches Fantrax answers in localStorage (draw at once, refresh in the background); the pages link Engine, data and shared code as hashed `assets/` files (`_headers`: immutable); `gen.py` clears `src/site/assets` before each build. Leftovers: cache `stats/espn.json` and box files, skip the live `players` call when cached, purge cache on Unload. Board artifact unchanged. Details and timings: archive 142.
+- **Tab speed (#142, released 2026-10-26):** `src/fx_cache.js` caches Fantrax answers; pages link hashed `assets/` files. Detail and leftovers: archive "Handoff lines trimmed 2026-10-27".
 
 ## Open items (details in IDEAS.md)
 
@@ -49,12 +49,12 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
 
 Run `node .claude/scripts/branches.mjs` (every branch, ahead/behind main, pushed, landed, worktree, its Next line); notes are
 `src/handoffs/<branch>.md`. Shared records (this file, IDEAS, archive) change only in the ledger worktree: `docs/release-handoff.md`, "Parallel sessions".
-Pushing needs the user's word. Merged 2026-10-26/27: calib-ros (PR #37), manual-league (PR #38), team-d3-swap (PR #45: D3 trades, Team tab Source switch, Rankings D2), plays-rank (PR #41), Hashtag 10-25 data (PR #43), branch-hygiene (PR #40), fix-136-espn-retry, block-bash-prompts. The 11 old remote branches (claude-md-general ... workflow-repo-link) were deleted 2026-10-27; only `main` is on origin besides PR branches.
-Merged 2026-10-27: team-tab-next (PR #46; worktree and branch removed). Open: **tests-subfolders** (#148 built, worktree `FantasyBBall-tests`, reviewed, not pushed or PR'd). Claude-Workflow PR #8 (permission rules, branch `permissions-worktree-rules`) waits on the user.
+Pushing needs the user's word. Merged 2026-10-26/27 (list in the archive): team-tab-next (PR #46), tests-subfolders (#148, PR #47; tests are in `src/tests/{engine,league,team,collect,tooling}`), Claude-Workflow PR #8. No open PRs. `fold-test` is another session's branch.
 
-**Permissions (user, 2026-10-27):** wants everything allowed except hard-to-undo commands. `.claude/settings.json` (commit 6a043c8 on main, not pushed) keeps explicit allows plus 54 ask rules (`git * push*` forms for `git -C`, rm/mv, risky `gh`). A bare `"Bash"` allow was tried and removed. **Unresolved:** in the 2026-10-27 session `git push`, `ledger.mjs land` and `gh pr create` ran with no prompt, so ask rules may not be enforced there; the file holds 54 asks (counted 2026-10-27) and the user saw `Bash(git push:*)` on the Ask tab, but `gh pr merge 46` also ran without a prompt that session. Do a real `git push --dry-run` test before relying on it.
+**Permissions (user, 2026-10-27):** prompts only before a final push, a final merge (and `wrangler deploy`), and before using the user's PC for a test (the last is a rule for Claude, ask in chat; memory `permission-policy`). `.claude/settings.json` allows all tools and keeps ask rules for `git push` / `gh pr merge` / `gh api *merge*` / `wrangler deploy` (Bash and PowerShell); verified: a push dry-run and the merge prompted. `branches.mjs` adds sibling worktrees to `additionalDirectories` in the untracked `.claude/settings.local.json`, which also holds `C:\Users\Fefe` and `Read(//c/Users/Fefe/**)` so searches outside the project don't prompt. Run one step per Bash call (a chained `git -C <other worktree>` command prompted). `node --test 'src/tests/*.test.js'` fails here: use `node --test src/tests/`.
 
-**Next session starts with:** 1. on the user's word: PR `tests-subfolders` (#148) and merge it, merge Claude-Workflow PR #8, push settings commit 6a043c8 (rebase on origin/main first; the main checkout also has uncommitted `.claude/settings.json` edits to settle). 2. Settle the permissions check above. 3. Land the ledger. Follow-ups from team-tab-next: fit k for the new Win (analyst), analyze the Trade Analyzer congruency (#149-#152).
+**Next session starts with: #151 / #152, Trade Analyzer on the Team-tab rules.** Analyst and planner are done (2026-10-27) and the user approved the plan with all 3 recommendations: (1) always the Season basis (`basis:'total'`, `opts.basis` may override), (2) keep `perceived`'s worst-line fill for the likelihood, (3) re-fit `TRADE_W.winM` (0.07 x slope). Branch from `origin/main` (e.g. `trade-team-rules`), test first, no further planning needed:
+The step-by-step plan (baseline dump, 4 tests, `tabView` cache in `team_win.js`, golden diff, winM re-fit, review) is in the archive entry "151. Plan". Then #150 (needs a PC run, ask the user first): see its IDEAS row.
 
 ## This PC
 
