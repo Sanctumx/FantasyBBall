@@ -342,3 +342,104 @@ test('sourceCtx: a previewed trade scores on a source context; scorer jobs are p
   const j0 = sc.get(c0, sw, { cats: 9 }), jW = sc.get(cW, sw, { cats: 9 });
   assert.notStrictEqual(j0, jW); assert.strictEqual(sc.get(c0, sw, { cats: 9 }), j0); assert.strictEqual(sc.get(cW, sw, { cats: 9 }), jW);
 });
+
+test('sourceCtx opts: {teamTab, basis} sets the flag on avg and on another source; without opts a ctx carries neither (the Trade Analyzer and Rankings with no team stay plain)', () => {
+  const a = baseArgs(), rows = Rk.sourceRows('w7', PLAYERS, [boxOf(6)]);
+  for (const src of ['avg', 'w7']) {
+    const plain = V.sourceCtx(a, src, rows, FXP), tab = V.sourceCtx(a, src, rows, FXP, { teamTab: true, basis: 'total' });
+    assert.ok(!('teamTab' in plain) && !('basis' in plain), src);
+    assert.strictEqual(tab.teamTab, true); assert.strictEqual(tab.basis, 'total');
+    assert.strictEqual(V.sourceCtx(a, src, rows, FXP, { teamTab: true }).basis, 'pergame');
+  }
+});
+
+test('fillProbe puts every non-IL player in Active and leaves IL alone; autoFill ranks by score, top n Active, the rest Reserve, IL untouched, moves kept', () => {
+  const inK = ROS[other].find(x => x.slot === 'ACTIVE').fid, st0 = stateOf(), st = T.applySwap(st0, [st0.order[0]], [inK]);
+  const il = st.order.filter(k => st.slots[k] === 'il'), non = st.order.filter(k => st.slots[k] !== 'il');
+  const pr = V.fillProbe(st);
+  non.forEach(k => assert.strictEqual(pr.slots[k], 'active')); il.forEach(k => assert.strictEqual(pr.slots[k], 'il'));
+  assert.deepStrictEqual(pr.moves, st.moves);
+  const score = { }; non.forEach((k, i) => { score[k] = i % 3 === 0 ? 5 : i; });   // ties at 5 keep roster order
+  const f = V.autoFill(st, k => score[k], 4), ranked = non.map((k, i) => ({ k, i, v: score[k] })).sort((a, b) => b.v - a.v || a.i - b.i).map(x => x.k);
+  ranked.slice(0, 4).forEach(k => assert.strictEqual(f.slots[k], 'active', k)); ranked.slice(4).forEach(k => assert.strictEqual(f.slots[k], 'reserve', k));
+  il.forEach(k => assert.strictEqual(f.slots[k], 'il'));
+  assert.deepStrictEqual(f.moves, st.moves); assert.deepStrictEqual(f.order, st.order);
+  assert.strictEqual(V.autoFill(f, k => score[k], 4), f);   // a second fill changes nothing: the same object
+  const all = V.autoFill(st, k => score[k], 99); non.forEach(k => assert.strictEqual(all.slots[k], 'active'));
+  const miss = V.autoFill(st, k => k === non[3] ? 1 : null, 1); assert.strictEqual(miss.slots[non[3]], 'active'); assert.strictEqual(miss.slots[non[0]], 'reserve');
+});
+
+test('move / dropIn with a max: a move into a full Active throws, a move of an Active player or out of Active does not', () => {
+  const st = T.tabState(ROS[me]), act = st.order.filter(k => st.slots[k] === 'active'), il = st.order.find(k => st.slots[k] === 'il');
+  const full = act.length;
+  assert.throws(() => V.move(st, il, 'active', full), /Active is full \(\d+\)/);
+  assert.throws(() => V.dropIn(st, il, 'active', full), /Active is full/);
+  assert.strictEqual(V.move(st, act[0], 'active', full), st);
+  assert.strictEqual(V.move(st, act[0], 'reserve', full).slots[act[0]], 'reserve');
+  assert.strictEqual(V.move(st, il, 'active', full + 1).slots[il], 'active');
+  assert.strictEqual(V.move(st, il, 'active').slots[il], 'active');   // no max: as before
+  const free = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  assert.throws(() => V.dropIn(st, free, 'active', full));
+  assert.strictEqual(V.dropIn(st, free, 'reserve', full).slots[free], 'reserve');
+});
+
+test('apply with a max: incoming players take Active while there is room, otherwise Reserve; without a max they land in Reserve as before', () => {
+  const st = T.tabState(ROS[me]), act = st.order.filter(k => st.slots[k] === 'active'), full = act.length;
+  const ins = ROS[other].filter(x => x.slot === 'ACTIVE').slice(0, 2).map(x => ({ key: x.fid }));
+  const one = V.apply(st, [{ key: act[0] }], ins.slice(0, 1), full), two = V.apply(st, [{ key: act[0] }], ins, full);
+  assert.strictEqual(one.slots[ins[0].key], 'active');
+  assert.strictEqual(two.slots[ins[0].key], 'active'); assert.strictEqual(two.slots[ins[1].key], 'reserve');
+  assert.strictEqual(V.apply(st, [{ key: act[0] }], ins.slice(0, 1)).slots[ins[0].key], 'reserve');
+  assert.deepStrictEqual(two.moves, [{ out: [act[0]], in: ins.map(x => x.key) }]);
+});
+
+test('gamesLeft: plain = team games x min(1, g/82); Team tab Per game = full team games, total = as plain, Mix = halfway', () => {
+  const ctx = mk(), pp = Object.assign({}, pool.players.find(p => p.t && p.g > 0 && p.g < 82), { g: 41 }), tg = T.seasonGamesLeft(ctx, pp.t);
+  assert.ok(tg > 0);
+  assert.ok(near(V.gamesLeft(ctx, pp), tg * 0.5));
+  assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'pergame' }), pp), tg));
+  assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'total' }), pp), tg * 0.5));
+  assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'mix' }), pp), tg * 0.75));
+});
+
+test('apply with a ctx: the list dM of a candidate equals the Win M change after Apply swap, also when the worst counted player is in IL (Rest of season)', () => {
+  const ctx = V.sourceCtx(baseArgs(), 'avg', [], FXP, { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const il = st.order.find(k => st.slots[k] === 'il'), pp = ctx.pool.byKey.get(il), g0 = pp.g, full = st.order.filter(k => st.slots[k] === 'active').length;
+  try {
+    pp.g = 3;   // a long-term IL player: his share of the games is tiny, so he is the worst counted player
+    const su = W.moduleSetup(ctx, st, { baseline: 'rep' });
+    assert.strictEqual(su.worst, il, 'premise: the IL player is the worst counted player');
+    const cands = ctx.pool.players.filter(p => !p.owner && p.g > 40 && p.t).slice(0, 5).map(p => p.key);
+    cands.forEach(c => {
+      const row = W.moduleRow(ctx, st, su, c), s2 = V.apply(st, [{ key: il }], [{ key: c }], full, ctx), m2 = W.matrix(ctx, s2, su.mo);
+      assert.ok(near(row.dM, 100 * (m2.mean.match - su.base.mean.match), 1e-6), c + ': list dM ' + row.dM + ' vs after apply ' + 100 * (m2.mean.match - su.base.mean.match));
+    });
+  } finally { pp.g = g0; }
+});
+
+test('rows on the Team tab: the team line and avgZ weight each counted player by Plays % x availability (Rest of season: a g=3 IL player is ~4% of a slot); Per game and plain ctx unchanged', () => {
+  const st = T.tabState(ROS[me]), il = st.order.find(k => st.slots[k] === 'il'), mkTab = basis => V.sourceCtx(baseArgs(), 'avg', [], FXP, { teamTab: true, basis });
+  const ctxT = mkTab('total'), pp = ctxT.pool.byKey.get(il), g0 = pp.g, z = p => p.line.pts;
+  const zc = p => Array.from({ length: 9 }, (_, c) => c === 1 ? z(p) : 0);
+  try {
+    pp.g = 3;
+    const r = V.rows(ctxT, st, { zCats: zc }), pl = T.playsPct(ctxT, st), slots = ctxT.L.maxActive;
+    const want = st.order.reduce((s, k) => { const q = ctxT.pool.byKey.get(k); return s + (pl[k].pct || 0) * T.avail(ctxT, q) * q.line.pts; }, 0) / slots;
+    assert.ok(near(r.avg.pts, want, 1e-9), 'team pts ' + r.avg.pts + ' vs ' + want);
+    assert.ok(near(r.avgCats[1], want, 1e-9), 'avgCats ' + r.avgCats[1]);
+    const pg = mkTab('pergame'), rp = V.rows(pg, st, { zCats: zc }), pp2 = T.playsPct(pg, st);
+    assert.ok(near(rp.avg.pts, st.order.reduce((s, k) => s + (pp2[k].pct || 0) * pg.pool.byKey.get(k).line.pts, 0) / slots, 1e-9));
+  } finally { pp.g = g0; }
+});
+
+test('move / dropIn with an IL cap: a move into a full IL throws, Active/Reserve moves and a player already in IL do not; no cap = as before', () => {
+  const st = T.tabState(ROS[me]), act = st.order.filter(k => st.slots[k] === 'active'), il = st.order.filter(k => st.slots[k] === 'il'), nIl = il.length;
+  assert.ok(act.length > 1);
+  assert.throws(() => V.move(st, act[0], 'il', 99, nIl), /IL is full \(\d+\)/);
+  assert.throws(() => V.dropIn(st, act[0], 'il', 99, nIl), /IL is full/);
+  assert.strictEqual(V.move(st, act[0], 'il', 99, nIl + 1).slots[act[0]], 'il');
+  assert.strictEqual(V.move(st, act[0], 'il', 99).slots[act[0]], 'il');   // no cap: as before
+  if (il.length) { assert.strictEqual(V.move(st, il[0], 'il', 99, nIl), st); assert.strictEqual(V.move(st, il[0], 'reserve', 99, nIl).slots[il[0]], 'reserve'); }
+  const free = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  assert.throws(() => V.dropIn(st, free, 'il', 99, nIl));
+});

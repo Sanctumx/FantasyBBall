@@ -226,8 +226,27 @@ const lchg = p => p.$$eval('#ltable tbody tr[data-key] td:last-child', t => t.ma
   await p.dragAndDrop('#ltable tr[data-key="' + inKey + '"]', 'tr.grp[data-slot="active"]'); await scored(p);
   for (const k of await p.$$eval('select.slot', s => s.map(x => x.dataset.key))) { await p.selectOption('select.slot[data-key="' + k + '"]', 'active'); await scored(p); }
   const gt = await p.$eval('tr.grp[data-slot="active"] td', e => e.textContent);
-  ok(/over the limit/.test(gt) && /13 \/ 12/.test(gt), 'Active over the roster limit (13 / 12) shows the warning');
+  ok(/12 \/ 12/.test(gt) && !/over the limit/.test(gt) && /Active is full \(12\)/.test(await p.textContent('#swap-msg')), 'a move into a full Active (12 / 12) is refused with a message, never 13 / 12');
   await p.click('#reset'); await scored(p);
+  // Fill Active: park two players in Reserve (0%, they count for nothing), then Fill puts everyone non-IL back in Active as one change; Undo restores
+  const nonIl = await p.$$eval('select.slot', s => s.filter(x => x.value !== 'il').map(x => x.dataset.key));
+  if (nonIl.length <= 12 && nonIl.length > 2) {
+    for (const k of nonIl.slice(0, 2)) { await p.waitForTimeout(1500); await p.selectOption('select.slot[data-key="' + k + '"]', 'reserve'); await p.waitForFunction(kk => document.querySelector('select.slot[data-key="' + kk + '"]').value === 'reserve', k); await scored(p); }   // the pause lets the previous move's redraw settle, or the next select event can land on a replaced table
+    const pcts = await p.$$eval('select.slot', s => s.filter(x => x.value === 'reserve').map(x => x.closest('tr').children[2].textContent));
+    ok(pcts.length === 2 && pcts.every(t => t === '0%'), 'Reserve players show 0% Plays % (' + pcts.join(',') + ')');
+    const logN = (await p.$$eval('#log li', l => l.length));
+    await p.click('#fill'); await p.waitForFunction(() => /Active filled|already holds/.test(document.getElementById('swap-msg').textContent), null, { timeout: 90000 }); await scored(p);
+    ok((await p.$$eval('select.slot', s => s.filter(x => x.value === 'active').length)) === nonIl.length && (await p.$$eval('#log li', l => l.length)) === logN + 1, 'Fill Active puts every non-IL player in Active as one entry in the Changes list');
+    await p.click('#undo'); await scored(p);
+    ok((await p.$$eval('select.slot', s => s.filter(x => x.value === 'reserve').length)) === 2 && (await p.$$eval('#log li', l => l.length)) === logN, 'Undo restores the roster from before the fill');
+    await p.click('#reset'); await scored(p);
+  }
+  // the toggle is the basis of the Win numbers: switching it changes the matrix, and back restores it
+  const mPer = await matrixText(p);
+  await p.click('#view button[data-v="ros"]'); await scored(p);
+  ok((await matrixText(p)) !== mPer, 'Rest of season changes the Win numbers (availability counts)');
+  await p.click('#view button[data-v="game"]'); await scored(p);
+  ok((await matrixText(p)) === mPer, 'switching back to Per game restores them');
   ok(errs.length === 0, 'list: no page errors ' + errs.join('; '));
   await ctx.close(); }
 // layout: list right of the roster at 1440 px, below it at 1200 px

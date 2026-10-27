@@ -79,6 +79,39 @@ test('Plays %: reserve players get the slots the active players leave open; IL r
   assert.strictEqual(lone[keys[10]].pct, 1);
 });
 
+// Team-tab Plays % (2026-10-26): Reserve is a parking place (0%, no nights), IL gets games only on the seasonal bases
+const tabCtx = (keys, basis) => Object.assign(mkCtx(keys), { teamTab: true, basis });
+const gOf = k => pool.byKey.get(k).g, near = (a, b, tol = 1e-9) => Math.abs(a - b) < tol;
+
+test('Team-tab Plays %: a Reserve player takes no nights and shows 0%; adding one changes nobody else\'s games', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 12);
+  for (const basis of ['pergame', 'total']) {
+    const ctx = tabCtx(keys, basis), a = T.playsPct(ctx, stateOf(keys.slice(0, 8), [])), b = T.playsPct(ctx, stateOf(keys.slice(0, 8), keys.slice(8, 12)));
+    keys.slice(8).forEach(k => { assert.deepStrictEqual([b[k].played, b[k].pct, !!b[k].hypo], [0, 0, false], basis + k); });
+    keys.slice(0, 8).forEach(k => { assert.strictEqual(b[k].played, a[k].played, basis + k); assert.strictEqual(b[k].pct, a[k].pct, basis + k); });
+  }
+});
+
+test('Team-tab Plays %: an IL player gets no games on Per game; on the seasonal basis he plays his availability share and is not hypo', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 5), il = keys[4], g = gOf(il), st = stateOf(keys.slice(0, 4), [], [il]);
+  const per = T.playsPct(tabCtx(keys, 'pergame'), st), tot = T.playsPct(tabCtx(keys, 'total'), st);
+  assert.deepStrictEqual([per[il].played, per[il].pct, !!per[il].hypo], [0, 0, false]);
+  assert.ok(!tot[il].hypo && near(tot[il].played, Math.min(1, g / 82)), 'g ' + g);
+  assert.ok(near(tot[il].pct, 1));   // Plays % is the lineup share of the games he is there for, so availability is not counted twice
+  assert.strictEqual(T.playsPct(mkCtx(keys), st)[il].hypo, true);   // a plain ctx is as before
+});
+
+test('Team-tab Plays %: a player under 82 projected games plays fewer games on total than on Per game, and the same on a full-season player', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 4), st = stateOf(keys, []);
+  const per = T.playsPct(tabCtx(keys, 'pergame'), st), tot = T.playsPct(tabCtx(keys, 'total'), st), mix = T.playsPct(tabCtx(keys, 'mix'), st);
+  keys.forEach(k => {
+    const a = Math.min(1, gOf(k) / 82);
+    assert.strictEqual(per[k].played, 1, k);
+    assert.ok(near(tot[k].played, a), k); assert.ok(near(mix[k].played, (1 + a) / 2), k);
+  });
+  assert.ok(keys.some(k => gOf(k) < 82), 'fixture has an injured or part-season player');
+});
+
 test('counted: active and reserve players in roster order, never IL', () => {
   const keys = ROS[me].map(x => x.fid).slice(0, 5), st = stateOf(keys.slice(0, 2), keys.slice(2, 4), [keys[4]]);
   assert.deepStrictEqual(T.counted(st), keys.slice(0, 4));
@@ -162,4 +195,39 @@ test('applySwap records the swap in state.moves; moveSlot keeps the record; an e
   assert.deepStrictEqual(T.moveSlot(w, inK, 'active').moves, w.moves);
   assert.deepStrictEqual(T.applySwap(w, [], []).moves, w.moves);
   assert.deepStrictEqual(s.moves, []);
+});
+
+// ---- the Team-tab flag (2026-10-26): ctx.teamTab turns Reserve into a parking slot and applies the basis; a plain ctx never changes ----
+test('tabState: Fantrax ACTIVE and RESERVE are both active (Courtside Active = active + bench), IR is il, no moves', () => {
+  const s = T.tabState(ROS[me]);
+  ROS[me].forEach(x => assert.strictEqual(s.slots[x.fid], x.slot === 'IR' ? 'il' : 'active'));
+  assert.deepStrictEqual(s.order, ROS[me].map(x => x.fid));
+  assert.deepStrictEqual(s.moves, []);
+});
+
+test('countedSlots: a plain ctx counts active + reserve; the Team tab on Per game counts only active, on the seasonal bases active + il', () => {
+  assert.deepStrictEqual(T.countedSlots({}), ['active', 'reserve']);
+  assert.deepStrictEqual(T.countedSlots(undefined), ['active', 'reserve']);
+  assert.deepStrictEqual(T.countedSlots({ teamTab: true, basis: 'pergame' }), ['active']);
+  assert.deepStrictEqual(T.countedSlots({ teamTab: true, basis: 'total' }), ['active', 'il']);
+  assert.deepStrictEqual(T.countedSlots({ teamTab: true, basis: 'mix' }), ['active', 'il']);
+});
+
+test('counted(state, ctx): without a ctx it is today\'s counted (active + reserve); with a Team-tab ctx it follows countedSlots', () => {
+  const s = T.initState(ROS[me]), k = s.order.find(x => s.slots[x] === 'il'), r = s.order.find(x => s.slots[x] === 'reserve');
+  assert.ok(k && r);
+  assert.ok(T.counted(s).includes(r) && !T.counted(s).includes(k));
+  assert.ok(!T.counted(s, { teamTab: true, basis: 'pergame' }).includes(r));
+  assert.ok(T.counted(s, { teamTab: true, basis: 'total' }).includes(k));
+  assert.deepStrictEqual(T.counted(s, {}), T.counted(s));
+});
+
+test('avail: 1 on a plain ctx and on Per game; min(1, g/82) on the seasonal basis; halfway on Mix', () => {
+  const pp = { g: 41 }, full = { g: 90 };
+  assert.strictEqual(T.avail({}, pp), 1);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'pergame' }, pp), 1);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'total' }, pp), 0.5);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'total' }, full), 1);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'mix' }, pp), 0.75);
+  assert.strictEqual(T.avail({ teamTab: true, basis: 'mix' }, full), 1);
 });

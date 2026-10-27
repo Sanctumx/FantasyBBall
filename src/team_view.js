@@ -10,7 +10,8 @@
   const COUNT = ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
 
   // projected remaining games: the team's games to the end of the NBA season times the player's availability (g/82)
-  const gamesLeft = (ctx, pp) => Team.seasonGamesLeft(ctx, pp.t) * Math.min(1, pp.g / 82);
+  // (the Team tab's ctx scales by Team.avail instead: Per game compares everyone at peak non-injury performance, so full team games)
+  const gamesLeft = (ctx, pp) => Team.seasonGamesLeft(ctx, pp.t) * (ctx.teamTab ? Team.avail(ctx, pp) : Math.min(1, pp.g / 82));
 
   // a per-game line times f; percentages stay, attempts and counting stats scale
   function scaled(line, f) {
@@ -35,11 +36,14 @@
     // points leagues (#137): FP of the row's scaled line, so the column follows Per game / Rest of season and the Plays % box
     if (o.points) all.forEach(r => { r.fp = Points.perGame(r.stat, o.points); });
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
-    const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: plays[k].pct, hypo: plays[k].hypo })), slots);
+    // Plays % is the lineup share only; Win also counts how much of the time a player is there (Team.avail: 1 on Per game and on a plain ctx),
+    // so the team line and avgZ weight each player by both
+    const wt = k => plays[k].pct == null ? null : plays[k].pct * (ctx.teamTab ? Team.avail(ctx, ctx.pool.byKey.get(k)) : 1);
+    const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: wt(k), hypo: plays[k].hypo })), slots);
     let avgCats = null;
     if (o.zCats) {
       avgCats = Array(9).fill(0);
-      state.order.forEach(k => { const p = plays[k], c = o.zCats(ctx.pool.byKey.get(k)); if (!p.hypo && p.pct != null && c) c.forEach((v, i) => { avgCats[i] += p.pct * v / slots; }); });
+      state.order.forEach(k => { const p = plays[k], c = o.zCats(ctx.pool.byKey.get(k)); if (!p.hypo && p.pct != null && c) c.forEach((v, i) => { avgCats[i] += wt(k) * v / slots; }); });
     }
     const avgZ = avgCats ? Team.weightedZ(avgCats, o.weights, nc) : null;
     return { groups, rows: all, avg, avgZ, avgCats, avgFp: o.points ? Points.perGame(avg, o.points) : null };
@@ -74,7 +78,7 @@
   // -> { done, rows (unsorted, in candidate order), n, total, step(budgetMs, clock) }; step() returns true while it did work
   function moduleJob(ctx, state, opts, candidates) {
     const o = opts || {}, mo = { cats: o.cats, points: o.points }, cand = candidates || ctx.pool.players.map(p => p.key);
-    const counted = Team.counted(state);
+    const counted = Team.counted(state, ctx);
     let base = null, pw = {}, su = null;
     const job = { done: false, rows: [], n: 0, total: cand.length, step(budgetMs, clock) {
       if (job.done) return false;
@@ -133,10 +137,13 @@
   // The context for source `src` ('avg' = the pool as the Team tab builds it, the plain Matchup.makeCtx). Any other source gets a copy of
   // the pool with that source's lines (Rankings.sourcePool; a player with no row keeps his projection, lineFb) and the plain context's
   // projection ref, so only the lines change. args = Matchup.makeCtx's argument; rows = Rankings.sourceRows(src, ...).
-  function sourceCtx(args, src, rows, fxPlayers) {
+  // opts { teamTab, basis } (2026-10-26) is how the Team tab and Rankings with a team ask for the Team-tab rules (Team.countedSlots, Team.avail);
+  // a ctx made without opts carries neither field, which is what keeps the Trade Analyzer and Rankings with no team on today's numbers
+  function sourceCtx(args, src, rows, fxPlayers, opts) {
     const base = Matchup.makeCtx(args);
-    if (src === 'avg') return base;
-    return Matchup.makeCtx(Object.assign({}, args, { pool: Rk.sourcePool(args.pool, Rk.matchRows(src, rows, args.pool, fxPlayers)), ref: base.ref }));
+    const ctx = src === 'avg' ? base : Matchup.makeCtx(Object.assign({}, args, { pool: Rk.sourcePool(args.pool, Rk.matchRows(src, rows, args.pool, fxPlayers)), ref: base.ref }));
+    if (opts && opts.teamTab) { ctx.teamTab = true; ctx.basis = opts.basis || 'pergame'; }
+    return ctx;
   }
 
   // ---- the list as drawn ----
@@ -162,11 +169,38 @@
     if (inKey in state.slots) return Team.moveSlot(Team.moveSlot(state, inKey, state.slots[outKey]), outKey, state.slots[inKey]);
     return Team.moveSlot(Team.applySwap(state, [outKey], [inKey]), inKey, state.slots[outKey]);
   }
-  const dropIn = (state, key, slot) => key in state.slots ? Team.moveSlot(state, key, slot) : Team.moveSlot(Team.applySwap(state, [], [key]), key, slot);
+  // max (the Team tab passes maxPlayers): Active never goes above it; a player who would make it larger is refused with an error
+  // ilMax (the league's IL spots): IL never goes above it either, so IL cannot park a healthy player to get round the Active limit
+  const slotCount = (state, slot) => state.order.filter(k => state.slots[k] === slot).length;
+  const activeCount = state => slotCount(state, 'active');
+  const LIMITS = { active: 'Active', il: 'IL' };
+  const full = (state, key, slot, max, ilMax) => {
+    const cap = slot === 'active' ? max : slot === 'il' ? ilMax : null;
+    return cap != null && state.slots[key] !== slot && slotCount(state, slot) >= cap;
+  };
+  const FULL_MSG = (slot, cap) => LIMITS[slot] + ' is full (' + cap + ')';
+  function dropIn(state, key, slot, max, ilMax) {
+    if (full(state, key, slot, max, ilMax)) throw new Error(FULL_MSG(slot, slot === 'active' ? max : ilMax));
+    return key in state.slots ? Team.moveSlot(state, key, slot) : Team.moveSlot(Team.applySwap(state, [], [key]), key, slot);
+  }
 
   // ---- slots ----
-  // a move to another slot; the same slot returns the same state object
-  const move = (state, key, slot) => state.slots[key] === slot ? state : Team.moveSlot(state, key, slot);
+  // a move to another slot; the same slot returns the same state object; max and ilMax as in dropIn
+  function move(state, key, slot, max, ilMax) {
+    if (state.slots[key] === slot) return state;
+    if (full(state, key, slot, max, ilMax)) throw new Error(FULL_MSG(slot, slot === 'active' ? max : ilMax));
+    return Team.moveSlot(state, key, slot);
+  }
+
+  // Fill Active (2026-10-26): the probe every non-IL player is scored on (as if all were Active, since a Reserve player's Win M would be
+  // measured on leftovers), then the top n by score go to Active and the rest to Reserve; IL is untouched. score(key) -> number | null (null
+  // last), ties keep roster order. Goes through Team.moveSlot so state.moves is kept; nothing to change returns the same object
+  const fillProbe = state => state.order.reduce((s, k) => state.slots[k] === 'il' || s.slots[k] === 'active' ? s : Team.moveSlot(s, k, 'active'), state);
+  function autoFill(state, score, n) {
+    const miss = v => v == null || v !== v, non = state.order.filter(k => state.slots[k] !== 'il');
+    const ranked = non.map((k, i) => ({ k, i, v: score(k) })).sort((a, b) => (miss(a.v) - miss(b.v)) || (miss(a.v) ? 0 : b.v - a.v) || a.i - b.i).map(x => x.k);
+    return ranked.reduce((s, k, i) => { const to = i < n ? 'active' : 'reserve'; return s.slots[k] === to ? s : Team.moveSlot(s, k, to); }, state);
+  }
   // players per slot; over is set only for Active above the league limit
   function slotCounts(state, maxActive) {
     const o = {};
@@ -178,8 +212,21 @@
   const sendOutList = (ctx, state) => state.order.map(k => ctx.pool.byKey.get(k));
   const bringInList = (ctx, state) => ctx.pool.players.filter(p => !(p.key in state.slots));
   const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
-  const apply = (state, outs, ins) => Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
+  // max (Team tab): incoming players take Active while there is room after the outgoing ones leave, else Reserve; without it they land in Reserve.
+  // ctx (Team tab, with max): on the seasonal bases, where IL counts, an incoming player who finds Active full takes an IL slot an outgoing
+  // player vacated before the Reserve, as TeamWin's list scores him (swapSlot)
+  function apply(state, outs, ins, max, ctx) {
+    const s = Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
+    if (max == null) return s;
+    let room = max - activeCount(s), freedIl = ctx && Team.countedSlots(ctx).includes('il') ? outs.filter(x => state.slots[x.key] === 'il').length : 0;
+    return ins.reduce((t, x) => {
+      if (t.slots[x.key] === 'active') return t;
+      if (room > 0) { room--; return Team.moveSlot(t, x.key, 'active'); }
+      if (freedIl > 0) { freedIl--; return Team.moveSlot(t, x.key, 'il'); }
+      return t;
+    }, s);
+  }
 
-  const api = { gamesLeft, rows, zParts, move, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, fillProbe, autoFill, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);

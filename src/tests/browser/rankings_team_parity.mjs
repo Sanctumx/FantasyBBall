@@ -25,15 +25,18 @@ async function open(page, seed) {
 }
 const num = t => parseFloat(String(t).replace('−', '-'));
 
-for (const src of ['avg', 'w7']) {
-  // Team tab: the list vs average, the Win M change of the first rows
-  const t = await open('team.html', SEED({ 'courtside-team-v1': JSON.stringify({ src, listVs: 'avg' }) }));
+// Same settings -> same results (2026-10-26): with a team loaded Rankings scores Win like the Team tab, in both Vs modes and on both bases
+// (Rankings Per game = Team Per game, Rankings Season = Team Rest of season). The Team tab is at its default state (no Reserve moves).
+for (const [src, vs, basis] of [['avg', 'avg', 'pergame'], ['w7', 'avg', 'pergame'], ['avg', 'rep', 'pergame'], ['w7', 'rep', 'pergame'], ['avg', 'avg', 'total'], ['avg', 'rep', 'total']]) {
+  const tag = src + '/' + vs + '/' + basis;
+  // Team tab: the list vs average or replacement, the Win M change of the first rows
+  const t = await open('team.html', SEED({ 'courtside-team-v1': JSON.stringify({ src, listVs: vs, view: basis === 'total' ? 'ros' : 'game' }) }));
   await t.p.waitForSelector('#body:not([hidden])', { timeout: 30000 });
   await t.p.waitForFunction(() => document.querySelectorAll('#ltable tr.lrow').length > 0 && !/Scoring/.test(document.getElementById('lmeta').textContent), null, { timeout: 120000 });
   const team = await t.p.$$eval('#ltable tr.lrow', r => r.slice(0, 6).map(x => [x.querySelector('td.l').childNodes[0].textContent, x.lastElementChild.textContent]));
-  ok(team.length >= 5, src + ': Team list has rows (' + team.length + ')');
-  // Rankings: the same source, Win vs Average player, the same team
-  const r = await open('rankings.html', SEED({ 'courtside-rankings-v1': JSON.stringify({ src, winvs: 'avg', basis: 'pergame', order: 'z' }) }));
+  ok(team.length >= 5, tag + ': Team list has rows (' + team.length + ')');
+  // Rankings: the same source, Win vs the same baseline, the same basis, the same team
+  const r = await open('rankings.html', SEED({ 'courtside-rankings-v1': JSON.stringify({ src, winvs: vs, basis, order: 'z' }) }));
   await r.p.waitForFunction(() => /all scored/.test(document.getElementById('note').textContent), null, { timeout: 120000 });
   const wmCol = await r.p.$$eval('#tbl thead th', h => h.findIndex(x => x.dataset.k === 'winM') + 1);
   let n = 0;
@@ -41,10 +44,10 @@ for (const src of ['avg', 'w7']) {
     await r.p.fill('#q', name); await r.p.waitForTimeout(150);
     const cell = await r.p.$$eval('#tbl tbody tr', (rows, c) => rows.filter(x => x.children[2] && true).map(x => [x.querySelector('td.l').textContent, x.children[c - 1].textContent]), wmCol);
     const hit = cell.find(x => x[0] === name);
-    if (hit) { n++; ok(Math.abs(num(hit[1]) - num(wm)) < 0.051, src + ': ' + name + ' Win M vs average on Rankings (' + hit[1] + ') = Team list (' + wm + ')'); }
+    if (hit) { n++; ok(Math.abs(num(hit[1]) - num(wm)) < 0.051, tag + ': ' + name + ' Win M on Rankings (' + hit[1] + ') = Team list (' + wm + ')'); }
   }
-  ok(n >= 3, src + ': at least 3 of the Team list players were found on Rankings (' + n + ')');
-  ok(t.errs.length === 0 && r.errs.length === 0, src + ': no page errors ' + t.errs.concat(r.errs).join('; '));
+  ok(n >= 3, tag + ': at least 3 of the Team list players were found on Rankings (' + n + ')');
+  ok(t.errs.length === 0 && r.errs.length === 0, tag + ': no page errors ' + t.errs.concat(r.errs).join('; '));
   await t.ctx.close(); await r.ctx.close();
 }
 await b.close();
