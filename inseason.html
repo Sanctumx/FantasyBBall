@@ -343,7 +343,7 @@ tr.click{cursor:pointer}
 <script src="assets/shared.9f9a6a1b.js"></script>
 <script src="assets/store.22818a7e.js"></script>
 <script src="assets/fxcache.3a003ffb.js"></script>
-<script src="assets/inseason_mods.f5433be3.js"></script>
+<script src="assets/inseason_mods.577bd27f.js"></script>
 <script>
 (function () {
   'use strict';
@@ -586,7 +586,7 @@ tr.click{cursor:pointer}
 
   // One player's candidate trades take about 0.7 s, so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
-  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v3';
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v4';
   const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
   function candSave(sig, ck, gives) {
     try {
@@ -676,12 +676,13 @@ tr.click{cursor:pointer}
     $('dl-a').innerHTML = opts(S.b, S.aGets); $('dl-b').innerHTML = opts(S.a, S.bGets);
     const chips = (keys, side) => keys.map(k => '<li>' + esc(pool.byKey.get(k).n) + '<button type="button" data-side="' + side + '" data-rm="' + esc(k) + '" aria-label="Remove ' + esc(pool.byKey.get(k).n) + '">×</button></li>').join('');
     $('list-a').innerHTML = chips(S.aGets, 'a'); $('list-b').innerHTML = chips(S.bGets, 'b');
-    $('multi').textContent = S.aGets.length !== S.bGets.length && S.aGets.length + S.bGets.length > 0 ? 'Uneven trade: each team keeps its whole roster here, so the team getting more players needs open spots or must drop someone. Win M counts every player involved.' : '';
+    $('multi').textContent = '';
     $('bt').innerHTML = S.aGets.length + S.bGets.length ? '<thead><tr><th class="l">Player</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '<th title="Zscore of the chosen type and basis; players without a projection show a dash and are left out of the average and total">Total</th></tr></thead><tbody>' + sideRows(nameOfTeam(S.a) + ' receives', S.aGets, S.stat) + sideRows(nameOfTeam(S.b) + ' receives', S.bGets, S.stat) + '</tbody>' : '';
     $('sum').innerHTML = ''; $('sum-msg').textContent = '';
     if (!S.aGets.length || !S.bGets.length) { $('sum-msg').textContent = 'Add at least one player on each side to see the effect on rest-of-season Win M.'; return; }
     try {
       const r = Trade.evaluateTrade(ctx, { a: S.a, b: S.b, aGets: S.aGets, bGets: S.bGets });
+      $('multi').textContent = [S.a, S.b].filter(t => r.drops[t].length).map(t => 'Roster limit ' + L.maxPlayers + ': ' + nameOfTeam(t) + ' drops ' + r.drops[t].map(k => pool.byKey.get(k).n).join(', ') + ' (lowest value).').join(' ');
       $('sum').innerHTML = '<div class="kpi"><b>' + signed(r.dA) + '</b><span>' + esc(nameOfTeam(S.a)) + ' Win M (points)</span></div><div class="kpi"><b>' + signed(r.dB) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Win M</span></div>' +
         '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>'
       const zsum = ks => { const v = ks.map(k => InP.zscoreOf(PLAYERS, pool.byKey.get(k), ui.zt, ui.zb)).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };

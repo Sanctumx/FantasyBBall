@@ -56,7 +56,6 @@ test('"any" offers each of my players: rows carry every give, all mine, none dro
   const rows = T.findTrades(ctx, 'any', { limit: 40, minLikelihood: 0.05, minDA: 1e-9 });
   assert.ok(rows.length > 0 && rows.length <= 40);
   rows.forEach(r => { assert.ok(mineKeys.has(r.give.key)); assert.ok(!mineKeys.has(r.target.key)); assert.ok(r.likelihood >= 0.05); });
-  // (the top 40 may all be one give: since #151 my IR player costs about half a player, so swapping him for a healthy one ranks first)
   assert.ok(new Set(T.findTrades(ctx, 'any', { limit: 1e9, minLikelihood: 0.05, minDA: 1e-9 }).map(r => r.give.key)).size > 1);
   const one = ctx.roster[me][0];
   const best = T.findTrades(ctx, one, { limit: 1 })[0];
@@ -130,4 +129,56 @@ test('likelihood: the best-value offers are not near-certain (median under 50%, 
   const top = T.filterTrades(all, { limit: 25, minDA: 1e-9 }).map(r => r.likelihood).sort((a, b) => a - b);
   assert.strictEqual(top.length, 25);
   assert.ok(top[12] < 0.5, 'median ' + top[12]); assert.ok(top[24] < 0.7, 'max ' + top[24]);
+});
+
+// #153: an IL player is valued by the team that holds him after the trade (that team's worst non-IL player fills the rest of 82), and a side
+// left over the roster limit drops its worst non-IL player
+const vz = f => { const p = pool.byKey.get(f); return Pl.valueZ(p.line, p.g, ctx.ref); };
+const nonIR = (R, t) => R[t].filter(f => pool.byKey.get(f).slot !== 'IR');
+const worstOf = (R, t) => nonIR(R, t).slice().sort((x, y) => vz(x) - vz(y) || (x < y ? -1 : 1))[0];
+const myIR = ctx.roster[me].find(f => pool.byKey.get(f).slot === 'IR' && pool.byKey.get(f).g < 82);
+const fullTeam = Object.keys(ctx.roster).find(t => t !== me && nonIR(ctx.roster, t).length >= L.maxPlayers && ctx.roster[t].length === nonIR(ctx.roster, t).length);
+
+test('perceived: the fill line can be the receiving team\'s worst non-IL player', () => {
+  const il = pool.byKey.get(myIR), other = Object.keys(ctx.roster).find(t => t !== me), w = worstOf(ctx.roster, other);
+  assert.ok(Math.abs(T.perceived(ctx, il, other).proj - Pl.valueZFill(il.line, il.g, pool.byKey.get(w).line, 82, ctx.ref)) < 1e-9);
+  assert.strictEqual(T.perceived(ctx, il).proj, T.perceived(ctx, il, me).proj);   // default: his owner
+});
+
+test('evaluateTrade: team B values my IL player with B\'s worst player filling the rest (the fill swaps with him)', () => {
+  assert.ok(myIR && fullTeam, 'fixture has my IL player and a full team');
+  const b = fullTeam, target = nonIR(ctx.roster, b)[0], r = T.evaluateTrade(ctx, { a: me, b, aGets: [target], bGets: [myIR] });
+  const pv = (f, t) => T.perceived(ctx, pool.byKey.get(f), t).pv;
+  assert.ok(Math.abs(r.gapB - (pv(myIR, b) - pv(target, b))) < 1e-9);
+  assert.ok(Math.abs(pv(myIR, b) - pv(myIR, me)) > 1e-6, 'B\'s worst player differs from mine');
+});
+
+test('evaluateTrade: my IL player for a healthy one leaves me over the limit, I drop my worst non-IL player; B drops nobody', () => {
+  const b = fullTeam, target = nonIR(ctx.roster, b)[0], r = T.evaluateTrade(ctx, { a: me, b, aGets: [target], bGets: [myIR] });
+  const R = Object.assign({}, ctx.roster); R[me] = ctx.roster[me].filter(f => f !== myIR).concat(target); R[b] = ctx.roster[b].filter(f => f !== target).concat(myIR);
+  const drop = worstOf(R, me);
+  assert.deepStrictEqual(r.drops[me], [drop]); assert.deepStrictEqual(r.drops[b], []);
+  const R2 = Object.assign({}, R, { [me]: R[me].filter(f => f !== drop) });
+  assert.ok(Math.abs(r.dA - 100 * (T.rosWinM(ctx, R2, me).mean - T.rosWinM(ctx, ctx.roster, me).mean)) < 1e-9);
+  assert.ok(Math.abs(r.dB - 100 * (T.rosWinM(ctx, R2, b).mean - T.rosWinM(ctx, ctx.roster, b).mean)) < 1e-9);
+});
+
+test('evaluateTrade: a clean one-for-one and a team with an open spot drop nobody', () => {
+  const b = fullTeam, give = nonIR(ctx.roster, me)[0], target = nonIR(ctx.roster, b)[0];
+  assert.deepStrictEqual(T.evaluateTrade(ctx, { a: me, b, aGets: [target], bGets: [give] }).drops, { [me]: [], [b]: [] });
+  const open = Object.keys(ctx.roster).find(t => t !== me && nonIR(ctx.roster, t).length < L.maxPlayers);
+  if (open) { const ir = ctx.roster[open].find(f => pool.byKey.get(f).slot === 'IR'); if (ir) assert.deepStrictEqual(T.evaluateTrade(ctx, { a: me, b: open, aGets: [ir], bGets: [give] }).drops[me], []); }
+});
+
+test('evaluateTrade: two-for-one leaves B over the limit, B drops its worst non-IL player', () => {
+  const b = fullTeam, gives = nonIR(ctx.roster, me).slice(0, 2), target = nonIR(ctx.roster, b)[0];
+  const r = T.evaluateTrade(ctx, { a: me, b, aGets: [target], bGets: gives });
+  const R = Object.assign({}, ctx.roster); R[me] = ctx.roster[me].filter(f => !gives.includes(f)).concat(target); R[b] = ctx.roster[b].filter(f => f !== target).concat(gives);
+  assert.deepStrictEqual(r.drops[b], [worstOf(R, b)]); assert.deepStrictEqual(r.drops[me], []);
+});
+
+test('finder: giving away my IL player no longer fills the top of the list (M2: at most 5 IL gives, at least 5 different gives in the top 25)', () => {
+  const top = T.filterTrades(T.tradeCandidates(ctx, 'any'), { limit: 25 });
+  assert.ok(top.filter(r => r.give.key === myIR).length <= 5, 'IL gives ' + top.filter(r => r.give.key === myIR).length);
+  assert.ok(new Set(top.map(r => r.give.key)).size >= 5);
 });
