@@ -1,5 +1,5 @@
 // Rest-of-season calibration of the Team tab's Win M / Win C (#139, 2026-10-26; analyst spec, built by the main session).
-// Usage: node --max-old-space-size=4096 calib_ros.js [seeds=20] [season,season=2025-26,2024-25]  -> results_calib_ros.txt, calib_ros.json
+// Usage: node --max-old-space-size=4096 calib_ros.js [seeds=20] [season,season=2025-26,2024-25] [firstSeed=1]  -> results_calib_ros.txt, calib_ros.json
 // Design:
 //  - Rosters and actual weekly results are calib_pair.js's: 14 teams x 12 drafted by ADP with noise (seed*7919), all 91 pairs, all 12 active.
 //  - At the start of weeks 4, 8, 12, 16 (0-based 3, 7, 11, 15) one forecast per team is made with the SHIPPED Team tab code
@@ -7,16 +7,17 @@
 //    That forecast is scored against each remaining week's actual result (Win M on the Team tab is the chance of an average week).
 //  - Games: whole = the NBA team's scheduled games over the remaining weeks / weeks (no g/82, as Team.windowGames); g82 = the same x min(1, g/82).
 //    A player with no daily row in the 14 days before the checkpoint stands in for the IL slot: 0 forecast games (actuals still count him).
-//  - Arms: E-ROS (whole, k 1; the shipped Team tab), E-ROS-k, E-ROS-g82, E-ROS-g82-k, PM-sig-k (old Team tab: pairMatchup whole games,
-//    gVar 1.87, k .72 / .82). Decision rule A-E: see verdict().
+//  - Arms: E-ROS (whole, k 1; the shipped Team tab), E-ROS-k, E-ROS-g82, E-ROS-g82-k, E-ROS-mix, E-ROS-mix-k (#150, 2026-10-28: mix = the
+//    midpoint of whole and g82 games, x (1 + min(1, g/82)) / 2, as the Mix basis does in engine.js), PM-sig-k (old Team tab: pairMatchup
+//    whole games, gVar 1.87, k .72 / .82). Decision rule A-E: see verdict(); #150's shared-k rule is line F.
 //  - Caveat: rosters are frozen at the draft and lines are preseason projections even at week 16, so the backtest looks more overconfident
 //    than the app and a fitted k is conservative (shrinks too much).
 const fs = require('fs');
 const E = require('./engine.js'), B = require('./backtest.js'), TW = require('./team_win.js'), S = require('./calib_ros_stats.js');
 const DATA = require('./bt_data.json'), SCHED = require('./bt_sched.json'), DAILY = require('./bt_daily.json');
-const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || '2025-26,2024-25').split(','), N = 14, R = 12, CKS = [3, 7, 11, 15];
+const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || '2025-26,2024-25').split(','), SEED0 = +(process.argv[4] || 1), N = 14, R = 12, CKS = [3, 7, 11, 15];
 const gauss = r => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
-const SRC = ['W', 'G', 'PM'];   // whole games, g82 games, pairMatchup (whole games, gVar 1.87)
+const SRC = ['W', 'G', 'X', 'PM'];   // whole games, g82 games, mix (midpoint of the two), pairMatchup (whole games, gVar 1.87)
 const PSRC = { '2025-26': 'bbm', '2024-25': 'bbm', '2023-24': 'hs' };   // one source per season (the only one 2025-26 and 2023-24 have)
 const K_MATCH = 0.72, K_CAT = 0.82, T0 = Date.now();
 let done = 0;
@@ -26,9 +27,9 @@ function build(season) {
   const cfg = Object.assign({}, cfg0, { ilSpots: 0, scoring: 'h2h', order: 'snake', slot: 1 });
   const { weekly, nweeks } = DATA[season], G = SCHED[season].games, daily = DAILY[season].daily;
   const cats = s => [s[1] ? s[0] / s[1] : 0, s[3] ? s[2] / s[3] : 0, s[4], s[5], s[6], s[7], s[8], s[9], -s[10]];
-  const cols = { p: { W: [], G: [], PM: [] }, y: [], wk: [], sd: [], cat: [], ck: [] }, pairWeeks = CKS.map(() => 0);
+  const cols = { p: { W: [], G: [], X: [], PM: [] }, y: [], wk: [], sd: [], cat: [], ck: [] }, pairWeeks = CKS.map(() => 0);
   let checks = 0;
-  for (let seed = 1; seed <= SEEDS; seed++) {
+  for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
     done++; if (done > 1) { const el = (Date.now() - T0) / 1000, left = Math.round(el / (done - 1) * (SEEDS * SEASONS.length - done + 1)); process.stdout.write(`Estimated time remaining: ${Math.floor(left / 60)} min ${String(left % 60).padStart(2, '0')} s   `); }
     const r = S.rng(seed * 7919);
     const T = P.map(p => p.adpUse + gauss(r) * p.sd), order = P.map((_, i) => i).sort((a, b) => T[a] - T[b]), picks = order.slice(0, N * R);
@@ -47,14 +48,17 @@ function build(season) {
       const recent = pid => (daily[String(pid)] || []).some(x => x[0] >= 7 * w0 - 14 && x[0] <= 7 * w0 - 1);
       const entries = (t, mode) => t.roster.map(x => {
         const rows = G[x.p.t] || [], whole = recent(x.p.pid) ? weeks.reduce((s, w) => s + (rows[w] || 0), 0) / nRem : 0;
-        return { p: x.p, games: mode === 'G' ? whole * Math.min(1, x.p.g / 82) : whole, gVar: 1.87 };
+        const share = Math.min(1, x.p.g / 82);
+        return { p: x.p, games: mode === 'G' ? whole * share : mode === 'X' ? whole * (1 + share) / 2 : whole, gVar: 1.87 };
       });
       const outW = TW.evalVecs(e, res.teams.map(t => TW.teamVec(e, entries(t, 'W')))), outG = TW.evalVecs(e, res.teams.map(t => TW.teamVec(e, entries(t, 'G'))));
+      const outX = TW.evalVecs(e, res.teams.map(t => TW.teamVec(e, entries(t, 'X'))));
       const ent = res.teams.map(t => entries(t, 'W'));
       for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
         const fc = {
           W: [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => outW.catProb(outW.teams[i], outW.teams[j], c)).concat(outW.pairProb(outW.teams[i], outW.teams[j])),
-          G: [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => outG.catProb(outG.teams[i], outG.teams[j], c)).concat(outG.pairProb(outG.teams[i], outG.teams[j]))
+          G: [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => outG.catProb(outG.teams[i], outG.teams[j], c)).concat(outG.pairProb(outG.teams[i], outG.teams[j])),
+          X: [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => outX.catProb(outX.teams[i], outX.teams[j], c)).concat(outX.pairProb(outX.teams[i], outX.teams[j]))
         };
         const pm = E.pairMatchup(ent[i], ent[j]); fc.PM = pm.cat.concat(pm.match);
         checks += Math.abs(outW.catProb(outW.teams[i], outW.teams[j], 0) + outW.catProb(outW.teams[j], outW.teams[i], 0) - 1) > 1e-6;
@@ -94,10 +98,11 @@ function report(R_) {
   R_.forEach(r => log(`  ${r.season}: pair-weeks per checkpoint ${r.pairWeeks.join(' / ')}  (rows ${r.D.n}, symmetry failures ${r.checks})`));
   log('Caveat: rosters frozen at the draft and preseason lines even at week 16: the backtest looks more overconfident than the app, so a fitted k shrinks too much.');
   for (const r of R_) {
-    const D = r.D, kE = fit(D, 'W'), kG = fit(D, 'G'), kP = fit(D, 'PM');
-    const arms = [['E-ROS', BASE], ['E-ROS-k', A('W', kE.kM, kE.kC)], ['E-ROS-g82', A('G', 1, 1)], ['E-ROS-g82-k', A('G', kG.kM, kG.kC)], ['PM-sig-k', A('PM', K_MATCH, K_CAT)]];
-    const res = results[r.season] = { k: { W: kE, G: kG, PM: kP }, arms: {} };
-    log(`\n== ${r.season}  (k* in sample: E-ROS matchup ${kE.kM.toFixed(2)} cats ${kE.kC.toFixed(2)}; g82 ${kG.kM.toFixed(2)} / ${kG.kC.toFixed(2)})`);
+    const D = r.D, kE = fit(D, 'W'), kG = fit(D, 'G'), kX = fit(D, 'X'), kP = fit(D, 'PM');
+    const arms = [['E-ROS', BASE], ['E-ROS-k', A('W', kE.kM, kE.kC)], ['E-ROS-g82', A('G', 1, 1)], ['E-ROS-g82-k', A('G', kG.kM, kG.kC)],
+      ['E-ROS-mix', A('X', 1, 1)], ['E-ROS-mix-k', A('X', kX.kM, kX.kC)], ['PM-sig-k', A('PM', K_MATCH, K_CAT)]];
+    const res = results[r.season] = { k: { W: kE, G: kG, X: kX, PM: kP }, arms: {} };
+    log(`\n== ${r.season}  (k* in sample: E-ROS matchup ${kE.kM.toFixed(2)} cats ${kE.kC.toFixed(2)}; g82 ${kG.kM.toFixed(2)} / ${kG.kC.toFixed(2)}; mix ${kX.kM.toFixed(2)} / ${kX.kC.toFixed(2)})`);
     for (const [name, a] of arms) {
       const o = res.arms[name] = {};
       for (const [lab, kind] of [['matchup', 'M'], ['cats', 'C']]) {
@@ -117,6 +122,17 @@ function report(R_) {
     }
   }
   return results;
+}
+
+// #150 rule F (fixed before the results): one shared k for whole, g82 and mix games if, in every season, each basis's fitted k_M is within
+// .05 of whole games' and its fitted-k Brier is within 1 SE of whole games' fitted-k Brier (matchup); otherwise one k per basis.
+function sharedK(R_, results) {
+  const lines = R_.map(r => {
+    const k = results[r.season].k, o = { kind: 'M' }, base = A('W', k.W.kM, k.W.kC);
+    const per = ['G', 'X'].map(s => { const d = S.diffSE(r.D, A(s, k[s].kM, k[s].kC), base, o); return { s, gap: Math.abs(k[s].kM - k.W.kM), d: d.d, se: d.se, ok: Math.abs(k[s].kM - k.W.kM) <= 0.05 && Math.abs(d.d) <= d.se }; });
+    return { ok: per.every(p => p.ok), text: `${r.season}: ` + per.map(p => `${p.s === 'G' ? 'g82' : 'mix'} k_M gap ${p.gap.toFixed(2)}, Brier d ${p.d.toFixed(4)}+-${p.se.toFixed(4)}`).join('; ') };
+  });
+  return [`F  one shared k across games bases (#150): ${lines.every(l => l.ok) ? 'YES' : 'NO, fit one k per basis'}`].concat(lines.map(l => '     ' + l.text));
 }
 
 function verdict(R_, results) {
@@ -147,6 +163,7 @@ function verdict(R_, results) {
   V.push(`D  g82 games beat whole games held-out by >=2 SE in both seasons: ${D_ ? 'YES, open a row on the Plays % games definition (user call)' : 'no'}  (` + folds.map(x => `${x.testS} ${x.dG.d.toFixed(4)}+-${x.dG.se.toFixed(4)}`).join(', ') + ')');
   const E_ = folds.every(x => x.dP.d <= -2 * x.dP.se);
   V.push(`E  PM-sig-k beats E-ROS-k held-out by >=2 SE in both seasons: ${E_ ? 'YES, flag to the user (decision 138 chose evaluate)' : 'no'}  (` + folds.map(x => `${x.testS} ${x.dP.d.toFixed(4)}+-${x.dP.se.toFixed(4)}`).join(', ') + ')');
+  sharedK(R_, results).forEach(l => V.push(l));
   const both = merge(s1.D, s2.D), kb = fit(both, 'W'), r2 = x => Math.round(x * 100) / 100;
   if (A_ok) V.push('KEEP UNSHRUNK');
   else if (B_ok) V.push(`SHIP k_M=${r2(kb.kM)}, k_C=${r2(kb.kC)}`);
