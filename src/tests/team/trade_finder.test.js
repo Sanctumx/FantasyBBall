@@ -166,8 +166,10 @@ test('evaluateTrade: my IL player for a healthy one leaves me over the limit, I 
 test('evaluateTrade: a clean one-for-one and a team with an open spot drop nobody', () => {
   const b = fullTeam, give = nonIR(ctx.roster, me)[0], target = nonIR(ctx.roster, b)[0];
   assert.deepStrictEqual(T.evaluateTrade(ctx, { a: me, b, aGets: [target], bGets: [give] }).drops, { [me]: [], [b]: [] });
-  const open = Object.keys(ctx.roster).find(t => t !== me && nonIR(ctx.roster, t).length < L.maxPlayers);
-  if (open) { const ir = ctx.roster[open].find(f => pool.byKey.get(f).slot === 'IR'); if (ir) assert.deepStrictEqual(T.evaluateTrade(ctx, { a: me, b: open, aGets: [ir], bGets: [give] }).drops[me], []); }
+  const open = Object.keys(ctx.roster).find(t => t !== me && nonIR(ctx.roster, t).length < L.maxPlayers && ctx.roster[t].some(f => pool.byKey.get(f).slot === 'IR'));
+  assert.ok(open, 'fixture has a team with an open spot and an IL player');
+  const ir = ctx.roster[open].find(f => pool.byKey.get(f).slot === 'IR');   // it gives its IL player for my healthy one: 11 -> 12 non-IL, no drop
+  assert.deepStrictEqual(T.evaluateTrade(ctx, { a: me, b: open, aGets: [ir], bGets: [give] }).drops[open], []);
 });
 
 test('evaluateTrade: two-for-one leaves B over the limit, B drops its worst non-IL player', () => {
