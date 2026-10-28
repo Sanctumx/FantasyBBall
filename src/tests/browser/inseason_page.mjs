@@ -145,7 +145,7 @@ async function open(opts = {}) {
   ok(/./.test(await p.textContent('#sum')) && (await p.$$eval('#sum .kpi', k => k.length)) === 6, 'summary strip: +Win M each team, Total, Likelihood, then Zscore for each team');
   ok(!(await p.textContent('#multi')).trim(), 'even trade has no caveat');
   await p.fill('#in-b', dlB[1]); await p.dispatchEvent('#in-b', 'change');
-  ok(/Uneven trade/.test(await p.textContent('#multi')), 'two for one shows the multi-player caveat');
+  ok(/Roster limit 12: .* drops .*\(lowest value\)/.test(await p.textContent('#multi')), 'two for one shows who drops to the roster limit');
   const bt = await p.$$eval('#bt tbody tr', r => r.map(x => [x.className, x.children.length, [...x.querySelectorAll('.chip')].some(c => /color-mix/.test(c.getAttribute('style') || ''))]));
   ok(bt.filter(r => r[0] === 'tot').length === 4, 'a Total and a Zscore row under each side');
   ok(bt.filter(r => r[1] === 11).length >= 3 && bt.some(r => r[2]), 'per-player rows have 9 category cells with green/red chips');

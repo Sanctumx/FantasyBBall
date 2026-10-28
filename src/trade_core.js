@@ -31,7 +31,7 @@
     return ctx._projVals;
   }
   // an IL player's season value: his projected games (which already hold the time he misses) at his line, the rest of the season at the
-  // line of his owner's worst non-IL player (user, 2026-10-26); everyone else is valued over his own games
+  // line of his owner's worst non-IL player (user, 2026-10-26; the receiving team's in a trade, user 2026-10-27); everyone else is valued over his own games
   const FULL_G = 82;
   function worstLine(ctx, owner) {
     const c = ctx._worst = ctx._worst || {};
@@ -41,12 +41,13 @@
     }
     return c[owner];
   }
-  function seasonZ(ctx, pp, line) {
-    const fill = pp.slot === 'IR' && pp.g < FULL_G ? worstLine(ctx, pp.owner) : null;
+  // fillOwner: the team whose worst player fills the rest (default his owner; in a trade the team that receives him, #153)
+  function seasonZ(ctx, pp, line, fillOwner) {
+    const fill = pp.slot === 'IR' && pp.g < FULL_G ? worstLine(ctx, fillOwner || pp.owner) : null;
     return fill ? InPlayers.valueZFill(line, pp.g, fill, FULL_G, ctx.ref) : InPlayers.valueZ(line, pp.g, ctx.ref);
   }
-  function perceived(ctx, pp) {
-    const proj = seasonZ(ctx, pp, pp.line), cur = seasonZ(ctx, pp, InPlayers.curLine(pp, TRADE_W.shrinkGames));
+  function perceived(ctx, pp, fillOwner) {
+    const proj = seasonZ(ctx, pp, pp.line, fillOwner), cur = seasonZ(ctx, pp, InPlayers.curLine(pp, TRADE_W.shrinkGames), fillOwner);
     const vals = projValues(ctx), rank = Math.max(1, Math.min(vals.length, Math.round(pp.adp == null ? 168 : pp.adp)));
     const adp = vals[rank - 1];
     return { cur, proj, adp, pv: TRADE_W.cur * cur + TRADE_W.proj * proj + TRADE_W.adp * adp, rv: proj };
@@ -65,13 +66,22 @@
     const R = Object.assign({}, ctx.roster);
     R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets);
     R[b] = ctx.roster[b].filter(f => !aGets.includes(f)).concat(bGets);
+    // a side left with more non-IL players than the limit drops its worst ones (#153); a team already over it is not charged for the trade
+    const nonIR = f => ctx.pool.byKey.get(f).slot !== 'IR', val = f => { const p = ctx.pool.byKey.get(f); return InPlayers.valueZ(p.line, p.g, ctx.ref); };
+    const capDrops = t => {
+      const over = R[t].filter(nonIR).length - Math.max(ctx.L.maxPlayers || 0, ctx.roster[t].filter(nonIR).length);
+      return ctx.L.maxPlayers > 0 && over > 0 ? R[t].filter(nonIR).sort((x, y) => val(x) - val(y) || (x < y ? -1 : 1)).slice(0, over) : [];
+    };
+    const drops = { [a]: capDrops(a), [b]: capDrops(b) };
+    R[a] = R[a].filter(f => !drops[a].includes(f)); R[b] = R[b].filter(f => !drops[b].includes(f));
     // one league run gives both sides; cached per (the two changed rosters, options)
     const sig = t => R[t].slice().sort().join(','), cache = ctx._rosCache = ctx._rosCache || new Map(), key = a + '#' + sig(a) + '|' + b + '#' + sig(b) + '|' + optKey(opts);
     if (!cache.has(key)) { const m = rosMeans(ctx, R, [a, b], opts); cache.set(key, [m[a].mean, m[b].mean]); }
     const after = cache.get(key), dA = 100 * (after[0] - baseline(ctx, a, opts)), dB = 100 * (after[1] - baseline(ctx, b, opts));
-    const pvSum = fs => fs.reduce((s, f) => s + perceived(ctx, ctx.pool.byKey.get(f)).pv, 0);
+    // B's view of the swap: an IL player is filled by B's worst player on either side (the fill swaps with him)
+    const pvSum = fs => fs.reduce((s, f) => s + perceived(ctx, ctx.pool.byKey.get(f), b).pv, 0);
     const gapB = pvSum(bGets) - pvSum(aGets);
-    return { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi: aGets.length !== bGets.length };
+    return { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi: aGets.length !== bGets.length, drops };
   }
 
   // ---- finder ----
