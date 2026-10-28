@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "auto",
     "allow": [
       "Bash",
       "PowerShell",
@@ -72,13 +73,14 @@
       "Bash(git push:*)",
       "Bash(gh pr merge:*)",
       "Bash(gh api:*merge*)",
-      "Bash(git * push*)",
+      "Bash(git -C * push *)",
+      "Bash(rm *)",
+      "Bash(git branch -d *)",
+      "Bash(git branch -D *)",
+      "Bash(git worktree remove *)",
       "PowerShell(git push:*)",
-      "PowerShell(git * push*)",
       "PowerShell(gh pr merge:*)",
-      "PowerShell(gh api:*merge*)",
-      "Bash(*wrangler*deploy*)",
-      "PowerShell(*wrangler*deploy*)"
+      "PowerShell(Remove-Item *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Fefe\\AppData\\Local\\Temp\\claude\\cw\\template",

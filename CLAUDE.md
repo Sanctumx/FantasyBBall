@@ -84,9 +84,11 @@ They work alongside the routing above; this file takes precedence over them. Siz
 
 ## The user's working rules
 
-- Change files with the Edit/Write tools, not `python - <<EOF` or `sed -i` patch scripts, and run commands from the repo
-  root without a `cd` prefix; both trigger permission prompts the user is tired of (user, 2026-10-26). Enforced by the
-  `before-bash.mjs` hook (it blocks `cd` prefixes, `sed -i`, `cat > f <<EOF` and heredoc patch scripts); don't work around it.
+- Change files with the Edit/Write tools, not `python - <<EOF` or `sed -i` patch scripts: a file written through Bash skips
+  the edit guards and the post-edit tests (user, 2026-10-26). Enforced by the `before-bash.mjs` hook (it blocks `sed -i`,
+  `cat > f <<EOF` and heredoc patch scripts); don't work around it. `cd` prefixes are allowed again since Bash no longer prompts (2026-10-28).
+- Permission prompts only for push, merge and delete, in any worktree (user, 2026-10-28): the `ask` list in `.claude/settings.json`
+  holds exactly those; everything else is allowed, and `additionalDirectories` in `~/.claude/settings.json` covers the worktrees.
 - A branch's handoff note covers only that branch (state, Next, and hazards it created for others). Other branches' status
   is read from `branches.mjs`, not copied into notes (user, 2026-10-26).
 - Push, merge or deploy only when the user says "push" or types /release (the ask prompt above is the backstop).
