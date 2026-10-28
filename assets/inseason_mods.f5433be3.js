@@ -1139,7 +1139,7 @@
     return out;
   }
   const rosWinM = (ctx, roster, teamId, opts) => rosMeans(ctx, roster, [teamId], opts)[teamId];
-  const optKey = o => o ? JSON.stringify([o.cats, o.points, o.shrink]) : '';
+  const optKey = o => o ? JSON.stringify([o.cats, o.points, o.shrink, o.basis]) : '';
 
   // projected players' values, best first (the ADP-implied value of a rank)
   function projValues(ctx) {
