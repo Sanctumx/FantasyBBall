@@ -8,7 +8,7 @@ for season in ['2022-23', '2023-24', '2024-25', '2025-26']:
     t['day'] = (t.game_date - st).dt.days
     t = t[t.player_id.isin(set(p['pid'] for p in D[season]['players']))]
     daily = {}
-    for r in t[['player_id', 'day', 'fgm', 'fga', 'ftm', 'fta', 'fg3m', 'pts', 'reb', 'ast', 'stl', 'blk', 'tov']].itertuples(index=False):
-        daily.setdefault(str(r[0]), []).append([int(x) for x in r[1:]])
+    for r in t[['player_id', 'day', 'fgm', 'fga', 'ftm', 'fta', 'fg3m', 'pts', 'reb', 'ast', 'stl', 'blk', 'tov', 'minutes']].itertuples(index=False):
+        daily.setdefault(str(r[0]), []).append([int(x) for x in r[1:13]] + [round(float(r[13]), 2)])   # column 12 = minutes (#145); the first 12 are unchanged
     out[season] = dict(daily=daily, ndays=int(t.day.max()) + 1)
 json.dump(out, open('bt_daily.json', 'w'))

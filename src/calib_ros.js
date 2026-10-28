@@ -15,19 +15,38 @@
 const fs = require('fs');
 const E = require('./engine.js'), B = require('./backtest.js'), TW = require('./team_win.js'), S = require('./calib_ros_stats.js');
 const DATA = require('./bt_data.json'), SCHED = require('./bt_sched.json'), DAILY = require('./bt_daily.json');
-const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || '2025-26,2024-25').split(','), SEED0 = +(process.argv[4] || 1), N = 14, R = 12, CKS = [3, 7, 11, 15];
+const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || (process.argv.includes('blend') ? '2025-26,2024-25,2023-24' : '2025-26,2024-25')).split(','), SEED0 = +(process.argv[4] || 1), N = 14, R = 12, CKS = [3, 7, 11, 15];
 const gauss = r => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
-const SRC = ['W', 'G', 'X', 'PM'];   // whole games, g82 games, mix (midpoint of the two), pairMatchup (whole games, gVar 1.87)
+// #145 blend mode (5th argument "blend", or any argument "blend"): sources W (preseason lines, E-ROS), S (season-to-date blend), L (last-30-days
+// blend), all on whole games; the n0 of each held-out season is fitted on the other seasons (calib_blend.js). Design: docs/superpowers/specs/2026-10-28-calib-blend-design.md
+const BLEND = process.argv.includes('blend'), CB = require('./calib_blend.js');
+const SRC = BLEND ? ['W', 'S', 'L'] : ['W', 'G', 'X', 'PM'];   // whole games, g82 games, mix (midpoint of the two), pairMatchup (whole games, gVar 1.87)
+const INF_N0 = { g: Infinity, min: Infinity, fg: Infinity, ft: Infinity };
 const PSRC = { '2025-26': 'bbm', '2024-25': 'bbm', '2023-24': 'hs' };   // one source per season (the only one 2025-26 and 2023-24 have)
 const K_MATCH = 0.72, K_CAT = 0.82, T0 = Date.now();
 let done = 0;
 
-function build(season) {
+// the player-level samples of one season for the n0 fit (every projected player, every checkpoint)
+function samplesOf(season) {
+  const { P } = B.setup(season, { proj: PSRC[season] || 'avg', realAdp: true }), daily = DAILY[season].daily, out = [];
+  P.forEach(p => { if (p.g > 0 && p.m > 0) CKS.forEach(w0 => out.push(CB.makeSample(p, daily[String(p.pid)] || [], w0))); });
+  return out;
+}
+
+// n0 = { S: n0 for the season-to-date blend, L: for the 30-day blend } (blend mode only)
+function build(season, n0) {
   const { P, ctx, cfg: cfg0 } = B.setup(season, { proj: PSRC[season] || 'avg', realAdp: true });
   const cfg = Object.assign({}, cfg0, { ilSpots: 0, scoring: 'h2h', order: 'snake', slot: 1 });
   const { weekly, nweeks } = DATA[season], G = SCHED[season].games, daily = DAILY[season].daily;
   const cats = s => [s[1] ? s[0] / s[1] : 0, s[3] ? s[2] / s[3] : 0, s[4], s[5], s[6], s[7], s[8], s[9], -s[10]];
-  const cols = { p: { W: [], G: [], X: [], PM: [] }, y: [], wk: [], sd: [], cat: [], ck: [] }, pairWeeks = CKS.map(() => 0);
+  const cols = { p: Object.fromEntries(SRC.map(s => [s, []])), y: [], wk: [], sd: [], cat: [], ck: [] }, pairWeeks = CKS.map(() => 0), blended = new Map();
+  // a roster player's line at checkpoint w0 for mode W (preseason), S or L (blend)
+  const lineAt = (p, w0, mode) => {
+    if (mode === 'W') return p;
+    const key = p.pid + '|' + w0 + '|' + mode; let b = blended.get(key);
+    if (!b) blended.set(key, b = CB.blendLine(p, daily[String(p.pid)] || [], w0, mode === 'L' ? 'L30' : 'STD', n0[mode]));
+    return b;
+  };
   let checks = 0;
   for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
     done++; if (done > 1) { const el = (Date.now() - T0) / 1000, left = Math.round(el / (done - 1) * (SEEDS * SEASONS.length - done + 1)); process.stdout.write(`Estimated time remaining: ${Math.floor(left / 60)} min ${String(left % 60).padStart(2, '0')} s   `); }
@@ -49,18 +68,15 @@ function build(season) {
       const entries = (t, mode) => t.roster.map(x => {
         const rows = G[x.p.t] || [], whole = recent(x.p.pid) ? weeks.reduce((s, w) => s + (rows[w] || 0), 0) / nRem : 0;
         const share = Math.min(1, x.p.g / 82);
-        return { p: x.p, games: mode === 'G' ? whole * share : mode === 'X' ? whole * (1 + share) / 2 : whole, gVar: 1.87 };
+        return { p: BLEND ? lineAt(x.p, w0, mode) : x.p, games: mode === 'G' ? whole * share : mode === 'X' ? whole * (1 + share) / 2 : whole, gVar: 1.87 };
       });
-      const outW = TW.evalVecs(e, res.teams.map(t => TW.teamVec(e, entries(t, 'W')))), outG = TW.evalVecs(e, res.teams.map(t => TW.teamVec(e, entries(t, 'G'))));
-      const outX = TW.evalVecs(e, res.teams.map(t => TW.teamVec(e, entries(t, 'X'))));
-      const ent = res.teams.map(t => entries(t, 'W'));
+      const modes = SRC.filter(s => s !== 'PM'), outs = {};
+      modes.forEach(s => { outs[s] = TW.evalVecs(e, res.teams.map(t => TW.teamVec(e, entries(t, s)))); });
+      const outW = outs.W, ent = res.teams.map(t => entries(t, 'W'));
       for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
-        const fc = {
-          W: [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => outW.catProb(outW.teams[i], outW.teams[j], c)).concat(outW.pairProb(outW.teams[i], outW.teams[j])),
-          G: [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => outG.catProb(outG.teams[i], outG.teams[j], c)).concat(outG.pairProb(outG.teams[i], outG.teams[j])),
-          X: [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => outX.catProb(outX.teams[i], outX.teams[j], c)).concat(outX.pairProb(outX.teams[i], outX.teams[j]))
-        };
-        const pm = E.pairMatchup(ent[i], ent[j]); fc.PM = pm.cat.concat(pm.match);
+        const fc = {};
+        modes.forEach(s => { const o = outs[s]; fc[s] = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => o.catProb(o.teams[i], o.teams[j], c)).concat(o.pairProb(o.teams[i], o.teams[j])); });
+        if (!BLEND) { const pm = E.pairMatchup(ent[i], ent[j]); fc.PM = pm.cat.concat(pm.match); }
         checks += Math.abs(outW.catProb(outW.teams[i], outW.teams[j], 0) + outW.catProb(outW.teams[j], outW.teams[i], 0) - 1) > 1e-6;
         for (const w of weeks) {
           const ci2 = cats(tot[i][w]), cj = cats(tot[j][w]); let wi = 0, wj = 0;
@@ -89,7 +105,7 @@ const fit = (D, src) => ({ kM: S.fitK(D, src, { kind: 'M' }), kC: S.fitK(D, src,
 const binsOk = (D, a, o) => S.bins(D, a, o).every(b => b.n < 200 || Math.abs(b.p - b.obs) <= 0.05);
 const merge = (X, Y) => {
   const cat = (a, b) => { const c = new a.constructor(a.length + b.length); c.set(a); c.set(b, a.length); return c; };
-  return { n: X.n + Y.n, y: cat(X.y, Y.y), wk: cat(X.wk, Y.wk), cat: cat(X.cat, Y.cat), ck: cat(X.ck, Y.ck), p: Object.fromEntries(SRC.map(s => [s, cat(X.p[s], Y.p[s])])) };
+  return { n: X.n + Y.n, y: cat(X.y, Y.y), wk: cat(X.wk, Y.wk), sd: cat(X.sd, Y.sd), cat: cat(X.cat, Y.cat), ck: cat(X.ck, Y.ck), p: Object.fromEntries(SRC.map(s => [s, cat(X.p[s], Y.p[s])])) };
 };
 
 function report(R_) {
@@ -171,6 +187,101 @@ function verdict(R_, results) {
   return V;
 }
 
+// ---- #145 blend mode: report and verdict lines G-J (rules fixed in the design doc before any result) ----
+const n0s = n => ['g', 'min', 'fg', 'ft'].map(k => `${k} ${n[k] === Infinity ? 'inf' : n[k]}`).join(', ');
+const NAME = { W: 'E-ROS-k', S: 'STD-k', L: 'L30-k' }, WIN = { S: 'STD', L: 'L30' };
+
+// k for each season's held-out fold: fitted on the other seasons only (every arm on its own forecasts)
+function blendFolds(R_) {
+  return R_.map(r => {
+    const others = R_.filter(x => x !== r).map(x => x.D).reduce(merge), arm = {}, raw = {};
+    SRC.forEach(s => { arm[s] = A(s, S.fitK(others, s, { kind: 'M' }), S.fitK(others, s, { kind: 'C' })); raw[s] = A(s, 1, 1); });
+    return { season: r.season, D: r.D, arm, raw };
+  });
+}
+const pm4 = d => `${f(d.d)} +-${d.se.toFixed(4)} (wk ${d.seWeek.toFixed(4)}, seed ${d.seSeed.toFixed(4)})`;
+
+function blendReport(R_, samples, FIT, folds) {
+  const out = { folds: {}, rmse: {}, playerOk: {}, kIn: {}, kCk: {} };
+  log(`#145 blend backtest  ${new Date().toISOString().slice(0, 10)}  seeds ${SEED0}-${SEED0 + SEEDS - 1}  seasons ${SEASONS.join(', ')}  checkpoints (start of weeks) ${CKS.map(c => c + 1).join(', ')}${process.env.N0INF ? '  [N0INF sanity run]' : ''}`);
+  log('Frozen rosters and whole games, as #150. n0 and k of each season come from the other seasons only (n0 is fitted on players; the k of a training season used its own held-out n0: a small known leak).');
+  for (const r of R_) {
+    const D = r.D, fo = folds.find(x => x.season === r.season), S_ = samples[r.season];
+    log(`\n== ${r.season}  (rows ${D.n}, pair-weeks per checkpoint ${r.pairWeeks.join(' / ')}, symmetry failures ${r.checks})`);
+    for (const m of ['S', 'L']) {
+      const ft = FIT[r.season][m], inf = ft.curves.g ? ft.curves.g[ft.curves.g.length - 1][1] : 1;
+      log(`n0 ${NAME[m]} (fitted on the other seasons): ${n0s(ft.n0)}${ft.edge.length ? '   AT GRID EDGE: ' + ft.edge.join(',') : ''}`);
+      for (const k of ['g', 'min', 'fg', 'ft']) if (ft.curves[k]) { const base = ft.curves[k][ft.curves[k].length - 1][1]; log(`   loss vs inf, n0.${k}: ` + ft.curves[k].map(([v, l]) => `${v === Infinity ? 'inf' : v}:${(l / base).toFixed(3)}`).join(' ')); }
+    }
+    const mk = { M: { kind: 'M' }, C: { kind: 'C' } };
+    out.folds[r.season] = {};
+    for (const s of SRC) {
+      const a = fo.arm[s], base = fo.arm.W, oM = { kind: 'M' }, oC = { kind: 'C' };
+      const dM = s === 'W' ? { d: 0, se: 0, seWeek: 0, seSeed: 0 } : S.diffSE(D, a, base, oM), dC = s === 'W' ? { d: 0, se: 0, seWeek: 0, seSeed: 0 } : S.diffSE(D, a, base, oC);
+      const raw = s === 'W' ? { d: 0, se: 0 } : S.diffSE(D, fo.raw[s], fo.raw.W, oM);
+      const ck = CKS.map((w0, ci) => s === 'W' ? { d: 0, se: 0 } : S.diffSE(D, a, base, { kind: 'M', ck: ci }));
+      const inK = { kM: S.fitK(D, s, oM), kC: S.fitK(D, s, oC) };
+      out.folds[r.season][s] = { dM, dC, ck, brierM: S.brier(D, a, oM), brierC: S.brier(D, a, oC), slopeM: S.slope(D, a, oM), slopeC: S.slope(D, a, oC), kHeld: { kM: a.kM, kC: a.kC }, kIn: inK };
+      log(`${NAME[s].padEnd(8)} held-out k_M ${a.kM.toFixed(2)} k_C ${a.kC.toFixed(2)} (in-sample ${inK.kM.toFixed(2)} / ${inK.kC.toFixed(2)}) | matchup Brier ${f(out.folds[r.season][s].brierM)} d ${pm4(dM)} slope ${out.folds[r.season][s].slopeM.toFixed(2)} | cats Brier ${f(out.folds[r.season][s].brierC)} d ${pm4(dC)} slope ${out.folds[r.season][s].slopeC.toFixed(2)}`);
+      if (s !== 'W') {
+        log(`         per checkpoint matchup d vs E-ROS-k: ` + ck.map((c, i) => `wk${CKS[i] + 1} ${f(c.d)}+-${c.se.toFixed(4)}`).join('  ') + `   | unshrunk (k 1) vs E-ROS unshrunk: ${f(raw.d)}+-${raw.se.toFixed(4)}`);
+        for (const lab of [['matchup', oM], ['cats', oC]]) log(`         ${lab[0]} bins (n:p/obs) ${S.bins(D, a, lab[1]).filter(b => b.n).map(b => `${b.n}:${b.p.toFixed(2)}/${b.obs.toFixed(2)}`).join('  ')}`);
+      }
+    }
+    // held-out player lines: weighted RMSE by stat and checkpoint, preseason vs each blend; "ok" = the normalized counting-stat loss falls below preseason's
+    out.rmse[r.season] = {}; out.playerOk[r.season] = { S: [], L: [] };
+    CKS.forEach(w0 => {
+      const Sc = S_.filter(x => x.w0 === w0), sp = CB.spreads(Sc), pre = CB.rmse(Sc, 'PRE'), fmt = o => Object.keys(o).map(k => `${k} ${o[k].toFixed(3)}`).join(' ');
+      log(`player RMSE wk${w0 + 1} (n ${Sc.length}; no rows before the checkpoint ${Sc.filter(x => !x.std.gp).length}, none after ${Sc.filter(x => !x.rest.gp).length}):`);
+      log(`   PRE  ${fmt(pre)}`);
+      for (const m of ['S', 'L']) {
+        const n0 = FIT[r.season][m].n0, b = CB.rmse(Sc, WIN[m], n0), lb = CB.loss(Sc, n0, WIN[m], sp, 'count'), lp = CB.loss(Sc, INF_N0, WIN[m], sp, 'count');
+        out.playerOk[r.season][m].push(lb < lp); log(`   ${WIN[m].padEnd(4)} ${fmt(b)}   counting loss ${(lb / lp).toFixed(3)} of preseason`);
+      }
+    });
+  }
+  return out;
+}
+
+function blendVerdict(R_, rep, folds) {
+  const V = [], seasons = R_.map(r => r.season), pick = (s, f_) => seasons.map(x => rep.folds[x][s][f_]);
+  const G = {};
+  for (const s of ['S', 'L']) {
+    const dM = pick(s, 'dM'), dC = pick(s, 'dC');
+    G[s] = { ok: dM.every(d => d.d <= -2 * d.se) && dC.every(d => d.d <= 0), noise: dM.filter(d => Math.abs(d.d) <= d.se).length >= 2 || (dM.some(d => d.d > 0) && dM.some(d => d.d < 0)),
+      neg: dM.every(d => d.d < 0), n2: dM.filter(d => d.d <= -2 * d.se).length, player: seasons.every(x => rep.playerOk[x][s].every(Boolean)) };
+    V.push(`G  ${NAME[s]} beats E-ROS-k held-out by >=2 SE (max of week and seed SE) in each season, cats d <= 0 in each: ${G[s].ok ? 'PASS' : 'FAIL'}  (matchup ` + seasons.map((x, i) => `${x} ${dM[i].d.toFixed(4)}+-${dM[i].se.toFixed(4)}`).join(', ') + '; cats ' + dC.map(d => d.d.toFixed(4)).join('/') + ')');
+  }
+  // I: L30 over STD only if >= 1 SE better (paired) on held-out matchup Brier in all 3 seasons
+  const dLS = folds.map(fo => S.diffSE(fo.D, fo.arm.L, fo.arm.S, { kind: 'M' })), Ipass = dLS.every(d => d.d <= -d.se), win = Ipass ? 'L' : 'S';
+  V.push(`I  L30 over STD (>=1 SE better in every season, paired): ${Ipass ? 'YES' : 'no, use STD'}  (` + seasons.map((x, i) => `${x} ${dLS[i].d.toFixed(4)}+-${dLS[i].se.toFixed(4)}`).join(', ') + ')');
+  // H on the chosen window: pooled-checkpoint k_M (each checkpoint on all seasons) spread, and the range of single-season in-sample k_M
+  const all = R_.map(r => r.D).reduce(merge), kCk = s => CKS.map((w0, ci) => S.kSE(all, s, { kind: 'M', ck: ci })), kw = kCk('W'), kb = kCk(win);
+  const spread = a => Math.max(...a.map(x => x.k)) - Math.min(...a.map(x => x.k)), inK = seasons.map(x => rep.folds[x][win].kIn.kM), range = Math.max(...inK) - Math.min(...inK);
+  const unin = kb.some(x => x.se > 0.05), hOk = spread(kb) <= 0.15 && spread(kb) <= spread(kw) / 2 && range <= 0.10, H = unin ? 'UNINFORMATIVE (a checkpoint k* has SE > .05)' : hOk ? 'PASS' : 'FAIL';
+  V.push(`H  k stops climbing with weeks (${NAME[win]}): ${H}  pooled k_M by checkpoint ${kb.map(x => x.k.toFixed(2) + '+-' + x.se.toFixed(2)).join(' / ')} (spread ${spread(kb).toFixed(2)} <= .15 and <= half of E-ROS-k's ${spread(kw).toFixed(2)}: ${spread(kb) <= 0.15 && spread(kb) <= spread(kw) / 2}); E-ROS-k ${kw.map(x => x.k.toFixed(2) + '+-' + x.se.toFixed(2)).join(' / ')}; single-season in-sample k_M ${inK.map(x => x.toFixed(2)).join(' / ')} (range ${range.toFixed(2)} <= .10: ${range <= 0.10})`);
+  const g = G[win];
+  V.push(`J  ${g.ok ? (H === 'PASS' ? 'G pass + H pass: user call on putting the blend in the app lines with one pooled k' : H.startsWith('FAIL') ? 'G pass + H fail: open a k-by-weeks-left row' : 'G pass, H uninformative: more seeds or a confirmation fold on 2022-23 before a decision') : 'G not passed: nothing to decide'}`);
+  const cls = g.ok && g.player ? 'REAL EFFECT' : g.noise ? 'NOISE' : (g.neg && !g.player) ? 'SUSPICIOUS (Brier improves, player RMSE does not)' : (g.neg && g.n2 >= 1) ? 'INCONCLUSIVE (d < 0 in all seasons, only ' + g.n2 + ' pass 2 SE: confirm on 2022-23)' : 'NOISE/NONE';
+  V.push(`Judged on ${NAME[win]}: ${cls}  (player RMSE better at every checkpoint in every season: ${g.player})`);
+  return V;
+}
+
+if (require.main === module && BLEND) {
+  const samples = Object.fromEntries(SEASONS.map(s => [s, samplesOf(s)])), FIT = {};
+  SEASONS.forEach(s => { FIT[s] = {}; for (const [m, win] of [['S', 'STD'], ['L', 'L30']]) FIT[s][m] = process.env.N0INF ? { n0: INF_N0, curves: {}, edge: [] } : CB.fitHoldout(samples, s, { win }); });
+  const R_ = SEASONS.map(s => build(s, { S: FIT[s].S.n0, L: FIT[s].L.n0 }));
+  if (process.env.N0INF) { // n0 = inf must reproduce E-ROS forecasts bit for bit
+    const same = R_.every(r => ['S', 'L'].every(m => r.D.p[m].every((v, i) => v === r.D.p.W[i])));
+    log(`SANITY n0 = inf reproduces E-ROS forecasts bit for bit: ${same ? 'PASS' : 'FAIL'}`);
+  }
+  const folds = blendFolds(R_), rep = blendReport(R_, samples, FIT, folds);
+  log('\n== Verdict (rules G-J fixed in docs/superpowers/specs/2026-10-28-calib-blend-design.md before the results)');
+  const V = blendVerdict(R_, rep, folds); V.forEach(log);
+  fs.writeFileSync('results_calib_blend.txt', OUT.join('\n') + '\n');
+  fs.writeFileSync('calib_blend.json', JSON.stringify({ seeds: SEEDS, seed0: SEED0, n0: Object.fromEntries(SEASONS.map(s => [s, { S: FIT[s].S.n0, L: FIT[s].L.n0 }])), report: rep, verdict: V }));
+  process.exit(0);
+}
 if (require.main === module) {
   const R_ = SEASONS.map(s => { const r = build(s); return r; });
   const results = report(R_);

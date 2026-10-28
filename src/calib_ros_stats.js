@@ -39,13 +39,37 @@ function weekSse(D, a, o) {
   for (let i = 0; i < D.n; i++) if (keep(D, i, o)) { const e = shr(p[i], k) - D.y[i], w = D.wk[i]; W[2 * w] += e * e; W[2 * w + 1]++; }
   return W;
 }
-// Brier(a) - Brier(b) and its bootstrap SE over outcome weeks (each week takes all its seeds, checkpoints and pairs)
-function diffSE(D, a, b, o, nBoot = 500) {
-  const A = weekSse(D, a, o), Bw = weekSse(D, b, o), ws = [];
-  for (let w = 0; w < 64; w++) if (A[2 * w + 1] > 0) ws.push([A[2 * w], Bw[2 * w], A[2 * w + 1]]);
-  const tot = ws.reduce((s, q) => [s[0] + q[0], s[1] + q[1], s[2] + q[2]], [0, 0, 0]), d = (tot[0] - tot[1]) / tot[2], r = rng(99), ds = [];
-  for (let t = 0; t < nBoot; t++) { let s1 = 0, s2 = 0, n = 0; for (let k = 0; k < ws.length; k++) { const q = ws[Math.floor(r() * ws.length)]; s1 += q[0]; s2 += q[1]; n += q[2]; } ds.push((s1 - s2) / n); }
-  const m = ds.reduce((s, x) => s + x, 0) / ds.length;
-  return { d, se: Math.sqrt(ds.reduce((s, x) => s + (x - m) ** 2, 0) / (ds.length - 1)) };
+// per cluster (key = D.wk or D.sd): [squared error, rows] for the arm
+function clusterSse(D, a, o, key) {
+  const p = D.p[a.src], k = kOf(a, o), W = new Float64Array(2 * 256);
+  for (let i = 0; i < D.n; i++) if (keep(D, i, o)) { const e = shr(p[i], k) - D.y[i], w = key[i]; W[2 * w] += e * e; W[2 * w + 1]++; }
+  return W;
 }
-module.exports = { rng, shr, fitK, brier, slope, bins, weekSse, diffSE };
+const sdOf = ds => { const m = ds.reduce((s, x) => s + x, 0) / ds.length; return Math.sqrt(ds.reduce((s, x) => s + (x - m) ** 2, 0) / (ds.length - 1)); };
+function bootD(A, Bw) {
+  const ws = [];
+  for (let w = 0; w < 256; w++) if (A[2 * w + 1] > 0) ws.push([A[2 * w], Bw[2 * w], A[2 * w + 1]]);
+  const tot = ws.reduce((s, q) => [s[0] + q[0], s[1] + q[1], s[2] + q[2]], [0, 0, 0]), r = rng(99), ds = [];
+  for (let t = 0; t < 500; t++) { let s1 = 0, s2 = 0, n = 0; for (let k = 0; k < ws.length; k++) { const q = ws[Math.floor(r() * ws.length)]; s1 += q[0]; s2 += q[1]; n += q[2]; } ds.push((s1 - s2) / n); }
+  return { d: (tot[0] - tot[1]) / tot[2], se: sdOf(ds) };
+}
+// Brier(a) - Brier(b) and its bootstrap SE: the larger of the outcome-week bootstrap (a week takes all its seeds, checkpoints and pairs) and the
+// draft-seed bootstrap (#145; paired). seWeek and seSeed are returned too; a D without seeds (D.sd) gets the week SE only.
+function diffSE(D, a, b, o) {
+  const w = bootD(clusterSse(D, a, o, D.wk), clusterSse(D, b, o, D.wk)), s = D.sd ? bootD(clusterSse(D, a, o, D.sd), clusterSse(D, b, o, D.sd)) : w;
+  return { d: w.d, se: Math.max(w.se, s.se), seWeek: w.se, seSeed: s.se };
+}
+// k* and its bootstrap SE (the larger of the week and the seed clusters)
+function kSE(D, src, o) {
+  const one = key => {
+    const p = D.p[src], C = new Float64Array(2 * 256);
+    for (let i = 0; i < D.n; i++) if (keep(D, i, o)) { const d = p[i] - 0.5; C[2 * key[i]] += d * (D.y[i] - 0.5); C[2 * key[i] + 1] += d * d; }
+    const cl = []; for (let c = 0; c < 256; c++) if (C[2 * c + 1] > 0) cl.push([C[2 * c], C[2 * c + 1]]);
+    const r = rng(77), ks = [];
+    for (let t = 0; t < 500; t++) { let a = 0, b = 0; for (let j = 0; j < cl.length; j++) { const q = cl[Math.floor(r() * cl.length)]; a += q[0]; b += q[1]; } ks.push(a / b); }
+    return sdOf(ks);
+  };
+  const w = one(D.wk), s = D.sd ? one(D.sd) : w;
+  return { k: fitK(D, src, o), se: Math.max(w, s), seWeek: w, seSeed: s };
+}
+module.exports = { rng, shr, fitK, brier, slope, bins, weekSse, clusterSse, diffSE, kSE };
