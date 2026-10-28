@@ -56,7 +56,8 @@ test('"any" offers each of my players: rows carry every give, all mine, none dro
   const rows = T.findTrades(ctx, 'any', { limit: 40, minLikelihood: 0.05, minDA: 1e-9 });
   assert.ok(rows.length > 0 && rows.length <= 40);
   rows.forEach(r => { assert.ok(mineKeys.has(r.give.key)); assert.ok(!mineKeys.has(r.target.key)); assert.ok(r.likelihood >= 0.05); });
-  assert.ok(new Set(rows.map(r => r.give.key)).size > 1);
+  // (the top 40 may all be one give: since #151 my IR player costs about half a player, so swapping him for a healthy one ranks first)
+  assert.ok(new Set(T.findTrades(ctx, 'any', { limit: 1e9, minLikelihood: 0.05, minDA: 1e-9 }).map(r => r.give.key)).size > 1);
   const one = ctx.roster[me][0];
   const best = T.findTrades(ctx, one, { limit: 1 })[0];
   if (best) assert.ok(rows.length === 40 || rows.some(r => r.give.key === one && r.target.key === best.target.key) || best.likelihood < 0.05);

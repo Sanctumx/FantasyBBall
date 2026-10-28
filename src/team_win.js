@@ -148,32 +148,43 @@
     return { weeks: W, teams, mean: { cat: Array.from({ length: 9 }, (_, c) => (c >= nc ? null : avg(t => t.cat[c]))), match: avg(t => t.match), winC: avg(t => t.winC) } };
   }
 
-  // The state of team t holding the fantrax ids `fids` (a trade's roster): its players keep their Fantrax slots, IL players count for
-  // an IL player counts as healthy (user, 2026-10-26): his per-game line in an Active slot, his games from the projection, which
-  // already includes the time he is expected to miss (Hashtag), and the Reserve refills the nights he is out. Each incoming player
-  // takes a slot the outgoing ones left (Active first), else the reserve. Incoming players are sorted, so the slots do not depend on
+  // The ctx the Trade Analyzer scores on (#151, user 2026-10-27): the Team tab's rules on the Season basis (Reserve parked, IL players
+  // count at their availability g/82), as the Team tab and Rankings do. A shallow copy so Team.* see the flags; cached per ctx and basis
+  // (never one per call: engCtx and lwMemos are keyed on the original ctx and rebuilding them per candidate would be ~2000 engine builds)
+  const tabViews = new WeakMap();
+  function tabView(ctx, basis) {
+    const b = basis || 'total';
+    if (ctx.teamTab && ctx.basis === b) return ctx;
+    let by = tabViews.get(ctx); if (!by) tabViews.set(ctx, by = {});
+    return by[b] || (by[b] = Object.assign({}, ctx, { teamTab: true, basis: b }));
+  }
+
+  // The state of team t holding the fantrax ids `fids` (a trade's roster), as the Team tab opens it (Team.tabState): its players keep their
+  // Fantrax slots, the bench is Active and an IR player stays IL; he counts at his availability g/82 of the team's games (the seasonal basis).
+  // Incoming players join like oppState's received ones (IR stays IR, the rest Active). They are sorted, so the slots do not depend on
   // the order of `fids` (the leagueWin memo key sorts them)
   function tradeState(ctx, t, fids) {
-    const keep = new Set(fids), was = new Set(ctx.roster[t]), slotOf = f => { const s = ctx.pool.byKey.get(f).slot; return s === 'IR' ? 'ACTIVE' : s; };
+    const keep = new Set(fids), was = new Set(ctx.roster[t]), slotOf = f => ctx.pool.byKey.get(f).slot === 'IR' ? 'IR' : 'ACTIVE';
     const rows = ctx.roster[t].filter(f => keep.has(f)).map(f => ({ fid: f, slot: slotOf(f) }));
-    const free = ctx.roster[t].filter(f => !keep.has(f)).map(slotOf).sort((a, b) => (a === 'ACTIVE' ? 0 : 1) - (b === 'ACTIVE' ? 0 : 1));
-    fids.filter(f => !was.has(f)).sort().forEach(f => rows.push({ fid: f, slot: free.length ? free.shift() : 'RESERVE' }));
-    return Team.initState(rows);
+    fids.filter(f => !was.has(f)).sort().forEach(f => rows.push({ fid: f, slot: slotOf(f) }));
+    return Team.tabState(rows);
   }
 
   // Every team's chance against every other team with the rosters R (fantrax ids per team; default the saved ones), rest of season, from one
   // Engine.evaluate run: the forecaster the Team tab shows, with the same SHRINK. -> { W, ids, P } with P[i][j] = team i's match chance
   // against team j (null on the diagonal); opts.rows (team ids) fills only those rows. null with no weeks left.
-  // opts: cats 9 | 8, points, shrink. Team forecasts are cached per ctx (team, its roster, weeks, categories, point values)
+  // opts: cats 9 | 8, points, shrink, basis (default 'total': the Team tab's Season rules, tabView). Team forecasts are cached per ctx
+  // (team, its roster, weeks, categories, point values, basis)
   const lwMemos = new WeakMap();
   function leagueWin(ctx, R, o) {
     const W = weeksLeft(ctx);
     if (!(W > 0)) return null;
     const nc = o && o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o && o.points), ids = Object.keys(ctx.roster), rows = new Set((o && o.rows) || ids), k = (o && o.shrink) || SHRINK;
+    const tv = tabView(ctx, o && o.basis);
     let memo = lwMemos.get(ctx); if (!memo) lwMemos.set(ctx, memo = new Map());
     const vecs = ids.map(t => {
-      const id = t + '|' + (R || ctx.roster)[t].slice().sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '');
-      if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, tradeState(ctx, t, (R || ctx.roster)[t]), W)));
+      const id = t + '|' + (R || ctx.roster)[t].slice().sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '') + '|' + tv.basis;
+      if (!memo.has(id)) memo.set(id, teamVec(e, side(tv, tradeState(ctx, t, (R || ctx.roster)[t]), W)));
       return memo.get(id);
     });
     const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
@@ -309,6 +320,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -420,13 +420,25 @@ test('WinK: Team, Rankings and Trade read one shrink object', () => {
   assert.ok(near(K.shrink(0.9, 0.6), 0.5 + 0.6 * 0.4));
 });
 
-test('leagueWin: with no IL players my row is the Team tab matrix with every opponent weighted equally', () => {
-  const R0 = {}; Object.keys(ROS).forEach(t => { R0[t] = ROS[t].map(x => Object.assign({}, x, { slot: x.slot === 'IR' ? 'RESERVE' : x.slot })); });
-  const pool0 = Pl.buildPool({ PLAYERS, fxPlayers: fx('fx_players.json'), espn: fx('espn_2025_26.json'), L, rosters: R0 });
-  const ctx = M.makeCtx({ L, pool: pool0, DAYS: games(last.start, last.end), rosters: R0, me, nowMs: last.start }), lw = W.leagueWin(ctx, ctx.roster), m = W.matrix(ctx, T.initState(R0[me]));
+test('leagueWin: my row is the Team tab (Season basis) matrix with every opponent weighted equally (#151)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), lw = W.leagueWin(ctx, ctx.roster), m = W.matrix(Object.assign(mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), T.tabState(ROS[me]));
   const mi = lw.ids.indexOf(me), mean = lw.ids.filter(t => t !== me).reduce((s, t) => s + lw.P[mi][lw.ids.indexOf(t)], 0) / (ids.length - 1);
   assert.ok(near(mean, m.mean.match, 1e-9));
   lw.ids.forEach((a, i) => lw.ids.forEach((b, j) => { if (i < j) assert.ok(near(lw.P[i][j] + lw.P[j][i], 1, 0.05), 'pair ' + a + b); }));
+});
+
+test('tradeState / leagueWin: an IR player gets his availability games (g/82), not every team game (#152)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), il = ROS[me].find(x => x.slot === 'IR').fid, tab = W.tabView(ctx), Wk = W.weeksLeft(ctx);
+  const e = W.side(tab, W.tradeState(ctx, me, [il]), Wk).find(x => x.key === il);
+  assert.ok(near(e.games * Wk, T.soloGames(tab, il), 1e-9));
+  assert.ok(e.games * Wk < T.soloGames(ctx, il) - 0.5, 'below the full-schedule games');
+});
+
+test('leagueWin: two calls on one ctx build the engine context once (tabView does not clone per call)', () => {
+  const ctx = mk(last.start, games(last.start, last.end)), orig = Eng.buildContext; let n = 0;
+  Eng.buildContext = (...a) => { n++; return orig(...a); };
+  try { W.leagueWin(ctx, ctx.roster); W.leagueWin(ctx, ctx.roster, { shrink: { match: 1, cat: 1 } }); } finally { Eng.buildContext = orig; }
+  assert.strictEqual(n, 1);
 });
 
 test('leagueWin: one linear k on every pair (shrink 1 vs 0.6)', () => {
@@ -434,24 +446,25 @@ test('leagueWin: one linear k on every pair (shrink 1 vs 0.6)', () => {
   a.P.forEach((row, i) => row.forEach((p, j) => { if (i !== j) assert.ok(near(b.P[i][j] - 0.5, 0.6 * (p - 0.5), 1e-12)); }));
 });
 
-test('tradeState: an IL player counts as healthy (kept: Active; incoming: the freed Active slot); slot order does not depend on fids order', () => {
+test('tradeState: IR players stay il (kept and incoming), Fantrax RESERVE is active; slots do not depend on fids order (#151)', () => {
   const ctx = mk(last.start, games(last.start, last.end)), slot = f => ctx.pool.byKey.get(f).slot;
   const x = ctx.roster[me].filter(f => slot(f) === 'ACTIVE').slice(0, 2), ys = ctx.roster[other].filter(f => slot(f) === 'ACTIVE').slice(0, 2);
   const keep = ctx.roster[me].filter(f => !x.includes(f)), a = W.tradeState(ctx, me, keep.concat(ys)), b = W.tradeState(ctx, me, keep.concat(ys.slice().reverse()));
   ys.forEach(y => assert.strictEqual(a.slots[y], b.slots[y]));
+  assert.deepStrictEqual(a.order, b.order);
   const il = ctx.roster[other].find(f => slot(f) === 'IR');
-  if (il) { const s = W.tradeState(ctx, me, keep.concat([il, ys[0]])); assert.strictEqual(s.slots[il], 'active'); assert.strictEqual(s.slots[ys[0]], 'active'); }
+  assert.ok(il, 'fixture has an IR player on the other team');
+  const s = W.tradeState(ctx, me, keep.concat([il, ys[0]])); assert.strictEqual(s.slots[il], 'il'); assert.strictEqual(s.slots[ys[0]], 'active');
   const mineIl = ctx.roster[me].find(f => slot(f) === 'IR');
-  if (mineIl) assert.strictEqual(a.slots[mineIl], 'active');
+  assert.ok(mineIl); assert.strictEqual(a.slots[mineIl], 'il');
+  ctx.roster[me].filter(f => slot(f) === 'RESERVE').forEach(f => assert.strictEqual(a.slots[f], 'active'));
 });
 
-test('leagueWin: a traded roster moves the incoming player into the slot the outgoing one left, an incoming IL player counts as healthy', () => {
+test('leagueWin: a traded roster moves the incoming player into the slot the outgoing one left', () => {
   const ctx = mk(last.start, games(last.start, last.end)), x = ctx.roster[me].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE'), y = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE');
   const R = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(y), [other]: ctx.roster[other].filter(f => f !== y).concat(x) });
   const st = W.tradeState(ctx, me, R[me]);
   assert.strictEqual(st.slots[y], 'active'); assert.ok(!(x in st.slots));
-  const il = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'IR');
-  if (il) { const R2 = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== x).concat(il), [other]: ctx.roster[other].filter(f => f !== il).concat(x) }); assert.strictEqual(W.tradeState(ctx, me, R2[me]).slots[il], 'active'); }
   const a = W.leagueWin(ctx, ctx.roster), b = W.leagueWin(ctx, R);
   assert.ok(Math.abs(a.P[a.ids.indexOf(me)][a.ids.indexOf(other)] - b.P[b.ids.indexOf(me)][b.ids.indexOf(other)]) > 1e-6);
 });
