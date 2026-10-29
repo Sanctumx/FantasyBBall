@@ -70,7 +70,13 @@
     return TEAMS.includes(m) ? m : '';
   }
 
-  const localDay = ms => new Date(ms - LOCAL).toISOString().slice(0, 10);
+  // memoized: a trade search asks for the same few thousand tip-off times millions of times (cleared past 50K entries)
+  const dayMemo = new Map();
+  const localDay = ms => {
+    let d = dayMemo.get(ms);
+    if (d === undefined) { if (dayMemo.size >= 50000) dayMemo.clear(); d = new Date(ms - LOCAL).toISOString().slice(0, 10); dayMemo.set(ms, d); }
+    return d;
+  };
   const dayStart = day => Date.parse(day + 'T00:00:00Z') + LOCAL;
   // Fantrax's last day of a period: its end is 18:59:59 ET on the day after (the next period starts at 19:00), so labels stop a day earlier
   const periodLast = per => localDay(per.end - DAY - 1);
@@ -1078,13 +1084,20 @@
       if (!memo.has(id)) memo.set(id, teamVec(e, side(tv, tradeState(ctx, t, (R || ctx.roster)[t]), W, { tid: t, cats: nc, points: o && o.points, e })));
       return memo.get(id);
     });
-    const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
+    const F = Pts.FP_SLOT;
+    if (!(o && o.detail)) {   // the requested rows only: their pairings, not the full Engine.evaluate run (same numbers, pairKit)
+      const kit = pairKit(e), P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? kit.winP(vecs[i].mu, vecs[i].v, vecs[j].mu, vecs[j].v, F) : shr(kit.pairMatch(vecs[i].mu, vecs[i].v, vecs[j].mu, vecs[j].v), k.match)));
+      return { W, ids, P };
+    }
+    const out = evalVecs(e, vecs);
     const P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? out.catProb(out.teams[i], out.teams[j], F) : shr(out.pairProb(out.teams[i], out.teams[j]), k.match)));
-    if (!(o && o.detail)) return { W, ids, P };
     // detail (the League tab): C[i][j][c] = team i's shrunk chance in category c against team j (null past nc, on the diagonal and in points mode), as the matrix's `cat`
     const C = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? null : Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(out.teams[i], out.teams[j], c), k.cat))));
     return { W, ids, P, C, swing: e.ctx.swing };
   }
+
+  // the pairing chances of evalVecs without the run: winP(mu, v, mu, v, c) one category, pairMatch(...) the matchup
+  const pairKit = e => Eng.pairKit(e.ctx, e.cfg, e.cfg.cats === 9 ? NC : NC - 1);
 
   // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb
   function evalVecs(e, vecs) {
@@ -1234,7 +1247,7 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, pairKit, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -1359,7 +1372,8 @@
     return v;
   }
   // Saved candidates (the page keeps them in the browser so a reload does not search again): compact rows, rebuilt from the pool
-  const packCandidates = rows => rows.map(r => [r.give.key, r.target.key, r.team, r.likelihood, r.dA, r.dB, r.total, r.buyLow ? 1 : 0]);
+  // dp: round the numbers to that many decimals (the page keeps 4, which saves about 40% of the browser storage)
+  const packCandidates = (rows, dp) => { const f = dp == null ? (x => x) : (x => Math.round(x * Math.pow(10, dp)) / Math.pow(10, dp)); return rows.map(r => [r.give.key, r.target.key, r.team, f(r.likelihood), f(r.dA), f(r.dB), f(r.total), r.buyLow ? 1 : 0]); };
   function unpackCandidates(packed, pool) {
     const out = [];
     packed.forEach(([g, t, team, likelihood, dA, dB, total, bl]) => {

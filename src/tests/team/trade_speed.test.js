@@ -29,6 +29,15 @@ test('a full any-search returns the golden rows and takes under 2 s', () => {
   assert.ok(ms < 2000, 'search took ' + ms + ' ms');
 });
 
+test('packCandidates(rows, 4) rounds the numbers to 4 decimals and keeps the rest', () => {
+  const rows = T.tradeCandidates(ctx, ctx.roster[me][0]), exact = T.packCandidates(rows), r4 = T.packCandidates(rows, 4);
+  r4.forEach((r, i) => {
+    assert.deepStrictEqual([r[0], r[1], r[2], r[7]], [exact[i][0], exact[i][1], exact[i][2], exact[i][7]]);
+    for (let k = 3; k < 7; k++) assert.strictEqual(r[k], Math.round(exact[i][k] * 1e4) / 1e4);
+  });
+  assert.ok(JSON.stringify(r4).length < JSON.stringify(exact).length);
+});
+
 test('localDay (memoized) matches the plain date math through a DST sweep and after the cache clears', () => {
   const plain = ms => new Date(ms - 6 * 3600e3).toISOString().slice(0, 10);
   for (let ms = Date.UTC(2026, 9, 1); ms < Date.UTC(2027, 3, 30); ms += 37 * 60e3) assert.strictEqual(I.localDay(ms), plain(ms));

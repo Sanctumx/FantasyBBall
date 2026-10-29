@@ -678,6 +678,35 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     idx.forEach((i, r) => { const f = playsF(r), f2 = f * f, e = all[i]; for (let c = 0; c < NC; c++) { mu[c] += f * e.x[c]; v[c] += f2 * e.v[c]; } });
   }
   const FIELD_F = { easy: 0.08, average: 0.31, strong: 0.46, vstrong: 0.62 };
+  // Pairing chances for a context and config (nc categories): winP = one category, pairMatch = the matchup. Shared by evaluate and callers that need only a few pairings (TeamWin.pairKit)
+  function pairKit(ctx, cfg, nc) {
+    const noise = cfg.scoring === 'roto' ? new Float64Array(NC) : ctx.h2hNoise;
+    const corrOn = cfg.scoring !== 'roto' && cfg.corr !== 'off' && ctx.corr;
+    // marginal category win chance: with the games factor its full variance is idiosyncratic + factor
+    const margNoise = corrOn ? ctx.idioNoise.map((v, c) => v + Math.pow(ctx.loadS[c] * ctx.gapSd, 2)) : noise;
+    const SK = ctx.streamK || new Float64Array(NC).fill(1);   // streamability: share of each category gap that counts
+    const winP = (a, av, b, bv, c) => Phi((a[c] - b[c]) * SK[c] / Math.sqrt(av[c] + bv[c] + margNoise[c] + 1e-9));
+
+    // standings & my category chances
+    // Matchup win chance: categories are independent given the weekly games gap, so average over the gap
+    function pairMatch(a, av, b, bv) {
+      if (!corrOn) { const ps = []; for (let c = 0; c < nc; c++) ps.push(winP(a, av, b, bv, c)); return matchProb(ps); }
+      let M = 0; const ps = new Array(nc);
+      for (let k = 0; k < GH_Z.length; k++) {
+        const g = GH_Z[k] * ctx.gapSd;
+        for (let c = 0; c < nc; c++) ps[c] = Phi(((a[c] - b[c]) * SK[c] + ctx.loadS[c] * g) / Math.sqrt(av[c] + bv[c] + ctx.idioNoise[c] + 1e-9));
+        M += GH_W[k] * matchProb(ps);
+      }
+      return M;
+    }
+    function matchProb(ps) { // ps over nc categories -> P(win matchup) with ties counted half
+      let dist = [1];
+      for (const q of ps) { const nd = new Array(dist.length + 1).fill(0); dist.forEach((v, i) => { nd[i] += v * (1 - q); nd[i + 1] += v * q; }); dist = nd; }
+      let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
+      return w;
+    }
+    return { winP, pairMatch, SK };
+  }
   function evaluate(players, ctx, cfg, state) {
     const N = cfg.teams, R = cfg.roster, me = cfg.slot - 1, total = N * R;
     const nc = cfg.cats === 9 ? NC : NC - 1;
@@ -755,31 +784,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       }
     }
     if (pr) teams.forEach(T => { sumRanked(T.ents, null, T.mu, T.v); });
-    const noise = cfg.scoring === 'roto' ? new Float64Array(NC) : ctx.h2hNoise;
-    const corrOn = cfg.scoring !== 'roto' && cfg.corr !== 'off' && ctx.corr;
-    // marginal category win chance: with the games factor its full variance is idiosyncratic + factor
-    const margNoise = corrOn ? ctx.idioNoise.map((v, c) => v + Math.pow(ctx.loadS[c] * ctx.gapSd, 2)) : noise;
-    const SK = ctx.streamK || new Float64Array(NC).fill(1);   // streamability: share of each category gap that counts
-    const winP = (a, av, b, bv, c) => Phi((a[c] - b[c]) * SK[c] / Math.sqrt(av[c] + bv[c] + margNoise[c] + 1e-9));
-
-    // standings & my category chances
-    // Matchup win chance: categories are independent given the weekly games gap, so average over the gap
-    function pairMatch(a, av, b, bv) {
-      if (!corrOn) { const ps = []; for (let c = 0; c < nc; c++) ps.push(winP(a, av, b, bv, c)); return matchProb(ps); }
-      let M = 0; const ps = new Array(nc);
-      for (let k = 0; k < GH_Z.length; k++) {
-        const g = GH_Z[k] * ctx.gapSd;
-        for (let c = 0; c < nc; c++) ps[c] = Phi(((a[c] - b[c]) * SK[c] + ctx.loadS[c] * g) / Math.sqrt(av[c] + bv[c] + ctx.idioNoise[c] + 1e-9));
-        M += GH_W[k] * matchProb(ps);
-      }
-      return M;
-    }
-    function matchProb(ps) { // ps over nc categories -> P(win matchup) with ties counted half
-      let dist = [1];
-      for (const q of ps) { const nd = new Array(dist.length + 1).fill(0); dist.forEach((v, i) => { nd[i] += v * (1 - q); nd[i + 1] += v * q; }); dist = nd; }
-      let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
-      return w;
-    }
+    const { winP, pairMatch, SK } = pairKit(ctx, cfg, nc);
     const standings = teams.map(A_ => {
       let roto = 0, cats = 0, match = 0;
       for (let c = 0; c < nc; c++) roto += 1;
@@ -1194,7 +1199,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return { cat, match, mu: [mu(a), mu(b)] };
   }
   const E2 = (...a) => evaluate(...a);
-  const api = { draftSims, perGameVar, VARS: { GPW, VAR_GAMES, SIGMA_G2, SEASON_G, PROJ_SD }, FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  const api = { draftSims, perGameVar, VARS: { GPW, VAR_GAMES, SIGMA_G2, SEASON_G, PROJ_SD }, FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, pairKit, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   api.pairMatchup = pairMatchup;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);
@@ -1727,7 +1732,13 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return TEAMS.includes(m) ? m : '';
   }
 
-  const localDay = ms => new Date(ms - LOCAL).toISOString().slice(0, 10);
+  // memoized: a trade search asks for the same few thousand tip-off times millions of times (cleared past 50K entries)
+  const dayMemo = new Map();
+  const localDay = ms => {
+    let d = dayMemo.get(ms);
+    if (d === undefined) { if (dayMemo.size >= 50000) dayMemo.clear(); d = new Date(ms - LOCAL).toISOString().slice(0, 10); dayMemo.set(ms, d); }
+    return d;
+  };
   const dayStart = day => Date.parse(day + 'T00:00:00Z') + LOCAL;
   // Fantrax's last day of a period: its end is 18:59:59 ET on the day after (the next period starts at 19:00), so labels stop a day earlier
   const periodLast = per => localDay(per.end - DAY - 1);
@@ -2959,13 +2970,20 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       if (!memo.has(id)) memo.set(id, teamVec(e, side(tv, tradeState(ctx, t, (R || ctx.roster)[t]), W, { tid: t, cats: nc, points: o && o.points, e })));
       return memo.get(id);
     });
-    const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
+    const F = Pts.FP_SLOT;
+    if (!(o && o.detail)) {   // the requested rows only: their pairings, not the full Engine.evaluate run (same numbers, pairKit)
+      const kit = pairKit(e), P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? kit.winP(vecs[i].mu, vecs[i].v, vecs[j].mu, vecs[j].v, F) : shr(kit.pairMatch(vecs[i].mu, vecs[i].v, vecs[j].mu, vecs[j].v), k.match)));
+      return { W, ids, P };
+    }
+    const out = evalVecs(e, vecs);
     const P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? out.catProb(out.teams[i], out.teams[j], F) : shr(out.pairProb(out.teams[i], out.teams[j]), k.match)));
-    if (!(o && o.detail)) return { W, ids, P };
     // detail (the League tab): C[i][j][c] = team i's shrunk chance in category c against team j (null past nc, on the diagonal and in points mode), as the matrix's `cat`
     const C = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? null : Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(out.teams[i], out.teams[j], c), k.cat))));
     return { W, ids, P, C, swing: e.ctx.swing };
   }
+
+  // the pairing chances of evalVecs without the run: winP(mu, v, mu, v, c) one category, pairMatch(...) the matchup
+  const pairKit = e => Eng.pairKit(e.ctx, e.cfg, e.cfg.cats === 9 ? NC : NC - 1);
 
   // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb
   function evalVecs(e, vecs) {
@@ -3115,7 +3133,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, pairKit, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 

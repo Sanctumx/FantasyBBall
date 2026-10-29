@@ -189,6 +189,20 @@ async function open(opts = {}) {
   ok(await p.isVisible('#tab-trades'), 'the Trade Analyzer link stays on the trades section after a reload');
   { const t0 = Date.now(); await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
     ok(Date.now() - t0 < 3000 && (await p.$$eval('#sell .tl, #buy .tl', d => d.length)) >= 1, 'a reload reuses the saved trade search (' + (Date.now() - t0) + ' ms)'); }
+  { // idle fill (#168): the other Basis choices are searched in the background, so a change of Basis draws at once
+    await p.waitForTimeout(4000);
+    const t0 = Date.now(); await p.selectOption('#zb', 'pergame'); await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
+    ok(Date.now() - t0 < 1500 && (await p.$$eval('#finder tbody tr', r => r.length)) > 0, 'a change of Basis after the idle fill draws at once (' + (Date.now() - t0) + ' ms)');
+    await p.selectOption('#zb', 'total'); await p.waitForTimeout(300);
+    // the search pauses off the Trade tab: clear the saved search, start it, leave at once, and little more is saved
+    await p.evaluate(() => localStorage.removeItem('courtside-trade-cands-v1'));
+    await p.click('.sitenav a[href="inseason.html#matchup"]'); await p.waitForTimeout(300);
+    await p.click('.sitenav a[href="inseason.html#trades"]'); await p.waitForTimeout(60);
+    await p.click('.sitenav a[href="inseason.html#matchup"]'); await p.waitForTimeout(2500);
+    const n = await p.evaluate(() => Object.values((JSON.parse(localStorage.getItem('courtside-trade-cands-v1') || '{"sigs":{}}')).sigs).reduce((s, m) => s + Object.keys(m).length, 0));
+    ok(n < 13, 'leaving the Trade tab pauses the trade search (' + n + ' players saved)');
+    await p.click('.sitenav a[href="inseason.html#trades"]'); await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
+  }
   ok(/^Trade Analyzer/.test(await p.title()) && (await p.$eval('.sitenav a[aria-current]', a => a.textContent)) === 'Trade', 'title and toolbar follow the section');
   ok(errs.length === 0, 'no page errors on the Trades tab ' + errs.join('; '));
   await ctx.close(); }
