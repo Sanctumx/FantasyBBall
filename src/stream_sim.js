@@ -42,6 +42,12 @@ function scoreLeague(season, rosters, opts = {}) {
     const H = opts.periods ?? (adds > 4 ? 7 : 2);
     const bnd = H === 2 ? [d0, mid, d1] : Array.from({ length: H + 1 }, (_, i) => Math.min(d1, d0 + Math.round(i * 7 / H)));
     const perOf = d => { let h = 0; while (h < H - 1 && d >= bnd[h + 1]) h++; return h; };
+    // opts.trades: [{ w, me?, other, give: [pid], get: [pid] }] swaps core players between two teams at the start of week w
+    for (const tr of opts.trades || []) if (tr.w === w) {
+      const a = teams[tr.me ?? opts.me], b = teams[tr.other];
+      const swap = (T, out, inn) => { if (out.some(x => !T.core.includes(x))) throw new Error('trade: a traded player is not in the core'); T.core = T.core.filter(x => !out.includes(x)).concat(inn).sort((x, y) => val[y] - val[x]); };
+      swap(a, tr.give, tr.get); swap(b, tr.get, tr.give);
+    }
     const order = [...Array(N).keys()].sort(() => r() - 0.5);
     const claimed = Array.from({ length: H }, () => new Set());
     const lineups = Array.from({ length: N }, () => Array.from({ length: H }, () => []));   // players on roster for each period
@@ -73,7 +79,9 @@ function scoreLeague(season, rosters, opts = {}) {
         for (let sl = 0; sl < slots; sl++) {
           if (!plan[sl][h]) { if (cur[sl] != null) roster.push(cur[sl]); continue; }   // keep the earlier streamer
           const pool = fa.filter(x => !held.has(x) && !claimed[h].has(x)).sort((x, y) => tval(t, y) - tval(t, x)).slice(0, 15);
-          const pick = pool.sort((x, y) => gamesIn(y, s0, s1) - gamesIn(x, s0, s1) || tval(t, y) - tval(t, x))[0];
+          let pick = pool.sort((x, y) => gamesIn(y, s0, s1) - gamesIn(x, s0, s1) || tval(t, y) - tval(t, x))[0];
+          // opts.streamPick (team opts.me only): may return another pid from ctx.pool; null/undefined keeps the baseline pick
+          if (opts.streamPick && t === opts.me && pick != null) { const hp = opts.streamPick({ t, w, h, s0, s1, roster: roster.slice(), pool: pool.slice(), baseline: pick, val, gamesIn, catW: catW[t] }); if (hp != null) { if (!pool.includes(hp)) throw new Error('streamPick must return a pid from ctx.pool'); pick = hp; } }
           if (pick != null) { for (let k = h; k < H; k++) claimed[k].add(pick); roster.push(pick); cur[sl] = pick; }
         }
         lineups[t][h] = roster;
@@ -83,8 +91,15 @@ function scoreLeague(season, rosters, opts = {}) {
     for (let t = 0; t < N; t++) for (let d = d0; d < d1; d++) {
       const roster = lineups[t][perOf(d)].filter(x => x != null);
       let playing = roster.filter(pid => byDay[pid] && byDay[pid].has(d));
-      if (slots) playing = fillSlots(playing.sort((a, b) => val[b] - val[a]), slots, opts.pos);
-      else if (playing.length > active) playing = playing.sort((a, b) => val[b] - val[a]).slice(0, active);
+      // opts.lineupRank (team opts.me only): returns the playing pids in the order to fill the lineup; null keeps the value order
+      const ranked = () => {
+        const hr = opts.lineupRank && t === opts.me ? opts.lineupRank({ t, w, d, playing: playing.slice(), roster, val }) : null;
+        if (hr == null) return playing.sort((a, b) => val[b] - val[a]);
+        if (hr.length !== playing.length || hr.some(x => !playing.includes(x))) throw new Error('lineupRank must return a permutation of ctx.playing');
+        return hr.slice();
+      };
+      if (slots) playing = fillSlots(ranked(), slots, opts.pos);
+      else if (playing.length > active) playing = ranked().slice(0, active);
       played[t] += playing.length;
       if (opts.rankLog) { const ps = new Set(playing); roster.slice().sort((a, b) => val[b] - val[a]).forEach((pid, k) => { const L = opts.rankLog; L.has[k] = (L.has[k] || 0) + (byDay[pid] && byDay[pid].has(d) ? 1 : 0); L.played[k] = (L.played[k] || 0) + (ps.has(pid) ? 1 : 0); }); }
       playing.forEach(pid => { const s = byDay[pid].get(d); for (let c = 0; c < 11; c++) weekTot[t][w][c] += s[c]; });
