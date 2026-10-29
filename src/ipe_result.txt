@@ -1,0 +1,15 @@
+IPE full run, seeds 201-280, 4 seasons x 5 slots = 1600 paired drafts, 3.4 s per draft (4 seasons in parallel, ~23 min). 2026-10-29.
+Rule from src/ipe_gate.txt (analyst A1). Units: title-equivalents per 100 seasons, paired vs arm 66.
+
+arm 68 model streaming: PE +0.56 +/- 0.10  [+0.36, +0.77]  actual prize +0.56 +/- 0.79
+   by season 2022-23 -0.35, 2023-24 +1.34, 2024-25 +0.46, 2025-26 +0.80  (ahead in 3 of 4)   -> MATTERS
+   paired poAll -0.003 +/- 0.002 (no gain in the playoff weeks; the gain is season-long)
+arm 69 model lineup:    PE -0.03 +/- 0.05  [-0.12, +0.07]  actual prize -0.83 +/- 0.51
+   by season -0.04, -0.02, +0.07, -0.12                                                  -> DOES NOT MATTER (upper < 0.3)
+arm 67 placebo (positive control): PE -1.68 +/- 0.10, negative in all 4 seasons (-0.89 .. -2.13)  -> valid control
+
+Validity: refit without arms 66-69 moves PE by +0.02 (68), 0.00 (69), -0.04 (67), all < 0.05.
+Not done: side fit with poAll in the logistic (analyst asked; flag if it differs by > 1 SE).
+Caveats: gamesIn is hindsight (both arms), so the benefit may be overstated vs the live app; the streaming arm uses all-play
+category share in playoff weeks (no bracket in the hook); PE outweighs actual prize ~36:1, so the actual-prize column is weak.
+Trade screen (idea 163) not run yet.
