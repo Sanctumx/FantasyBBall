@@ -22,6 +22,9 @@ test('no bt_*.js script writes a result file next to itself', () => {
   const bad = fs.readdirSync(SRC).filter(f => /^bt_.*\.js$/.test(f))
     .filter(f => /writeFileSync\(\s*['`]bt_/.test(fs.readFileSync(path.join(SRC, f), 'utf8')));
   assert.deepStrictEqual(bad, []);
+  const noHelper = fs.readdirSync(SRC).filter(f => /^bt_.*\.js$/.test(f)).map(f => [f, fs.readFileSync(path.join(SRC, f), 'utf8')])
+    .filter(([, s]) => /writeFileSync/.test(s) && !/resultPath/.test(s)).map(([f]) => f);
+  assert.deepStrictEqual(noHelper, []);
 });
 
 test('summary scripts do not read results from the working directory', () => {
