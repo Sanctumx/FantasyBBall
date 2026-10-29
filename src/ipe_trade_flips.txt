@@ -1,5 +1,5 @@
 2025-26 seeds 281-290 slots 1,4,7,10,14: 50 drafts, 150 checkpoints, 150 with offers
-rule 70 (Win M) accepts at 62.0% of checkpoints; rule 71 (z) at 77.3%
-70 and 71 choose differently at 48.0% of checkpoints (48.0% of those with offers)
-mean dA of the trade 70 takes: 0.82 pts of Win M
-111s, 2.2s per draft
+rule 70 (Win M) accepts at 55.3% of checkpoints; rule 71 (z) at 66.7%
+70 and 71 choose differently at 46.7% of checkpoints (46.7% of those with offers)
+mean dA of the trade 70 takes: 0.88 pts of Win M
+125s, 2.5s per draft
