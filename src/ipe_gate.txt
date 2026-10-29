@@ -1,0 +1,26 @@
+IPE pilot gate (2026-10-29). 200 drafts (4 seasons x 50, seeds 181-190, slots as ipe_run default), arms 66-69, same rosters.
+Units: title-equivalents per 100 seasons (prize equity / 0.6), paired per draft against arm 66.
+(Written to src/ipe_gate.txt, not src/results/: a deny rule blocks writes there.)
+
+DISCLOSURE: the pooled prize-equity lines for arms 67/68/69 vs 66 were printed (prize_equity.py) BEFORE this gate was
+written, in the same command that was meant to supply the gate inputs. The gate inputs below (sd, beta, time) do not
+depend on those means, but the order rule "gate before any screen result" was not kept. The analyst should treat the
+screen numbers from this pilot as seen, and judge the full run on fresh seeds (201+), not on seeds 181-190.
+
+Pilot paired prize-equity difference per draft:
+  arm 67 placebo   mean -2.0  sd/draft 4.2   (actual-prize sd/draft 24.4)
+  arm 68 streaming mean +0.5  sd/draft 4.0   (29.8)
+  arm 69 lineup    mean -0.2  sd/draft 1.7   (14.9)
+Pooled: 68 vs 66 +0.5 +/- 0.3, 69 vs 66 -0.2 +/- 0.1, 67 vs 66 -1.9 +/- 0.3.
+beta (slope of title logit on `me`): 12.5.   Time: 3.4 s per draft for all four arms (local, 4 seasons in parallel).
+
+Placebo note: the plan expected mean about 0. It is -2.0 (about 6 s.e.), as it should be if "second-best streamer in odd
+weeks" is a real downgrade rather than a neutral swap. So it shows the pipeline can see a harm of that size; it does not
+show the null is calibrated. Analyst to judge whether a truly neutral placebo (e.g. equal-ranked tie swap) is needed.
+
+Gate: gateT(se1, n, delta) = min(0.5*se1/sqrt(n), delta). delta = 0.3 (user, 2026-10-29).
+  se1 = 4.2 (the larger of placebo/streaming sd), n = 1000 drafts (about 57 min local at 3.4 s per draft, no PC needed):
+  T = min(0.5*4.2/sqrt(1000), 0.3) = 0.066.
+  n = 2000: T = 0.047 (about 1.9 h).  n = 200 (pilot size): T = 0.149.
+Rule: run the full simulation unless the screen's upper bound is below T. Lineup arm sd is 1.7, so its T is smaller still at
+the same n (0.5*1.7/sqrt(1000) = 0.027); use arm-specific se1 if the analyst prefers.
