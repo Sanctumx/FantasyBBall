@@ -122,7 +122,7 @@
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
     if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
     else {
-      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), from: w.from, to: w.to }));
+      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: Matchup.nightValue(ctx, byKey.get(k)), from: w.from, to: w.to }));
       InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, items[i].a));
     }
     return res;

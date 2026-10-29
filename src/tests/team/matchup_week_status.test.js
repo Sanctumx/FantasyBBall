@@ -95,6 +95,15 @@ test('rosterGames: a day cap can be lowered for players already counted', () => 
   assert.ok(Math.abs(g.reduce((a, x) => a + x, 0) - 2) < 1e-9, 'only 2 slots left: ' + g);
 });
 
+test('rosterGames: with a value v per entry the best players fill the night first and the worst ones share what is left', () => {
+  const G = { AAA: [Date.parse('2026-10-21T00:30:00Z') / 1000] };
+  const e = [5, 4, 3, 2, 1].map(v => ({ t: 'AAA', a: 1, v, from: 0, to: Date.parse('2026-11-01T00:00:00Z') }));
+  assert.deepStrictEqual(I.rosterGames(e, { games: G }, 3), [1, 1, 1, 0, 0]);
+  e[3].a = 0.5; e[4].a = 0.5;   // 3 slots, 4 wanted: the two worst split the one slot left
+  assert.deepStrictEqual(I.rosterGames(e.map(x => Object.assign({}, x, { a: x.v >= 3 ? 1 : 0.5 })), { games: G }, 4), [1, 1, 1, 0.5, 0.5]);
+  assert.deepStrictEqual(I.rosterGames(e.map(x => Object.assign({}, x, { a: x.v >= 3 ? 1 : 0.5 })), { games: G }, 3.5), [1, 1, 1, 0.5, 0]);
+});
+
 test('a night split between played and unplayed games never counts more than maxActive players', () => {
   // a team with early (boxed) and later games the same day: players boxed + players still to play <= maxActive
   const t = Object.keys(ROS).find(k => ROS[k].length >= 12), ps = active(t);
