@@ -17,13 +17,14 @@ test('an empty trade changes nothing', () => {
   assert.ok(near(r.likelihood, 1 / (1 + Math.exp(-T.TRADE_W.bias)))); assert.ok(r.likelihood < 0.5); assert.strictEqual(r.multi, false);   // nothing changes hands: not a coin flip
 });
 
-test('a trade and its reverse cancel', () => {
+test('a trade and its reverse cancel (no player limit: an arrival is never the drop at an IL return, so with a limit the two sides differ)', () => {
+  const mkNoLimit = rosters => M.makeCtx({ L: Object.assign({}, L, { maxPlayers: 99 }), pool, DAYS, rosters, me, nowMs: NOW }), c0 = mkNoLimit(ROS);
   const x = keys(me)[0], y = keys(other)[0];
-  const r = T.evaluateTrade(ctx, { a: me, b: other, aGets: [y], bGets: [x] });
+  const r = T.evaluateTrade(c0, { a: me, b: other, aGets: [y], bGets: [x] });
   assert.ok(Math.abs(r.dA) > 1e-6);
   const R2 = {}; Object.keys(ROS).forEach(t => { R2[t] = ROS[t].map(e => Object.assign({}, e)); });
   R2[me].find(e => e.fid === x).fid = y; R2[other].find(e => e.fid === y).fid = x;
-  const back = T.evaluateTrade(mk(R2), { a: me, b: other, aGets: [x], bGets: [y] });
+  const back = T.evaluateTrade(mkNoLimit(R2), { a: me, b: other, aGets: [x], bGets: [y] });
   assert.ok(near(back.dA, -r.dA) && near(back.dB, -r.dB));
 });
 

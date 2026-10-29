@@ -1,0 +1,17 @@
+# il-timeline
+
+State (2026-10-29): branch `il-timeline` stacked on `fix-roster-rep` (worktree `C:/Users/Fefe/Documents/FantasyBBall-iltimeline`), UNPUSHED. Plan steps 1-6 built, reviewer (effort high) ran, must-fix done. 526 unit tests pass. Pages rebuilt. Ledger #165 updated (ledger worktree, committed, NOT landed).
+
+Design (user decisions 2026-10-29): an IL player is out for his first `nOut` team games, then plays at the league-wide typical availability (`Team.ilReturn`, `Team.typicalAvail`); total stays avail x GL. When active + IL exceed `maxPlayers`, Reserve go first, then counted players in `o.rank` order (`tabPlays` option; `drop: leaveMs` on the row; a dropped IL player plays 0). Options `extra`, `noDrop`, `force`. `TeamWin.plays/dropRank/side(.., {tid,cats,points,e})` thread the team id everywhere.
+DEVIATION from the approved plan (tell the user): `dropRank` = minus the realized mean match chance when k is the single drop at the first return, NOT the loss from removing him (that picked IL Ingram: 55.16 Win M vs 56.58 dropping Keldon Johnson). Several drops: order = each one's single-drop cost (approximation). Players off the saved roster (candidates, trade arrivals) rank Infinity, never dropped. The replacement (Vs replacement) excludes IL, never-playing and dropped players. Vs average: `allowed` counts a dropped player only to his leave time; avgOwn for a dropped non-IL player replays the team with a protected a:0 placeholder (drop moves on); dropped IL player gets 0 games.
+Real league (Paragua, diag `C:/Users/Fefe/Documents/pw-tools/diag6.mjs`, PORT env): dropped Kris Dunn (0 games), replacement Champagnie 0, 5 weakest free agents -6.4..-7.3, Dunn avg row -1.72 vs Champagnie -2.11. Browser: rankings_team_parity passes; rankings_page only the known "302 players" fail; team_page fails at the drag swap (also on main).
+Perf: moduleScores +~200 ms, tradeCandidates('any') +~100 ms. `category_golden.json` regenerated on purpose (its hash was already stale, so it was being skipped).
+Tests changed: "trade and its reverse cancel" runs with maxPlayers 99 (arrivals are never dropped, so with a limit the two directions differ).
+
+Reviewer leftovers (a)-(e) done 2026-10-29: tests for winJob Vs-average rows (points, 8 cats, over-limit IL roster), the dropped-IL avgOwn path, the s<0 branch of tabPlays, the renamed avgOwn test, and a dropped IL player's row at 0 Plays %. 530 unit tests pass. These cover fixes already in, so none failed first.
+
+Hazards for other branches: every seasonal Team-tab / Rankings Win number with an IL player changes, as do the Trade Analyzer, trade finder, `calib_live` and #163 on `inseason-pe` (`ipe_trade_core.js` calls `TeamWin.leagueWin`): re-run or pin #163 after this merges. Model pick / backtests untouched.
+
+Cleanup: a scratch git worktree for before/after timing is at `C:/Users/Fefe/AppData/Local/Temp/claude/c--Users-Fefe-Documents-FantasyBBall/310ebeb0-60da-4ee9-84e8-bab970f86f1e/scratchpad/old` (remove: needs the user's OK). A local server may still run on port 8791 from this worktree (`node .claude/scripts/serve-local.mjs 8791`; the user viewed it on their phone at http://192.168.0.51:8791/team.html).
+
+Next: wait for the user's "push": push, PR (after fix-roster-rep's). Then land ledger #165 (`node .claude/scripts/ledger.mjs land`). Follow-up ledger rows: `capDrops` in trade_core on `dropRank`; return dates (no source yet).

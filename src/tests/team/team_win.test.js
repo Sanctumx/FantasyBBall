@@ -122,6 +122,84 @@ test('moduleScores: the worst Active/Reserve player shows 0, a candidate equals 
   assert.ok(only3.every((r, i) => i === 0 || only3[i - 1].dCat[3] >= r.dCat[3] - 1e-12));
 });
 
+test('Vs replacement, Team tab Season basis, IL on the timeline: the replacement is the lowest counted non-IL player who plays; everyone else is measured against him', () => {
+  const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const il = st.order.filter(k => st.slots[k] === 'il'), act = st.order.filter(k => st.slots[k] === 'active');
+  assert.ok(il.length && act.length >= ctx.L.maxActive, 'premise: IL player and full Active slots');
+  const su = W.moduleSetup(ctx, st, { baseline: 'rep' }), pct = m => 100 * m.mean.match, cur = pct(su.base), pl = W.plays(ctx, st, { tid: me });
+  assert.ok(!il.includes(su.worst), 'an IL player is never the replacement');
+  assert.ok(pl[su.worst].played > 0);
+  const cand = T.counted(st, ctx).filter(k => st.slots[k] !== 'il' && pl[k].played > 0 && pl[k].drop == null);   // a player dropped at an IL return is not the replacement
+  cand.forEach(k => assert.ok(su.pw[su.worst].m <= su.pw[k].m + 1e-12, 'the lowest contribution among them ' + k));
+  assert.deepStrictEqual(su.grp, [su.worst]);
+  const row = k => W.moduleRow(ctx, st, su, k);
+  T.counted(st, ctx).filter(k => k !== su.worst).forEach(k => assert.ok(near(row(k).dM, su.pw[k].m - su.ref.m, 1e-9), 'own player vs the replacement ' + k));
+  assert.ok(near(row(su.worst).dM, 0, 1e-12), 'the replacement shows 0');
+  const c = pool.players.find(p => !p.owner && p.g > 40 && p.t).key, s2 = T.moveSlot(T.applySwap(st, su.grp, [c]), c, 'active');
+  assert.ok(near(row(c).dM, pct(W.matrix(ctx, s2, su.mo)) - cur, 1e-9), 'a candidate takes the replacement\'s slot');
+  assert.ok(near(row(c).new - row(c).old, row(c).dM, 1e-9));
+});
+
+test('Team tab: the list row of an IL player equals the roster row (one pw, no pairing), and a player who never plays reads below 0 in both baselines', () => {
+  const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const il = st.order.find(k => st.slots[k] === 'il'), act = st.order.filter(k => st.slots[k] === 'active');
+  const rep = W.moduleSetup(ctx, st, { baseline: 'rep' }), pw = W.playerWin(ctx, st, rep.mo);
+  assert.ok(near(rep.pw[il].m, pw[il].m, 1e-12));
+  assert.ok(near(W.moduleRow(ctx, st, rep, il).dM, pw[il].m - rep.ref.m, 1e-9));
+  // a player whose team has no games plays 0%: counted, but worth nothing
+  const none = act[0], DAYS = games(last.start, last.end); DAYS.games[pool.byKey.get(none).t] = [];
+  const c0 = Object.assign({}, mk(last.start, DAYS), { teamTab: true, basis: 'total' });
+  assert.strictEqual(W.plays(c0, st, { tid: me })[none].played, 0);
+  const su = W.moduleSetup(c0, st, { baseline: 'rep' });
+  assert.ok(su.worst !== none, 'he is not the replacement');
+  assert.ok(W.moduleRow(c0, st, su, none).dM < -1e-9, 'reads below 0');
+});
+
+test('avg: a player dropped at an IL return is replaced by an average player who takes his slot games and cannot be dropped, so the drop moves on', () => {
+  const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const pl = W.plays(ctx, st, { tid: me }), D = Object.keys(pl).find(k => pl[k].drop != null && st.slots[k] !== 'il'), Wk = W.weeksLeft(ctx);
+  assert.ok(D, 'fixture: a counted player is dropped');
+  const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), ap = su.ap;
+  // the share counts a dropped player's games only up to his leave time
+  const allowed = T.counted(st, ctx).reduce((a, k) => a + T.soloGames(ctx, k, pl[k].drop), 0);
+  assert.ok(allowed < T.counted(st, ctx).reduce((a, k) => a + T.soloGames(ctx, k), 0), 'the dropped player counts less than a full window');
+  assert.ok(near(ap.share, ap.tot * Wk / allowed, 1e-12), 'share ' + ap.share);
+  // his row = the team minus the team with an average player in his place, the next-ranked player dropped instead
+  const st2 = T.applySwap(st, [D], []), w = T.window(ctx), A0 = { t: pool.byKey.get(D).t, a: 0, v: 0, from: w.from, to: w.from };
+  const r2 = T.playsPct(ctx, st2, { rank: W.dropRank(ctx, me), extra: [A0] });
+  const mine = T.counted(st2, ctx).map(k => ({ key: k, p: pool.byKey.get(k).line, games: r2[k].played / Wk })).concat(Object.assign({}, ap.mean, { games: T.soloGames(ctx, D) / Wk * ap.share }));
+  const hand = W.matrixOf(ctx, mine, new Set(st.order), Wk, { recv: {} }), row = W.moduleRow(ctx, st, su, D);
+  assert.ok(near(row.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9), 'dropped row ' + row.dM);
+  assert.ok(Object.keys(r2).some(k => r2[k].drop != null && k !== D), 'the drop moved to another player');
+  // he reads at the replacement's level, not far below it
+  const rep = W.moduleSetup(ctx, st, { baseline: 'rep' }), rowR = W.moduleRow(ctx, st, su, rep.worst);
+  assert.ok(row.dM <= rowR.dM + 1e-9, 'D ' + row.dM + ' vs R ' + rowR.dM);
+  assert.ok(row.dM > rowR.dM - 2, 'about the replacement\'s level ' + row.dM + ' vs ' + rowR.dM);
+});
+
+test('avg: a dropped IL player gets 0 games and is replaced by an average entry with his slot\'s share of games; the team keeps playing the others', () => {
+  const pp = pool.byKey.get(T.tabState(ROS[me]).order.find(k => T.tabState(ROS[me]).slots[k] === 'il')), was = pp.g;
+  pp.g = 4;   // 5% of a season: the cheapest drop, so he is the one who goes
+  try {
+    const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]), il = pp.key, w = T.window(ctx);
+    const pl = W.plays(ctx, st, { tid: me });
+    assert.strictEqual(pl[il].drop, w.from, 'fixture: the IL player is dropped at the start');
+    assert.strictEqual(pl[il].played, 0);
+    const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), ap = su.ap, g = T.soloGames(ctx, il, pl[il].drop);
+    assert.strictEqual(g, 0, 'a dropped IL player has no games before he leaves');
+    const hand = W.matrixOf(ctx, ap.mine.filter(e => e.key !== il).concat(Object.assign({}, ap.mean, { games: 0 })), new Set(st.order), ap.W);
+    assert.ok(near(W.moduleRow(ctx, st, su, il).dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9));
+    assert.ok(near(W.moduleRow(ctx, st, su, il).dM, 0, 1e-9), 'he adds nothing, so he reads 0 vs average');
+  } finally { pp.g = was; }
+});
+
+test('avg: avgOwn on a counted player equals the team with an average-line entry (his slot\'s games) in his place', () => {
+  const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), k = T.counted(st, ctx)[0], g = T.soloGames(ctx, k) / su.ap.W * su.ap.share;
+  const own = W.moduleRow(ctx, st, su, k), mine = su.ap.mine.filter(e => e.key !== k).concat(Object.assign({}, su.ap.mean, { games: g })), hand = W.matrixOf(ctx, mine, new Set(st.order), su.ap.W);
+  assert.ok(near(own.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9));
+});
+
 test('moduleSetup + moduleRow + moduleSort equal moduleScores in both baselines; new - old = dM; rep old is the matrix mean', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), own = st.order.filter(k => ['active', 'reserve', 'il'].includes(st.slots[k]));
   const cands = own.concat(ROS[other].map(x => x.fid).slice(0, 4)), w = [1, 1, 1, 0, 1, 1, 1, 1, 1];
@@ -187,9 +265,9 @@ test('avg: a candidate is my team minus the average player plus him', () => {
   assert.ok(near(row.new - row.old, row.dM, 1e-9) && near(row.old, 100 * base.mean.match, 1e-9));
 });
 
-test('avg: my own counted player replaces nobody; he is scored against an average-line entry with his own games', () => {
+test('avg: my own counted player replaces nobody; he is scored against an average-line entry with the games his slot allows (as a candidate)', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), x = st.order.find(k => st.slots[k] === 'active');
-  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(Object.assign(meanEntry(mine, ctx), { games: mine.find(e => e.key === x).games })), new Set(st.order), w);
+  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(Object.assign(meanEntry(mine, ctx), { games: T.soloGames(ctx, x) / w * W.avgParts(ctx, st, w).share })), new Set(st.order), w);
   const row = W.moduleScores(ctx, st, { baseline: 'avg', candidates: [x] })[0];
   assert.ok(near(row.dM, 100 * (base.mean.match - m.mean.match), 1e-9));
   assert.ok(near(row.new, 100 * base.mean.match, 1e-9) && near(row.old, 100 * m.mean.match, 1e-9));
@@ -210,7 +288,7 @@ test('avg: an average-line player with an average player\'s games scores the sam
 
 test('rep: when the worst player is in Reserve a candidate is scored as an Active player, not with the Reserve leftovers', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), su0 = W.moduleSetup(ctx, st, {}), c = ROS[other].find(x => x.slot === 'ACTIVE').fid;
-  const rk = st.order.find(k => st.slots[k] === 'reserve'), su = Object.assign({}, su0, { worst: rk, wSlot: 'reserve' });   // force the Reserve player to be the worst
+  const rk = st.order.find(k => st.slots[k] === 'reserve'), su = Object.assign({}, su0, { worst: rk, grp: [rk], wSlot: 'reserve' });   // force the Reserve player to be the worst
   const s0 = T.moveSlot(T.applySwap(st, [su.worst], [c]), c, 'active'), exp = 100 * (W.matrix(ctx, s0).mean.match - su.base.mean.match);
   assert.ok(near(W.moduleRow(ctx, st, su, c).dM, exp, 1e-9), String(W.moduleRow(ctx, st, su, c).dM) + ' vs ' + exp);
 });
@@ -321,8 +399,8 @@ test('avg: after a trade the Vs average rows use the same opponents as the matri
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), o1 = st.order.find(k => st.slots[k] === 'active'), a = oppActive(other);
   const sw = T.applySwap(st, [o1], [a]), su = W.moduleSetup(ctx, sw, { baseline: 'avg' }), own = sw.order.find(k => k !== a && T.COUNTED.includes(sw.slots[k]));
   const row = W.moduleRow(ctx, sw, su, own), recv = W.received(ctx, sw), W0 = su.ap.W;
-  const e = su.ap.mine.find(x => x.key === own), keys = [].concat(...Object.values(recv)).map(r => r.key);
-  const hand = W.matrixOf(ctx, su.ap.mine.filter(x => x.key !== own).concat(Object.assign({}, su.ap.mean, { games: e.games })), new Set(sw.order.concat(keys)), W0, { recv });
+  const keys = [].concat(...Object.values(recv)).map(r => r.key);
+  const hand = W.matrixOf(ctx, su.ap.mine.filter(x => x.key !== own).concat(Object.assign({}, su.ap.mean, { games: T.soloGames(ctx, own) / W0 * su.ap.share })),new Set(sw.order.concat(keys)), W0, { recv });
   assert.ok(near(row.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9));
   const cand = pool.players.find(p => !p.owner && p.g > 0).key, rc = W.moduleRow(ctx, sw, su, cand);
   const mine = su.ap.mine.concat(Object.assign({}, su.ap.mean, { sign: -1 }), { p: ctx.pool.byKey.get(cand).line, games: require('../../team_core.js').windowGames(ctx, [cand], null)[0] / W0 * su.ap.share });
@@ -562,7 +640,7 @@ test('Team tab: a candidate in the list scores as the worst counted player\'s sl
   for (const basis of ['pergame', 'total']) {
     const ctx = mkTab(basis), st = tabSt(), c = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE'), su = W.moduleSetup(ctx, st, { baseline: 'rep' });
     if (su.wSlot !== 'active') continue;
-    const row = W.moduleRow(ctx, st, su, c), after = T.moveSlot(T.applySwap(st, [su.worst], [c]), c, 'active');
+    const row = W.moduleRow(ctx, st, su, c), after = T.moveSlot(T.applySwap(st, su.grp, [c]), c, 'active');   // grp = the worst, plus the IL player sharing his slot
     assert.ok(near(row.dM, 100 * (W.matrix(ctx, after, su.mo).mean.match - su.base.mean.match), 1e-6), basis);
     assert.ok(Number.isFinite(row.dM) && row.dM !== 0, basis);
   }
@@ -587,4 +665,42 @@ test('leagueWin detail: C[i][j] and P[i][j] equal the Team tab matrix of team i 
 test('leagueWin without detail has no C or swing (unchanged result shape)', () => {
   const lw = W.leagueWin(mkTab('total'), null, { basis: 'total' });
   assert.strictEqual(lw.C, undefined); assert.strictEqual(lw.swing, undefined);
+});
+
+// dropRank (IL timeline, 2026-10-29): who is dropped when the IL players return and the roster is over the player limit is chosen by Win M
+// contribution (the drop in the team's mean match chance when he is removed), not by nightValue
+const tabDrop = DAYS => Object.assign({}, mk(last.start, DAYS || games(last.start, last.end)), { teamTab: true, basis: 'total' });
+test('dropRank: rank(k) is minus the team\'s mean match chance when k is the one dropped at the first return, the field\'s saved rosters with nobody dropped', () => {
+  const ctx = tabDrop(), st = T.tabState(ROS[me]), Wk = W.weeksLeft(ctx), rank = W.dropRank(ctx, me), e = W.engCtx(ctx, 9);
+  const field = ids.filter(t => t !== me).map(t => W.teamVec(e, W.side(ctx, W.oppState(ctx, t), Wk, { noDrop: true })));
+  const meanDropped = k => {
+    const r = T.playsPct(ctx, st, { force: 1, rank: x => (x === k ? -1 : 0) });
+    const mine = st.order.filter(x => T.counted(st, ctx).includes(x)).map(x => ({ key: x, p: pool.byKey.get(x).line, games: r[x].played / Wk }));
+    const vecs = [W.teamVec(e, mine)].concat(field), out = W.evalVecs(e, vecs);
+    return field.reduce((s, _, j) => s + 0.5 + W.SHRINK.match * (out.pairProb(out.teams[0], out.teams[j + 1]) - 0.5), 0) / field.length;
+  };
+  T.counted(st, ctx).forEach(k => assert.ok(near(rank(k), -meanDropped(k), 1e-9), k));
+  assert.strictEqual(rank('not-on-the-roster'), Infinity, 'players off the saved roster are never dropped');
+  // the player the rank picks is the one whose drop leaves the best team: it is what the Team tab then shows
+  const pick = T.counted(st, ctx).reduce((a, b) => rank(b) < rank(a) ? b : a), res = W.plays(ctx, st, { tid: me });
+  assert.ok(res[pick].drop != null, 'the lowest rank is the player dropped');
+});
+
+test('dropRank: a player whose team has no games is the one dropped; the dropped player has the lowest contribution among the non-IL counted', () => {
+  const DAYS = games(last.start, last.end), st = T.tabState(ROS[me]), act = st.order.filter(k => st.slots[k] === 'active');
+  DAYS.games[pool.byKey.get(act[0]).t] = [];
+  const ctx = tabDrop(DAYS), rank = W.dropRank(ctx, me), res = W.plays(ctx, st, { tid: me }), drop = Object.keys(res).filter(k => res[k].drop != null);
+  assert.ok(drop.length >= 1, 'fixture: over the limit');
+  assert.ok(T.counted(st, ctx).every(k => rank(act[0]) <= rank(k) + 1e-12), 'the no-games player ranks lowest');
+  const pw = W.playerWin(ctx, st, { cats: 9 });
+  drop.forEach(d => T.counted(st, ctx).filter(k => st.slots[k] !== 'il' && !drop.includes(k)).forEach(k => assert.ok(pw[d].m <= pw[k].m + 1e-9, d + ' vs ' + k)));
+});
+
+test('dropRank: free agents swapped in are never the drop, so the weakest read at or below the replacement and not all the same', () => {
+  const ctx = tabDrop(), st = T.tabState(ROS[me]), su = W.moduleSetup(ctx, st, { baseline: 'rep' }), fa = pool.players.filter(p => !p.owner && p.g > 0 && p.t).sort((a, b) => Pl.valueZ(a.line, 82, ctx.ref) - Pl.valueZ(b.line, 82, ctx.ref)).slice(0, 5);
+  const dM = fa.map(p => W.moduleRow(ctx, st, su, p.key).dM);
+  dM.forEach(d => assert.ok(d <= 1e-9, 'weak free agent ' + d));
+  assert.ok(new Set(dM.map(d => d.toFixed(9))).size > 1, 'not all the same ' + dM);
+  const res = W.plays(ctx, st, { tid: me }), dropped = Object.keys(res).filter(k => res[k].drop != null);
+  dropped.forEach(d => { assert.notStrictEqual(d, su.worst); assert.ok(W.moduleRow(ctx, st, su, d).dM <= 1e-9, 'the dropped row ' + W.moduleRow(ctx, st, su, d).dM); });
 });

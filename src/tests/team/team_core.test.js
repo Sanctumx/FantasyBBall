@@ -101,19 +101,121 @@ test('Team-tab Plays %: an IL player gets no games on Per game; on the seasonal 
   assert.strictEqual(T.playsPct(mkCtx(keys), st)[il].hypo, true);   // a plain ctx is as before
 });
 
-test('Team-tab Plays %: with the active slots full, an IL player shares the worst active player\'s slot by his availability, and their Plays % add up to what that slot had', () => {
-  const keys = ROS[me].map(x => x.fid).slice(0, 11), act = keys.slice(0, 10), il = keys[10];
-  for (const basis of ['total', 'mix']) {
-    const ctx = tabCtx(keys, basis), base = T.playsPct(ctx, stateOf(act, [])), r = T.playsPct(ctx, stateOf(act, [], [il]));
-    const worst = act.slice().sort((a, b) => valueOf(ctx, a) - valueOf(ctx, b))[0], aI = T.avail(ctx, pool.byKey.get(il));
-    // his games come out of the worst player's games (IL 20, worst 80 -> IL 20, worst 60), capped at what the worst had
-    const take = Math.min(T.soloGames(ctx, il), base[worst].played);
-    assert.ok(near(r[il].played, take) && near(r[worst].played, base[worst].played - take), basis + ' games');
-    assert.ok(near(r[il].pct + r[worst].pct, base[worst].pct), basis + ' sum');
-    assert.ok(near(r[il].pct, base[worst].pct * take / base[worst].played), basis + ' IL share');
-    assert.ok(near(r[il].wt, r[il].played / r[il].gl) && near(r[worst].wt, r[worst].played / r[worst].gl), basis + ' weight');
-    act.filter(k => k !== worst).forEach(k => assert.deepStrictEqual([r[k].played, r[k].pct], [base[k].played, base[k].pct], basis + k));
-  }
+// IL timeline (2026-10-29, replaces the shared-slot pairs): an IL player is out for the first nOut games of his team's window, then plays at the
+// league-wide typical availability (his projected games g/82 carry both his current absence and the generic chance of missing games later, so
+// only the part of his missed games above a typical player's goes up front); his total stays avail x GL. After he is back everyone competes for
+// the nightly slots, so whoever is worst by value loses nights then, not before.
+const nightsOf = (keys, counts) => { const g = {}; keys.forEach((k, i) => { g[pool.byKey.get(k).t] = Array.from({ length: counts[i] }, (_, n) => NIGHT + n * 86400); }); return { games: g }; };
+const timelineCtx = (keys, counts, basis) => Object.assign(M.makeCtx({ L, pool, DAYS: nightsOf(keys, counts), rosters: ROS, me, nowMs: NOW }), { teamTab: true, basis: basis || 'total' });
+const withG = (k, g, fn) => { const pp = pool.byKey.get(k), was = pp.g; pp.g = g; try { return fn(); } finally { pp.g = was; } };
+
+test('IL timeline: typicalAvail is the league-wide median availability of the rostered non-IL players', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 5), ctx = timelineCtx(keys, [10, 10, 10, 10, 10]);
+  const own = pool.players.filter(p => p.owner && p.slot !== 'IR').map(p => T.avail(ctx, p)).sort((a, b) => a - b);
+  assert.ok(near(T.typicalAvail(ctx), own[Math.floor((own.length - 1) / 2)] / 2 + own[Math.ceil((own.length - 1) / 2)] / 2));
+  assert.strictEqual(T.typicalAvail(tabCtx(keys, 'pergame')), 1);
+});
+
+test('IL timeline: nOut games up front, the same total as his availability, and he is back at the typical rate', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 10), act = keys.slice(0, 9), il = keys[9], counts = new Array(10).fill(10);
+  withG(il, 50, () => {
+    const ctx = timelineCtx(keys, counts), a = T.avail(ctx, pool.byKey.get(il)), aT = T.typicalAvail(ctx), r = T.ilReturn(ctx, il);
+    assert.ok(a < aT, 'fixture: below the typical player');
+    assert.strictEqual(r.nOut, Math.round(10 * (1 - a / aT)));
+    assert.ok(r.nOut > 0 && near(r.a * (10 - r.nOut), a * 10, 1e-9), 'total games kept');
+    assert.strictEqual(r.tRet, (NIGHT + r.nOut * 86400) * 1000);
+    const res = T.playsPct(ctx, stateOf(act, [], [il]));   // 9 active + IL = 10 = the nightly limit, so no night is capped
+    assert.ok(near(res[il].played, a * 10, 1e-9) && near(res[il].played, T.soloGames(ctx, il), 1e-9));
+  });
+  // a player at or above the typical rate has no absence up front
+  withG(il, 82, () => assert.strictEqual(T.ilReturn(timelineCtx(keys, counts), il).nOut, 0));
+});
+
+test('IL timeline: the cover plays his own games until the IL player is back, even when his team has fewer games left than the IL player\'s', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 11), act = keys.slice(0, 10), il = keys[10], counts = [6, 7, 8, 9, 10, 6, 7, 8, 9, 10, 10];
+  withG(il, 40, () => {
+    const ctx = timelineCtx(keys, counts), r = T.ilReturn(ctx, il), res = T.playsPct(ctx, stateOf(act, [], [il])), base = T.playsPct(ctx, stateOf(act, []));
+    assert.ok(r.nOut >= 4, 'fixture: a long absence ' + r.nOut);
+    act.forEach((k, i) => {
+      const before = Math.min(counts[i], r.nOut);   // nights before his return: 10 active players fit the limit, so nobody is cut
+      assert.ok(res[k].played >= before * T.avail(ctx, pool.byKey.get(k)) - 1e-9, k + ' keeps his games before the return');
+      assert.ok(res[k].played > 0, k);
+    });
+    assert.ok(res[il].played > 0 && res[il].played <= T.soloGames(ctx, il) + 1e-9);
+    // after he is back, whoever is worst by value gives up nights: nobody gains from the IL player being on the roster
+    act.forEach(k => assert.ok(res[k].played <= base[k].played + 1e-9, k));
+  });
+});
+
+test('IL timeline: with a roster limit, o.rank picks who is dropped when the IL player returns, not nightValue', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 13), act = keys.slice(0, 12), il = keys[12], counts = new Array(13).fill(10);
+  withG(il, 40, () => {
+    const ctx = timelineCtx(keys, counts), r = T.ilReturn(ctx, il), st = stateOf(act, [], [il]);   // 12 active + 1 IL > maxPlayers (12)
+    const byValue = act.slice().sort((x, y) => valueOf(ctx, x) - valueOf(ctx, y)), best = byValue[byValue.length - 1], worst = byValue[0];
+    const res = T.playsPct(ctx, st, { rank: k => (k === best ? -1 : 0) });
+    assert.ok(r.nOut > 0 && r.nOut < 10);
+    assert.strictEqual(res[best].drop, (NIGHT + r.nOut * 86400) * 1000, 'the lowest-ranked player leaves at the return');
+    assert.ok(res[best].played <= T.avail(ctx, pool.byKey.get(best)) * r.nOut + 1e-9, 'only his games before it');
+    assert.strictEqual(res[worst].drop, undefined, 'the lowest nightValue is not dropped when the rank says otherwise');
+    // a protected (Infinity) player is never dropped, and ties in rank fall back to nightValue
+    const res2 = T.playsPct(ctx, st, { rank: k => (k === worst || k === il ? Infinity : 0) });
+    assert.strictEqual(res2[worst].drop, undefined);
+    assert.strictEqual(Object.keys(res2).filter(k => res2[k].drop != null).length, 1);
+    assert.throws(() => T.playsPct(ctx, st), /rank/, 'over the limit with no rank');
+    assert.doesNotThrow(() => T.playsPct(ctx, stateOf(act.slice(0, 11), [], [il])), 'under the limit needs no rank');
+  });
+});
+
+test('IL timeline: 12 Active + 2 IL with different returns: the j-th lowest-ranked drop leaves at the j-th return; a dropped IL player never plays', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 13).concat(ROS[other][0].fid), act = keys.slice(0, 12), il1 = keys[12], il2 = keys[13], counts = new Array(14).fill(10);
+  withG(il1, 40, () => withG(il2, 55, () => {
+    const ctx = timelineCtx(keys, counts), r1 = T.ilReturn(ctx, il1), r2 = T.ilReturn(ctx, il2), st = stateOf(act, [], [il1, il2]);
+    assert.ok(r1.nOut > 0 && r2.nOut > 0 && r1.tRet !== r2.tRet, 'fixture: different returns ' + r1.nOut + ' ' + r2.nOut);
+    const [early, late] = [r1.tRet, r2.tRet].sort((x, y) => x - y), rank = k => (act.includes(k) ? act.indexOf(k) : Infinity);   // act[0] lowest, act[1] next, the IL players protected
+    const res = T.playsPct(ctx, st, { rank });
+    assert.strictEqual(res[act[0]].drop, early);
+    assert.strictEqual(res[act[1]].drop, late);
+    assert.strictEqual(res[act[2]].drop, undefined);
+    // a dropped IL player never plays, and his return frees the spot: only one counted player goes
+    const res2 = T.playsPct(ctx, st, { rank: k => (k === il2 ? -1 : rank(k)) });
+    assert.strictEqual(res2[il2].played, 0);
+    assert.strictEqual(res2[act[0]].drop, r1.tRet);
+    assert.strictEqual(res2[act[1]].drop, undefined);
+  }));
+});
+
+test('IL timeline: o.force drops that many even under the limit (at the first return, the window middle with no IL player); o.noDrop keeps everyone', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 13), act = keys.slice(0, 11), il = keys[12], rank = k => (act.includes(k) ? act.indexOf(k) : Infinity);
+  withG(il, 40, () => {
+    const ctx = timelineCtx(keys, new Array(13).fill(10)), r = T.ilReturn(ctx, il), w = T.window(ctx);
+    const under = T.playsPct(ctx, stateOf(act, [], [il]), { force: 1, rank });   // 11 + IL = 12: nobody has to go
+    assert.strictEqual(under[act[0]].drop, (NIGHT + r.nOut * 86400) * 1000);
+    const lone = T.playsPct(ctx, stateOf(act, []), { force: 1, rank });   // no IL player: the window's middle
+    assert.strictEqual(lone[act[0]].drop, w.from + (w.to - w.from) / 2);
+    const over = T.playsPct(ctx, stateOf(keys.slice(0, 12), [], [il]), { noDrop: true });
+    assert.ok(Object.keys(over).every(k => over[k].drop == null));
+  });
+});
+
+test('IL timeline: 13 Active + 1 IL over a limit of 12 is two over: the first drop leaves at the window start, the second at the return', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 13).concat(ROS[other][0].fid), act = keys.slice(0, 13), il = keys[13], rank = k => (act.includes(k) ? act.indexOf(k) : Infinity);
+  withG(il, 40, () => {
+    const ctx = timelineCtx(keys, new Array(14).fill(10)), r = T.ilReturn(ctx, il), w = T.window(ctx), res = T.playsPct(ctx, stateOf(act, [], [il]), { rank });
+    assert.ok(r.nOut > 0, 'fixture: a real absence');
+    assert.strictEqual(res[act[0]].drop, w.from, 'already over the limit: gone from the start');
+    assert.strictEqual(res[act[0]].played, 0);
+    assert.strictEqual(res[act[1]].drop, r.tRet, 'the second goes when the IL player is back');
+    assert.strictEqual(res[act[2]].drop, undefined);
+    assert.strictEqual(Object.keys(res).filter(k => res[k].drop != null).length, 2);
+  });
+});
+
+test('IL timeline: soloGames(ctx, key, to) counts the games only up to `to`', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 3), ctx = timelineCtx(keys, [10, 10, 10]), k = keys[0], w = T.window(ctx);
+  assert.ok(near(T.soloGames(ctx, k, w.to), T.soloGames(ctx, k), 1e-9));
+  const half = (NIGHT + 4 * 86400) * 1000;
+  assert.ok(near(T.soloGames(ctx, k, half), T.avail(ctx, pool.byKey.get(k)) * 4, 1e-9));
+  assert.strictEqual(T.soloGames(ctx, k, w.from), 0);
 });
 
 test('Team-tab Plays %: a player under 82 projected games plays fewer games on total than on Per game, and the same on a full-season player', () => {
