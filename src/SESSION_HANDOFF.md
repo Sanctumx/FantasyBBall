@@ -39,11 +39,9 @@ availability (There at / Lasts to), Edge and a Model pick; it never punts. Share
    context limits if handoffs feel too frequent). Detail: archive "Handoff lines trimmed 2026-10-26".
 5. In-season open: #98 tune
    perceived-value weights, #101 projected playoffs, #102 multi-week plan, #103 week-to-date actuals; refit shrink k.
-6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
 7. **After Rankings (user, 2026-10-21):** #114 projected weekly stats dashboard in the Matchup Analyzer; #115 combine known
    game stats with projections; (#116 done).
-8. **#136** done 2026-10-25: `src/collect/espn_fetch.mjs` retries the ESPN collectors with backoff (429/403/5xx/network, 3
-   retries) and `espn_stats` pauses 500 ms between pages.
+(#112 and #136 done: moved to the archive, "Handoff lines trimmed 2026-10-29".)
 
 ## Branches in flight
 
@@ -51,11 +49,11 @@ Run `node .claude/scripts/branches.mjs` (every branch, ahead/behind main, pushed
 `src/handoffs/<branch>.md`. Shared records (this file, IDEAS, archive) change only in the ledger worktree: `docs/release-handoff.md`, "Parallel sessions".
 Pushing needs the user's word. Merged 2026-10-26/27 (list in the archive): team-tab-next (PR #46), tests-subfolders (#148, PR #47; tests are in `src/tests/{engine,league,team,collect,tooling}`), Claude-Workflow PR #8. No open PRs. `fold-test` is another session's branch.
 
-**Permissions (user, 2026-10-28):** prompts only on push, merge and delete, in any worktree (and ask in chat before using the user's PC for a test; memory `permission-policy`). PR #50 (and Claude-Workflow PR #9) trimmed `.claude/settings.json` `ask` to `git push` / `git -C * push *` / `gh pr merge` / `gh api *merge*` / `rm` / `git branch -d,-D` / `git worktree remove` / `Remove-Item` and set `defaultMode: auto`; `~/.claude/settings.json` has `additionalDirectories` `C:\Users\Fefe\Documents` and no stale entries. The `cd` rule is gone from `before-bash.mjs`; `sed -i` and heredoc writes stay blocked (they skip the edit guards). **Known gap:** with the bare `Bash` allow the ask rules look unenforced (push, PR create and merge ran with no prompt on 2026-10-28). Decision open: add a `PreToolUse` hook that forces a prompt on push/merge/delete, here and in the template. `node --test 'src/tests/*.test.js'` fails here: use `node --test src/tests/`.
+**Permissions (user, 2026-10-28):** prompts only on push, merge and delete, in any worktree; ask in chat before using the user's PC for a test (memory `permission-policy`). Detail: archive "Handoff lines trimmed 2026-10-29". Use `node --test src/tests/`.
 
 **Calibration (2026-10-29, PRs #52, #54, #55 merged):** ideas 145-158 are all run and read; nothing changed the app's k. Matchup Analyzer `K_MATCH` is **0.72** (an earlier .78 was reverted: #157 line P and #146's live .55 measure the Team-tab forecaster, not the Analyzer's; #158 re-fit on the right forecaster gave pooled .71 +-.05, archive 158b). Team / Rankings / Trade keep `WinK.SHRINK` .60 / .75. The guard hook (PR #51) is in. Open calibration rows: 159 (variance instead of k), 160 (match-from-category step), 158 optional live check. Known unfixed review points on the calib scripts: season-merged bootstrap clustering in `calib_ros.js` kwlMain / `calib_lag.js` (fix before gate O is reused), division SE ~5% low.
 
-**#165 IL timeline merged 2026-10-29** (PRs 60, 61): re-run #163; delete empty folders `FantasyBBall-iltimeline`, `-reprep`.
+**#165 IL timeline merged 2026-10-29** (PRs 60, 61). `inseason-pe` merged with main; the #163 full trade run (seeds 291-370) was started on the user's PC 16:30 on 2026-10-29: read results per `src/handoffs/inseason-pe.md` Next 2. **#166 stat congruency** is in branch `stat-congruency` (worktree `FantasyBBall-congruency`, B1 done, user decisions D1-D7 in its notes `src/handoffs/stat-congruency.md`): resume there. Empty folders `FantasyBBall-iltimeline`, `-reprep` could not be deleted (in use by a process).
 
 **Next session starts with:** 1. Item 2 of the user's list: scoring in-season models in prize equity ("check prize equity of different in-season models": weekly add / streaming policies and Win-chance models if they fed decisions). Big feature: brainstorm with the user first (superpowers:brainstorming), then the `planner`. Facts found: no in-season policy has a prize-equity score; `prize_equity.py` reads `bt_real_*.json` rows (me, made, rounds, title); `stream_sim.js` / `bt_stream.js` give weekly rates only, so a season simulator (bt_real / title_score path) must run the policy and emit rows under a new arm, then `prize_equity.py <arm>:23`. Related rows: 6b Rejected, 96, 102, 116, 121, 140, 141. 2. Ledger clearing with the user, row by row (143, 144, 133, 121, 101-102, 98, draft research). 3. #150 needs a PC run (ask first). Permission mode: the user wants as much done without prompts as possible; bundle pushes for one decision.
 

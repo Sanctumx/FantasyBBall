@@ -190,6 +190,13 @@ Analyst on `pairMatchup`: math sound; consistency test uses gVar 1.87, tolerance
 gates the merge. Ledger with every ruling: `.superpowers/sdd/2026-10-20-matchup-and-trade-analyzer/progress.md` (git-ignored).
 
 
+## Handoff lines trimmed 2026-10-29 (moved here unchanged)
+
+6. #112 done: per game = mean of the active players per-game lines (branch fix-112-per-game-average, not yet merged).
+8. **#136** done 2026-10-25: `src/collect/espn_fetch.mjs` retries the ESPN collectors with backoff (429/403/5xx/network, 3
+   retries) and `espn_stats` pauses 500 ms between pages.
+Also moved: the "Permissions (user, 2026-10-28)" paragraph (PR #50 and Claude-Workflow PR #9 trimmed `ask` to push / merge / delete and set `defaultMode: auto`; known gap that ask rules looked unenforced with the bare `Bash` allow, then closed by the guard hook, PR #51).
+
 ## Handoff lines trimmed 2026-10-26 (moved here unchanged)
 
 Old "Next session starts with" paragraph of `SESSION_HANDOFF.md` (PR #24 summary and the tab-overhaul brainstorm, since built as #131-135):
