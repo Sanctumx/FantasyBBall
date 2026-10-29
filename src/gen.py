@@ -16,7 +16,8 @@ SRC={'DATA':('players','const PLAYERS='+P+';'),'SCHED':('sched','const SCHED='+S
      'LEAGUE':('league_core',rd('league_core.js')),
      'INSEASON':('inseason_mods',cat(['inseason_league.js','inseason_players.js','matchup_core.js','points_core.js','team_core.js','win_k.js','team_win.js','trade_core.js'])),
      'RANKINGS':('rankings_mods',cat(['inseason_league.js','inseason_players.js','points_core.js','win_k.js','rankings_core.js'])),
-     'TEAM':('team_mods',cat(['inseason_league.js','inseason_players.js','matchup_core.js','points_core.js','win_k.js','rankings_core.js','team_core.js','team_win.js','team_view.js']))}
+     'TEAM':('team_mods',cat(['inseason_league.js','inseason_players.js','matchup_core.js','points_core.js','win_k.js','rankings_core.js','team_core.js','team_win.js','team_view.js'])),
+     'LEAGUETAB':('league_tab',rd('league_tab.js'))}
 ASSET={}   # file name under assets/ -> text
 # the hash is of the bytes written, which are what open(...,'w') makes of the text on this machine
 OUTENC=open(os.devnull,'w').encoding or 'utf-8'

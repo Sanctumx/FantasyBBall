@@ -646,6 +646,27 @@ test('Team tab: a candidate in the list scores as the worst counted player\'s sl
   }
 });
 
+test('leagueWin detail: C[i][j] and P[i][j] equal the Team tab matrix of team i against team j, on both bases', () => {
+  for (const basis of ['total', 'pergame']) {
+    const ctx = mkTab(basis), lw = W.leagueWin(ctx, null, { basis, detail: true });
+    assert.ok(Array.isArray(lw.C) && lw.swing !== undefined, basis);
+    lw.ids.forEach((a, i) => {
+      const m = W.matrix(Object.assign({}, ctx, { me: a }), T.tabState(ROS[a]));
+      m.teams.forEach(t => {
+        const j = lw.ids.indexOf(t.id);
+        assert.ok(near(lw.P[i][j], t.match, 1e-9), basis + ' P ' + a + t.id);
+        t.cat.forEach((v, c) => { if (v == null) assert.strictEqual(lw.C[i][j][c], null); else assert.ok(near(lw.C[i][j][c], v, 1e-9), basis + ' C ' + a + t.id + ' ' + c); });
+      });
+      assert.strictEqual(lw.C[i][i], null);
+    });
+  }
+});
+
+test('leagueWin without detail has no C or swing (unchanged result shape)', () => {
+  const lw = W.leagueWin(mkTab('total'), null, { basis: 'total' });
+  assert.strictEqual(lw.C, undefined); assert.strictEqual(lw.swing, undefined);
+});
+
 // dropRank (IL timeline, 2026-10-29): who is dropped when the IL players return and the roster is over the player limit is chosen by Win M
 // contribution (the drop in the team's mean match chance when he is removed), not by nightValue
 const tabDrop = DAYS => Object.assign({}, mk(last.start, DAYS || games(last.start, last.end)), { teamTab: true, basis: 'total' });

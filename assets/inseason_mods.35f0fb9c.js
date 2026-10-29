@@ -1080,7 +1080,10 @@
     });
     const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
     const P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? out.catProb(out.teams[i], out.teams[j], F) : shr(out.pairProb(out.teams[i], out.teams[j]), k.match)));
-    return { W, ids, P };
+    if (!(o && o.detail)) return { W, ids, P };
+    // detail (the League tab): C[i][j][c] = team i's shrunk chance in category c against team j (null past nc, on the diagonal and in points mode), as the matrix's `cat`
+    const C = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? null : Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(out.teams[i], out.teams[j], c), k.cat))));
+    return { W, ids, P, C, swing: e.ctx.swing };
   }
 
   // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb

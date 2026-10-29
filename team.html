@@ -263,7 +263,7 @@ tr.lrow{cursor:pointer}
 <script src="assets/shared.9f9a6a1b.js"></script>
 <script src="assets/store.22818a7e.js"></script>
 <script src="assets/fxcache.3a003ffb.js"></script>
-<script src="assets/team_mods.943be11d.js"></script>
+<script src="assets/team_mods.a51c9df5.js"></script>
 <script>
 (function () {
   'use strict';
@@ -358,29 +358,17 @@ tr.lrow{cursor:pointer}
   const zCats = pp => (zmap.has(pp.key) ? zmap.get(pp.key) : null);
 
   // sources (2026-10-26): the monthly box-score files load only when a box-score source is picked; rows and Zscore tables are kept per source
-  let box = null, boxP = null;
-  const needBox = () => R.WINDAYS[ui.src] ? (boxP = boxP || R.loadBox(fetch).then(b => (box = b))) : Promise.resolve();
-  // a window built before the box files arrive (box === null) is empty: use it, but never keep it
-  const srcCache = new Map(), srcWin = src => { const k = 'win:' + src; if (srcCache.has(k)) return srcCache.get(k); const w = R.windowSource(box || [], R.WINDAYS[src], PLAYERS); if (box) srcCache.set(k, w); return w; };
-  const srcRows = src => { const k = 'rows:' + src; if (srcCache.has(k)) return srcCache.get(k); const r = R.WINDAYS[src] ? srcWin(src).rows : R.projSource(PLAYERS, src); if (!R.WINDAYS[src] || box) srcCache.set(k, r); return r; };
+  // (TeamView.createSources, shared with the League tab: a window built before the box files arrive is empty and never kept)
+  const SRCS = TV.createSources(PLAYERS), zMapOf = TV.createZMap();
+  const needBox = () => SRCS.need(ui.src, fetch), srcWin = SRCS.win, srcRows = SRCS.rows;
   const SRC_NAME = { season: 'Season to date', w7: 'Last week', w14: 'Last 2 weeks', w30: 'Last month', avg: 'BBM + Hashtag average', bbm: 'BBM', hs: 'Hashtag' };
   // the category Zscores of the roster table: the source's own table; a player with no game in it keeps his projection Zscore
-  const zCache = new WeakMap();
   // the Per game / Rest of season toggle is the basis of the Win numbers and the Zscore table, as on the Rankings tab (2026-10-26)
   const basisOf = () => ui.view === 'ros' ? 'total' : 'pergame';
   const maxA = () => ctx.L.maxPlayers || ctx.L.maxActive;
   function mkZ() {
     zmap = new Map(); if (pw()) return;
-    const s = SS.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: ui.ztype, basis: basisOf() };
-    // one table per source rows and settings (R.table + matchRows cost about 90 ms): kept until the rows, pool or Fantrax players change
-    const ck = [s.teams, s.roster, s.cats, opt.basis, opt.type].join('|');
-    const tableOf = (src, rows) => {
-      let c = zCache.get(rows); if (!c || c.pool !== pool || c.fx !== fxPlayers) zCache.set(rows, c = { pool, fx: fxPlayers, by: new Map() });
-      if (!c.by.has(ck)) { const byPid = R.matchRows(src, rows, pool, fxPlayers).byPid; c.by.set(ck, R.table(rows, opt).map(x => x.cats && byPid.get(x.pid) ? [byPid.get(x.pid), x.cats] : null).filter(Boolean)); }
-      return c.by.get(ck);
-    };
-    const add = (src, over) => tableOf(src, srcRows(src)).forEach(([k, cats]) => { if (over || !zmap.has(k)) zmap.set(k, cats); });
-    add(ui.src, true); if (ui.src !== 'avg') add('avg', false);
+    zmap = zMapOf(SRCS, { src: ui.src, settings: SS.settings, ztype: ui.ztype, basis: basisOf(), pool, fxPlayers });
   }
 
   function start() {

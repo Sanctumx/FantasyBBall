@@ -212,7 +212,7 @@ tr.click{cursor:pointer}
       <h4>Stats and weights</h4>
       <p>Stats picks what the nine category columns show: Win added, Zscore or projected stats. Category weights (×0 to ×2; TO starts at ×0.5) change Zscore only; Win always counts every category.</p>
       <h4>League Dashboard</h4>
-      <p>League Dashboard (top right) analyzes the league loaded in Settings as it stands now: every team's current roster (players on IR are left out and noted). On top, the team in focus against each opponent (chance to win the matchup and each category) and its category profile (win chance against an average team, projected total, rank). Below, every team against every team (matchup win %, category win % or expected categories) and every team's projected stats (raw, per week, Zscore or rank). Stats Total or Per game sets the basis for every number on that page (Per game ignores missed games); Playoff boost is Off, like the Model pick, so with the same Basis and Projections here its numbers match Your team. Click any column header to sort; percentages show one decimal. Without a loaded league the page asks you to load one in Settings.</p>
+      <p>League Dashboard (top right) analyzes the league loaded in Settings as it stands now: every team's current roster, scored by the Team tab's rules (Plays % lineups, win chances shrunk toward 50%). Players on IL are listed in the header; on Total they count at their availability, on Per game they do not. On top, the team in focus against each opponent (chance to win the matchup and each category) and its category profile (win chance against an average team, projected total, rank). Below, every team against every team (matchup win %, category win % or expected categories) and every team's projected stats (raw, per week, Zscore or rank). Basis Total or Per game sets the basis for every number on that page (Per game ignores missed games); Source picks the projections (or recent games) and Zscore type the Zscore view, as on the Team tab, so a team's numbers here match what the Team tab shows for it. Click any column header to sort; percentages show one decimal. Without a loaded league the page asks you to load one in Settings.</p>
       <h4>Saved drafts</h4>
       <p>Save, load, rename, delete or start a new draft; anything that would lose work asks for a second tap. Drafts live in this browser; Export (one draft) or Export all saves them to a file, and Import adds a file's drafts here, on any browser or device. Players are matched by name, so an older file still lands on the right players.</p>
       <h4>Colors</h4>
@@ -2817,7 +2817,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
     const P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? out.catProb(out.teams[i], out.teams[j], F) : shr(out.pairProb(out.teams[i], out.teams[j]), k.match)));
-    return { W, ids, P };
+    if (!(o && o.detail)) return { W, ids, P };
+    // detail (the League tab): C[i][j][c] = team i's shrunk chance in category c against team j (null past nc, on the diagonal and in points mode), as the matrix's `cat`
+    const C = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? null : Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(out.teams[i], out.teams[j], c), k.cat))));
+    return { W, ids, P, C, swing: e.ctx.swing };
   }
 
   // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb

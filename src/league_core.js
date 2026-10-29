@@ -116,12 +116,17 @@
   // The league as it stands now: each team's non-IR players on the board (IR players are left out and listed in `ir`; counting them
   // is tabled, #109). Teams run by standings rank, then name. Rosters go round by round, so open spots are the late picks of their
   // team. `rosters` and `standings` are the Worker's answers (what=rosters, what=standings).
-  function sourceFromRosters(league, rosters, standings, fxPlayers, PLAYERS, settings, myTeam) {
-    const ti = (league && league.teamInfo) || {}, tids = Object.keys(ti);
-    if (!tids.length) throw new Error('This league has no teams yet.');
+  // team ids (the keys of league.teamInfo) by standings rank, then name; teams without a rank last
+  function teamOrder(ti, standings) {
     const rank = {}; (Array.isArray(standings) ? standings : []).forEach(r => { if (r && r.teamId && r.rank != null && !isNaN(+r.rank)) rank[r.teamId] = +r.rank; });
     const label = t => (ti[t] && ti[t].name) || t;
-    const ids = tids.slice().sort((x, y) => ((rank[x] == null ? 1e9 : rank[x]) - (rank[y] == null ? 1e9 : rank[y])) || String(label(x)).localeCompare(String(label(y)), undefined, { numeric: true }));
+    return Object.keys(ti).sort((x, y) => ((rank[x] == null ? 1e9 : rank[x]) - (rank[y] == null ? 1e9 : rank[y])) || String(label(x)).localeCompare(String(label(y)), undefined, { numeric: true }));
+  }
+  function sourceFromRosters(league, rosters, standings, fxPlayers, PLAYERS, settings, myTeam) {
+    const ti = (league && league.teamInfo) || {};
+    if (!Object.keys(ti).length) throw new Error('This league has no teams yet.');
+    const label = t => (ti[t] && ti[t].name) || t;
+    const ids = teamOrder(ti, standings);
     const N = ids.length, body = (rosters && rosters.rosters) || {};
     const P = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i, key: Shared.norm(r.n) }));
     const tail = PLAYERS.filter(q => q.src !== 'hs').sort((a, b) => b.rk - a.rk).slice(0, 15), extra = [], byFid = {}, ir = [];
@@ -141,6 +146,6 @@
     return { cfg, picks, owner, extra, base: PLAYERS.length, names: ids.map(label), ids, ir };
   }
 
-  const api = { computeLeague, rawTotals, playersFor, sourceFromRosters };
+  const api = { computeLeague, rawTotals, playersFor, sourceFromRosters, teamOrder };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.League = api;
 })(this);

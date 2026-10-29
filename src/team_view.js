@@ -154,6 +154,36 @@
     return ctx;
   }
 
+  // sources (2026-10-26, shared with the League tab 2026-10-29): rows per source. The monthly box-score files load only when a box-score
+  // source is asked for (need); a window built before the files arrive is empty: it is returned, but never kept.
+  // -> { rows(src), win(src), need(src, fetchFn), setBox(b), box() }
+  function createSources(PLAYERS) {
+    let box = null, boxP = null; const cache = new Map();
+    const win = src => { const k = 'win:' + src; if (cache.has(k)) return cache.get(k); const w = Rk.windowSource(box || [], Rk.WINDAYS[src], PLAYERS); if (box) cache.set(k, w); return w; };
+    const rows = src => { const k = 'rows:' + src; if (cache.has(k)) return cache.get(k); const r = Rk.WINDAYS[src] ? win(src).rows : Rk.projSource(PLAYERS, src); if (!Rk.WINDAYS[src] || box) cache.set(k, r); return r; };
+    const need = (src, fetchFn) => Rk.WINDAYS[src] ? (boxP = boxP || Rk.loadBox(fetchFn).then(b => (box = b))) : Promise.resolve();
+    return { rows, win, need, setBox: b => { box = b; }, box: () => box };
+  }
+
+  // the category Zscores of the roster tables, by Fantrax key: the source's own table; a player with no game in it keeps his projection
+  // Zscore (the 'avg' table fills the gaps). One table per source rows and settings (R.table + matchRows cost about 90 ms) is kept until
+  // the rows, pool or Fantrax players change. -> zMap(sources, { src, settings, ztype, basis, pool, fxPlayers }) = Map(key -> 9 category Zscores)
+  function createZMap() {
+    const zCache = new WeakMap();
+    return (sources, a) => {
+      const zmap = new Map(), s = a.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: a.ztype, basis: a.basis };
+      const ck = [s.teams, s.roster, s.cats, opt.basis, opt.type].join('|');
+      const tableOf = (src, rows) => {
+        let c = zCache.get(rows); if (!c || c.pool !== a.pool || c.fx !== a.fxPlayers) zCache.set(rows, c = { pool: a.pool, fx: a.fxPlayers, by: new Map() });
+        if (!c.by.has(ck)) { const byPid = Rk.matchRows(src, rows, a.pool, a.fxPlayers).byPid; c.by.set(ck, Rk.table(rows, opt).map(x => x.cats && byPid.get(x.pid) ? [byPid.get(x.pid), x.cats] : null).filter(Boolean)); }
+        return c.by.get(ck);
+      };
+      const add = (src, over) => tableOf(src, sources.rows(src)).forEach(([k, cats]) => { if (over || !zmap.has(k)) zmap.set(k, cats); });
+      add(a.src, true); if (a.src !== 'avg') add('avg', false);
+      return zmap;
+    };
+  }
+
   // ---- the list as drawn ----
   const SLOT_LABEL = { active: 'Active', reserve: 'Reserve', il: 'IL' };
   // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query.
@@ -235,6 +265,6 @@
     }, s);
   }
 
-  const api = { gamesLeft, rows, zParts, move, fillProbe, autoFill, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, fillProbe, autoFill, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, createSources, createZMap, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);

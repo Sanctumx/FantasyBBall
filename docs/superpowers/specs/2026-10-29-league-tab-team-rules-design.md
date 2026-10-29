@@ -62,3 +62,17 @@ My calls (flagged, change if wrong):
 - The adapter's exact shapes, how the per-team context is built efficiently (14 teams; Plays % cost), caching of box-score
   loads, and the fixtures for the equality test.
 - Open for the builder to check: how League handles a team whose Fantrax roster has IL players on a non-seasonal basis.
+
+## Builder-check answers (user, 2026-10-29)
+
+- Equality test (raw line plus `P[i][j]` equal to the Team tab): yes. Include a team with full active slots plus an IL player (PR #58 rule).
+- Non-seasonal bases: League shows a note on the tab about seasonal vs per game (IL counts only on seasonal bases).
+- `TeamWin.leagueWin` is extended to expose per-category and per-match probabilities (hard area: planner at effort high).
+- The old `proj` select is replaced by Source: yes.
+- Zscore type dropdown (Normal, H2H-adjusted, Roto-adjusted) goes on the team stats module of the League tab; no weights control.
+
+My calls (user did not know the questions; change if wrong):
+- Open roster spots: drop the average-pick filler the old engine added; a team is scored on the players it has (as the Team tab does). Drop the "N of M roster spots filled" count.
+- Players missing from the projections (`src.extra`, waiver-level lines): follow whatever `Team.tabState` does for the Team tab.
+- Scoring formats: keep the Standings/rank ordering for H2H each category, H2H most, and Roto, derived from the new win numbers.
+- The header text "N on IR left out" goes away; IL players are listed and counted like on the Team tab.

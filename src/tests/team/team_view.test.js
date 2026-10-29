@@ -482,3 +482,14 @@ test('move / dropIn with an IL cap: a move into a full IL throws, Active/Reserve
   const free = ROS[other].find(x => x.slot === 'ACTIVE').fid;
   assert.throws(() => V.dropIn(st, free, 'il', 99, nIl));
 });
+
+// ---- shared source code (League tab, 2026-10-29): rows per source; a box-score window built before the files arrive is empty and never kept ----
+test('createSources: projection rows are cached and equal Rankings.projSource; a window before the box files is empty and not kept', () => {
+  const R = require('../../rankings_core.js'), S = V.createSources(PLAYERS);
+  assert.strictEqual(S.rows('avg'), S.rows('avg'));
+  assert.deepStrictEqual(S.rows('bbm'), R.projSource(PLAYERS, 'bbm'));
+  const empty = S.win('w7'); assert.strictEqual(empty.rows.length, 0); assert.notStrictEqual(S.win('w7'), empty);
+  S.setBox([fx('box_week1.json')]);
+  const w = S.win('season'); assert.strictEqual(S.win('season'), w); assert.strictEqual(S.rows('season'), w.rows);
+  assert.ok(S.need('avg') instanceof Promise);
+});
