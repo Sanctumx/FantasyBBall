@@ -46,6 +46,6 @@ for _, r in X.iterrows():
 print('Hashtag-only players added:', len(added))
 blank = [q['n'] for q in P if q.get('src') == 'hs' and q['p'] in ('nan', '')]
 if blank: print('::warning::blank position for', blank, '- add to POS_FIX')
-json.dump(P, open('players.json', 'w'), ensure_ascii=False, separators=(',', ':'))
+json.dump(P, open('players.json', 'w'), ensure_ascii=False, separators=(',', ':'), allow_nan=False)
 print('hashtag rows', len(H), '| BBM players', len(P), '| matched', hit)
 print('BBM players with no Hashtag projection:', miss)
