@@ -6,7 +6,7 @@
   const Engine = root.Engine || require('./engine.js'), InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js');
 
   // K_MATCH / K_CAT: fractional games of a later week (Matchup Analyzer), fitted weekly. The rest-of-season k is WinK.SHRINK (Team, Rankings, Trade)
-  const GVAR = 1.87, K_MATCH = 0.78, K_CAT = 0.82;
+  const GVAR = 1.87, K_MATCH = 0.72, K_CAT = 0.82;
   // whole games with the recent-play filter (outSet) calibrate looser than the fractional ones (calib_pair.js PM-act, 2025-26 / 2024-25: ideal k .83 matchup, .85 categories)
   const KW_MATCH = 0.83, KW_CAT = 0.85;
   const shrink = (p, k) => p == null ? p : 0.5 + k * (p - 0.5);
