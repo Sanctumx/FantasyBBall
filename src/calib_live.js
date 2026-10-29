@@ -64,7 +64,7 @@ function engineFor(ctx, N) {
 }
 // every team's forecast for the rosters `rows` ({ team: [{ fid, slot }] }), W weeks left; ids follow ctx.roster
 function forecast(ctx, e, rows, W) {
-  const ids = Object.keys(ctx.roster), out = TW.evalVecs(e, ids.map(t => TW.teamVec(e, TW.side(ctx, T.tabState(rows[t]), W))));
+  const ids = Object.keys(ctx.roster), out = TW.evalVecs(e, ids.map(t => TW.teamVec(e, TW.side(ctx, T.tabState(rows[t]), W, { tid: t, e }))));
   return { ids, match: (i, j) => out.pairProb(out.teams[i], out.teams[j]), cat: (i, j, c) => out.catProb(out.teams[i], out.teams[j], c) };
 }
 

@@ -83,8 +83,8 @@
   // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
   // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
-  function playsPct(ctx, state) {
-    if (ctx.teamTab) return tabPlays(ctx, state);
+  function playsPct(ctx, state, o) {
+    if (ctx.teamTab) return tabPlays(ctx, state, o);
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
     const act = by('active'), bench = by('reserve'), res = {};
@@ -106,10 +106,11 @@
   }
 
   // one player's games over the window with no nightly cap (the games his own team's schedule allows him), under the same rule as playsPct
-  function soloGames(ctx, key) {
+  // (`to`, ms, cuts the window short: a dropped player's games up to his leave time)
+  function soloGames(ctx, key, to) {
     const pp = ctx.pool.byKey.get(key), w = window(ctx);
     if (!ctx.teamTab || ctx.basis === 'pergame') return windowGames(ctx, [key], null)[0];
-    return InLeague.rosterGames([{ t: pp.t, a: avail(ctx, pp), from: w.from, to: w.to }], ctx.DAYS, ctx.L.maxActive, null)[0];
+    return InLeague.rosterGames([{ t: pp.t, a: avail(ctx, pp), from: w.from, to: to != null ? Math.min(to, w.to) : w.to }], ctx.DAYS, ctx.L.maxActive, null)[0];
   }
 
   // The availability of a typical player in the league: the median of avail over the rostered players who are not on IR (cached per ctx).
@@ -140,25 +141,35 @@
   // (everyone is there for every team game; IL gets none). Seasonal bases: Active players are there for avail(g) of the team's games and an IL
   // player from his return (ilReturn) on; one call fills the nights best value first, capped per night at the league's active limit
   // (InLeague.rosterGames). So the cover plays until the IL player is back and whoever is worst by value then loses nights. When the roster
-  // would exceed the league's player limit (maxPlayers) once the IL players are back, the Reserve players go first and then the lowest-value
-  // counted players, dropped from the first return on. pct is the lineup share of the games a player is there for, so availability (which GL
-  // carries) is not counted twice
-  function tabPlays(ctx, state) {
-    const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k]));
-    const done = (k, played, a) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; };
+  // would exceed the league's player limit (maxPlayers) once the IL players are back, the Reserve players go first and then counted players
+  // in order of o.rank(key) (lower goes first; ties by nightValue, then key; the caller ranks by Win M contribution, TeamWin.dropRank).
+  // The j-th drop leaves at the j-th time a spot is missing (each IL return past the limit; already over it, the window start), and that
+  // row carries drop: leaveMs. A dropped IL player never plays. o.extra = rosterGames items that sit on the roster too (count against the
+  // limit, never dropped, not returned). pct is the lineup share of the games a player is there for, so availability (which GL carries) is
+  // not counted twice
+  function tabPlays(ctx, state, o) {
+    o = o || {};
+    const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), extra = o.extra || [];
+    const done = (k, played, a, drop) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; if (drop != null) res[k].drop = drop; };
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
     if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
     else {
       const il = keys.filter(k => state.slots[k] === 'il'), ret = {}, v = k => Matchup.nightValue(ctx, byKey.get(k));
       il.forEach(k => { ret[k] = ilReturn(ctx, k); });
-      const first = il.length ? Math.min(...il.map(k => ret[k].tRet)) : w.to, lim = ctx.L.maxPlayers;
-      const parked = state.order.filter(k => state.slots[k] === 'reserve').length, onRoster = state.order.filter(k => state.slots[k] !== 'il').length;
-      const nDrop = typeof lim === 'number' && il.length ? Math.max(0, onRoster + il.length - lim - parked) : 0;
-      const dropped = new Set(keys.slice().sort((x, y) => v(x) - v(y)).slice(0, nDrop));
+      const lim = ctx.L.maxPlayers, parked = state.order.filter(k => state.slots[k] === 'reserve').length;
+      const onRoster = state.order.filter(k => state.slots[k] !== 'il').length + extra.length - parked;   // the players on the roster now, Reserve ones aside
+      const need = typeof lim === 'number' && il.length ? Math.max(0, onRoster + il.length - lim) : 0;
+      const nDrop = o.noDrop ? 0 : Math.max(need, o.force || 0);   // o.noDrop: everyone stays; o.force: at least that many go, at the first return (the window's middle with no IL player) - TeamWin.dropRank's trial runs
+      if (nDrop && typeof o.rank !== 'function') throw new Error('tabPlays: the roster is over the player limit, o.rank is needed to choose who is dropped');
+      const rk = o.rank, order = !nDrop ? keys : keys.slice().sort((x, y) => (rk(x) === rk(y) ? 0 : rk(x) < rk(y) ? -1 : 1) || (v(x) - v(y)) || (x < y ? -1 : x > y ? 1 : 0));
+      const dropped = new Set(order.slice(0, nDrop)), keptRet = il.filter(k => !dropped.has(k)).map(k => ret[k].tRet).sort((x, y) => x - y);
+      const s = typeof lim === 'number' ? lim - onRoster : Infinity, times = s >= 0 ? keptRet.slice(s) : new Array(-s).fill(w.from).concat(keptRet), leave = {}, outs = order.slice(0, nDrop).filter(k => !il.includes(k));
+      while (times.length < outs.length) times.unshift(keptRet.length ? keptRet[0] : w.from + (w.to - w.from) / 2);   // only a forced drop is short of a time
+      outs.forEach((k, j) => { leave[k] = times[j]; });
       const items = keys.map(k => il.includes(k)
-        ? { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: dropped.has(k) ? ret[k].tRet : w.to }
-        : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: dropped.has(k) ? first : w.to });
-      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, avail(ctx, byKey.get(keys[i]))));
+        ? (dropped.has(k) ? { t: byKey.get(k).t, a: 0, v: v(k), from: w.from, to: w.from } : { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: w.to })
+        : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: leave[k] != null ? leave[k] : w.to });
+      InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]]); });
     }
     return res;
   }

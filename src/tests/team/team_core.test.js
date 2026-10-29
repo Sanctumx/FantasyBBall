@@ -147,15 +147,62 @@ test('IL timeline: the cover plays his own games until the IL player is back, ev
   });
 });
 
-test('IL timeline: with a roster limit, the lowest-value counted player is dropped when the IL player returns', () => {
+test('IL timeline: with a roster limit, o.rank picks who is dropped when the IL player returns, not nightValue', () => {
   const keys = ROS[me].map(x => x.fid).slice(0, 13), act = keys.slice(0, 12), il = keys[12], counts = new Array(13).fill(10);
   withG(il, 40, () => {
-    const ctx = timelineCtx(keys, counts), r = T.ilReturn(ctx, il), res = T.playsPct(ctx, stateOf(act, [], [il]));   // 12 active + 1 IL > maxPlayers (12)
-    const lowest = keys.slice().sort((x, y) => valueOf(ctx, x) - valueOf(ctx, y))[0];
+    const ctx = timelineCtx(keys, counts), r = T.ilReturn(ctx, il), st = stateOf(act, [], [il]);   // 12 active + 1 IL > maxPlayers (12)
+    const byValue = act.slice().sort((x, y) => valueOf(ctx, x) - valueOf(ctx, y)), best = byValue[byValue.length - 1], worst = byValue[0];
+    const res = T.playsPct(ctx, st, { rank: k => (k === best ? -1 : 0) });
     assert.ok(r.nOut > 0 && r.nOut < 10);
-    const a = T.avail(ctx, pool.byKey.get(lowest));
-    assert.ok(res[lowest].played <= a * r.nOut + 1e-9, 'dropped at the return: only his games before it');
+    assert.strictEqual(res[best].drop, (NIGHT + r.nOut * 86400) * 1000, 'the lowest-ranked player leaves at the return');
+    assert.ok(res[best].played <= T.avail(ctx, pool.byKey.get(best)) * r.nOut + 1e-9, 'only his games before it');
+    assert.strictEqual(res[worst].drop, undefined, 'the lowest nightValue is not dropped when the rank says otherwise');
+    // a protected (Infinity) player is never dropped, and ties in rank fall back to nightValue
+    const res2 = T.playsPct(ctx, st, { rank: k => (k === worst || k === il ? Infinity : 0) });
+    assert.strictEqual(res2[worst].drop, undefined);
+    assert.strictEqual(Object.keys(res2).filter(k => res2[k].drop != null).length, 1);
+    assert.throws(() => T.playsPct(ctx, st), /rank/, 'over the limit with no rank');
+    assert.doesNotThrow(() => T.playsPct(ctx, stateOf(act.slice(0, 11), [], [il])), 'under the limit needs no rank');
   });
+});
+
+test('IL timeline: 12 Active + 2 IL with different returns: the j-th lowest-ranked drop leaves at the j-th return; a dropped IL player never plays', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 13).concat(ROS[other][0].fid), act = keys.slice(0, 12), il1 = keys[12], il2 = keys[13], counts = new Array(14).fill(10);
+  withG(il1, 40, () => withG(il2, 55, () => {
+    const ctx = timelineCtx(keys, counts), r1 = T.ilReturn(ctx, il1), r2 = T.ilReturn(ctx, il2), st = stateOf(act, [], [il1, il2]);
+    assert.ok(r1.nOut > 0 && r2.nOut > 0 && r1.tRet !== r2.tRet, 'fixture: different returns ' + r1.nOut + ' ' + r2.nOut);
+    const [early, late] = [r1.tRet, r2.tRet].sort((x, y) => x - y), rank = k => (act.includes(k) ? act.indexOf(k) : Infinity);   // act[0] lowest, act[1] next, the IL players protected
+    const res = T.playsPct(ctx, st, { rank });
+    assert.strictEqual(res[act[0]].drop, early);
+    assert.strictEqual(res[act[1]].drop, late);
+    assert.strictEqual(res[act[2]].drop, undefined);
+    // a dropped IL player never plays, and his return frees the spot: only one counted player goes
+    const res2 = T.playsPct(ctx, st, { rank: k => (k === il2 ? -1 : rank(k)) });
+    assert.strictEqual(res2[il2].played, 0);
+    assert.strictEqual(res2[act[0]].drop, r1.tRet);
+    assert.strictEqual(res2[act[1]].drop, undefined);
+  }));
+});
+
+test('IL timeline: o.force drops that many even under the limit (at the first return, the window middle with no IL player); o.noDrop keeps everyone', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 13), act = keys.slice(0, 11), il = keys[12], rank = k => (act.includes(k) ? act.indexOf(k) : Infinity);
+  withG(il, 40, () => {
+    const ctx = timelineCtx(keys, new Array(13).fill(10)), r = T.ilReturn(ctx, il), w = T.window(ctx);
+    const under = T.playsPct(ctx, stateOf(act, [], [il]), { force: 1, rank });   // 11 + IL = 12: nobody has to go
+    assert.strictEqual(under[act[0]].drop, (NIGHT + r.nOut * 86400) * 1000);
+    const lone = T.playsPct(ctx, stateOf(act, []), { force: 1, rank });   // no IL player: the window's middle
+    assert.strictEqual(lone[act[0]].drop, w.from + (w.to - w.from) / 2);
+    const over = T.playsPct(ctx, stateOf(keys.slice(0, 12), [], [il]), { noDrop: true });
+    assert.ok(Object.keys(over).every(k => over[k].drop == null));
+  });
+});
+
+test('IL timeline: soloGames(ctx, key, to) counts the games only up to `to`', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 3), ctx = timelineCtx(keys, [10, 10, 10]), k = keys[0], w = T.window(ctx);
+  assert.ok(near(T.soloGames(ctx, k, w.to), T.soloGames(ctx, k), 1e-9));
+  const half = (NIGHT + 4 * 86400) * 1000;
+  assert.ok(near(T.soloGames(ctx, k, half), T.avail(ctx, pool.byKey.get(k)) * 4, 1e-9));
+  assert.strictEqual(T.soloGames(ctx, k, w.from), 0);
 });
 
 test('Team-tab Plays %: a player under 82 projected games plays fewer games on total than on Per game, and the same on a full-season player', () => {

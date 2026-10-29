@@ -436,8 +436,11 @@ test('rows on the Team tab: the team line and avgZ weight each counted player by
   const zc = p => Array.from({ length: 9 }, (_, c) => c === 1 ? z(p) : 0);
   try {
     pp.g = 3;
-    const r = V.rows(ctxT, st, { zCats: zc }), pl = T.playsPct(ctxT, st), slots = ctxT.L.maxActive;
-    const want = st.order.reduce((s, k) => { const q = ctxT.pool.byKey.get(k); return s + (pl[k].wt !== undefined ? pl[k].wt : (pl[k].pct || 0) * T.avail(ctxT, q)) * q.line.pts; }, 0) / slots;
+    const r = V.rows(ctxT, st, { zCats: zc }), pl = W.plays(ctxT, st, { tid: ctxT.me }), slots = ctxT.L.maxActive;
+    const want = st.order.reduce((s, k) => { const q = ctxT.pool.byKey.get(k); return s + (pl[k].pct || 0) * T.avail(ctxT, q) * q.line.pts; }, 0) / slots;
+    // Plays % of every row is the side's games (what Win counts) over the games he is there for; a dropped IL player shows 0
+    const W0 = W.weeksLeft(ctxT), sd = W.side(ctxT, st, W0, { tid: ctxT.me });
+    sd.forEach(e => { const q = ctxT.pool.byKey.get(e.key), row = r.rows.find(x => x.key === e.key); assert.ok(near(row.pct * T.gamesLeft(ctxT, q.t) * T.avail(ctxT, q), e.games * W0, 1e-9), e.key); });
     assert.ok(near(r.avg.pts, want, 1e-9), 'team pts ' + r.avg.pts + ' vs ' + want);
     assert.ok(near(r.avgCats[1], want, 1e-9), 'avgCats ' + r.avgCats[1]);
     const pg = mkTab('pergame'), rp = V.rows(pg, st, { zCats: zc }), pp2 = T.playsPct(pg, st);

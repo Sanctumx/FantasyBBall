@@ -97,12 +97,57 @@
   const received = (ctx, state) => trade(ctx, state).recv;
   const goneKeys = (ctx, state) => [...trade(ctx, state).gone].sort();
 
+  // Team.playsPct with the drop order of team o.tid (default mine): when the IL players' return pushes the roster over the player limit, the
+  // players with the lowest Win M contribution go (dropRank). o: tid, cats, points, e (the engine context when the caller has it), noDrop
+  function plays(ctx, state, o) {
+    o = o || {};
+    if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop });
+    let rank = null;
+    return Team.playsPct(ctx, state, { rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
+  }
+
+  // The drop order of team tid on the Team tab (IL timeline, user 2026-10-29: drop by Win M contribution): rank(k) = minus the team's mean match
+  // chance (the category chance of the points total for points leagues) when k is the one dropped from its saved roster at the first IL
+  // return, so the lowest rank costs the least Win M. It is the realized chance, not the loss from removing him altogether: that one would
+  // drop an IL player (who then never plays) before a weak healthy player who still plays until the return, and the team would end up
+  // worse (Paragua: Ingram out would have cost 1.5 Win M points against dropping Keldon Johnson). The field's saved rosters are taken whole,
+  // nobody dropped. A player off the saved roster (a candidate, a trade arrival) ranks Infinity and is never dropped. With several drops at
+  // once the order is each player's cost as the single drop. Memoised per ctx, team, weeks, categories, point values and basis.
+  // o: cats, points, e. -> rank(key)
+  const dropMemos = new WeakMap();
+  function dropRank(ctx, tid, o) {
+    o = o || {};
+    const Wk = weeksLeft(ctx), nc = o.cats === 8 ? 8 : 9, pts = o.points;
+    if (!(Wk > 0) || !ctx.teamTab || ctx.basis === 'pergame' || !ctx.roster[tid]) return () => 0;
+    let memo = dropMemos.get(ctx); if (!memo) dropMemos.set(ctx, memo = new Map());
+    const id = [tid, Wk, nc, pts ? Pts.key(pts) : '', ctx.basis].join('|');
+    if (!memo.has(id)) {
+      const e = o.e || engCtx(ctx, nc, pts), F = Pts.FP_SLOT, none = { noDrop: true };
+      const field = Object.keys(ctx.roster).filter(t => t !== tid).map(t => teamVec(e, side(ctx, oppState(ctx, t), Wk, none))), saved = oppState(ctx, tid);
+      const meanOf = vec => {
+        const out = evalVecs(e, [vec].concat(field));
+        return field.reduce((s, _, j) => s + (e.w ? out.catProb(out.teams[0], out.teams[j + 1], F) : shr(out.pairProb(out.teams[0], out.teams[j + 1]), SHRINK.match)), 0) / (field.length || 1);
+      };
+      const u = new Map();
+      Team.counted(saved, ctx).forEach(k => u.set(k, -meanOf(teamVec(e, sideOf(ctx, saved, Team.playsPct(ctx, saved, { force: 1, rank: x => (x === k ? -1 : 0) }), Wk)))));
+      memo.set(id, k => (u.has(k) ? u.get(k) : Infinity));
+    }
+    return memo.get(id);
+  }
+
+  // my side's options from a matrix opts (cats, points)
+  const sideOpts = opts => ({ cats: opts && opts.cats, points: opts && opts.points });
+
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
-  function side(ctx, state, W) {
-    const r = Team.playsPct(ctx, state), c = Team.countedSlots(ctx);
+  // o: see plays (tid defaults to mine)
+  function side(ctx, state, W, o) {
+    return sideOf(ctx, state, plays(ctx, state, o), W);
+  }
+  const sideOf = (ctx, state, r, W) => {
+    const c = Team.countedSlots(ctx);
     return state.order.filter(k => c.includes(state.slots[k]) && !r[k].hypo)
       .map(k => ({ key: k, p: ctx.pool.byKey.get(k).line, games: r[k].played / W }));
-  }
+  };
 
   // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
   // opponents' forecasts are the same for every previewed roster that removes the same players from them, so they are cached per ctx
@@ -111,7 +156,7 @@
     let memo = memos.get(ctx);
     if (!memo) { memo = new Map(); memos.set(ctx, memo); }
     const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + (recv || []).map(r => r.key + ':' + r.slot).sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '');
-    if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude, recv), W)));
+    if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude, recv), W, { tid, cats: nc, points: e.w, e })));
     return memo.get(id);
   }
 
@@ -122,7 +167,7 @@
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
     const t = trade(ctx, state);
-    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat([...t.gone])), W, Object.assign({}, opts, { recv: t.recv }));
+    return matrixOf(ctx, side(ctx, state, W, sideOpts(opts)), new Set(state.order.concat([...t.gone])), W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
@@ -184,7 +229,7 @@
     let memo = lwMemos.get(ctx); if (!memo) lwMemos.set(ctx, memo = new Map());
     const vecs = ids.map(t => {
       const id = t + '|' + (R || ctx.roster)[t].slice().sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '') + '|' + tv.basis;
-      if (!memo.has(id)) memo.set(id, teamVec(e, side(tv, tradeState(ctx, t, (R || ctx.roster)[t]), W)));
+      if (!memo.has(id)) memo.set(id, teamVec(e, side(tv, tradeState(ctx, t, (R || ctx.roster)[t]), W, { tid: t, cats: nc, points: o && o.points, e })));
       return memo.get(id);
     });
     const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
@@ -210,7 +255,7 @@
   function playerGain(ctx, state, k, base, opts) {
     if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };   // (points: the zero gain keeps its category zeros; nothing shows them)
     if (opts && opts.baseline === 'avg') {
-      const ap = (opts.ap) || avgParts(ctx, state, base.weeks);
+      const ap = (opts.ap) || avgParts(ctx, state, base.weeks, opts);
       if (ap) { const own = Team.countedSlots(ctx).includes(state.slots[k]); return own ? gain(base, avgOwn(ctx, state, ap, k, opts)) : Object.assign(gain(avgCandidate(ctx, state, ap, k, opts), base), { hypo: true }); }
     }
     // a player who does not count (IL; on the Team tab also Reserve, and IL on Per game) is scored as the one more player he would be: the plain
@@ -223,8 +268,8 @@
   // (ctx.L.maxActive), mean = the games-weighted mean line with tot / M games (so his totals are one M-th of the team's), share = the games my
   // counted players get out of the games their own team schedules allow, with no nightly cap (the team's average lineup share).
   // -> null with no counted player or no games
-  function avgParts(ctx, state, W) {
-    const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
+  function avgParts(ctx, state, W, opts) {
+    const mine = side(ctx, state, W, sideOpts(opts)), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
     const allowed = Team.counted(state, ctx).reduce((a, k) => a + Team.soloGames(ctx, k), 0);   // each player alone: no nightly cap
     if (!n || !(tot > 0) || !(allowed > 0)) return null;
     return { W, mine, n, tot, M, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
@@ -249,7 +294,7 @@
   // points my counted players produce in an average remaining week: sum of FP per game x Plays % games per week
   function pointsPerWeek(ctx, state, w) {
     const Wk = weeksLeft(ctx); if (!(Wk > 0)) return 0;
-    return side(ctx, state, Wk).reduce((t, e) => t + Pts.perGame(e.p, w) * e.games, 0);
+    return side(ctx, state, Wk, { points: w }).reduce((t, e) => t + Pts.perGame(e.p, w) * e.games, 0);
   }
 
   function playerWin(ctx, state, opts) {
@@ -275,15 +320,16 @@
   function moduleSetup(ctx, state, opts) {
     const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode, points: o.points }, base = o.base || matrix(ctx, state, mo);
     if (!base.mean) return null;
-    if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks); return ap ? { base, ap, mo, avg: true } : null; }
+    if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks, mo); return ap ? { base, ap, mo, avg: true } : null; }
     const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state, ctx);
     if (!counted.length) return null;
     // The replacement level is the counted player with the lowest contribution who plays and is not on IL: a candidate takes his slot. An IL
     // player cannot be it (a healthy candidate cannot take an IL slot) and neither can a player who never plays (nothing to replace, so he
-    // would read 0 and every other row would be measured from a player who is worth nothing); they read below it instead. With no such player
+    // would read 0 and every other row would be measured from a player who is worth nothing) and neither can one who is dropped at an IL
+    // return (a candidate does not take a slot that is closing); they read below it instead. With no such player
     // every counted player is a candidate
-    const pl = Team.playsPct(ctx, state), plays = k => pl[k] && pl[k].played > 0;
-    const pool = counted.filter(k => state.slots[k] !== 'il' && plays(k)), cand = pool.length ? pool : counted;
+    const pl = plays(ctx, state, sideOpts(mo)), playing = k => pl[k] && pl[k].played > 0;
+    const pool = counted.filter(k => state.slots[k] !== 'il' && playing(k) && pl[k].drop == null), cand = pool.length ? pool : counted;
     const worst = cand.reduce((a, b) => pw[b].m < pw[a].m ? b : a), ref = pw[worst], wSlot = state.slots[worst];
     return { base, pw, worst, grp: [worst], ref, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
   }
@@ -329,6 +375,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
