@@ -24,3 +24,14 @@ Gate: gateT(se1, n, delta) = min(0.5*se1/sqrt(n), delta). delta = 0.3 (user, 202
   n = 2000: T = 0.047 (about 1.9 h).  n = 200 (pilot size): T = 0.149.
 Rule: run the full simulation unless the screen's upper bound is below T. Lineup arm sd is 1.7, so its T is smaller still at
 the same n (0.5*1.7/sqrt(1000) = 0.027); use arm-specific se1 if the analyst prefers.
+
+ANALYST VERDICT (A1, 2026-10-29) - supersedes the gateT rule above for arms 68/69.
+ipe_run scores whole seasons, so the screen is already the full PE run; gateT could never clear a true zero. Replaced by an
+equivalence rule at delta 0.3. Arm 67 is a positive control (a real downgrade), not a null. Pilot seeds 181-190 are
+exploratory only and are not pooled. Fresh run: seeds 201-280, 4 seasons x 5 slots = 1600 drafts (80% power for +0.3 at sd 4.2).
+  Matters:         PE - 1.96*SE > 0 and ahead in at least 3 of 4 seasons.
+  Does not matter: PE + 1.96*SE < 0.3.
+  Otherwise:       inconclusive.
+  Valid only if:   arm 67 <= -1.0 and negative in all 4 seasons, and refitting without arms 66-69 moves PE by < 0.05.
+  Report alongside: paired poAll and actual prize; side fit with poAll in the logistic, flag if it differs from PE by > 1 SE.
+  Caveat: gamesIn is hindsight (both arms see it), so benefit may be overstated vs the live app.
