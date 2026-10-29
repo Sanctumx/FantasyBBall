@@ -29,7 +29,17 @@ test('streamPick context carries the pool and the baseline pick', () => {
   run({ me: ME, streamPick: ctx => { ctx0 = ctx0 || ctx; return ctx.baseline; } });
   assert.ok(Array.isArray(ctx0.pool) && ctx0.pool.length > 0 && ctx0.pool.length <= 15);
   assert.ok(ctx0.pool.includes(ctx0.baseline));
-  for (const k of ['t', 'w', 'h', 's0', 's1', 'roster', 'val', 'gamesIn']) assert.ok(k in ctx0, k);
+  for (const k of ['t', 'w', 'h', 's0', 's1', 'roster', 'val', 'gamesIn', 'field', 'active']) assert.ok(k in ctx0, k);
+  assert.strictEqual(ctx0.field.length, 14);
+  assert.strictEqual(ctx0.active, 10);
+});
+
+test('lineupRank context carries the field and the active cap', () => {
+  let c0 = null;
+  run({ me: ME, lineupRank: ctx => { c0 = c0 || ctx; return null; } });
+  assert.strictEqual(c0.field.length, 14);
+  assert.strictEqual(c0.active, 10);
+  assert.ok(typeof c0.gamesIn === 'function');
 });
 
 test('a different streamPick changes me and is applied', () => {

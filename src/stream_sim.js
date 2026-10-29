@@ -81,7 +81,7 @@ function scoreLeague(season, rosters, opts = {}) {
           const pool = fa.filter(x => !held.has(x) && !claimed[h].has(x)).sort((x, y) => tval(t, y) - tval(t, x)).slice(0, 15);
           let pick = pool.sort((x, y) => gamesIn(y, s0, s1) - gamesIn(x, s0, s1) || tval(t, y) - tval(t, x))[0];
           // opts.streamPick (team opts.me only): may return another pid from ctx.pool; null/undefined keeps the baseline pick
-          if (opts.streamPick && t === opts.me && pick != null) { const hp = opts.streamPick({ t, w, h, s0, s1, roster: roster.slice(), pool: pool.slice(), baseline: pick, val, gamesIn, catW: catW[t] }); if (hp != null) { if (!pool.includes(hp)) throw new Error('streamPick must return a pid from ctx.pool'); pick = hp; } }
+          if (opts.streamPick && t === opts.me && pick != null) { const hp = opts.streamPick({ t, w, h, s0, s1, roster: roster.slice(), pool: pool.slice(), baseline: pick, val, gamesIn, catW: catW[t], field: teams.map(T2 => T2.core.slice()), active }); if (hp != null) { if (!pool.includes(hp)) throw new Error('streamPick must return a pid from ctx.pool'); pick = hp; } }
           if (pick != null) { for (let k = h; k < H; k++) claimed[k].add(pick); roster.push(pick); cur[sl] = pick; }
         }
         lineups[t][h] = roster;
@@ -93,7 +93,7 @@ function scoreLeague(season, rosters, opts = {}) {
       let playing = roster.filter(pid => byDay[pid] && byDay[pid].has(d));
       // opts.lineupRank (team opts.me only): returns the playing pids in the order to fill the lineup; null keeps the value order
       const ranked = () => {
-        const hr = opts.lineupRank && t === opts.me ? opts.lineupRank({ t, w, d, playing: playing.slice(), roster, val }) : null;
+        const hr = opts.lineupRank && t === opts.me ? opts.lineupRank({ t, w, d, playing: playing.slice(), roster, val, gamesIn, field: teams.map(T2 => T2.core.slice()), active, d0, d1 }) : null;
         if (hr == null) return playing.sort((a, b) => val[b] - val[a]);
         if (hr.length !== playing.length || hr.some(x => !playing.includes(x))) throw new Error('lineupRank must return a permutation of ctx.playing');
         return hr.slice();
