@@ -15,14 +15,19 @@
 const fs = require('fs');
 const E = require('./engine.js'), B = require('./backtest.js'), TW = require('./team_win.js'), S = require('./calib_ros_stats.js');
 const DATA = require('./bt_data.json'), SCHED = require('./bt_sched.json'), DAILY = require('./bt_daily.json');
-const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || (process.argv.includes('blend') ? '2025-26,2024-25,2023-24' : '2025-26,2024-25')).split(','), SEED0 = +(process.argv[4] || 1), N = 14, R = 12, CKS = [3, 7, 11, 15];
+const KWL = process.argv.includes('kwl');   // #156 mode, see the block before the verdict lines G-J below
+const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || (KWL ? '2025-26,2024-25,2023-24,2022-23' : process.argv.includes('blend') ? '2025-26,2024-25,2023-24' : '2025-26,2024-25')).split(','), SEED0 = +(process.argv[4] || 1), N = 14, R = 12;
+const CKS = KWL ? Array.from({ length: 11 }, (_, i) => 2 * i + 1) : [3, 7, 11, 15];   // kwl: the start of weeks 2, 4, ..., 22
+let TOTAL_BUILDS = SEASONS.length;
 const gauss = r => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
 // #145 blend mode (5th argument "blend", or any argument "blend"): sources W (preseason lines, E-ROS), S (season-to-date blend), L (last-30-days
 // blend), all on whole games; the n0 of each held-out season is fitted on the other seasons (calib_blend.js). Design: docs/superpowers/specs/2026-10-28-calib-blend-design.md
-const BLEND = process.argv.includes('blend'), CB = require('./calib_blend.js');
-const SRC = BLEND ? ['W', 'S', 'L'] : ['W', 'G', 'X', 'PM'];   // whole games, g82 games, mix (midpoint of the two), pairMatchup (whole games, gVar 1.87)
+const BLEND = process.argv.includes('blend') || KWL, CB = require('./calib_blend.js');
+// #156 kwl mode: sources W, S (STD), L30, L60, L90; the n0 of a build is { S, L30, L60, L90 } (blend mode: { S, L })
+const WINOF = { S: 'STD', L: 'L30', L30: 'L30', L60: 'L60', L90: 'L90' };
+const SRC = KWL ? ['W', 'S', 'L30', 'L60', 'L90'] : BLEND ? ['W', 'S', 'L'] : ['W', 'G', 'X', 'PM'];   // whole games, g82 games, mix (midpoint of the two), pairMatchup (whole games, gVar 1.87)
 const INF_N0 = { g: Infinity, min: Infinity, fg: Infinity, ft: Infinity };
-const PSRC = { '2025-26': 'bbm', '2024-25': 'bbm', '2023-24': 'hs' };   // one source per season (the only one 2025-26 and 2023-24 have)
+const PSRC = { '2025-26': 'bbm', '2024-25': 'bbm', '2023-24': 'hs', '2022-23': 'hs' };   // one source per season (the only one 2025-26 and 2023-24 have; 2022-23: 165 of 260 players have one, the rest keep the prior-season line)
 const K_MATCH = 0.72, K_CAT = 0.82, T0 = Date.now();
 let done = 0;
 
@@ -44,12 +49,12 @@ function build(season, n0) {
   const lineAt = (p, w0, mode) => {
     if (mode === 'W') return p;
     const key = p.pid + '|' + w0 + '|' + mode; let b = blended.get(key);
-    if (!b) blended.set(key, b = CB.blendLine(p, daily[String(p.pid)] || [], w0, mode === 'L' ? 'L30' : 'STD', n0[mode]));
+    if (!b) blended.set(key, b = CB.blendLine(p, daily[String(p.pid)] || [], w0, WINOF[mode], n0[mode]));
     return b;
   };
   let checks = 0;
   for (let seed = SEED0; seed < SEED0 + SEEDS; seed++) {
-    done++; if (done > 1) { const el = (Date.now() - T0) / 1000, left = Math.round(el / (done - 1) * (SEEDS * SEASONS.length - done + 1)); process.stdout.write(`Estimated time remaining: ${Math.floor(left / 60)} min ${String(left % 60).padStart(2, '0')} s   `); }
+    done++; if (done > 1) { const el = (Date.now() - T0) / 1000, left = Math.round(el / (done - 1) * (SEEDS * TOTAL_BUILDS - done + 1)); process.stdout.write(`Estimated time remaining: ${Math.floor(left / 60)} min ${String(left % 60).padStart(2, '0')} s   `); }
     const r = S.rng(seed * 7919);
     const T = P.map(p => p.adpUse + gauss(r) * p.sd), order = P.map((_, i) => i).sort((a, b) => T[a] - T[b]), picks = order.slice(0, N * R);
     const res = E.evaluate(P, ctx, cfg, { picks });
@@ -267,7 +272,89 @@ function blendVerdict(R_, rep, folds) {
   return V;
 }
 
-if (require.main === module && BLEND) {
+// ---- #156 kwl mode (design: docs/superpowers/specs/2026-10-28-calib-kwl-design.md; gates K-N fixed there before any result) ----
+// Per fold (held-out season T): k is fitted on the training seasons' forecasts, each built with an n0 fitted on the seasons other than itself and T
+// (nested), and scored on T's forecasts (n0 fitted on the seasons other than T). Forms: K0 one k, K1 k = a + b t (t = days played / 175), Kck per checkpoint.
+const lagBucket = lag => (lag <= 1 ? 0 : lag <= 3 ? 1 : lag <= 7 ? 2 : lag <= 11 ? 3 : 4), LAG_NAMES = ['0-1', '2-3', '4-7', '8-11', '12+'];
+const TCK = CKS.map(w0 => 7 * w0 / 175), KINDS = [['M', { kind: 'M' }], ['C', { kind: 'C' }]];
+const tab = f => TCK.map(t => f.a + f.b * t);
+function lagSums(D, src) {   // matchup rows: sum (p - .5)(y - .5) and sum (p - .5)^2 by lag bucket
+  const s = LAG_NAMES.map(() => [0, 0]), p = D.p[src];
+  for (let i = 0; i < D.n; i++) if (D.cat[i] === 9) { const b = s[lagBucket(D.wk[i] - CKS[D.ck[i]])], d = p[i] - 0.5; b[0] += d * (D.y[i] - 0.5); b[1] += d * d; }
+  return s;
+}
+function p1Fit(D, src) {   // P1 probit shrink Phi(Phi^-1(p) (a + b t)), in sample on matchup rows, coarse grid; printed only
+  const KW = require('./calib_kwl.js'), z = [], y = [], t = []; const p = D.p[src];
+  for (let i = 0; i < D.n; i++) if (D.cat[i] === 9) { z.push(KW.normInv(Math.min(0.9999, Math.max(0.0001, p[i])))); y.push(D.y[i]); t.push(TCK[D.ck[i]]); }
+  let best = { a: 1, b: 0, brier: Infinity };
+  for (let a = 0.3; a <= 1.101; a += 0.1) for (let b = -0.3; b <= 0.701; b += 0.1) {
+    let s = 0; for (let i = 0; i < z.length; i++) { const e = KW.normCdf(z[i] * (a + b * t[i])) - y[i]; s += e * e; }
+    if (s / z.length < best.brier) best = { a, b, brier: s / z.length };
+  }
+  return best;
+}
+function kwlMain() {
+  const KW = require('./calib_kwl.js'), primary = SEASONS.slice(0, 3), confirm = SEASONS[3], plan = KW.foldPlan(primary, confirm);
+  TOTAL_BUILDS = plan.reduce((s, f) => s + f.nTrainBuilds + 1, 0);
+  const samples = Object.fromEntries(SEASONS.map(s => [s, samplesOf(s)])), fitCache = new Map();
+  const n0Of = pool => { const key = pool.join(); if (!fitCache.has(key)) { const o = {}; for (const [m, win] of [['S', 'STD'], ['L30', 'L30'], ['L60', 'L60'], ['L90', 'L90']]) o[m] = CB.fitOn(samples, pool, { win }); fitCache.set(key, o); } return fitCache.get(key); };
+  const n0Of1 = (A, T) => { const f = n0Of(KW.nestedPool(SEASONS, A, T)); return { S: f.S.n0, L30: f.L30.n0, L60: f.L60.n0, L90: f.L90.n0 }; };
+  log(`#156 k by weeks left  ${new Date().toISOString().slice(0, 10)}  seeds ${SEED0}-${SEED0 + SEEDS - 1}  seasons ${SEASONS.join(', ')} (${confirm} confirmation only)  checkpoints (start of weeks) ${CKS.map(c => c + 1).join(', ')}`);
+  log('Frozen rosters and whole games, as #145. Each training season forecasts with an n0 fitted without it and without the held-out season (nested). t = days played / 175.');
+  const FO = {}, LAGS = {}, INA = {}, P1 = {};
+  for (const fold of plan) {
+    const T = fold.test, trainD = fold.train.map(A => build(A, n0Of1(A, T)).D).reduce(merge), r = build(T, n0Of1(null, T)), D = r.D, nT = n0Of(KW.nestedPool(SEASONS, null, T));
+    log(`\n== ${T}${fold.confirm ? ' (confirmation: k fitted on all primary seasons)' : ''}  (rows ${D.n}, pair-weeks per checkpoint ${r.pairWeeks.join('/')}, symmetry failures ${r.checks})`);
+    for (const m of ['S', 'L30', 'L60', 'L90']) log(`n0 ${m} (fitted on ${KW.nestedPool(SEASONS, null, T).join(', ')}): ${n0s(nT[m].n0)}${nT[m].edge.length ? '   AT GRID EDGE: ' + nT[m].edge.join(',') : ''}`);
+    const fo = FO[T] = {}; LAGS[T] = {}; INA[T] = {}; P1[T] = {};
+    for (const s of SRC) {
+      const o = fo[s] = {};
+      for (const [kn, oo] of KINDS) {
+        const k0 = S.fitK(trainD, s, oo), lin = S.kLinSE(trainD, s, oo, TCK), kck = CKS.map((w, ci) => S.fitK(trainD, s, Object.assign({ ck: ci }, oo)));
+        const pick = k => A(s, kn === 'M' ? k : 1, kn === 'C' ? k : 1), a0 = pick(k0), a1 = pick(tab(lin)), aC = pick(kck);
+        const star = CKS.map((w, ci) => S.fitK(D, s, Object.assign({ ck: ci }, oo)));
+        o[kn] = { k0, lin, kck, brier: { K0: S.brier(D, a0, oo), K1: S.brier(D, a1, oo), Kck: S.brier(D, aC, oo) }, dK1: S.diffSE(D, a1, a0, oo), dCk: S.diffSE(D, aC, a1, oo), kStar: star,
+          spreadK0: KW.ratioSpread(star, star.map(() => k0)), spreadK1: KW.ratioSpread(star, tab(lin)), train: { a: lin.a, b: lin.b, seB: lin.seB }, inK1: S.fitKLin(D, s, oo, TCK), slopeK1: S.slope(D, a1, oo) };
+        if (s !== 'W') o[kn].dVsW = S.diffSE(D, a1, A('W', kn === 'M' ? tab(fo.W[kn].lin) : 1, kn === 'C' ? tab(fo.W[kn].lin) : 1), oo);
+      }
+      LAGS[T][s] = lagSums(D, s); P1[T][s] = p1Fit(D, s); INA[T][s] = o.M.inK1.a + 0.5 * o.M.inK1.b;
+      const L = o.M, f4 = x => x.toFixed(2);
+      log(`${s.padEnd(3)} matchup: K0 k ${f4(L.k0)} | K1 a ${f4(L.lin.a)} b ${f4(L.lin.b)} +-${L.lin.seB.toFixed(2)} | held-out Brier K0 ${L.brier.K0.toFixed(4)} K1 ${L.brier.K1.toFixed(4)} Kck ${L.brier.Kck.toFixed(4)} | K1 vs K0 ${pm4(L.dK1)} | Kck vs K1 ${pm4(L.dCk)} | spread k*/k K0 ${f4(L.spreadK0)} K1 ${f4(L.spreadK1)} | P1 a ${f4(P1[T][s].a)} b ${f4(P1[T][s].b)} Brier ${P1[T][s].brier.toFixed(4)}`);
+      log(`    cats: K0 k ${f4(o.C.k0)} | K1 a ${f4(o.C.lin.a)} b ${f4(o.C.lin.b)} +-${o.C.lin.seB.toFixed(2)} | K1 vs K0 ${pm4(o.C.dK1)}`);
+      log(`    k* by checkpoint (matchup): ${L.kStar.map(x => x.toFixed(2)).join(' ')}`);
+    }
+    // windows against STD, only at the checkpoints where the window differs from season-to-date, with the held-out k
+    fo.win = {};
+    for (const [w, days] of [['L30', 30], ['L60', 60], ['L90', 90]]) {
+      const mask = CKS.map(w0 => 7 * w0 > days), oo = { kind: 'M', f: i => mask[D.ck[i]] }, Sc = samples[T].filter(x => 7 * x.w0 > days), sp = CB.spreads(Sc);
+      const dW = S.diffSE(D, A(w, fo[w].M.k0, 1), A('S', fo.S.M.k0, 1), oo), player = CB.loss(Sc, nT[w].n0, w, sp, 'count') < CB.loss(Sc, nT.S.n0, 'STD', sp, 'count');
+      fo.win[w] = { d: dW, player, checkpoints: mask.filter(Boolean).length };
+      log(`${w} vs STD at the ${mask.filter(Boolean).length} checkpoints where they differ: matchup d ${pm4(dW)}, player counting loss lower: ${player}`);
+    }
+  }
+  // lag diagnostic: pooled k* by lag (outcome week - checkpoint) on the primary seasons
+  const lagK = s => LAG_NAMES.map((n, b) => { let xy = 0, xx = 0; for (const T of primary) { xy += LAGS[T][s][b][0]; xx += LAGS[T][s][b][1]; } return xy / xx; });
+  log('\nk* by lag (outcome week - checkpoint), matchup, pooled on the primary seasons, lags ' + LAG_NAMES.join(' / '));
+  for (const s of SRC) log(`   ${s.padEnd(3)} ${lagK(s).map(x => x.toFixed(2)).join(' / ')}`);
+  // verdict
+  const V = [], pf = primary.map(T => FO[T]), cf = FO[confirm], M = KW.gateM(pf.map(f => ({ dW: Object.fromEntries(Object.entries(f.win).map(([w, x]) => [w, { d: x.d, player: x.player }])) })));
+  const src = M.pick === 'STD' ? 'S' : M.pick, r2 = x => Math.round(x * 100) / 100;
+  V.push(`M  window: ${M.pick}  (windows passing >= 1 SE and lower player loss in all 3 seasons: ${M.passing.join(', ') || 'none'}; ` + ['L30', 'L60', 'L90'].map(w => w + ' ' + pf.map(f => f.win[w].d.d.toFixed(4) + '+-' + f.win[w].d.se.toFixed(4)).join('/')).join('; ') + ')');
+  const gate = (name, s, kn) => { const g = KW.gateK(pf.map(f => f[s][kn]), cf[s][kn].dK1); V.push(`K${kn === 'C' ? '_C' : ''} ${name}: ${g.pass ? 'PASS' : 'FAIL'}  (K1 beats K0 by >= 1 SE in each fold: ${g.brier}; b > 0 and >= 2 SE in every training fold: ${g.slope} [b ` + pf.map(f => f[s][kn].train.b.toFixed(2) + '+-' + f[s][kn].train.seB.toFixed(2)).join(' / ') + `]; k*/k spread smaller in 2 of 3: ${g.spread}; ${confirm} d < 0: ${g.conf} [${cf[s][kn].dK1.d.toFixed(4)}+-${cf[s][kn].dK1.se.toFixed(4)}]; K1 vs K0 ` + pf.map(f => f[s][kn].dK1.d.toFixed(4) + '+-' + f[s][kn].dK1.se.toFixed(4)).join(' / ') + ')'); return g; };
+  const gM = gate(`k by weeks left on ${M.pick} lines (matchup)`, src, 'M'), gC = gate(`k by weeks left on ${M.pick} lines (category)`, src, 'C'), gW = src === 'W' ? gM : gate('k by weeks left on preseason lines (matchup)', 'W', 'M');
+  const gL = KW.gateL(pf.map(f => f[src].M));
+  V.push(`L  per-checkpoint k over the straight line (>= 2 SE in every fold): ${gL.pass ? 'YES, use a table' : 'no, use k = a + b t'}  (Kck vs K1 ` + pf.map(f => f[src].M.dCk.d.toFixed(4) + '+-' + f[src].M.dCk.se.toFixed(4)).join(' / ') + ')');
+  const gN = KW.gateN(primary.map(T => INA[T][src]));
+  V.push(`N  mid-season k level by season ${primary.map(T => T + ' ' + INA[T][src].toFixed(2)).join(', ')} (range ${gN.range.toFixed(2)}): ${gN.uncertain ? 'UNCERTAIN, the level is the user\'s call whatever K says' : 'stable'}`);
+  const bSig = pf.every(f => f[src].M.train.b > 0 && f[src].M.train.b >= 2 * f[src].M.train.seB);
+  V.push(gM.pass ? `RESULT: K PASS on ${M.pick} lines: candidate k(t) = a + b t pooled over the 3 seasons; STD lines ship only with a blend-lines decision and after #146; the preseason-lines version ${gW.pass ? 'also passes and could ship alone (user call)' : 'does not pass on its own'}` : bSig ? 'RESULT: K fails but b is significant: the climb is real, too small to change Brier; keep one k' : 'RESULT: b not significant in every training fold: close #156 as No');
+  V.forEach(log);
+  fs.writeFileSync('results_calib_kwl.txt', OUT.join('\n') + '\n');
+  fs.writeFileSync('calib_kwl.json', JSON.stringify({ seeds: SEEDS, seed0: SEED0, cks: CKS, folds: FO, lags: LAGS, inA: INA, p1: P1, verdict: V }));
+  process.exit(0);
+}
+if (require.main === module && KWL) kwlMain();
+else if (require.main === module && BLEND) {
   const samples = Object.fromEntries(SEASONS.map(s => [s, samplesOf(s)])), FIT = {};
   SEASONS.forEach(s => { FIT[s] = {}; for (const [m, win] of [['S', 'STD'], ['L', 'L30']]) FIT[s][m] = process.env.N0INF ? { n0: INF_N0, curves: {}, edge: [] } : CB.fitHoldout(samples, s, { win }); });
   const R_ = SEASONS.map(s => build(s, { S: FIT[s].S.n0, L: FIT[s].L.n0 }));
