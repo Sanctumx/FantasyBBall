@@ -1,6 +1,6 @@
 // Summarize bt_real_*.json: each arm vs the current board (arm 0), paired by season/slot/seed; titles, prize, made, matchup.
 const fs = require('fs');
-const all = fs.readdirSync('.').filter(f => /^bt_real_.*\.json$/.test(f)).map(f => JSON.parse(fs.readFileSync(f)));
+const all = require('./results_path').listResults(/^bt_real_.*\.json$/).map(f => JSON.parse(fs.readFileSync(f)));
 const by = {}; const names = {};
 all.forEach(({ name, rows }) => rows.forEach(r => { names[r.arm] = name; (by[r.arm] = by[r.arm] || {})[r.season + '|' + r.slot + '|' + r.seed] = r; }));
 const se = a => { const m = a.reduce((x, y) => x + y, 0) / a.length; return [m, a.length > 1 ? Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1) / a.length) : 0]; };

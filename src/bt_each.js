@@ -19,6 +19,6 @@ for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
   const tot = sc.weekTot.map(t => { const a = new Array(11).fill(0); t.forEach(w => w && w.forEach((x, c) => { a[c] += x; })); return [a[1] ? a[0] / a[1] : 0, a[3] ? a[2] / a[3] : 0, a[4], a[5], a[6], a[7], a[8], a[9], -a[10]]; });
   const z = [...Array(9).keys()].map(c => { const v = tot.map(t => t[c]), mu = v.reduce((x, y) => x + y, 0) / v.length, sd = Math.sqrt(v.reduce((x, y) => x + (y - mu) ** 2, 0) / v.length) || 1; return (tot[m][c] - mu) / sd; });
   row.minZ = Math.min(...z); rows.push(row);
-  require('fs').writeFileSync('bt_each_' + season + '_' + s0 + '-' + s1 + '.json', JSON.stringify(rows));
+  require('fs').writeFileSync(require('./results_path').resultPath('bt_each_' + season + '_' + s0 + '-' + s1 + '.json'), JSON.stringify(rows));
 }
 console.log(season, 'done', ((Date.now() - t0) / 1000).toFixed(0) + 's');

@@ -1,7 +1,7 @@
 // Pooled summary over all seasons: arm vs arm, paired by season/slot/seed. node real_sum2.js
 const fs = require('fs');
 const by = {}, names = {};
-fs.readdirSync('.').filter(f => /^bt_real_.*\.json$/.test(f)).forEach(f => { const { name, rows } = JSON.parse(fs.readFileSync(f)); rows.forEach(r => { names[r.arm] = name; (by[r.arm] = by[r.arm] || {})[r.season + '|' + r.slot + '|' + r.seed] = r; }); });
+require('./results_path').listResults(/^bt_real_.*\.json$/).forEach(f => { const { name, rows } = JSON.parse(fs.readFileSync(f)); rows.forEach(r => { names[r.arm] = name; (by[r.arm] = by[r.arm] || {})[r.season + '|' + r.slot + '|' + r.seed] = r; }); });
 const se = a => { const m = a.reduce((x, y) => x + y, 0) / a.length; return [m, a.length > 1 ? Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1) / a.length) : 0]; };
 const f1 = ([m, s], k = 100) => (k * m >= 0 ? '+' : '') + (k * m).toFixed(1) + ' ± ' + (k * s).toFixed(1);
 const prize = r => r.title ? 60 : r.rounds === 2 ? 30 : r.rounds === 1 ? 5 : 0;

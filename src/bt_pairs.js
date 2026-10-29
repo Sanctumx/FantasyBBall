@@ -10,6 +10,6 @@ for (const [name, c] of arms) {
     const ro = draft(season, slot, seed, Object.assign({}, base, c), { trueSd: 'v2' });
     rows.push({ season, slot, seed, me: scoreLeague(season, ro, { seed, target: true }).rates[slot - 1], roster: ro[slot - 1].slice().sort().join(',') });
   }
-  out.push({ name, rows }); require('fs').writeFileSync('bt_pairs_' + season + '_' + s0 + '-' + s1 + '.json', JSON.stringify(out));
+  out.push({ name, rows }); require('fs').writeFileSync(require('./results_path').resultPath('bt_pairs_' + season + '_' + s0 + '-' + s1 + '.json'), JSON.stringify(out));
   console.log(season, name, (rows.reduce((a, r) => a + r.me, 0) / rows.length).toFixed(4), ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }

@@ -5,7 +5,7 @@ echo == 1. parity: 2024-25 seeds 145-147
 node bt_real.js 2024-25 23 145 147
 node bt_real.js 2024-25 65 145 147
 python prize_equity.py 65:23
-del bt_real_2024-25_a23_145-147.json bt_real_2024-25_a65_145-147.json
+del results\bt_real_2024-25_a23_145-147.json results\bt_real_2024-25_a65_145-147.json
 echo.
 echo == 2. paired run: 4 seasons, seeds 145-160
 for %%S in (2022-23 2023-24 2024-25 2025-26) do (

@@ -19,7 +19,7 @@ Every idea tried or planned has one line in `src/IDEAS.md`; full write-ups are i
 ## Keeping context lean (`.claude/`)
 
 - **Blocked** (`settings.json` deny rules): reading `src/logs*.csv`, `src/bt_daily.json`, `src/bt_data.json`, backtest
-  results `src/bt_*_*.json`, `src/data/*.xls*`, and the built pages `index.html`, `league.html`, `inseason.html`,
+  results `src/results/bt_*_*.json`, `src/data/*.xls*`, and the built pages `index.html`, `league.html`, `inseason.html`,
   `settings.html`, `rankings.html`, `team.html`, `math.html`; editing the built pages by hand is blocked too (rebuild them instead).
   Scripts still read them; to inspect one, run a short node or python snippet that prints only what you need.
 - **Asks first:** `git push`, `gh pr merge` and the merge API call prompt the user every time (`permissions.ask`).

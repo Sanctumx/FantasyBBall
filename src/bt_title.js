@@ -15,7 +15,7 @@ for (const [name, c] of arms) {
     const sc = scoreLeague(season, ro, { seed, target: true }), t = titleScore(sc.weekTot), m = slot - 1;
     rows.push({ season, slot, seed, me: sc.rates[m], rs: t.rsRate[m], made: t.made[m], poAll: t.poAll[m], rounds: t.roundsWon[m], title: t.title[m], roster: ro[m].slice().sort().join(',') });
   }
-  out.push({ name, rows }); require('fs').writeFileSync('bt_title_' + season + '_' + s0 + '-' + s1 + '.json', JSON.stringify(out));
+  out.push({ name, rows }); require('fs').writeFileSync(require('./results_path').resultPath('bt_title_' + season + '_' + s0 + '-' + s1 + '.json'), JSON.stringify(out));
   const avg = k => (rows.reduce((a, r) => a + r[k], 0) / rows.length);
   console.log(season, name.padEnd(17), 'matchup', avg('me').toFixed(3), 'made PO', avg('made').toFixed(2), 'PO all-play', avg('poAll').toFixed(3), 'title', avg('title').toFixed(3), ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }

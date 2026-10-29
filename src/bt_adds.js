@@ -14,6 +14,6 @@ for (const [name, c] of arms) {
     rows.push({ season, slot, seed, me: scoreLeague(season, ro, { seed, target: true }).rates[slot - 1], roster: ro[slot - 1].join(',') });
   }
   out.push({ name, cfg: c, rows });
-  require('fs').writeFileSync('bt_adds_' + season + '.json', JSON.stringify(out));
+  require('fs').writeFileSync(require('./results_path').resultPath('bt_adds_' + season + '.json'), JSON.stringify(out));
   console.log(name, (rows.reduce((a, r) => a + r.me, 0) / rows.length).toFixed(4), ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }

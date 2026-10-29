@@ -3,8 +3,14 @@
 # Equity = the prize_equity.py logistic fits (P(title / final / semis) on matchup rate + made playoffs, fit on every
 # bt_real draft) combined by inverse variance with the actual prize. Errors: by draft (each strategy's mean minus the
 # draft's mean, so league-wide luck cancels). Run: python3 strat_equity.py
-import json, glob, collections, numpy as np
-rows = [r for f in glob.glob('bt_real_*.json') for r in json.load(open(f))['rows']]
+import os, json, glob, collections, numpy as np
+def _results(pat):  # src/results/ first, then src/ (older runs); one file per name
+    here, seen, out = os.path.dirname(os.path.abspath(__file__)), set(), []
+    for d in (os.path.join(here, 'results'), here):
+        for f in sorted(glob.glob(os.path.join(d, pat))):
+            if os.path.basename(f) not in seen: seen.add(os.path.basename(f)); out.append(f)
+    return out
+rows = [r for f in _results('bt_real_*.json') for r in json.load(open(f))['rows']]
 X = np.array([[1, r['me'], r['made']] for r in rows])
 def logit(y):
     b = np.zeros(3)
@@ -16,7 +22,7 @@ bT, bF, bS = logit(ge(3)), logit(ge(2)), logit(ge(1))
 P = lambda b, r: 1 / (1 + np.exp(-(b[0] + b[1] * r['me'] + b[2] * r['made'])))
 eq = lambda r: 60 * P(bT, r) + 30 * max(0, P(bF, r) - P(bT, r)) + 5 * max(0, P(bS, r) - P(bF, r))
 prize = lambda r: 60 if r['title'] else 30 if r['rounds'] == 2 else 5 if r['rounds'] == 1 else 0
-S = [r for f in glob.glob('bt_strat_*.json') for r in json.load(open(f))['rows']]
+S = [r for f in _results('bt_strat_*.json') for r in json.load(open(f))['rows']]
 D = collections.defaultdict(list)
 for r in S: D[(r['season'], r['seed'])].append(r)
 NAME = {'board': 'Model pick (this board)', 'z': 'Standard Zscore, TO ×0.5', 'h2h': 'H2H-Adjusted Zscore, TO ×0.5', 'adp': 'ADP'}

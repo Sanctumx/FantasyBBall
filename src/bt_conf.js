@@ -11,6 +11,6 @@ for (const [sc, s0, s1, opp] of scen) for (const [name, c] of [['current', {}], 
     const ro = draft(season, slot, seed, Object.assign({}, base, c), opp);
     rows.push({ season, sc, slot, seed, me: scoreLeague(season, ro, { seed, target: true }).rates[slot - 1], roster: ro[slot - 1].join(',') });
   }
-  out.push({ sc, name, rows }); require('fs').writeFileSync('bt_conf_' + season + '.json', JSON.stringify(out));
+  out.push({ sc, name, rows }); require('fs').writeFileSync(require('./results_path').resultPath('bt_conf_' + season + '.json'), JSON.stringify(out));
   console.log(season, sc, name, (rows.reduce((a, r) => a + r.me, 0) / rows.length).toFixed(4), ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }

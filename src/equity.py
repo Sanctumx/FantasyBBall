@@ -1,9 +1,15 @@
 # Title equity (2026-10-17): a low-noise stand-in for titles. Fit P(title) from the team's matchup win rate and whether it made
 # the playoffs, on every real-projection backtest draft (logistic regression), then score each arm by the change in predicted
 # title chance, paired draft by draft against its baseline. Combined metric = inverse-variance blend of real titles and equity.
-import json, glob, numpy as np, collections
+import os, json, glob, numpy as np, collections
+def _results(pat):  # src/results/ first, then src/ (older runs); one file per name
+    here, seen, out = os.path.dirname(os.path.abspath(__file__)), set(), []
+    for d in (os.path.join(here, 'results'), here):
+        for f in sorted(glob.glob(os.path.join(d, pat))):
+            if os.path.basename(f) not in seen: seen.add(os.path.basename(f)); out.append(f)
+    return out
 rows = []; arms = {}
-for f in glob.glob('bt_real_*.json'):
+for f in _results('bt_real_*.json'):
     d = json.load(open(f))
     for r in d['rows']: rows.append(r); arms[r['arm']] = d['name']
 X = np.array([[1, r['me'], r['made']] for r in rows]); y = np.array([r['title'] for r in rows], float)

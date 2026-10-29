@@ -29,7 +29,7 @@ for (const [name, c] of arms) {
     rows.push({ season, slot, seed, season_: sc.rates[slot - 1], po: playoffRate(sc.weekTot, slot - 1), roster: ro[slot - 1].join(',') });
   }
   out.push({ name, rows });
-  require('fs').writeFileSync('bt_po_' + season + '.json', JSON.stringify(out));
+  require('fs').writeFileSync(require('./results_path').resultPath('bt_po_' + season + '.json'), JSON.stringify(out));
   const m = k => (rows.reduce((a, r) => a + r[k], 0) / rows.length).toFixed(4);
   console.log(name, '| season', m('season_'), '| playoffs', m('po'), '|', ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }

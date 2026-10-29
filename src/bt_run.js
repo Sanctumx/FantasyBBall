@@ -12,5 +12,5 @@ for (const cf of configs) {
     const ro = draft(season, slot, seed, cf.c); const s = score(season, ro); rows.push({ season, slot, seed, me: s[slot - 1] });
   }
   out.push({ name: cf.name, rows }); console.log(cf.name, (rows.reduce((a, r) => a + r.me, 0) / rows.length).toFixed(4));
-  require('fs').writeFileSync('bt_res_' + which + '.json', JSON.stringify(out));
+  require('fs').writeFileSync(require('./results_path').resultPath('bt_res_' + which + '.json'), JSON.stringify(out));
 }

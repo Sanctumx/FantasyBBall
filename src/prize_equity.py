@@ -3,9 +3,15 @@
 # matchup rate + made playoffs over every real-projection draft, combined with the actual prize by inverse variance, paired
 # draft by draft against a baseline. Shown in title-equivalents per 100 seasons (prize ÷ 60), so it reads on the same scale.
 # Run: python3 prize_equity.py <arm>:<baseline> [<arm>:<baseline> ...]     e.g. python3 prize_equity.py 41:23 42:23
-import sys, json, glob, collections, numpy as np
+import sys, os, json, glob, collections, numpy as np
+def _results(pat):  # src/results/ first, then src/ (older runs); one file per name
+    here, seen, out = os.path.dirname(os.path.abspath(__file__)), set(), []
+    for d in (os.path.join(here, 'results'), here):
+        for f in sorted(glob.glob(os.path.join(d, pat))):
+            if os.path.basename(f) not in seen: seen.add(os.path.basename(f)); out.append(f)
+    return out
 rows, arms = [], {}
-for f in glob.glob('bt_real_*.json'):
+for f in _results('bt_real_*.json'):
     d = json.load(open(f))
     for r in d['rows']: rows.append(r); arms[r['arm']] = d['name']
 X = np.array([[1, r['me'], r['made']] for r in rows])

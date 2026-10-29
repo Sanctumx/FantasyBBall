@@ -33,6 +33,6 @@ Everything here runs from inside `src/` (scripts use relative paths).
 - `backtest.js`: `draft(season, slot, seed, cfgExtra, opp)` and simple all-12 scoring. `opp`: `{n, gamma}` punting opponents, `{model}` opponents drafting with the board.
 - `stream_sim.js`: `scoreLeague()` realistic scoring: daily 10 active of 12, 2 IL spots, 4 adds/week streaming.
 - `bt_run.js` (Auto β/τ grid and locked punts), `bt_run4.js` (strategy sets), `bt_opp.js` (punting opponents), `bt_model2.js` (board-using opponents + Board users setting), `bt_corr.js` (correlation on/off), `bt_lock.js` (re-lock best strategy), `bt_stream.js` (IL fill / streamer baseline under realistic scoring).
-- Results are written to `bt_*_<season>.json`; compare configs paired by (season, slot, seed).
+- Results are written to `results/bt_*_<season>.json` (via `results_path.js`; summaries also read `src/` for runs from older checkouts); compare configs paired by (season, slot, seed).
 
 See `SESSION_HANDOFF.md` for decisions, constraints and the next steps.

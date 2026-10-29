@@ -22,5 +22,5 @@ for (let seed = s0; seed <= s1; seed++) {
   const t = titleScore(sc.weekTot, { rsMode: 'each', rsWeeks: 17, rounds: [[17, 18], [19, 20], [21, 22]] });
   for (let m = 0; m < N; m++) rows.push({ season, seed, team: m + 1, strat: list[m], me: sc.rates[m], made: t.made[m], rounds: t.roundsWon[m], title: t.title[m] });
 }
-require('fs').writeFileSync(`bt_strat_${season}_${s0}-${s1}.json`, JSON.stringify({ rows }));
+require('fs').writeFileSync(require('./results_path').resultPath(`bt_strat_${season}_${s0}-${s1}.json`), JSON.stringify({ rows }));
 console.log(season, s0 + '-' + s1, ((Date.now() - t0) / 1000).toFixed(0) + 's');

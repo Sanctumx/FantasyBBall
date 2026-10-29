@@ -13,6 +13,6 @@ for (const [name, board, truth] of cells) {
     rows.push({ season, slot, seed, me: scoreLeague(season, ro, { seed }).rates[slot - 1] });
   }
   out.push({ name, board, truth, rows });
-  require('fs').writeFileSync('bt_sd_' + season + '.json', JSON.stringify(out));
+  require('fs').writeFileSync(require('./results_path').resultPath('bt_sd_' + season + '.json'), JSON.stringify(out));
   console.log(name, (rows.reduce((a, r) => a + r.me, 0) / rows.length).toFixed(4), ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }

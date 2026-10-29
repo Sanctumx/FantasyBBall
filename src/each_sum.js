@@ -1,6 +1,6 @@
 // Summarize bt_each_*.json: titles / playoffs made per 100 seasons under each scoring, paired differences each − most.
 const fs = require('fs');
-const rows = fs.readdirSync('.').filter(f => /^bt_each_.*\.json$/.test(f)).flatMap(f => JSON.parse(fs.readFileSync(f)));
+const rows = require('./results_path').listResults(/^bt_each_.*\.json$/).flatMap(f => JSON.parse(fs.readFileSync(f)));
 const se = a => { const m = a.reduce((x, y) => x + y, 0) / a.length; return [m, Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1) / a.length)]; };
 const f1 = ([m, s]) => (100 * m).toFixed(1) + ' ± ' + (100 * s).toFixed(1);
 console.log('drafts', rows.length);

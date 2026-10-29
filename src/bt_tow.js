@@ -14,6 +14,6 @@ for (const [name, c] of (armIx != null ? [arms[+armIx]] : arms)) {
     const sc = scoreLeague(season, ro, { seed, target: true }), t = titleScore(sc.weekTot), m = slot - 1;
     rows.push({ season, slot, seed, me: sc.rates[m], made: t.made[m], poAll: t.poAll[m], rounds: t.roundsWon[m], title: t.title[m], roster: ro[m].slice().sort().join(',') });
   }
-  out.push({ name, rows }); require('fs').writeFileSync('bt_tow_' + season + '_' + s0 + '-' + s1 + (armIx != null ? '_arm' + armIx : '') + '.json', JSON.stringify(out));
+  out.push({ name, rows }); require('fs').writeFileSync(require('./results_path').resultPath('bt_tow_' + season + '_' + s0 + '-' + s1 + (armIx != null ? '_arm' + armIx : '') + '.json'), JSON.stringify(out));
   console.log(season, name, ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }
