@@ -1,6 +1,6 @@
 # Live-roster k on the real LOFB league (idea 146) — design
 
-Date: 2026-10-29. Branch: calib-ros-150 (spec only; nothing built). Status: written, not yet approved by the user.
+Date: 2026-10-29. Branch: calib-ros-150 (spec only; nothing built). Status: written; data gathered and checked 2026-10-29; user said to hand it to the planner.
 
 ## Intent
 
@@ -33,7 +33,15 @@ Verified on 2026-10-29 by fetching (curl, no login). Files go to the scratchpad 
 | Weekly results | POST `fxpa/req?leagueId=...` body `{"msgs":[{"method":"getStandings","data":{"leagueId":"...","view":"SCHEDULE","period":"1"}}]}` | `tableList` of 19 tables; rows hold team, category W/L/T, nine category totals, `matchupId` `teamA_teamB` |
 | Transactions (cross-check, optional) | user's CSV downloads: `Downloads\Fantrax-Transaction-History-Claims+Drops-LOFB Bowl 9 Cat Red (1).csv` (all 120 teams, 4,321 claims) | median 29 claims per team, max 122 |
 
-Not yet verified: that every period 1-19 and all 10 divisions return in the `fxpa` call (only period 1 pulled, and not checked against the screen); that the daily roster call keeps working at scale (146 calls; throttle). Player ids are Fantrax ids; matching them to our names is open (user, 2026-10-29: the ids can also be found through the team profile pages on Fantrax; also Fantrax `getPlayerIds`, or the league's `playerInfo`). Projections for 2024-25: `src/data/proj_2024-25_kit.xlsx` (coverage of the ~1,900 drafted players unchecked). In-season lines for players outside the 164 in `bt_daily.json` need box scores (`mk_daily.py` source): the biggest open data item.
+The open data items of the first draft are closed: see "Data findings" below.
+
+### Data findings (2026-10-29, gathered into `src/live_data/`, untracked; scripts `fetch_live.mjs`, `build_id_map.py`)
+
+- One `getStandings` SCHEDULE call returns all 19 periods (the `period` field is ignored). Every team has **two matchup rows per period** (two opponents a week, 120 pairings); each row is one matchup to score, so there are more matchups than the 6-per-division reading assumed (user: more matchups means more data). Periods 1-17 are regular season (W+L+T = 9 in every row); 18-19 are playoff rounds with byes: not used.
+- Daily rosters: all 146 days, 120 teams, 400 unique players. Roster day N starts 19:00 ET on its date; a scoring period's last date belongs to the next period from 19:00 (use start <= date < end).
+- Check: ACTIVE players on the daily rosters, summed over box scores in `logs3.csv`, reproduce the standings category totals exactly for 8 of 9 team-weeks tested (the ninth is off by one game, likely a mid-day move). So rosters, dates and id map are right, and lines come from `logs3.csv` (569 players in 2024-25), not `bt_daily.json`.
+- Id map: 397 of 400 Fantrax ids matched to NBA ids (3 without 2024-25 games). Projections (`proj_2024-25_kit.xlsx`, top 400) cover about 343 / 353 of them; ~50 waiver pickups have none and need the app's no-projection rule.
+- The draft pool is 227 unique players across the 10 divisions.
 
 ## Approaches
 
