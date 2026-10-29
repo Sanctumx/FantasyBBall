@@ -2975,7 +2975,15 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
         const k = keys[Object.keys(job.players).length];
         job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, po);
       }
-      if (job.matrix && Object.keys(job.players).length === keys.length) job.done = true;
+      if (job.matrix && Object.keys(job.players).length === keys.length) {
+        // Vs replacement: each row is his gain over the replacement entry, as in the player list (the replacement shows 0), not the raw contribution
+        const su = job.matrix.mean && opts && opts.baseline === 'rep' ? TeamWin.moduleSetup(ctx, state, { baseline: 'rep', cats: opts.cats, points: opts.points, base: job.matrix, pw: job.players }) : null;
+        if (su) {
+          const raw = job.players; job.players = {};
+          keys.forEach(k => { const r = TeamWin.moduleRow(ctx, state, su, k); job.players[k] = Object.assign({ c: r.dC, m: r.dM, dCat: r.dCat }, raw[k].hypo ? { hypo: true } : null); });
+        }
+        job.done = true;
+      }
       return true;
     } };
     return job;

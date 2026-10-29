@@ -109,6 +109,19 @@ test('winJob: one player per step; the result equals matrix and playerWin', () =
   assert.deepStrictEqual(job.players, W.playerWin(ctx, st));
 });
 
+test('winJob Vs replacement: every roster row is scored like the player list (his gain over the replacement entry), so the replacement shows 0', () => {
+  const ctx = V.sourceCtx(baseArgs(), 'avg', [], FXP, { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]), o = { baseline: 'rep' };
+  const job = V.winJob(ctx, st, o); while (job.step());
+  const su = W.moduleSetup(ctx, st, Object.assign({ base: job.matrix }, o)), raw = W.playerWin(ctx, st, o);
+  st.order.forEach(k => {
+    if (!T.countedSlots(ctx).includes(st.slots[k])) return;
+    const row = W.moduleRow(ctx, st, su, k);
+    assert.ok(near(job.players[k].m, row.dM), k + ' matches the list row');
+    assert.ok(!near(job.players[k].m, raw[k].m) || near(su.ref.m, 0), k + ' is no longer the raw contribution');
+  });
+  assert.ok(Math.abs(job.players[su.worst].m) < 1e-9 || su.grp.length > 1, 'the replacement shows 0');
+});
+
 test('scorer: the same ctx and roster reuse the finished job; a swap scores again; weights are no part of it', () => {
   const ctx = mk(), st = stateOf(), sc = V.createScorer(), run = j => { while (j.step()); return j; };
   const a = run(sc.get(ctx, st));
