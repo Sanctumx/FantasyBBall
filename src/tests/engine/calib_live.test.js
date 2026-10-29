@@ -150,6 +150,21 @@ test('decide: rounding to .05, the 2 SE bar and the 8-of-10 divisions rule (the 
   assert.strictEqual(CL.decide({ k: .68, se: .02, byDiv: divs(10, .68), shipped: .6 }).k, .7);        // the value to ship is the rounded one
 });
 
+test('#144 teamGamesBefore counts a team\'s games on dates before the cut day (days since the first day); rateG turns the shrunk rate into the g the Total basis turns back into it', () => {
+  const G = CL.gameSeconds({ AAA: ['2024-10-22', '2024-10-24', '2024-10-29', '2024-11-05'] });
+  assert.strictEqual(CL.teamGamesBefore(G.games.AAA, 0), 0);
+  assert.strictEqual(CL.teamGamesBefore(G.games.AAA, 1), 1);   // Oct 22 is day 0
+  assert.strictEqual(CL.teamGamesBefore(G.games.AAA, 7), 2);   // Oct 29 is day 7: not before the cut at 7
+  assert.strictEqual(CL.teamGamesBefore(G.games.AAA, 8), 3);
+  assert.strictEqual(CL.teamGamesBefore(G.games.AAA, 15), 4);
+  assert.strictEqual(CL.teamGamesBefore(undefined, 5), 0);
+  const CA = require('../../calib_avail.js');
+  for (const [g, gp, tg, n0] of [[70, 3, 5, 12], [30, 0, 0, 12], [82, 5, 4, 0], [60, 4, 8, Infinity]]) {
+    const out = Math.min(1, CL.rateG(g, gp, tg, n0) / 82);
+    assert.ok(Math.abs(out - CA.rate(gp, tg, g, n0)) < 1e-12);
+  }
+});
+
 test('outcomes feed rows: a season-to-date cut of lines and the outcome period list use only periods from the checkpoint to 17', () => {
   assert.deepStrictEqual(CL.outcomePeriods(2), Array.from({ length: 16 }, (_, i) => i + 2));
   assert.deepStrictEqual(CL.outcomePeriods(16), [16, 17]);

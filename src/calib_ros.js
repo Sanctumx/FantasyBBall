@@ -16,8 +16,9 @@ const fs = require('fs');
 const E = require('./engine.js'), B = require('./backtest.js'), TW = require('./team_win.js'), S = require('./calib_ros_stats.js');
 const DATA = require('./bt_data.json'), SCHED = require('./bt_sched.json'), DAILY = require('./bt_daily.json');
 const KWL = process.argv.includes('kwl');   // #156 mode, see the block before the verdict lines G-J below
-const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || (KWL ? '2025-26,2024-25,2023-24,2022-23' : process.argv.includes('blend') ? '2025-26,2024-25,2023-24' : '2025-26,2024-25')).split(','), SEED0 = +(process.argv[4] || 1), N = 14, R = 12;
-const CKS = KWL ? Array.from({ length: 11 }, (_, i) => 2 * i + 1) : [3, 7, 11, 15];   // kwl: the start of weeks 2, 4, ..., 22
+const AVAIL = process.argv.includes('avail'), CA = require('./calib_avail.js');   // #144 mode, see availMain below
+const SEEDS = +(process.argv[2] || 20), SEASONS = (process.argv[3] || (KWL || AVAIL ? '2025-26,2024-25,2023-24,2022-23' : process.argv.includes('blend') ? '2025-26,2024-25,2023-24' : '2025-26,2024-25')).split(','), SEED0 = +(process.argv[4] || 1), N = 14, R = 12;
+const CKS = KWL ? Array.from({ length: 11 }, (_, i) => 2 * i + 1) : AVAIL ? [1, 2, 3, 7, 11, 15] : [3, 7, 11, 15];   // kwl: the start of weeks 2, 4, ..., 22; avail: weeks 2, 3, 4, 8, 12, 16
 let TOTAL_BUILDS = SEASONS.length;
 const gauss = r => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
 // #145 blend mode (5th argument "blend", or any argument "blend"): sources W (preseason lines, E-ROS), S (season-to-date blend), L (last-30-days
@@ -25,7 +26,7 @@ const gauss = r => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * M
 const BLEND = process.argv.includes('blend') || KWL, CB = require('./calib_blend.js');
 // #156 kwl mode: sources W, S (STD), L30, L60, L90; the n0 of a build is { S, L30, L60, L90 } (blend mode: { S, L })
 const WINOF = { S: 'STD', L: 'L30', L30: 'L30', L60: 'L60', L90: 'L90' };
-const SRC = KWL ? ['W', 'S', 'L30', 'L60', 'L90'] : BLEND ? ['W', 'S', 'L'] : ['W', 'G', 'X', 'PM'];   // whole games, g82 games, mix (midpoint of the two), pairMatchup (whole games, gVar 1.87)
+const SRC = AVAIL ? ['W', 'G0', 'R', 'RIL', 'R0'] : KWL ? ['W', 'S', 'L30', 'L60', 'L90'] : BLEND ? ['W', 'S', 'L'] : ['W', 'G', 'X', 'PM'];   // whole games, g82 games, mix (midpoint of the two), pairMatchup (whole games, gVar 1.87)
 const INF_N0 = { g: Infinity, min: Infinity, fg: Infinity, ft: Infinity };
 const PSRC = { '2025-26': 'bbm', '2024-25': 'bbm', '2023-24': 'hs', '2022-23': 'hs' };   // one source per season (the only one 2025-26 and 2023-24 have; 2022-23: 165 of 260 players have one, the rest keep the prior-season line)
 const K_MATCH = 0.72, K_CAT = 0.82, T0 = Date.now();
@@ -39,6 +40,7 @@ function samplesOf(season) {
 }
 
 // n0 = { S: n0 for the season-to-date blend, L: for the 30-day blend } (blend mode only)
+// n0 = { S, L } (blend mode) or the one games-played n0 (avail mode, Infinity = the g/82 prior only)
 function build(season, n0) {
   const { P, ctx, cfg: cfg0 } = B.setup(season, { proj: PSRC[season] || 'avg', realAdp: true });
   const cfg = Object.assign({}, cfg0, { ilSpots: 0, scoring: 'h2h', order: 'snake', slot: 1 });
@@ -71,8 +73,12 @@ function build(season, n0) {
       if (!nRem) return;
       const recent = pid => (daily[String(pid)] || []).some(x => x[0] >= 7 * w0 - 14 && x[0] <= 7 * w0 - 1);
       const entries = (t, mode) => t.roster.map(x => {
-        const rows = G[x.p.t] || [], whole = recent(x.p.pid) ? weeks.reduce((s, w) => s + (rows[w] || 0), 0) / nRem : 0;
+        const rows = G[x.p.t] || [], sched = weeks.reduce((s, w) => s + (rows[w] || 0), 0) / nRem, whole = recent(x.p.pid) ? sched : 0;
         const share = Math.min(1, x.p.g / 82);
+        if (AVAIL) {   // whole games are the schedule's whatever the stand-in says; CA.gamesFor decides who loses them
+          const prow = daily[String(x.p.pid)] || [], gp = CA.gpAt(prow, w0), tg = CA.tgAt(rows, w0);
+          return { p: x.p, games: CA.gamesFor(mode, { recent: recent(x.p.pid), whole: sched, share, a: CA.rate(gp, tg, x.p.g, n0), a0: CA.rate(gp, tg, x.p.g, 0) }), gVar: 1.87 };
+        }
         return { p: BLEND ? lineAt(x.p, w0, mode) : x.p, games: mode === 'G' ? whole * share : mode === 'X' ? whole * (1 + share) / 2 : whole, gVar: 1.87 };
       });
       const modes = SRC.filter(s => s !== 'PM'), outs = {};
@@ -81,7 +87,7 @@ function build(season, n0) {
       for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
         const fc = {};
         modes.forEach(s => { const o = outs[s]; fc[s] = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(c => o.catProb(o.teams[i], o.teams[j], c)).concat(o.pairProb(o.teams[i], o.teams[j])); });
-        if (!BLEND) { const pm = E.pairMatchup(ent[i], ent[j]); fc.PM = pm.cat.concat(pm.match); }
+        if (!BLEND && !AVAIL) { const pm = E.pairMatchup(ent[i], ent[j]); fc.PM = pm.cat.concat(pm.match); }
         checks += Math.abs(outW.catProb(outW.teams[i], outW.teams[j], 0) + outW.catProb(outW.teams[j], outW.teams[i], 0) - 1) > 1e-6;
         for (const w of weeks) {
           const ci2 = cats(tot[i][w]), cj = cats(tot[j][w]); let wi = 0, wj = 0;
@@ -371,7 +377,83 @@ function kwlMain() {
   fs.writeFileSync('calib_kwl.json', JSON.stringify({ seeds: SEEDS, seed0: SEED0, cks: CKS, folds: FO, lags: LAGS, inA: INA, p1: P1, verdict: V }));
   process.exit(0);
 }
-if (require.main === module && KWL) kwlMain();
+// ---- #144 avail mode (design: docs/superpowers/specs/2026-10-29-early-availability-design.md; gates A1-A5 fixed there before any result) ----
+// Same fold plan as kwl: per held-out season T, k per arm is fitted on the training seasons' forecasts (each built with an n0 fitted without it and without T)
+// and scored on T's. The early checkpoints are weeks 2, 3, 4 (ck 0-2), the late ones weeks 8, 12, 16 (ck 3-5). N0INF=1 sets every n0 to Infinity (sanity run).
+function availSamples(season) {
+  const { P } = B.setup(season, { proj: PSRC[season] || 'avg', realAdp: true }), daily = DAILY[season].daily, G = SCHED[season].games, nweeks = DATA[season].nweeks, out = [];
+  P.forEach(p => { if (p.g > 0 && p.m > 0) CKS.forEach(w0 => out.push(CA.makeAvailSample(p, daily[String(p.pid)] || [], G, w0, nweeks))); });
+  return out;
+}
+function availRmse(Sc, n0) {   // weighted player-level RMSE of rest-of-season availability: stand-in (Per game), g/82 (Total), raw rate, shrunk rate
+  const arms = { standIn: s => (s.recent ? 1 : 0), g82: s => Math.min(1, s.g / 82), raw: s => CA.rate(s.gp, s.tg, s.g, 0), shrunk: s => CA.rate(s.gp, s.tg, s.g, n0) }, out = {};
+  for (const k in arms) { let l = 0, w = 0; for (const s of Sc) if (s.tgAfter > 0) { const e = arms[k](s) - s.gpAfter / s.tgAfter; l += s.tgAfter * e * e; w += s.tgAfter; } out[k] = Math.sqrt(l / w); }
+  return out;
+}
+function availMain() {
+  const KW = require('./calib_kwl.js'), primary = SEASONS.slice(0, 3), confirm = SEASONS[3], plan = KW.foldPlan(primary, confirm), INF = !!process.env.N0INF;
+  TOTAL_BUILDS = plan.reduce((s, f) => s + f.nTrainBuilds + 1, 0);
+  const samples = Object.fromEntries(SEASONS.map(s => [s, availSamples(s)])), n0Of = (A, T) => (INF ? Infinity : CA.n0For(samples, SEASONS, A, T));
+  const ECK = 3, isEarly = D => i => D.ck[i] < ECK, isLate = D => i => D.ck[i] >= ECK;
+  log(`#144 early-season availability  ${new Date().toISOString().slice(0, 10)}  seeds ${SEED0}-${SEED0 + SEEDS - 1}  seasons ${SEASONS.join(', ')} (${confirm} confirmation only)  checkpoints (start of weeks) ${CKS.map(c => c + 1).join(', ')}${INF ? '  [N0INF sanity run]' : ''}`);
+  log('Arms: W stand-in (Per game) | G0 g/82 for everyone (Total) | R shrunk games-played rate, no stand-in | RIL R with the stand-in (printed) | R0 raw rate, n0 = 0 (printed). Each arm has its own k, fitted on the training seasons over all checkpoints.');
+  log('Frozen rosters, whole games as #150. Early = weeks 2, 3, 4; late = weeks 8, 12, 16. d = paired difference in Brier, negative = the first arm is better.');
+  SEASONS.forEach(s => {
+    const { P } = B.setup(s, { proj: PSRC[s] || 'avg', realAdp: true }), al = CA.alignCheck(P.filter(p => p.g > 0), DAILY[s].daily, SCHED[s].games, DATA[s].nweeks);
+    log(`alignment ${s}: team-weeks with games ${al.cells}, a player has more rows than team games in ${al.over}, the busiest player matches the schedule in ${al.exact}`);
+  });
+  const FO = {}, N0 = {}, V = [];
+  for (const fold of plan) {
+    const T = fold.test, trainD = fold.train.map(A => build(A, n0Of(A, T)).D).reduce(merge), n0T = n0Of(null, T), r = build(T, n0T), D = r.D;
+    N0[T] = n0T;
+    const Sc = samples[T], traded = Sc.filter(s => s.gp > s.tg).length;
+    log(`\n== ${T}${fold.confirm ? ' (confirmation: k fitted on all primary seasons)' : ''}  (rows ${D.n}, pair-weeks per checkpoint ${r.pairWeeks.join('/')}, symmetry failures ${r.checks})`);
+    log(`n0 for ${T} (fitted on ${KW.nestedPool(SEASONS, null, T).join(', ')}): ${n0T}${n0T === 0 || n0T === 82 ? '   AT GRID EDGE' : ''}; training n0: ` + fold.train.map(A => `${A} ${n0Of(A, T)}`).join(', '));
+    if (INF) { const same = D.p.R.every((v, i) => v === D.p.G0[i]); log(`SANITY n0 = inf: R reproduces G0 forecasts bit for bit: ${same ? 'PASS' : 'FAIL'}`); }
+    const fo = FO[T] = { arm: {}, n0: n0T }, mk = (s, f) => { const o = (kind, ff) => ({ kind, f: ff }); return { kM: S.fitK(trainD, s, o('M', f)), kC: S.fitK(trainD, s, o('C', f)) }; };
+    const ARM = {}, ARMe = {}; SRC.forEach(s => { const kk = mk(s), ke = mk(s, isEarly(trainD)); ARM[s] = A(s, kk.kM, kk.kC); ARMe[s] = A(s, ke.kM, ke.kC); fo.arm[s] = { k: kk, kEarly: ke }; });
+    const O = (kind, f) => ({ kind, f }), eM = O('M', isEarly(D)), eC = O('C', isEarly(D)), lM = O('M', isLate(D)), lC = O('C', isLate(D));
+    const sh = s => A(s, 0.6, 0.75);
+    for (const s of SRC) {
+      const a = ARM[s], x = fo.arm[s];
+      x.brierEarly = S.brier(D, a, eM); x.brierLate = S.brier(D, a, lM); x.brierEarlyK = S.brier(D, ARMe[s], eM); x.brierEarlyShipped = S.brier(D, sh(s), eM); x.slopeEarly = S.slope(D, a, eM); x.binsEarly = S.bins(D, a, eM);
+      log(`${s.padEnd(3)} k_M ${a.kM.toFixed(2)} k_C ${a.kC.toFixed(2)} (early-only ${ARMe[s].kM.toFixed(2)} / ${ARMe[s].kC.toFixed(2)}) | matchup Brier early ${f(x.brierEarly)} (early-only k ${f(x.brierEarlyK)}, shipped .60 ${f(x.brierEarlyShipped)}) late ${f(x.brierLate)} | early slope ${x.slopeEarly.toFixed(2)}`);
+    }
+    const dd = (s, b, o) => S.diffSE(D, ARM[s], ARM[b], o);
+    for (const s of ['R', 'RIL', 'R0']) for (const b of ['W', 'G0']) {
+      const z = fo.arm[s]['vs' + b] = { eM: dd(s, b, eM), eC: dd(s, b, eC), lM: dd(s, b, lM), lC: dd(s, b, lC) };
+      log(`${s.padEnd(3)} minus ${b.padEnd(2)}: early matchup ${pm4(z.eM)} cats ${f(z.eC.d)}+-${z.eC.se.toFixed(4)} | late matchup ${pm4(z.lM)} cats ${f(z.lC.d)}+-${z.lC.se.toFixed(4)}`);
+    }
+    const rvs = dd('R', 'RIL', O('M', null)); log(`R minus RIL, all checkpoints, matchup: ${pm4(rvs)}`);
+    fo.ck = CKS.map((w0, ci) => { const o = { kind: 'M', ck: ci }; return { week: w0 + 1, rawW: S.brier(D, A('W', 1, 1), o), rawRIL: S.brier(D, A('RIL', 1, 1), o), dRG0: dd('R', 'G0', o), dRW: dd('R', 'W', o) }; });
+    log('per checkpoint, matchup: ' + fo.ck.map(c => `wk${c.week} R-G0 ${f(c.dRG0.d)}+-${c.dRG0.se.toFixed(4)} R-W ${f(c.dRW.d)}+-${c.dRW.se.toFixed(4)}`).join('  '));
+    log('per checkpoint raw (k = 1) Brier, W / RIL: ' + fo.ck.map(c => `wk${c.week} ${c.rawW.toFixed(4)} / ${c.rawRIL.toFixed(4)}`).join('  '));
+    fo.rmse = CKS.map(w0 => availRmse(Sc.filter(s => s.w0 === w0), n0T));
+    log('player availability RMSE (stand-in / g82 / raw / shrunk) by checkpoint: ' + fo.rmse.map((o, i) => `wk${CKS[i] + 1} ${o.standIn.toFixed(3)} / ${o.g82.toFixed(3)} / ${o.raw.toFixed(3)} / ${o.shrunk.toFixed(3)}`).join('  '));
+    log(`players with more games played than team games before the checkpoint (traded: that team's tg is slightly wrong): ${traded} of ${Sc.length} player-checkpoints`);
+    fo.slopeW = S.slope(D, ARM.W, eM); fo.binsOk = CA.binsOk(fo.arm.R.binsEarly);
+  }
+  // gates
+  const pf = primary.map(T => FO[T]), cf = FO[confirm], flat = (key, b) => pf.map(x => x.arm.R['vs' + b][key]);
+  const a1 = CA.gateA1(flat('eM', 'W'), flat('eC', 'W')), a2 = CA.gateA2(flat('eM', 'G0'));
+  const a3 = CA.gateA3([].concat(...['W', 'G0'].map(b => [].concat(flat('lM', b), flat('lC', b)))));
+  const a4 = pf.every(x => CA.gateA4({ slopeR: x.arm.R.slopeEarly, slopeW: x.slopeW, binsOk: x.binsOk }));
+  const a5 = CA.gateA5Harness(cf.arm.R.vsG0.eM);
+  const ds = (key, b) => pf.map(x => `${x.arm.R['vs' + b][key].d.toFixed(4)}+-${x.arm.R['vs' + b][key].se.toFixed(4)}`).join(' / ');
+  V.push(`A1 (Per game, early) R beats W by >= 2 SE in each season, cats d <= 0: ${a1 ? 'PASS' : 'FAIL'}  (matchup ${ds('eM', 'W')}; cats ${flat('eC', 'W').map(x => x.d.toFixed(4)).join('/')})`);
+  V.push(`A2 (Total, early) R beats G0 by >= 1 SE in each season: ${a2 ? 'PASS' : 'FAIL'}  (${ds('eM', 'G0')})`);
+  V.push(`A3 (no harm, weeks 8/12/16) R minus W and minus G0 below +1 SE, matchup and category, each season: ${a3 ? 'PASS' : 'FAIL'}  (vs W matchup ${ds('lM', 'W')}; vs G0 matchup ${ds('lM', 'G0')}; vs W cats ${ds('lC', 'W')}; vs G0 cats ${ds('lC', 'G0')})`);
+  V.push(`A4 (calibration, early) R slope no further from 1 than W's and bins pass: ${a4 ? 'PASS' : 'FAIL'}  (R ${pf.map(x => x.arm.R.slopeEarly.toFixed(2)).join('/')}; W ${pf.map(x => x.slopeW.toFixed(2)).join('/')}; bins ${pf.map(x => x.binsOk).join('/')})`);
+  V.push(`A5 harness half (${confirm}, k from the primary seasons, early) R minus G0 d < 0: ${a5 ? 'PASS' : 'FAIL'}  (${cf.arm.R.vsG0.eM.d.toFixed(4)}+-${cf.arm.R.vsG0.eM.se.toFixed(4)}; vs W ${cf.arm.R.vsW.eM.d.toFixed(4)}+-${cf.arm.R.vsW.eM.se.toFixed(4)}); the live half (d <= 0 at periods 2-4) is in results_calib_live_avail.txt`);
+  V.push(`Fitted n0 by held-out season: ${SEASONS.map(T => T + ' ' + N0[T]).join(', ')}`);
+  V.push(`Read: ship only if A2, A3, A4 and both halves of A5 pass (the rate goes into avail() on Total / Mix; the user decides). A1 matters only if Per game is redefined (decision D1).`);
+  V.forEach(log);
+  fs.writeFileSync(INF ? 'results_calib_avail_n0inf.txt' : 'results_calib_avail.txt', OUT.join('\n') + '\n');
+  fs.writeFileSync(INF ? 'calib_avail_n0inf.json' : 'calib_avail.json', JSON.stringify({ seeds: SEEDS, seed0: SEED0, cks: CKS, n0: N0, folds: FO, verdict: V }));
+  process.exit(0);
+}
+if (require.main === module && AVAIL) availMain();
+else if (require.main === module && KWL) kwlMain();
 else if (require.main === module && BLEND) {
   const samples = Object.fromEntries(SEASONS.map(s => [s, samplesOf(s)])), FIT = {};
   SEASONS.forEach(s => { FIT[s] = {}; for (const [m, win] of [['S', 'STD'], ['L', 'L30']]) FIT[s][m] = process.env.N0INF ? { n0: INF_N0, curves: {}, edge: [] } : CB.fitHoldout(samples, s, { win }); });

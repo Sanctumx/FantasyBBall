@@ -46,6 +46,11 @@ function gameSeconds(byTeam) {
   return { games };
 }
 
+// #144: a team's games on dates before day `cut` (days since FIRST_DAY, the box rows' day numbers); secs are gameSeconds' (date 00:00 UTC + 1 day + 30 min)
+const teamGamesBefore = (secs, cut) => (secs || []).filter(s => Math.round((s - 86400 - 1800 - Date.parse(FIRST_DAY + 'T00:00:00Z') / 1000) / 86400) < cut).length;
+// #144: the g that the Total basis (avail = min(1, g / 82)) turns into the shrunk games-played rate of CalibAvail.rate
+const rateG = (g, gp, tg, n0) => 82 * require('./calib_avail.js').rate(gp, tg, g, n0);
+
 // ---- the Team tab's forecast on one division ----
 // players: [{ key, n, t, g, line, adp, src, ... }] (everyone who may be on a roster); rows: { team: [{ fid, slot: ACTIVE | RESERVE | IR }] } at the checkpoint
 function divisionCtx({ L, players, rows, DAYS, nowMs }) {
@@ -114,5 +119,5 @@ function decideDiff({ d, se, byDiv }) {
   return { moves: Math.abs(d) > 2 * se + 1e-9 && agree >= 8, agree };
 }
 
-module.exports = { FIRST_DAY, LAST_REG, SHIPPED, CHECKPOINTS, outcomePeriods, rosterDay, parseOutcomes, stdLine, gameSeconds, divisionCtx, engineFor, forecast, newCols, pushRows, finish, kDiffSE, round05, decide, decideDiff };
+module.exports = { FIRST_DAY, LAST_REG, SHIPPED, CHECKPOINTS, outcomePeriods, rosterDay, parseOutcomes, stdLine, gameSeconds, divisionCtx, engineFor, forecast, newCols, pushRows, finish, kDiffSE, round05, decide, decideDiff, teamGamesBefore, rateG };
 if (require.main === module) require('./calib_live_main.js');
