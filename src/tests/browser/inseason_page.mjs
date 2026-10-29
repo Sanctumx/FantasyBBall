@@ -190,7 +190,7 @@ async function open(opts = {}) {
   { const t0 = Date.now(); await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
     ok(Date.now() - t0 < 3000 && (await p.$$eval('#sell .tl, #buy .tl', d => d.length)) >= 1, 'a reload reuses the saved trade search (' + (Date.now() - t0) + ' ms)'); }
   { // idle fill (#168): the other Basis choices are searched in the background, so a change of Basis draws at once
-    await p.waitForTimeout(4000);
+    await p.waitForFunction(() => { const s = JSON.parse(localStorage.getItem('courtside-trade-cands-v1') || '{"sigs":{}}').sigs; return Object.values(s).reduce((n, m) => n + Object.keys(m).length, 0) >= 39; }, null, { timeout: 60000 });
     const t0 = Date.now(); await p.selectOption('#zb', 'pergame'); await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
     ok(Date.now() - t0 < 1500 && (await p.$$eval('#finder tbody tr', r => r.length)) > 0, 'a change of Basis after the idle fill draws at once (' + (Date.now() - t0) + ' ms)');
     await p.selectOption('#zb', 'total'); await p.waitForTimeout(300);
