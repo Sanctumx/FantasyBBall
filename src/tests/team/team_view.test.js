@@ -122,6 +122,29 @@ test('winJob Vs replacement: every roster row is scored like the player list (hi
   assert.ok(Math.abs(job.players[su.worst].m) < 1e-9 || su.grp.length > 1, 'the replacement shows 0');
 });
 
+test('winJob Vs average on an over-limit IL roster: every roster row equals the player list row for points and for 8 categories', () => {
+  const ctx = V.sourceCtx(baseArgs(), 'avg', [], FXP, { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  assert.ok(st.order.some(k => st.slots[k] === 'il') && st.order.length > ctx.L.maxPlayers, 'premise: IL player and over the player limit');
+  [{ cats: 8 }, { points: { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 } }].forEach(o => {
+    const opts = Object.assign({ baseline: 'avg' }, o), job = V.winJob(ctx, st, opts); while (job.step());
+    const su = W.moduleSetup(ctx, st, Object.assign({ base: job.matrix }, opts));
+    st.order.filter(k => T.countedSlots(ctx).includes(st.slots[k])).forEach(k => assert.ok(near(job.players[k].m, W.moduleRow(ctx, st, su, k).dM), JSON.stringify(o) + ' ' + k));
+  });
+});
+
+test('rows: a dropped IL player shows 0 Plays % and keeps his games left', () => {
+  const pp = pool.byKey.get(T.tabState(ROS[me]).order.find(k => T.tabState(ROS[me]).slots[k] === 'il')), was = pp.g;
+  pp.g = 4;   // the cheapest drop, so the IL player is the one who goes
+  try {
+    const ctx = V.sourceCtx(baseArgs(), 'avg', [], FXP, { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+    assert.notStrictEqual(W.plays(ctx, st, { tid: me })[pp.key].drop, undefined, 'fixture: he is dropped');
+    const row = find(V.rows(ctx, st, { zCats }), pp.key);
+    assert.ok(row, 'he still has a row');
+    assert.strictEqual(row.pct, 0);
+    assert.ok(row.gl > 0, 'the games left column is his projection, not his played games');
+  } finally { pp.g = was; }
+});
+
 test('scorer: the same ctx and roster reuse the finished job; a swap scores again; weights are no part of it', () => {
   const ctx = mk(), st = stateOf(), sc = V.createScorer(), run = j => { while (j.step()); return j; };
   const a = run(sc.get(ctx, st));
@@ -436,8 +459,11 @@ test('rows on the Team tab: the team line and avgZ weight each counted player by
   const zc = p => Array.from({ length: 9 }, (_, c) => c === 1 ? z(p) : 0);
   try {
     pp.g = 3;
-    const r = V.rows(ctxT, st, { zCats: zc }), pl = T.playsPct(ctxT, st), slots = ctxT.L.maxActive;
-    const want = st.order.reduce((s, k) => { const q = ctxT.pool.byKey.get(k); return s + (pl[k].wt !== undefined ? pl[k].wt : (pl[k].pct || 0) * T.avail(ctxT, q)) * q.line.pts; }, 0) / slots;
+    const r = V.rows(ctxT, st, { zCats: zc }), pl = W.plays(ctxT, st, { tid: ctxT.me }), slots = ctxT.L.maxActive;
+    const want = st.order.reduce((s, k) => { const q = ctxT.pool.byKey.get(k); return s + (pl[k].pct || 0) * T.avail(ctxT, q) * q.line.pts; }, 0) / slots;
+    // Plays % of every row is the side's games (what Win counts) over the games he is there for; a dropped IL player shows 0
+    const W0 = W.weeksLeft(ctxT), sd = W.side(ctxT, st, W0, { tid: ctxT.me });
+    sd.forEach(e => { const q = ctxT.pool.byKey.get(e.key), row = r.rows.find(x => x.key === e.key); assert.ok(near(row.pct * T.gamesLeft(ctxT, q.t) * T.avail(ctxT, q), e.games * W0, 1e-9), e.key); });
     assert.ok(near(r.avg.pts, want, 1e-9), 'team pts ' + r.avg.pts + ' vs ' + want);
     assert.ok(near(r.avgCats[1], want, 1e-9), 'avgCats ' + r.avgCats[1]);
     const pg = mkTab('pergame'), rp = V.rows(pg, st, { zCats: zc }), pp2 = T.playsPct(pg, st);

@@ -158,14 +158,14 @@ tr.lrow{cursor:pointer}
      </section>
     <section class="how-card">
       <h3>Z and category weights</h3>
-      <p>Z is the Rankings Zscore, per game; the Zscore select picks the type: Normal (Standard), H2H-adjusted or Roto-adjusted. The Win M select picks what each roster row is compared with: a made-up average player of your team (Vs average) or your worst counted player (Vs replacement). The Z button above the table swaps the stat columns for each category's weighted Z, which add up to the Z column. The weights are a punt lens: 1 counts a category fully, 0 leaves it out of the Z total. They only change Z and the Z order; Win C, Win M and the matrix always count every category.</p>
+      <p>Z is the Rankings Zscore, per game; the Zscore select picks the type: Normal (Standard), H2H-adjusted or Roto-adjusted. The Win M select picks what each roster row is compared with: a made-up average player of your team (Vs average) or your counted player with the lowest Win M contribution (Vs replacement). The Z button above the table swaps the stat columns for each category's weighted Z, which add up to the Z column. The weights are a punt lens: 1 counts a category fully, 0 leaves it out of the Z total. They only change Z and the Z order; Win C, Win M and the matrix always count every category.</p>
       <h3 style="margin-top:14px">Swapping players</h3>
       <p>Type part of a name in Send out (your roster) and Bring in (every other player), press Enter or click to add chips, then Apply swap. Any number can go out and in. Incoming players take Active while there is room, otherwise Reserve. A player taken from another team leaves that team, and the team receives the player you send out, in the slot he left (extra players go to its reserve; free agents send nothing back). Accents and capitals don't matter. Every change (a swap, a slot move, a drag) is listed under the cards as Changes with its effect on Win M; Undo last steps back one change and Clear list empties the list. The three cards under the boxes show your team now against the saved roster: Team Zscore, Win C and Win M, each with what it was and the change.</p>
     </section>
     <section class="how-card">
       <h3>Player list</h3>
-      <p>Every player, sorted by what he does to your Win M. The Change column is the real change in your Win M (points). Vs replacement: he takes the place of your own worst counted player (this is not the replacement level of the Rankings tab). Vs average: he takes the place of a made-up average player of your team, one Active slot's worth (for your own players: an average-line player with his games stands in his place). Win M is your chance after the change. All players are listed; use Show and Search to narrow it. The roster table above always uses Vs average.</p>
-      <p>A player already on your roster shows his gain over your worst player (the worst shows 0); his Win M after is that gain on top of your current Win M, an approximation. Click a row to bring him in (your own players go to Send out), or drag him onto a roster row to swap him into that slot, or onto a group header to add him there with no one going out. Category weights only re-sort the list, by the weighted change in category chances; the numbers shown stay real.</p>
+      <p>Every player, sorted by what he does to your Win M. The Change column is the real change in your Win M (points). Vs replacement: he takes the place of your own counted player with the lowest Win M contribution (this is not the replacement level of the Rankings tab). Vs average: he takes the place of a made-up average player of your team, one Active slot's worth (for your own players: an average-line player with his games stands in his place). Win M is your chance after the change. All players are listed; use Show and Search to narrow it. The roster table above always uses Vs average.</p>
+      <p>A player already on your roster shows his gain over your lowest Win M contribution (that player shows 0); his Win M after is that gain on top of your current Win M, an approximation. Click a row to bring him in (your own players go to Send out), or drag him onto a roster row to swap him into that slot, or onto a group header to add him there with no one going out. Category weights only re-sort the list, by the weighted change in category chances; the numbers shown stay real.</p>
     </section>
    </div>
   </div>
@@ -193,7 +193,7 @@ tr.lrow{cursor:pointer}
         <span class="seg" id="view" role="group" aria-label="Stat view"><button type="button" data-v="game">Per game</button><button type="button" data-v="ros">Rest of season</button></span>
         <span class="seg" id="zview" role="group" aria-label="Columns show"><button type="button" data-z="stats" title="Show each player's projected stats">Stats</button><button type="button" data-z="z" title="Show each category's Zscore, weighted, adding up to the Zscore column">Zscore</button></span>
         <label class="f" for="ztype">Zscore<select id="ztype" title="Which Zscore the Z column shows: Standard, H2H-adjusted or Roto-adjusted (the Rankings tab's types)"><option value="classic">Normal</option><option value="h2h">H2H-adjusted</option><option value="adj">Roto-adjusted</option></select></label>
-        <label class="f" for="rvs">Win M vs<select id="rvs" title="What each player's Win M is compared with: a made-up average player of your team, or your worst counted player"><option value="avg">Vs average</option><option value="rep">Vs replacement</option></select></label>
+        <label class="f" for="rvs">Win M vs<select id="rvs" title="What each player's Win M is compared with: a made-up average player of your team, or your counted player with the lowest Win M contribution"><option value="avg">Vs average</option><option value="rep">Vs replacement</option></select></label>
         <label class="chk" for="adj" title="Multiply each player's stats and Z by his Plays %"><input type="checkbox" id="adj"> Adjust player stats by Plays %</label>
         <button class="btn" type="button" id="fill" title="Rank every non-IL player by his Win M and put the top ones in Active (up to the roster limit); the rest go to Reserve, which counts for nothing">Fill Active</button>
         <button class="btn" type="button" id="reset" title="Put back the roster saved on Fantrax">Reset roster</button>
@@ -233,7 +233,7 @@ tr.lrow{cursor:pointer}
     <section class="panel" id="list" aria-label="Player list">
       <h2>Player list <span class="meta" id="lmeta"></span></h2>
       <div class="ctl">
-        <label class="f" for="lvs">Win M vs<select id="lvs" title="What a player is compared with: your worst counted player, or a made-up average player of your team"><option value="rep">Vs replacement</option><option value="avg">Vs average</option></select></label>
+        <label class="f" for="lvs">Win M vs<select id="lvs" title="What a player is compared with: your counted player with the lowest Win M contribution, or a made-up average player of your team"><option value="rep">Vs replacement</option><option value="avg">Vs average</option></select></label>
         <label class="f" for="lown">Show<select id="lown" title="Whose players to list"></select></label>
         <label class="f" for="lq">Search<input type="text" id="lq" placeholder="Type a name" autocomplete="off" title="Filters the list; the Win M order stays"></label>
       </div>
@@ -2593,8 +2593,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
   // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
-  function playsPct(ctx, state) {
-    if (ctx.teamTab) return tabPlays(ctx, state);
+  function playsPct(ctx, state, o) {
+    if (ctx.teamTab) return tabPlays(ctx, state, o);
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
     const act = by('active'), bench = by('reserve'), res = {};
@@ -2616,46 +2616,71 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
 
   // one player's games over the window with no nightly cap (the games his own team's schedule allows him), under the same rule as playsPct
-  function soloGames(ctx, key) {
+  // (`to`, ms, cuts the window short: a dropped player's games up to his leave time)
+  function soloGames(ctx, key, to) {
     const pp = ctx.pool.byKey.get(key), w = window(ctx);
     if (!ctx.teamTab || ctx.basis === 'pergame') return windowGames(ctx, [key], null)[0];
-    return InLeague.rosterGames([{ t: pp.t, a: avail(ctx, pp), from: w.from, to: w.to }], ctx.DAYS, ctx.L.maxActive, null)[0];
+    return InLeague.rosterGames([{ t: pp.t, a: avail(ctx, pp), from: w.from, to: to != null ? Math.min(to, w.to) : w.to }], ctx.DAYS, ctx.L.maxActive, null)[0];
   }
 
-  // With the Active slots full on a seasonal basis, the k IL players share the slots of the k worst Active players (lowest nightly value):
-  // -> [[active key, il key]], the n-th IL player with the n-th worst Active player (wrapping when there are more IL than Active). [] otherwise
-  function ilPairs(ctx, state) {
-    if (!ctx.teamTab || ctx.basis === 'pergame') return [];
-    const c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), act = keys.filter(k => state.slots[k] === 'active'), il = keys.filter(k => state.slots[k] === 'il');
-    if (!(act.length >= ctx.L.maxActive) || !act.length || !il.length) return [];
-    const v = k => Matchup.nightValue(ctx, ctx.pool.byKey.get(k)), worst = act.slice().sort((a, b) => v(a) - v(b));
-    return il.map((k, n) => [worst[n % worst.length], k]);
+  // The availability of a typical player in the league: the median of avail over the rostered players who are not on IR (cached per ctx).
+  // Per game and plain ctxs have none (avail is 1)
+  const typMemo = new WeakMap();
+  function typicalAvail(ctx) {
+    if (!ctx || !ctx.teamTab || ctx.basis === 'pergame') return 1;
+    if (typMemo.has(ctx)) return typMemo.get(ctx);
+    const a = ctx.pool.players.filter(p => p.owner && p.slot !== 'IR').map(p => avail(ctx, p)).sort((x, y) => x - y), n = a.length;
+    const med = n ? (a[Math.floor((n - 1) / 2)] + a[Math.ceil((n - 1) / 2)]) / 2 : 1;
+    typMemo.set(ctx, med);
+    return med;
+  }
+
+  // An IL player on the timeline (user 2026-10-29; there are no return dates yet): his projected games (avail) carry both his current absence
+  // and the generic chance of missing games later that every player has, so only the part of his missed games above a typical player's goes up
+  // front. He is out for the first nOut of his team's games in the window (until tRet, ms), then plays at rate a, which keeps his total at
+  // avail x GL. -> { nOut, tRet, a }; a real return date would replace nOut / tRet
+  function ilReturn(ctx, key) {
+    const pp = ctx.pool.byKey.get(key), w = window(ctx), a0 = avail(ctx, pp), aT = typicalAvail(ctx), G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {};
+    const times = (G[pp.t] || []).map(s => s * 1000).filter(ms => ms >= w.from && ms < w.to).sort((x, y) => x - y), gl = times.length;
+    // the cap keeps the rate after the return at 1 or below, so rounding never costs him games
+    const nOut = Math.min(Math.floor(gl * (1 - a0) + 1e-9), aT > 0 ? Math.round(gl * Math.max(0, 1 - a0 / aT)) : 0);
+    return { nOut, tRet: nOut ? (times[nOut] != null ? times[nOut] : w.to) : w.from, a: gl > nOut ? Math.min(1, a0 * gl / (gl - nOut)) : 0 };
   }
 
   // Plays % on the Team tab (ctx.teamTab): Reserve is parked and plays 0%, never hypo. Per game: Active players claim the nights as above
-  // (everyone is there for every team game; IL gets none). Seasonal bases: Active and IL players are there for avail(g) of the team's games,
-  // capped per night at the league's active limit (InLeague.rosterGames); pct is the lineup share of the games a player is there for, so
-  // availability (which GL carries) is not counted twice
-  function tabPlays(ctx, state) {
-    const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k]));
-    const done = (k, played, a) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; };
+  // (everyone is there for every team game; IL gets none). Seasonal bases: Active players are there for avail(g) of the team's games and an IL
+  // player from his return (ilReturn) on; one call fills the nights best value first, capped per night at the league's active limit
+  // (InLeague.rosterGames). So the cover plays until the IL player is back and whoever is worst by value then loses nights. When the roster
+  // would exceed the league's player limit (maxPlayers) once the IL players are back, the Reserve players go first and then counted players
+  // in order of o.rank(key) (lower goes first; ties by nightValue, then key; the caller ranks by Win M contribution, TeamWin.dropRank).
+  // The j-th drop leaves at the j-th time a spot is missing (each IL return past the limit; already over it, the window start), and that
+  // row carries drop: leaveMs. A dropped IL player never plays. o.extra = rosterGames items that sit on the roster too (count against the
+  // limit, never dropped, not returned). pct is the lineup share of the games a player is there for, so availability (which GL carries) is
+  // not counted twice
+  function tabPlays(ctx, state, o) {
+    o = o || {};
+    const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), extra = o.extra || [];
+    const done = (k, played, a, drop) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; if (drop != null) res[k].drop = drop; };
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
     if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
     else {
-      // with the active slots full an IL player shares the worst active player's slot: his games come out of that player's games
-      // (IL 20, worst 80 -> IL 20, worst 60), and their Plays % split what that player's was. Open slots are filled as before.
-      const act = keys.filter(k => state.slots[k] === 'active'), full = act.length >= ctx.L.maxActive;
-      const lineup = full ? act : keys, v = k => Matchup.nightValue(ctx, byKey.get(k));
-      const items = lineup.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: w.to }));
-      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(lineup[i], g, items[i].a));
-      if (full) {
-        ilPairs(ctx, state).forEach(([wk, k]) => {
-          const base = res[wk], take = Math.min(soloGames(ctx, k), base.played), share = base.played > 0 ? take / base.played : 0;
-          res[k] = { gl: gamesLeft(ctx, byKey.get(k).t), played: take, pct: base.pct == null ? null : base.pct * share };
-          res[k].wt = res[k].gl ? take / res[k].gl : null;
-          base.played -= take; base.wt = base.gl ? base.played / base.gl : null; if (base.pct != null) base.pct *= 1 - share;
-        });
-      }
+      const il = keys.filter(k => state.slots[k] === 'il'), ret = {}, v = k => Matchup.nightValue(ctx, byKey.get(k));
+      il.forEach(k => { ret[k] = ilReturn(ctx, k); });
+      const lim = ctx.L.maxPlayers, parked = state.order.filter(k => state.slots[k] === 'reserve').length;
+      const onRoster = state.order.filter(k => state.slots[k] !== 'il').length + extra.length - parked;   // the players on the roster now, Reserve ones aside
+      const need = typeof lim === 'number' && il.length ? Math.max(0, onRoster + il.length - lim) : 0;
+      const nDrop = o.noDrop ? 0 : Math.max(need, o.force || 0);   // o.noDrop: everyone stays; o.force: at least that many go, at the first return (the window's middle with no IL player) - TeamWin.dropRank's trial runs
+      if (nDrop && typeof o.rank !== 'function') throw new Error('tabPlays: the roster is over the player limit, o.rank is needed to choose who is dropped');
+      const rk = o.rank, order = !nDrop ? keys : keys.slice().sort((x, y) => (rk(x) === rk(y) ? 0 : rk(x) < rk(y) ? -1 : 1) || (v(x) - v(y)) || (x < y ? -1 : x > y ? 1 : 0));
+      const dropped = new Set(order.slice(0, nDrop)), keptRet = il.filter(k => !dropped.has(k)).map(k => ret[k].tRet).sort((x, y) => x - y);
+      const s = Number.isFinite(lim) ? lim - onRoster : Infinity, times = s >= 0 ? keptRet.slice(s) : new Array(-s).fill(w.from).concat(keptRet), leave = {}, outs = order.slice(0, nDrop).filter(k => !il.includes(k));
+      while (times.length < outs.length) times.unshift(keptRet.length ? keptRet[0] : w.from + (w.to - w.from) / 2);   // only a forced drop is short of a time
+      outs.forEach((k, j) => { leave[k] = times[j]; });
+      il.forEach(k => { if (dropped.has(k)) leave[k] = w.from; });   // a dropped IL player never plays: he left at the start
+      const items = keys.map(k => il.includes(k)
+        ? (dropped.has(k) ? { t: byKey.get(k).t, a: 0, v: v(k), from: w.from, to: w.from } : { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: w.to })
+        : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: leave[k] != null ? leave[k] : w.to });
+      InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]]); });
     }
     return res;
   }
@@ -2696,7 +2721,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, ilPairs, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, typicalAvail, ilReturn, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2799,12 +2824,57 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const received = (ctx, state) => trade(ctx, state).recv;
   const goneKeys = (ctx, state) => [...trade(ctx, state).gone].sort();
 
+  // Team.playsPct with the drop order of team o.tid (default mine): when the IL players' return pushes the roster over the player limit, the
+  // players with the lowest Win M contribution go (dropRank). o: tid, cats, points, e (the engine context when the caller has it), noDrop
+  function plays(ctx, state, o) {
+    o = o || {};
+    if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop });
+    let rank = null;
+    return Team.playsPct(ctx, state, { extra: o.extra, rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
+  }
+
+  // The drop order of team tid on the Team tab (IL timeline, user 2026-10-29: drop by Win M contribution): rank(k) = minus the team's mean match
+  // chance (the category chance of the points total for points leagues) when k is the one dropped from its saved roster at the first IL
+  // return, so the lowest rank costs the least Win M. It is the realized chance, not the loss from removing him altogether: that one would
+  // drop an IL player (who then never plays) before a weak healthy player who still plays until the return, and the team would end up
+  // worse (Paragua: Ingram out would have cost 1.5 Win M points against dropping Keldon Johnson). The field's saved rosters are taken whole,
+  // nobody dropped. A player off the saved roster (a candidate, a trade arrival) ranks Infinity and is never dropped. With several drops at
+  // once the order is each player's cost as the single drop. Memoised per ctx, team, weeks, categories, point values and basis.
+  // o: cats, points, e. -> rank(key)
+  const dropMemos = new WeakMap();
+  function dropRank(ctx, tid, o) {
+    o = o || {};
+    const Wk = weeksLeft(ctx), nc = o.cats === 8 ? 8 : 9, pts = o.points;
+    if (!(Wk > 0) || !ctx.teamTab || ctx.basis === 'pergame' || !ctx.roster[tid]) return () => 0;
+    let memo = dropMemos.get(ctx); if (!memo) dropMemos.set(ctx, memo = new Map());
+    const id = [tid, Wk, nc, pts ? Pts.key(pts) : '', ctx.basis].join('|');
+    if (!memo.has(id)) {
+      const e = o.e || engCtx(ctx, nc, pts), F = Pts.FP_SLOT, none = { noDrop: true };
+      const field = Object.keys(ctx.roster).filter(t => t !== tid).map(t => teamVec(e, side(ctx, oppState(ctx, t), Wk, none))), saved = oppState(ctx, tid);
+      const meanOf = vec => {
+        const out = evalVecs(e, [vec].concat(field));
+        return field.reduce((s, _, j) => s + (e.w ? out.catProb(out.teams[0], out.teams[j + 1], F) : shr(out.pairProb(out.teams[0], out.teams[j + 1]), SHRINK.match)), 0) / (field.length || 1);
+      };
+      const u = new Map();
+      Team.counted(saved, ctx).forEach(k => u.set(k, -meanOf(teamVec(e, sideOf(ctx, saved, Team.playsPct(ctx, saved, { force: 1, rank: x => (x === k ? -1 : 0) }), Wk)))));
+      memo.set(id, k => (u.has(k) ? u.get(k) : Infinity));
+    }
+    return memo.get(id);
+  }
+
+  // my side's options from a matrix opts (cats, points)
+  const sideOpts = opts => ({ cats: opts && opts.cats, points: opts && opts.points });
+
   // pairMatchup entries for the active and reserve players: games = Plays % games per average week (hypothetical rows never count)
-  function side(ctx, state, W) {
-    const r = Team.playsPct(ctx, state), c = Team.countedSlots(ctx);
+  // o: see plays (tid defaults to mine)
+  function side(ctx, state, W, o) {
+    return sideOf(ctx, state, plays(ctx, state, o), W);
+  }
+  const sideOf = (ctx, state, r, W) => {
+    const c = Team.countedSlots(ctx);
     return state.order.filter(k => c.includes(state.slots[k]) && !r[k].hypo)
       .map(k => ({ key: k, p: ctx.pool.byKey.get(k).line, games: r[k].played / W }));
-  }
+  };
 
   // ctx must be treated as immutable (the cache is keyed on the object; makeCtx builds a new one per change)
   // opponents' forecasts are the same for every previewed roster that removes the same players from them, so they are cached per ctx
@@ -2813,7 +2883,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     let memo = memos.get(ctx);
     if (!memo) { memo = new Map(); memos.set(ctx, memo); }
     const gone = ctx.roster[tid].filter(f => exclude.has(f)).sort(), id = tid + '|' + gone.join(',') + '|' + (recv || []).map(r => r.key + ':' + r.slot).sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '');
-    if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude, recv), W)));
+    if (!memo.has(id)) memo.set(id, teamVec(e, side(ctx, oppState(ctx, tid, exclude, recv), W, { tid, cats: nc, points: e.w, e })));
     return memo.get(id);
   }
 
@@ -2824,7 +2894,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const W = weeksLeft(ctx);
     if (!(W > 0)) return { weeks: 0, teams: [], mean: null };
     const t = trade(ctx, state);
-    return matrixOf(ctx, side(ctx, state, W), new Set(state.order.concat([...t.gone])), W, Object.assign({}, opts, { recv: t.recv }));
+    return matrixOf(ctx, side(ctx, state, W, sideOpts(opts)), new Set(state.order.concat([...t.gone])), W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // the matrix for any set of my entries [{ p, games, sign? }] (games per average week, W = weeks left); `exclude` = the keys that left
@@ -2886,7 +2956,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     let memo = lwMemos.get(ctx); if (!memo) lwMemos.set(ctx, memo = new Map());
     const vecs = ids.map(t => {
       const id = t + '|' + (R || ctx.roster)[t].slice().sort().join(',') + '|' + W + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '') + '|' + tv.basis;
-      if (!memo.has(id)) memo.set(id, teamVec(e, side(tv, tradeState(ctx, t, (R || ctx.roster)[t]), W)));
+      if (!memo.has(id)) memo.set(id, teamVec(e, side(tv, tradeState(ctx, t, (R || ctx.roster)[t]), W, { tid: t, cats: nc, points: o && o.points, e })));
       return memo.get(id);
     });
     const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
@@ -2912,7 +2982,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function playerGain(ctx, state, k, base, opts) {
     if (!base.mean) return { c: 0, m: 0, dCat: new Array(9).fill(0) };   // (points: the zero gain keeps its category zeros; nothing shows them)
     if (opts && opts.baseline === 'avg') {
-      const ap = (opts.ap) || avgParts(ctx, state, base.weeks);
+      const ap = (opts.ap) || avgParts(ctx, state, base.weeks, opts);
       if (ap) { const own = Team.countedSlots(ctx).includes(state.slots[k]); return own ? gain(base, avgOwn(ctx, state, ap, k, opts)) : Object.assign(gain(avgCandidate(ctx, state, ap, k, opts), base), { hypo: true }); }
     }
     // a player who does not count (IL; on the Team tab also Reserve, and IL on Per game) is scored as the one more player he would be: the plain
@@ -2925,11 +2995,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // (ctx.L.maxActive), mean = the games-weighted mean line with tot / M games (so his totals are one M-th of the team's), share = the games my
   // counted players get out of the games their own team schedules allow, with no nightly cap (the team's average lineup share).
   // -> null with no counted player or no games
-  function avgParts(ctx, state, W) {
-    const mine = side(ctx, state, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
-    const allowed = Team.counted(state, ctx).reduce((a, k) => a + Team.soloGames(ctx, k), 0);   // each player alone: no nightly cap
+  function avgParts(ctx, state, W, opts) {
+    const r = plays(ctx, state, sideOpts(opts)), mine = sideOf(ctx, state, r, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
+    const allowed = Team.counted(state, ctx).reduce((a, k) => a + Team.soloGames(ctx, k, r[k].drop), 0);   // each player alone: no nightly cap; a dropped one only until he leaves
     if (!n || !(tot > 0) || !(allowed > 0)) return null;
-    return { W, mine, n, tot, M, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
+    return { W, mine, n, tot, M, plays: r, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
   }
 
   // a player not counted on my team replaces the average player: current team - average + him, his games times the share
@@ -2940,16 +3010,28 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return matrixOf(ctx, mine, new Set(state.order.concat([...t.gone])).add(key), ap.W, Object.assign({}, opts, { recv: t.recv }));
   }
 
-  // my counted player replaced by an average-line player who keeps his games (so a Reserve player is judged on his quality, not his slot)
+  // my counted player replaced by an average-line player who gets the games his slot allows, as a candidate does (avgCandidate): his games
+  // times the team's share, not the games he plays, so a player who never plays costs what his slot would hold (user 2026-10-29, reverses #138's
+  // "keeps his games") and the list and the roster agree
+  // A player who is dropped at an IL return (non-IL) is replaced by an average player who cannot be dropped, so the drop moves on to the
+  // next-ranked player (the roster is the same size): without that he would read far below the replacement for games he never plays.
+  // The average player counts against the player limit but takes no nightly slot (a: 0 item); the rest of the team is replayed without D
   function avgOwn(ctx, state, ap, key, opts) {
-    const e = ap.mine.find(x => x.key === key), t = trade(ctx, state);
-    return matrixOf(ctx, ap.mine.filter(x => x.key !== key).concat(Object.assign({}, ap.mean, { games: e.games })), new Set(state.order.concat([...t.gone])), ap.W, Object.assign({}, opts, { recv: t.recv }));
+    const pk = ap.plays && ap.plays[key], isDrop = pk && pk.drop != null, il = state.slots[key] === 'il';
+    const t = trade(ctx, state), g = Team.soloGames(ctx, key, il && isDrop ? pk.drop : undefined) / ap.W * ap.share, so = sideOpts(opts);   // a dropped IL player never plays: 0 games, as in avgParts
+    const dropped = !il && isDrop;
+    let mine = ap.mine.filter(x => x.key !== key);
+    if (dropped) {
+      const w = Team.window(ctx), without = Team.applySwap(state, [key], []), A0 = { t: ctx.pool.byKey.get(key).t, a: 0, v: 0, from: w.from, to: w.from };
+      mine = sideOf(ctx, without, plays(ctx, without, Object.assign({ extra: [A0] }, so)), ap.W);
+    }
+    return matrixOf(ctx, mine.concat(Object.assign({}, ap.mean, { games: g })), new Set(state.order.concat([...t.gone])), ap.W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // points my counted players produce in an average remaining week: sum of FP per game x Plays % games per week
   function pointsPerWeek(ctx, state, w) {
     const Wk = weeksLeft(ctx); if (!(Wk > 0)) return 0;
-    return side(ctx, state, Wk).reduce((t, e) => t + Pts.perGame(e.p, w) * e.games, 0);
+    return side(ctx, state, Wk, { points: w }).reduce((t, e) => t + Pts.perGame(e.p, w) * e.games, 0);
   }
 
   function playerWin(ctx, state, opts) {
@@ -2975,24 +3057,21 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function moduleSetup(ctx, state, opts) {
     const o = opts || {}, mo = { cats: o.cats, k: o.k, mode: o.mode, points: o.points }, base = o.base || matrix(ctx, state, mo);
     if (!base.mean) return null;
-    if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks); return ap ? { base, ap, mo, avg: true } : null; }
+    if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks, mo); return ap ? { base, ap, mo, avg: true } : null; }
     const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state, ctx);
     if (!counted.length) return null;
-    const lowest = ks => ks.reduce((a, b) => pw[b].m < pw[a].m ? b : a);
-    // With the Active slots full on a seasonal basis the k IL players share the slots of the k worst Active players (Team.ilPairs, as
-    // tabPlays), so each pair is one fictional player. My entries are then the N - k other counted players plus the k pairs (a pair's
-    // contribution = the team minus the team without both); the replacement level is the lowest entry, usually the (N - k)th real player
-    // unless a pair is lowest. A candidate replaces the whole entry; a pair's members are scored against the next lowest entry (`nextRef`)
-    const pairs = Team.ilPairs(ctx, state), inPair = new Set([].concat(...pairs));
-    const ents = counted.filter(k => !inPair.has(k)).map(k => ({ grp: [k], ref: pw[k] }));
-    pairs.forEach(g => { if (!ents.some(e => e.grp.includes(g[0]))) { const grp = pairs.filter(q => q[0] === g[0]).map(q => q[1]).concat(g[0]); ents.push({ grp, ref: gain(base, matrix(ctx, Team.applySwap(state, grp, []), mo)) }); } });
-    const sorted = ents.slice().sort((a, b) => a.ref.m - b.ref.m), low = sorted[0], nextRef = sorted[1] ? sorted[1].ref : null;
-    const worst = low.grp.length === 1 ? low.grp[0] : lowest(low.grp.filter(k => state.slots[k] === 'active')), grp = low.grp, ref = low.ref, wSlot = state.slots[worst];
-    return { base, pw, worst, grp, ref, nextRef, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
+    // The replacement level is the counted player with the lowest contribution who plays and is not on IL: a candidate takes his slot. An IL
+    // player cannot be it (a healthy candidate cannot take an IL slot) and neither can a player who never plays (nothing to replace, so he
+    // would read 0 and every other row would be measured from a player who is worth nothing) and neither can one who is dropped at an IL
+    // return (a candidate does not take a slot that is closing); they read below it instead. With no such player
+    // every counted player is a candidate
+    const pl = plays(ctx, state, sideOpts(mo)), playing = k => pl[k] && pl[k].played > 0;
+    const pool = counted.filter(k => state.slots[k] !== 'il' && playing(k) && pl[k].drop == null), cand = pool.length ? pool : counted;
+    const worst = cand.reduce((a, b) => pw[b].m < pw[a].m ? b : a), ref = pw[worst], wSlot = state.slots[worst];
+    return { base, pw, worst, grp: [worst], ref, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
   }
 
-  // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team; the worst
-  // player's slot is the whole of A when the IL player shares it
+  // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team
   function swapScore(ctx, state, su, cx, key) {
     const s0 = key in state.slots ? Team.applySwap(state, su.grp, []) : Team.applySwap(state, su.grp, [key]);
     return gain(matrix(cx, Team.moveSlot(s0, key, swapSlot(ctx, s0, su.wSlot)), su.mo), su.base);
@@ -3015,7 +3094,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const pw = su.pw, zero = () => su.mo.points ? null : new Array(9).fill(0);
     let r;
     const vs = (a, b) => ({ c: sub(a.c, b.c), m: a.m - b.m, dCat: subV(a.dCat, b.dCat) });
-    if (su.grp.includes(key)) r = su.grp.length === 1 ? { c: su.mo.points ? null : 0, m: 0, dCat: zero() } : su.nextRef ? vs(pw[key], su.nextRef) : { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
+    if (su.grp.includes(key)) r = { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
     else if (own && Team.countedSlots(ctx).includes(s)) r = vs(pw[key], su.ref);
     else r = swapScore(ctx, state, su, ctx, key);
     return { key, owner, dM: r.m - su.off.m, dC: sub(r.c, su.off.c), dCat: subV(r.dCat, su.off.dCat), old: cur + su.off.m, new: cur + r.m };
@@ -3033,7 +3112,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtxFrom, teamVec, evalVecs, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -3064,7 +3143,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // row: { key, n, t, pos, slot, gl, mpg, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
   // avgZ is the Plays % weighted Z per lineup slot (null without zCats)
   function rows(ctx, state, opts) {
-    const o = opts || {}, plays = Team.playsPct(ctx, state), nc = o.cats === 8 ? 8 : 9, slots = ctx.L.maxActive;
+    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, plays = TeamWin.plays(ctx, state, { tid: ctx.me, cats: nc, points: o.points }), slots = ctx.L.maxActive;
     const all = state.order.map(key => {
       const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust ? (p.pct == null ? 0 : p.pct) : 1;
       const cats = o.zCats ? o.zCats(pp) : null;
@@ -3077,7 +3156,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
     // Plays % is the lineup share only; Win also counts how much of the time a player is there (Team.avail: 1 on Per game and on a plain ctx),
     // so the team line and avgZ weight each player by both
-    const wt = k => plays[k].wt !== undefined ? plays[k].wt : plays[k].pct == null ? null : plays[k].pct * (ctx.teamTab ? Team.avail(ctx, ctx.pool.byKey.get(k)) : 1);
+    const wt = k => plays[k].pct == null ? null : plays[k].pct * (ctx.teamTab ? Team.avail(ctx, ctx.pool.byKey.get(k)) : 1);
     const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: wt(k), hypo: plays[k].hypo })), slots);
     let avgCats = null;
     if (o.zCats) {
@@ -3100,7 +3179,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     let po = opts;   // for 'avg' the average player is built once, not per roster player
     const job = { done: false, matrix: null, players: {}, step() {
       if (job.done) return false;
-      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks) }); }
+      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks, opts) }); }
       else {
         const k = keys[Object.keys(job.players).length];
         job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, po);
@@ -3548,7 +3627,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const r0 = job.rows[0], nowM = ui.listVs === 'avg' && r0.key in state.slots && TC.countedSlots(ctx).includes(state.slots[r0.key]) ? r0.new : r0.old;   // old is the current Win M, except for my own counted player in Vs average
     const v = TV.moduleView(rows, ctx, state, { owner: ui.lown, query: $('lq').value });
     $('lmeta').textContent = v.total + ' players · Win M now ' + Math.round(nowM) + '%';
-    $('lhint').textContent = (ui.listVs === 'avg' ? 'Change in your Win M if he replaces a made-up average player of your team (your team games scaled down to make room).' : 'Change in your Win M if he replaces your worst counted player.') + (weighted ? ' Sorted by the weighted change in category chances; the change shown is the real Win M change.' : '') + (pw() ? ' Points league: a crowded night goes to the better points player.' : '') + ' Click to bring him in (yours go to Send out); drag onto a roster row to swap.';
+    $('lhint').textContent = (ui.listVs === 'avg' ? 'Change in your Win M if he replaces a made-up average player of your team (your team games scaled down to make room).' : 'Change in your Win M if he replaces your counted player with the lowest Win M contribution.') + (weighted ? ' Sorted by the weighted change in category chances; the change shown is the real Win M change.' : '') + (pw() ? ' Points league: a crowded night goes to the better points player.' : '') + ' Click to bring him in (yours go to Send out); drag onto a roster row to swap.';
     const mine = r => r.label.indexOf('You') === 0;
     $('ltable').innerHTML = '<thead><tr><th class="l">Player</th><th class="l">Owner</th><th title="Your Win M after the swap">Win M</th><th title="Change in your Win M, in points">Change</th></tr></thead><tbody>' +
       v.rows.map(r => '<tr class="lrow" data-key="' + esc(r.key) + '" data-own="' + (mine(r) ? '1' : '') + '" draggable="true" title="Click to ' + (mine(r) ? 'send ' + esc(r.n) + ' out' : 'bring ' + esc(r.n) + ' in') + '; drag onto a roster row to swap"><td class="l">' + esc(r.n) + '<small>' + esc(r.t || '') + ' ' + esc(r.pos || '') + '</small></td><td class="l">' + esc(r.label) + '</td><td>' + Math.round(r.new) + '%</td><td><span class="' + sgn(r.dM) + '">' + signed(r.dM) + '</span></td></tr>').join('') +

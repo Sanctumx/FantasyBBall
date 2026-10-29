@@ -25,7 +25,7 @@
   // row: { key, n, t, pos, slot, gl, mpg, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
   // avgZ is the Plays % weighted Z per lineup slot (null without zCats)
   function rows(ctx, state, opts) {
-    const o = opts || {}, plays = Team.playsPct(ctx, state), nc = o.cats === 8 ? 8 : 9, slots = ctx.L.maxActive;
+    const o = opts || {}, nc = o.cats === 8 ? 8 : 9, plays = TeamWin.plays(ctx, state, { tid: ctx.me, cats: nc, points: o.points }), slots = ctx.L.maxActive;
     const all = state.order.map(key => {
       const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust ? (p.pct == null ? 0 : p.pct) : 1;
       const cats = o.zCats ? o.zCats(pp) : null;
@@ -38,7 +38,7 @@
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
     // Plays % is the lineup share only; Win also counts how much of the time a player is there (Team.avail: 1 on Per game and on a plain ctx),
     // so the team line and avgZ weight each player by both
-    const wt = k => plays[k].wt !== undefined ? plays[k].wt : plays[k].pct == null ? null : plays[k].pct * (ctx.teamTab ? Team.avail(ctx, ctx.pool.byKey.get(k)) : 1);
+    const wt = k => plays[k].pct == null ? null : plays[k].pct * (ctx.teamTab ? Team.avail(ctx, ctx.pool.byKey.get(k)) : 1);
     const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: wt(k), hypo: plays[k].hypo })), slots);
     let avgCats = null;
     if (o.zCats) {
@@ -61,7 +61,7 @@
     let po = opts;   // for 'avg' the average player is built once, not per roster player
     const job = { done: false, matrix: null, players: {}, step() {
       if (job.done) return false;
-      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks) }); }
+      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks, opts) }); }
       else {
         const k = keys[Object.keys(job.players).length];
         job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, po);

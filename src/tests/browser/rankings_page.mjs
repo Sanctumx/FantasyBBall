@@ -124,7 +124,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(3)', t => t.map(e => e.t
 // 3b. saved team: my players show values, a free agent is measured in place of my weakest
 { const { p, errs, ctx } = await open({ 'courtside-settings-v1': store({ id: 'lg1', name: 'Mock', teams: [], loadedAt: 1 }), 'courtside-leagues-v1': JSON.stringify([{ id: 'lg1', name: 'Mock', myTeam: Object.keys(FXR.rosters || FXR)[0], used: 1 }]) });
   await p.selectOption('#src', 'avg'); await p.waitForFunction(() => /all scored/.test(document.getElementById('note').textContent), null, { timeout: 120000 });
-  ok(/Team tab's numbers/.test(await p.$eval('#note', e => e.textContent)) && /worst counted player/.test(await p.$eval('#note', e => e.textContent)), 'note says the numbers are the Team tab\'s and a player takes your worst counted player');
+  ok(/Team tab's numbers/.test(await p.$eval('#note', e => e.textContent)) && /lowest Win M contribution/.test(await p.$eval('#note', e => e.textContent)), 'note says the numbers are the Team tab\'s and a player takes your counted player with the lowest Win M contribution');
   const own = await p.$$eval('#tbl tbody tr', t => t.map(r => [r.children[3].textContent, r.children[10].textContent]));
   const mineRows = own.filter(([o]) => o !== 'Free agent'), faRows = own.filter(([o]) => o === 'Free agent');
   ok(own.every(([, m]) => m !== '…'), 'all Win cells have filled in');
@@ -138,7 +138,7 @@ const names = p => p.$$eval('#tbl tbody tr td:nth-child(3)', t => t.map(e => e.t
   ok(/add a team in Settings/.test(await p.$eval('#note', e => e.textContent)), 'No team: note drops the roster wording');
   const other = await p.$$eval('#myteam option', o => o.map(x => x.value).filter(v => v !== 'none')).then(l => l.find(v => v !== saved));
   await p.selectOption('#myteam', other); await p.waitForFunction(() => /all scored/.test(document.getElementById('note').textContent), null, { timeout: 120000 });
-  ok(/worst counted player/.test(await p.$eval('#note', e => e.textContent)) && await p.$eval('#myteam', e => e.value) === other, 'picking another team measures for it');
+  ok(/lowest Win M contribution/.test(await p.$eval('#note', e => e.textContent)) && await p.$eval('#myteam', e => e.value) === other, 'picking another team measures for it');
   ok(errs.length === 0, '3b: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
