@@ -4,3 +4,4 @@ src/courtside-draft-board.html
 src/courtside-league.html
 src/*.log
 .superpowers/
+.auth/
