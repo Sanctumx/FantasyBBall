@@ -171,7 +171,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
       <h4>Stats and weights</h4>
       <p>Stats picks what the nine category columns show: Win added, Zscore or projected stats. Category weights (×0 to ×2; TO starts at ×0.5) change Zscore only; Win always counts every category.</p>
       <h4>League Dashboard</h4>
-      <p>League Dashboard (top right) analyzes the league loaded in Settings as it stands now: every team's current roster (players on IR are left out and noted). On top, the team in focus against each opponent (chance to win the matchup and each category) and its category profile (win chance against an average team, projected total, rank). Below, every team against every team (matchup win %, category win % or expected categories) and every team's projected stats (raw, per week, Zscore or rank). Stats Total or Per game sets the basis for every number on that page (Per game ignores missed games); Playoff boost is Off, like the Model pick, so with the same Basis and Projections here its numbers match Your team. Click any column header to sort; percentages show one decimal. Without a loaded league the page asks you to load one in Settings.</p>
+      <p>League Dashboard (top right) analyzes the league loaded in Settings as it stands now: every team's current roster, scored by the Team tab's rules (Plays % lineups, win chances shrunk toward 50%). Players on IL are listed in the header; on Total they count at their availability, on Per game they do not. On top, the team in focus against each opponent (chance to win the matchup and each category) and its category profile (win chance against an average team, projected total, rank). Below, every team against every team (matchup win %, category win % or expected categories) and every team's projected stats (raw, per week, Zscore or rank). Basis Total or Per game sets the basis for every number on that page (Per game ignores missed games); Source picks the projections (or recent games) and Zscore type the Zscore view, as on the Team tab, so a team's numbers here match what the Team tab shows for it. Click any column header to sort; percentages show one decimal. Without a loaded league the page asks you to load one in Settings.</p>
       <h4>Saved drafts</h4>
       <p>Save, load, rename, delete or start a new draft; anything that would lose work asks for a second tap. Drafts live in this browser; Export (one draft) or Export all saves them to a file, and Import adds a file's drafts here, on any browser or device. Players are matched by name, so an older file still lands on the right players.</p>
       <h4>Colors</h4>
@@ -259,7 +259,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 <script src="assets/fxcache.3a003ffb.js"></script>
 <script src="assets/league_core.7692dceb.js"></script>
 <script src="assets/team_mods.7e12d76e.js"></script>
-<script src="assets/league_tab.459e6ab2.js"></script>
+<script src="assets/league_tab.424e4caa.js"></script>
 <script>
 (function () {
   'use strict';
@@ -302,7 +302,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   async function loadSource() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer);
     // nothing from the previous league stays on screen while this one loads or if it fails
-    $('body').hidden = true; $('fmt').textContent = ''; $('note').textContent = ''; $('retry').hidden = true; L = null; pool = null; memo.clear(); memoGen++;
+    $('body').hidden = true; $('fmt').textContent = ''; $('note').textContent = ''; $('retry').hidden = true; L = null; pool = null; memo.clear(); memoGen++; held = false;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
     if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
@@ -312,16 +312,16 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     const draw = async b => {
       const sp = await stats; await SRCS.need(ui.src, fetch); if (seq !== loadSeq) return false;
       L = InL.parseLeague(b[0]); rosters = InL.parseRosters(b[1]); standings = b[2]; fxPlayers = b[3]; espn = sp;
-      ids = League.teamOrder((b[0] && b[0].teamInfo) || {}, standings).filter(t => L.teams.some(q => q.id === t));
+      ids = League.teamOrder((b[0] && b[0].teamInfo) || {}, standings).filter(t => L.teams.some(q => q.id === t) && rosters[t]);
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
-      memo.clear(); memoGen++; fxWait = 0; build(); return true;
+      memo.clear(); memoGen++; fxWait = 0; return build();
     };
     await FXC.swr([['league', lg.id], ['rosters', lg.id], ['standings', lg.id], ['players']], {
       onCached: async b => { try { if (await draw(b)) { shown = true; say('Showing the saved Fantrax data, checking for newer…'); } } catch (e) { shown = false; } },
       onFresh: async (b, at, changed) => {
         if (seq !== loadSeq) return;
         try { if (!shown || changed) shown = await draw(b); } catch (e) { say(e.message, true); return; }
-        say('');
+        if (!held) say('');
       },
       onError: e => {
         if (seq !== loadSeq) return;
@@ -337,10 +337,14 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
       } });
   }
   // the focus team is remembered per league (a Fantrax team id); a team no longer in the league falls back to the saved league's team
-  // Results saved by their inputs (team, projections, basis, settings), cleared when Fantrax data loads again; after drawing,
-  // idle time fills in the other combinations so a change is a lookup.
-  const memo = new Map(); let memoGen = 0, warmTimer = 0, curMine = null;
+  // Results saved by their inputs (source, basis, Zscore type, settings), cleared when Fantrax data loads again; after drawing,
+  // idle time fills in the other basis so switching it is a lookup.
+  const memo = new Map(); let memoGen = 0, warmTimer = 0, curMine = null, held = false;
   const memoed = (key, fn) => { if (!memo.has(key)) memo.set(key, fn()); return memo.get(key); };
+  // a box-score source whose files have not arrived has an empty window: nothing is computed or kept until they do (the Source handler recomputes)
+  const boxPending = () => !!Rk.WINDAYS[ui.src] && !SRCS.box();
+  // messages compute sets itself (no weeks left, no teams, an error) stay on screen; a Fantrax load message is never wiped by it
+  const hold = (t, err) => { held = true; $('body').hidden = true; say(t, err); return false; };
   const setKey = () => JSON.stringify(SS.settings);
   const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
   // The result does not depend on the team in focus (every team is scored by the same rules), so it is kept per source, basis, Zscore type and settings.
@@ -351,21 +355,23 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     return LeagueTab.score({ ctx: ctxFor(basis), ids, names: ids.map(t => L.teams.find(q => q.id === t).name), basis, cats: nCats(), scoring: (SS.settings && SS.settings.scoring) || 'h2h', zCats: pp => (zmap.has(pp.key) ? zmap.get(pp.key) : null) });
   });
   function prewarm() {
-    clearTimeout(warmTimer); if (!L) return;
+    clearTimeout(warmTimer); if (!L || boxPending()) return;
     const gen = memoGen, other = ui.basis === 'total' ? 'pergame' : 'total';
     warmTimer = setTimeout(() => { if (gen === memoGen) try { resultFor(other); } catch (e) {} }, 600);
   }
   function build() {
     const lg = SS.league;
     curMine = LS.pickTeam(ui.teamBy[lg.id], ids, LS.defaultTeam(LS.local.get, lg.id));
-    compute();
+    return compute();
   }
 
+  // true when the page is drawn; false when compute showed a message instead (held) or is waiting for the box files
   function compute() {
-    if (!L) return;
-    let base; try { base = resultFor(ui.basis); } catch (e) { say(e.message, true); return; }
-    if (!base) { $('body').hidden = true; say('No regular-season weeks are left to forecast.'); return; }
-    say('');
+    if (!L || boxPending()) return false;
+    if (held) { held = false; say(''); }
+    if (!ids.length) return hold('This league has no teams yet.');
+    let base; try { base = resultFor(ui.basis); } catch (e) { return hold(e.message, true); }
+    if (!base) return hold('No regular-season weeks are left to forecast.');
     R = Object.assign({}, base, { me: Math.max(0, ids.indexOf(curMine)) });
     if ($('swing')) $('swing').innerHTML = CATS.map((c, i) => '<span>' + c.l + ' ' + R.swing[i].toFixed(2) + '</span>').join('');
     $('ts-sub').textContent = R.basis === 'pergame' ? 'Per game: the team line the Team tab shows for each roster' : 'Rest-of-season totals for each roster (Plays % lineups)';
@@ -383,7 +389,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     $('mxc').innerHTML = '<option value="all">All (average)</option>' + R.cats.map(k => '<option value="' + k + '">' + CATS[k].l + '</option>').join('');
     if (ui.mxc !== 'all' && !R.cats.includes(+ui.mxc)) ui.mxc = 'all';
     $('mxc').value = String(ui.mxc);
-    save(); render(); prewarm();
+    save(); render(); prewarm(); return true;
   }
   const name = t => R.names[t] + (t === R.me ? ' (you)' : '');
 
