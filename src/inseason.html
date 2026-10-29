@@ -166,6 +166,10 @@ tr.click{cursor:pointer}
       <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
       <label class="f" for="team">Your team<select id="team"></select></label>
       <label class="f" for="week" title="Win chances are projected for this matchup period">Week<select id="week"></select></label>
+      <label class="f" for="src" id="srclab" title="Which lines judge the players. Projections (the default) are what the Win numbers were calibrated on; the box-score sources show recent form, and their Win numbers are uncalibrated. A player with no game in the source keeps his projection line.">Source<select id="src">
+        <option value="season">Season to date</option>
+        <optgroup label="Recent games"><option value="w7">Last week</option><option value="w14">Last 2 weeks</option><option value="w30">Last month</option></optgroup>
+        <optgroup label="Projections"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></optgroup></select></label>
     </div>
     <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
     <div class="fresh" id="fresh"></div>
@@ -258,7 +262,7 @@ tr.click{cursor:pointer}
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', LS = LeagueStore;
-  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, dropCap: {}, keep: {}, sort: {}, zt: 'classic', zb: 'pergame', give: 'any', fl: { lik: '', da: '', db: '' } };
+  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, dropCap: {}, keep: {}, sort: {}, zt: 'classic', zb: 'pergame', src: 'avg', give: 'any', fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.tab = sectionOf();
   // one remembered team per tab and league id; the old single map seeds both, then goes
@@ -311,7 +315,7 @@ tr.click{cursor:pointer}
     const stats = loadStats(); let shown = false;
     // draws the page from [league, rosters, standings, players] fetched at `at`
     const build = async (b, at) => {
-      const lgn = InL.parseLeague(b[0]), sp = await stats, boxes = await loadBox(lgn); if (seq !== loadSeq) return false;
+      const lgn = InL.parseLeague(b[0]), sp = await stats, boxes = await loadBox(lgn); if (ui.tab === 'trades') await SRCS.need(ui.src, fetch); if (seq !== loadSeq) return false;
       L = lgn; rosters = InL.parseRosters(b[1]); standings = InL.parseStandings(b[2]); fxPlayers = b[3]; espn = sp; box = boxes; fetchedAt = new Date(at);
       pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
       memo.clear(); memoGen++; Object.keys(tradeCache).forEach(k => { delete tradeCache[k]; }); bd = null;
@@ -379,7 +383,11 @@ tr.click{cursor:pointer}
   }
 
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
-  const ctxFor = team => memoed('ctx|' + team + '|' + dayKey(), () => Matchup.makeCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now(), box }));
+  // Source (Trade Analyzer only): the same math on another source's lines (TeamView.sourceCtx, as on the Team tab). The monthly box-score
+  // files load only when a box-score source is picked; a context made before they arrive is not kept (the key carries whether they are in).
+  const TV = TeamView, SRCS = TV.createSources(PLAYERS), srcOf = () => (ui.tab === 'trades' && ui.src) || 'avg';
+  const SRC_NAME = { season: 'Season to date', w7: 'Last week', w14: 'Last 2 weeks', w30: 'Last month', avg: 'BBM + Hashtag average', bbm: 'BBM', hs: 'Hashtag' };
+  const ctxFor = team => { const s = srcOf(); return memoed('ctx|' + team + '|' + dayKey() + '|' + s + (SRCS.box() ? 'b' : ''), () => { const a = { L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now(), box }; return s === 'avg' ? Matchup.makeCtx(a) : TV.sourceCtx(a, s, SRCS.rows(s), fxPlayers); }); };
   const addsLeft = n => { const v = ui.adds[ui.leagueId + ':' + n]; return v != null ? v : 4; };
   const hasBox = () => (box || []).some(f => f && Object.keys(f.games || {}).length);
   // the current week with box scores: games already played count; any other week (or no games yet) is the whole-week projection
@@ -405,6 +413,7 @@ tr.click{cursor:pointer}
     ctx = ctxFor(teamFor(ui.tab));
     $('sect').textContent = ui.tab === 'trades' ? 'Trade Analyzer' : 'Matchup Analyzer'; document.title = $('sect').textContent + ' · Courtside Draft Kit';
     document.querySelector('.sitenav').outerHTML = Shared.TOOLBAR_HTML(ui.tab);
+    $('srclab').hidden = ui.tab !== 'trades'; $('src').value = ui.src;
     $('week').closest('label').hidden = ui.tab === 'trades';   // trades measure the rest of the season, so no week to pick
     $('tab-matchup').hidden = ui.tab !== 'matchup'; $('tab-trades').hidden = ui.tab !== 'trades';
     if (ui.tab === 'matchup') renderMatchup(); else renderTrades();
@@ -506,7 +515,7 @@ tr.click{cursor:pointer}
   let finderRun = 0;
   function renderFinder() {
     const run = ++finderRun, mineAll = ctx.roster[ctx.me], gives = ui.give === 'any' ? mineAll : [ui.give];
-    const ck = g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + g, sig = Trade.candSig(ctx, InL.localDay(Date.now()), CAND_VER);
+    const sv = srcOf() + (SRCS.box() ? 'b' : ''), ck = g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + sv + ':' + g, sig = Trade.candSig(ctx, InL.localDay(Date.now()), CAND_VER + sv);
     const saved = candStore().sigs[sig] || {};
     mineAll.forEach(g => { if (!tradeCache[ck(g)] && saved[g]) tradeCache[ck(g)] = Trade.unpackCandidates(saved[g], pool); });
     const todo = (ui.give === 'any' ? [] : [ui.give]).concat(mineAll.filter(g => g !== ui.give)).filter(g => !tradeCache[ck(g)]);
@@ -554,7 +563,7 @@ tr.click{cursor:pointer}
     if (!bd || !ids.includes(bd.a) || !ids.includes(bd.b) || bd.a === bd.b) { const a = ctx.me; bd = { a, b: ids.find(t => t !== a), aGets: [], bGets: [], stat: (bd && bd.stat) || 'proj' }; }
     return bd;
   }
-  const lineFor = (pp, stat) => stat === 'cur' ? InP.curLine(pp, Trade.TRADE_W.shrinkGames) : pp.line;
+  const lineFor = (pp, stat) => stat === 'cur' ? InP.curLine(pp, Trade.TRADE_W.shrinkGames) : (ctx.pool.byKey.get(pp.key) || pp).line;   // the picked Source's line
   const statTxt = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : v.toFixed(1);
   const stats9 = l => [l.fgp, l.ftp, l.tpm, l.pts, l.reb, l.ast, l.stl, l.blk, l.to];
   function sideRows(label, keys, stat) {
@@ -652,6 +661,11 @@ tr.click{cursor:pointer}
     if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
     const was = SS.league && SS.league.id, pts = LS.isPoints(SS.settings); SS = LS.load(LS.local.get);
     if ((SS.league && SS.league.id) !== was || LS.isPoints(SS.settings) !== pts) load();
+  });
+  $('src').addEventListener('change', e => {
+    ui.src = e.target.value; save(); bd = null; finderRun++;
+    SRCS.need(ui.src, fetch).then(() => { if (ui.src === e.target.value) render(); });   // box-score sources wait for their files; the first draw shows players on projections
+    render();
   });
   $('team').addEventListener('change', e => { ui.teamBy[ui.tab][ui.leagueId] = e.target.value; bd = null; save(); render(); });
   $('week').addEventListener('change', e => { ui.week = +e.target.value; save(); render(); });

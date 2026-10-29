@@ -40,7 +40,7 @@ async function open(opts = {}) {
   ok(errs.length === 0, 'loads without errors ' + errs.join('; '));
   ok(/^Matchup Analyzer/.test(await p.title()), 'title says Matchup Analyzer');
   ok(await p.$$eval('.sitenav a', l => l.map(a => a.textContent).join('|')) === 'Rankings|Team|Draft|League|Matchup|Trade|Settings', 'toolbar Rankings | Team | Draft | League | Matchup | Trade | Settings');
-  ok(!(await p.$('#src')) && (await p.textContent('#lgname')) === 'Home', 'no league picker; league name shown');
+  ok(!(await p.isVisible('#src')) && (await p.textContent('#lgname')) === 'Home', 'no league picker; Source select hidden on Matchup; league name shown');
   ok(await p.$eval('#team', s => s.value) === TEAMS[0], 'team defaults to the saved league team');
   ok((await p.$$eval('#team option', o => o.length)) === 14, 'team select has 14 options');
   const wk = await p.$$eval('#week option', o => o.map(x => x.value));
@@ -160,6 +160,12 @@ async function open(opts = {}) {
   ok((await p.$$eval('#sum .kpi', k => k.length)) === 6 && /Zscore/.test(await p.$eval('#sum .kpi:nth-child(5) span', e => e.textContent)), 'summary tiles add Zscore for each team');
   await p.click('#statv button[data-v="cur"]'); await p.waitForTimeout(100);
   ok((await p.$$eval('#bt tbody tr', r => r.length)) === bt.length, 'Projection | Current toggle keeps the rows');
+  ok(await p.isVisible('#src') && (await p.$eval('#src', s => s.value)) === 'avg', 'Trades tab shows the Source select on Average');
+  await p.selectOption('#src', 'bbm'); await p.waitForTimeout(800);
+  ok((await p.$eval('#src', s => s.value)) === 'bbm' && (await p.$$eval('#bt tbody tr', r => r.length)) === 0, 'Source BBM resets the builder');
+  await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
+  ok((await p.$$eval('#finder tbody tr', r => r.length)) > 0, 'finder still has rows on BBM');
+  await p.selectOption('#src', 'avg'); await p.waitForTimeout(300);
   await p.click('#reset'); await p.waitForTimeout(100);
   ok((await p.$$eval('#list-a li, #list-b li', l => l.length)) === 0 && !(await p.textContent('#sum')).trim(), 'Reset Trade empties both sides and the summary');
   await p.click('#finder tbody tr'); await p.waitForTimeout(300);
