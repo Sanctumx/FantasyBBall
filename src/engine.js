@@ -430,6 +430,35 @@
     idx.forEach((i, r) => { const f = playsF(r), f2 = f * f, e = all[i]; for (let c = 0; c < NC; c++) { mu[c] += f * e.x[c]; v[c] += f2 * e.v[c]; } });
   }
   const FIELD_F = { easy: 0.08, average: 0.31, strong: 0.46, vstrong: 0.62 };
+  // Pairing chances for a context and config (nc categories): winP = one category, pairMatch = the matchup. Shared by evaluate and callers that need only a few pairings (TeamWin.pairKit)
+  function pairKit(ctx, cfg, nc) {
+    const noise = cfg.scoring === 'roto' ? new Float64Array(NC) : ctx.h2hNoise;
+    const corrOn = cfg.scoring !== 'roto' && cfg.corr !== 'off' && ctx.corr;
+    // marginal category win chance: with the games factor its full variance is idiosyncratic + factor
+    const margNoise = corrOn ? ctx.idioNoise.map((v, c) => v + Math.pow(ctx.loadS[c] * ctx.gapSd, 2)) : noise;
+    const SK = ctx.streamK || new Float64Array(NC).fill(1);   // streamability: share of each category gap that counts
+    const winP = (a, av, b, bv, c) => Phi((a[c] - b[c]) * SK[c] / Math.sqrt(av[c] + bv[c] + margNoise[c] + 1e-9));
+
+    // standings & my category chances
+    // Matchup win chance: categories are independent given the weekly games gap, so average over the gap
+    function pairMatch(a, av, b, bv) {
+      if (!corrOn) { const ps = []; for (let c = 0; c < nc; c++) ps.push(winP(a, av, b, bv, c)); return matchProb(ps); }
+      let M = 0; const ps = new Array(nc);
+      for (let k = 0; k < GH_Z.length; k++) {
+        const g = GH_Z[k] * ctx.gapSd;
+        for (let c = 0; c < nc; c++) ps[c] = Phi(((a[c] - b[c]) * SK[c] + ctx.loadS[c] * g) / Math.sqrt(av[c] + bv[c] + ctx.idioNoise[c] + 1e-9));
+        M += GH_W[k] * matchProb(ps);
+      }
+      return M;
+    }
+    function matchProb(ps) { // ps over nc categories -> P(win matchup) with ties counted half
+      let dist = [1];
+      for (const q of ps) { const nd = new Array(dist.length + 1).fill(0); dist.forEach((v, i) => { nd[i] += v * (1 - q); nd[i + 1] += v * q; }); dist = nd; }
+      let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
+      return w;
+    }
+    return { winP, pairMatch, SK };
+  }
   function evaluate(players, ctx, cfg, state) {
     const N = cfg.teams, R = cfg.roster, me = cfg.slot - 1, total = N * R;
     const nc = cfg.cats === 9 ? NC : NC - 1;
@@ -507,31 +536,7 @@
       }
     }
     if (pr) teams.forEach(T => { sumRanked(T.ents, null, T.mu, T.v); });
-    const noise = cfg.scoring === 'roto' ? new Float64Array(NC) : ctx.h2hNoise;
-    const corrOn = cfg.scoring !== 'roto' && cfg.corr !== 'off' && ctx.corr;
-    // marginal category win chance: with the games factor its full variance is idiosyncratic + factor
-    const margNoise = corrOn ? ctx.idioNoise.map((v, c) => v + Math.pow(ctx.loadS[c] * ctx.gapSd, 2)) : noise;
-    const SK = ctx.streamK || new Float64Array(NC).fill(1);   // streamability: share of each category gap that counts
-    const winP = (a, av, b, bv, c) => Phi((a[c] - b[c]) * SK[c] / Math.sqrt(av[c] + bv[c] + margNoise[c] + 1e-9));
-
-    // standings & my category chances
-    // Matchup win chance: categories are independent given the weekly games gap, so average over the gap
-    function pairMatch(a, av, b, bv) {
-      if (!corrOn) { const ps = []; for (let c = 0; c < nc; c++) ps.push(winP(a, av, b, bv, c)); return matchProb(ps); }
-      let M = 0; const ps = new Array(nc);
-      for (let k = 0; k < GH_Z.length; k++) {
-        const g = GH_Z[k] * ctx.gapSd;
-        for (let c = 0; c < nc; c++) ps[c] = Phi(((a[c] - b[c]) * SK[c] + ctx.loadS[c] * g) / Math.sqrt(av[c] + bv[c] + ctx.idioNoise[c] + 1e-9));
-        M += GH_W[k] * matchProb(ps);
-      }
-      return M;
-    }
-    function matchProb(ps) { // ps over nc categories -> P(win matchup) with ties counted half
-      let dist = [1];
-      for (const q of ps) { const nd = new Array(dist.length + 1).fill(0); dist.forEach((v, i) => { nd[i] += v * (1 - q); nd[i + 1] += v * q; }); dist = nd; }
-      let w = 0; for (let i = 0; i < dist.length; i++) { if (2 * i > nc) w += dist[i]; else if (2 * i === nc) w += 0.5 * dist[i]; }
-      return w;
-    }
+    const { winP, pairMatch, SK } = pairKit(ctx, cfg, nc);
     const standings = teams.map(A_ => {
       let roto = 0, cats = 0, match = 0;
       for (let c = 0; c < nc; c++) roto += 1;
@@ -946,7 +951,7 @@
     return { cat, match, mu: [mu(a), mu(b)] };
   }
   const E2 = (...a) => evaluate(...a);
-  const api = { draftSims, perGameVar, VARS: { GPW, VAR_GAMES, SIGMA_G2, SEASON_G, PROJ_SD }, FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
+  const api = { draftSims, perGameVar, VARS: { GPW, VAR_GAMES, SIGMA_G2, SEASON_G, PROJ_SD }, FIELD_F, slidePick, lookAhead2, strategiesFor, catWeights, CATS, NC, TO, WEEKS, prepPlayers, buildContext, evaluate, pairKit, entryVec, teamAt, adpOf, adpSd, Phi, playoffSurvival, playoffMult, PO_STRENGTH };
   api.pairMatchup = pairMatchup;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
 })(this);
