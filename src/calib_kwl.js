@@ -35,6 +35,12 @@ function gateM(folds) {
   const pick = ok.length ? ok.sort((a, b) => pooled(a) - pooled(b))[0] : 'STD';
   return { pick, passing: ok };
 }
+// #157 gate O. folds[i] = { bT: { b, seB } of KLt on the training seasons, dKL: { d, se } KL vs K1 held-out, k1SeB?: seB of K1's b }; conf = KL vs K1 on the
+// confirmation season. pass: |b| < 2 SE and KL beats K1 by >= 1 SE in every fold; conf (d < 0) is reported apart. unidentified: b's SE over twice K1's.
+function gateO(folds, conf) {
+  const slope = folds.every(f => Math.abs(f.bT.b) < 2 * f.bT.seB), brier = folds.every(f => se1(f.dKL)), unidentified = folds.some(f => f.k1SeB != null && f.bT.seB > 2 * f.k1SeB);
+  return { pass: slope && brier, slope, brier, conf: conf.d < 0, unidentified };
+}
 function gateN(levels) { const range = Math.max(...levels) - Math.min(...levels); return { range, uncertain: range > 0.10 }; }
 
-module.exports = { nestedPool, foldPlan, normCdf, normInv, probitShrink, ratioSpread, gateK, gateL, gateM, gateN };
+module.exports = { nestedPool, foldPlan, normCdf, normInv, probitShrink, ratioSpread, gateK, gateL, gateM, gateN, gateO };

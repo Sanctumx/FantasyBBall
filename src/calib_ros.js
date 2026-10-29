@@ -275,7 +275,7 @@ function blendVerdict(R_, rep, folds) {
 // ---- #156 kwl mode (design: docs/superpowers/specs/2026-10-28-calib-kwl-design.md; gates K-N fixed there before any result) ----
 // Per fold (held-out season T): k is fitted on the training seasons' forecasts, each built with an n0 fitted on the seasons other than itself and T
 // (nested), and scored on T's forecasts (n0 fitted on the seasons other than T). Forms: K0 one k, K1 k = a + b t (t = days played / 175), Kck per checkpoint.
-const lagBucket = lag => (lag <= 1 ? 0 : lag <= 3 ? 1 : lag <= 7 ? 2 : lag <= 11 ? 3 : 4), LAG_NAMES = ['0-1', '2-3', '4-7', '8-11', '12+'];
+const LG = require('./calib_lag.js'), { lagBucket, LAG_NAMES } = LG;
 const TCK = CKS.map(w0 => 7 * w0 / 175), KINDS = [['M', { kind: 'M' }], ['C', { kind: 'C' }]];
 const tab = f => TCK.map(t => f.a + f.b * t);
 function lagSums(D, src) {   // matchup rows: sum (p - .5)(y - .5) and sum (p - .5)^2 by lag bucket
@@ -293,6 +293,16 @@ function p1Fit(D, src) {   // P1 probit shrink Phi(Phi^-1(p) (a + b t)), in samp
   }
   return best;
 }
+// #157 k by lag on matchup cells (calib_lag.js): forms fitted on the training seasons, scored on the held-out season; the cells are kept for later variants
+function lagFold(o, cellsOut, trainD, D, s) {
+  const F = LG.FEATURES, cTr = LG.cellSums(trainD, s, CKS, TCK), cTe = LG.cellSums(D, s, CKS, TCK), fit = f => LG.fitKX(cTr, f);
+  const b = { K0: fit(F.K0), K1: fit(F.K1), KL: fit(F.KL), KLt: fit(F.KLt), KLs: fit(F.KLs) }, kf = n => c => LG.dot(b[n], F[n](c));
+  const brier = {}; for (const n of Object.keys(b)) brier[n] = LG.brierCells(cTe, kf(n));
+  o.lag = { b, brier, dKL: LG.diffCells(cTe, kf('KL'), kf('K1')), dKLt: LG.diffCells(cTe, kf('KLt'), kf('K1')), bT: { b: b.KLt[5], seB: LG.fitKXSE(cTr, F.KLt, 5) }, k1SeB: LG.fitKXSE(cTr, F.K1, 1),
+    k01: LG.kBucket(cTe, 0), k01Train: LG.kBucket(cTr, 0) };
+  const pack = cs => cs.map(c => [c.wk, c.ck, c.sd, c.n, c.dd, c.de, c.ee]);
+  cellsOut.train = pack(cTr); cellsOut.test = pack(cTe);
+}
 function kwlMain() {
   const KW = require('./calib_kwl.js'), primary = SEASONS.slice(0, 3), confirm = SEASONS[3], plan = KW.foldPlan(primary, confirm);
   TOTAL_BUILDS = plan.reduce((s, f) => s + f.nTrainBuilds + 1, 0);
@@ -301,14 +311,15 @@ function kwlMain() {
   const n0Of1 = (A, T) => { const f = n0Of(KW.nestedPool(SEASONS, A, T)); return { S: f.S.n0, L30: f.L30.n0, L60: f.L60.n0, L90: f.L90.n0 }; };
   log(`#156 k by weeks left  ${new Date().toISOString().slice(0, 10)}  seeds ${SEED0}-${SEED0 + SEEDS - 1}  seasons ${SEASONS.join(', ')} (${confirm} confirmation only)  checkpoints (start of weeks) ${CKS.map(c => c + 1).join(', ')}`);
   log('Frozen rosters and whole games, as #145. Each training season forecasts with an n0 fitted without it and without the held-out season (nested). t = days played / 175.');
-  const FO = {}, LAGS = {}, INA = {}, P1 = {};
+  const FO = {}, LAGS = {}, INA = {}, P1 = {}, CELLS = {};
   for (const fold of plan) {
     const T = fold.test, trainD = fold.train.map(A => build(A, n0Of1(A, T)).D).reduce(merge), r = build(T, n0Of1(null, T)), D = r.D, nT = n0Of(KW.nestedPool(SEASONS, null, T));
     log(`\n== ${T}${fold.confirm ? ' (confirmation: k fitted on all primary seasons)' : ''}  (rows ${D.n}, pair-weeks per checkpoint ${r.pairWeeks.join('/')}, symmetry failures ${r.checks})`);
     for (const m of ['S', 'L30', 'L60', 'L90']) log(`n0 ${m} (fitted on ${KW.nestedPool(SEASONS, null, T).join(', ')}): ${n0s(nT[m].n0)}${nT[m].edge.length ? '   AT GRID EDGE: ' + nT[m].edge.join(',') : ''}`);
-    const fo = FO[T] = {}; LAGS[T] = {}; INA[T] = {}; P1[T] = {};
+    const fo = FO[T] = {}; LAGS[T] = {}; INA[T] = {}; P1[T] = {}; CELLS[T] = {};
     for (const s of SRC) {
-      const o = fo[s] = {};
+      fo[s] = {}; lagFold(fo[s], CELLS[T][s] = {}, trainD, D, s);
+      const o = fo[s];
       for (const [kn, oo] of KINDS) {
         const k0 = S.fitK(trainD, s, oo), lin = S.kLinSE(trainD, s, oo, TCK), kck = CKS.map((w, ci) => S.fitK(trainD, s, Object.assign({ ck: ci }, oo)));
         const pick = k => A(s, kn === 'M' ? k : 1, kn === 'C' ? k : 1), a0 = pick(k0), a1 = pick(tab(lin)), aC = pick(kck);
@@ -322,6 +333,8 @@ function kwlMain() {
       log(`${s.padEnd(3)} matchup: K0 k ${f4(L.k0)} | K1 a ${f4(L.lin.a)} b ${f4(L.lin.b)} +-${L.lin.seB.toFixed(2)} | held-out Brier K0 ${L.brier.K0.toFixed(4)} K1 ${L.brier.K1.toFixed(4)} Kck ${L.brier.Kck.toFixed(4)} | K1 vs K0 ${pm4(L.dK1)} | Kck vs K1 ${pm4(L.dCk)} | spread k*/k K0 ${f4(L.spreadK0)} K1 ${f4(L.spreadK1)} | P1 a ${f4(P1[T][s].a)} b ${f4(P1[T][s].b)} Brier ${P1[T][s].brier.toFixed(4)}`);
       log(`    cats: K0 k ${f4(o.C.k0)} | K1 a ${f4(o.C.lin.a)} b ${f4(o.C.lin.b)} +-${o.C.lin.seB.toFixed(2)} | K1 vs K0 ${pm4(o.C.dK1)}`);
       log(`    k* by checkpoint (matchup): ${L.kStar.map(x => x.toFixed(2)).join(' ')}`);
+      const G = o.lag, br = n => G.brier[n].toFixed(4);
+      log(`    by lag: held-out Brier K0 ${br('K0')} K1 ${br('K1')} KL ${br('KL')} KLt ${br('KLt')} KLs ${br('KLs')} | KL vs K1 ${pm4(G.dKL)} | KLt vs K1 ${pm4(G.dKLt)} | t term b ${f4(G.bT.b)} +-${G.bT.seB.toFixed(2)} (K1 b +-${G.k1SeB.toFixed(2)}) | k by lag (train) ${G.b.KL.slice(0, 5).map(x => x.toFixed(2)).join(' / ')} | lag 0-1 k held-out ${f4(G.k01.k)} +-${G.k01.se.toFixed(2)}`);
     }
     // windows against STD, only at the checkpoints where the window differs from season-to-date, with the held-out k
     fo.win = {};
@@ -348,7 +361,12 @@ function kwlMain() {
   V.push(`N  mid-season k level by season ${primary.map(T => T + ' ' + INA[T][src].toFixed(2)).join(', ')} (range ${gN.range.toFixed(2)}): ${gN.uncertain ? 'UNCERTAIN, the level is the user\'s call whatever K says' : 'stable'}`);
   const bSig = pf.every(f => f[src].M.train.b > 0 && f[src].M.train.b >= 2 * f[src].M.train.seB);
   V.push(gM.pass ? `RESULT: K PASS on ${M.pick} lines: candidate k(t) = a + b t pooled over the 3 seasons; STD lines ship only with a blend-lines decision and after #146; the preseason-lines version ${gW.pass ? 'also passes and could ship alone (user call)' : 'does not pass on its own'}` : bSig ? 'RESULT: K fails but b is significant: the climb is real, too small to change Brier; keep one k' : 'RESULT: b not significant in every training fold: close #156 as No');
+  // #157 gate O (fixed in the design before any result) and line P
+  const gO = KW.gateO(pf.map(f => ({ bT: f[src].lag.bT, dKL: f[src].lag.dKL, k1SeB: f[src].lag.k1SeB })), cf[src].lag.dKL), lagLine = f => f[src].lag;
+  V.push(`O  k by lag over the straight line on ${M.pick} lines (t term |b| < 2 SE in every training fold AND KL beats K1 by >= 1 SE held-out in every fold): ${gO.pass ? 'ADOPT k(lag), confirm on fresh seeds after #146' : 'NO'}  (t term b ` + pf.map(f => lagLine(f).bT.b.toFixed(2) + '+-' + lagLine(f).bT.seB.toFixed(2)).join(' / ') + `${gO.unidentified ? ' [b unidentified: SE over twice the K1 SE]' : ''}; KL vs K1 ` + pf.map(f => lagLine(f).dKL.d.toFixed(4) + '+-' + lagLine(f).dKL.se.toFixed(4)).join(' / ') + `; ${confirm} KL vs K1 d < 0: ${gO.conf} [${cf[src].lag.dKL.d.toFixed(4)}+-${cf[src].lag.dKL.se.toFixed(4)}])`);
+  V.push(`P  lag 0-1 k (the Team tab's Win M is this week's matchup; shipped 0.60, expected .74-.80) held-out by season on ${M.pick} lines: ` + SEASONS.map(T => T + ' ' + FO[T][src].lag.k01.k.toFixed(2) + '+-' + FO[T][src].lag.k01.se.toFixed(2)).join(', '));
   V.forEach(log);
+  fs.writeFileSync('calib_lag_cells.json', JSON.stringify({ seeds: SEEDS, seed0: SEED0, cks: CKS, tck: TCK, fields: ['wk', 'ck', 'sd', 'n', 'dd', 'de', 'ee'], cells: CELLS }));
   fs.writeFileSync('results_calib_kwl.txt', OUT.join('\n') + '\n');
   fs.writeFileSync('calib_kwl.json', JSON.stringify({ seeds: SEEDS, seed0: SEED0, cks: CKS, folds: FO, lags: LAGS, inA: INA, p1: P1, verdict: V }));
   process.exit(0);
