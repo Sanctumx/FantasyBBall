@@ -290,8 +290,9 @@
   // next-ranked player (the roster is the same size): without that he would read far below the replacement for games he never plays.
   // The average player counts against the player limit but takes no nightly slot (a: 0 item); the rest of the team is replayed without D
   function avgOwn(ctx, state, ap, key, opts) {
-    const t = trade(ctx, state), g = Team.soloGames(ctx, key) / ap.W * ap.share, so = sideOpts(opts);
-    const dropped = state.slots[key] !== 'il' && ap.plays && ap.plays[key] && ap.plays[key].drop != null;
+    const pk = ap.plays && ap.plays[key], isDrop = pk && pk.drop != null, il = state.slots[key] === 'il';
+    const t = trade(ctx, state), g = Team.soloGames(ctx, key, il && isDrop ? pk.drop : undefined) / ap.W * ap.share, so = sideOpts(opts);   // a dropped IL player never plays: 0 games, as in avgParts
+    const dropped = !il && isDrop;
     let mine = ap.mine.filter(x => x.key !== key);
     if (dropped) {
       const w = Team.window(ctx), without = Team.applySwap(state, [key], []), A0 = { t: ctx.pool.byKey.get(key).t, a: 0, v: 0, from: w.from, to: w.from };

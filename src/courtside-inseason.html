@@ -2518,7 +2518,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       if (nDrop && typeof o.rank !== 'function') throw new Error('tabPlays: the roster is over the player limit, o.rank is needed to choose who is dropped');
       const rk = o.rank, order = !nDrop ? keys : keys.slice().sort((x, y) => (rk(x) === rk(y) ? 0 : rk(x) < rk(y) ? -1 : 1) || (v(x) - v(y)) || (x < y ? -1 : x > y ? 1 : 0));
       const dropped = new Set(order.slice(0, nDrop)), keptRet = il.filter(k => !dropped.has(k)).map(k => ret[k].tRet).sort((x, y) => x - y);
-      const s = typeof lim === 'number' ? lim - onRoster : Infinity, times = s >= 0 ? keptRet.slice(s) : new Array(-s).fill(w.from).concat(keptRet), leave = {}, outs = order.slice(0, nDrop).filter(k => !il.includes(k));
+      const s = Number.isFinite(lim) ? lim - onRoster : Infinity, times = s >= 0 ? keptRet.slice(s) : new Array(-s).fill(w.from).concat(keptRet), leave = {}, outs = order.slice(0, nDrop).filter(k => !il.includes(k));
       while (times.length < outs.length) times.unshift(keptRet.length ? keptRet[0] : w.from + (w.to - w.from) / 2);   // only a forced drop is short of a time
       outs.forEach((k, j) => { leave[k] = times[j]; });
       il.forEach(k => { if (dropped.has(k)) leave[k] = w.from; });   // a dropped IL player never plays: he left at the start
@@ -2873,8 +2873,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // next-ranked player (the roster is the same size): without that he would read far below the replacement for games he never plays.
   // The average player counts against the player limit but takes no nightly slot (a: 0 item); the rest of the team is replayed without D
   function avgOwn(ctx, state, ap, key, opts) {
-    const t = trade(ctx, state), g = Team.soloGames(ctx, key) / ap.W * ap.share, so = sideOpts(opts);
-    const dropped = state.slots[key] !== 'il' && ap.plays && ap.plays[key] && ap.plays[key].drop != null;
+    const pk = ap.plays && ap.plays[key], isDrop = pk && pk.drop != null, il = state.slots[key] === 'il';
+    const t = trade(ctx, state), g = Team.soloGames(ctx, key, il && isDrop ? pk.drop : undefined) / ap.W * ap.share, so = sideOpts(opts);   // a dropped IL player never plays: 0 games, as in avgParts
+    const dropped = !il && isDrop;
     let mine = ap.mine.filter(x => x.key !== key);
     if (dropped) {
       const w = Team.window(ctx), without = Team.applySwap(state, [key], []), A0 = { t: ctx.pool.byKey.get(key).t, a: 0, v: 0, from: w.from, to: w.from };

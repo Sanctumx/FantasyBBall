@@ -61,7 +61,7 @@
     let po = opts;   // for 'avg' the average player is built once, not per roster player
     const job = { done: false, matrix: null, players: {}, step() {
       if (job.done) return false;
-      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks) }); }
+      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks, opts) }); }
       else {
         const k = keys[Object.keys(job.players).length];
         job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, po);

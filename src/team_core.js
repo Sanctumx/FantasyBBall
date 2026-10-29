@@ -163,7 +163,7 @@
       if (nDrop && typeof o.rank !== 'function') throw new Error('tabPlays: the roster is over the player limit, o.rank is needed to choose who is dropped');
       const rk = o.rank, order = !nDrop ? keys : keys.slice().sort((x, y) => (rk(x) === rk(y) ? 0 : rk(x) < rk(y) ? -1 : 1) || (v(x) - v(y)) || (x < y ? -1 : x > y ? 1 : 0));
       const dropped = new Set(order.slice(0, nDrop)), keptRet = il.filter(k => !dropped.has(k)).map(k => ret[k].tRet).sort((x, y) => x - y);
-      const s = typeof lim === 'number' ? lim - onRoster : Infinity, times = s >= 0 ? keptRet.slice(s) : new Array(-s).fill(w.from).concat(keptRet), leave = {}, outs = order.slice(0, nDrop).filter(k => !il.includes(k));
+      const s = Number.isFinite(lim) ? lim - onRoster : Infinity, times = s >= 0 ? keptRet.slice(s) : new Array(-s).fill(w.from).concat(keptRet), leave = {}, outs = order.slice(0, nDrop).filter(k => !il.includes(k));
       while (times.length < outs.length) times.unshift(keptRet.length ? keptRet[0] : w.from + (w.to - w.from) / 2);   // only a forced drop is short of a time
       outs.forEach((k, j) => { leave[k] = times[j]; });
       il.forEach(k => { if (dropped.has(k)) leave[k] = w.from; });   // a dropped IL player never plays: he left at the start
