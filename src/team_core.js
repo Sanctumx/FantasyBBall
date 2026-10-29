@@ -117,7 +117,7 @@
   function ilPairs(ctx, state) {
     if (!ctx.teamTab || ctx.basis === 'pergame') return [];
     const c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), act = keys.filter(k => state.slots[k] === 'active'), il = keys.filter(k => state.slots[k] === 'il');
-    if (act.length < ctx.L.maxActive || !il.length) return [];
+    if (!(act.length >= ctx.L.maxActive) || !act.length || !il.length) return [];
     const v = k => Matchup.nightValue(ctx, ctx.pool.byKey.get(k)), worst = act.slice().sort((a, b) => v(a) - v(b));
     return il.map((k, n) => [worst[n % worst.length], k]);
   }

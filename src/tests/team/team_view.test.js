@@ -408,7 +408,7 @@ test('apply with a ctx: the list dM of a candidate equals the Win M change after
   try {
     pp.g = 3;   // a long-term IL player: his share of the games is tiny
     const su = W.moduleSetup(ctx, st, { baseline: 'rep' });
-    assert.ok(su.grp.includes(su.worst));   // the replacement entry: one real player, or an Active player + the IL player sharing his slot
+    assert.ok(su.grp.includes(su.worst) && !(su.grp.length === 1 && su.grp[0] === il));   // the replacement entry: one real player, or an Active player + the IL player sharing his slot; never the IL player alone (the old bug)
     const cands = ctx.pool.players.filter(p => !p.owner && p.g > 40 && p.t).slice(0, 5).map(p => p.key);
     cands.forEach(c => {
       const row = W.moduleRow(ctx, st, su, c), s2 = V.apply(st, su.grp.map(key => ({ key })), [{ key: c }], full, ctx), m2 = W.matrix(ctx, s2, su.mo);

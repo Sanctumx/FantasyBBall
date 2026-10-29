@@ -616,241 +616,6 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Points = api;
 })(this);
 
-// The one shrink every Win C / Win M display reads (#139, #147): Team, Rankings and the Trade Analyzer. Display only, never in the Model pick.
-// Fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (calib_ros_k.js): pooled k 0.43 match, 0.65 per category; shipped at
-// 0.6 / 0.75 (user, 2026-10-26) because the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident.
-(function (root) {
-  'use strict';
-  const SHRINK = { match: 0.6, cat: 0.75 };
-  const shrink = (p, k) => 0.5 + k * (p - 0.5);
-  const api = { SHRINK, shrink };
-  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.WinK = api;
-})(typeof self !== 'undefined' ? self : this);
-
-// Rankings core (2026-10-21): per-game lines from any source → Zscore table. Pure; browser and Node.
-// Rule (user, 2026-10-21): a source's Zscore is calculated on the top X players by H2H-adjusted value within that source,
-// X = teams × roster size, re-ranked until the pool settles. No ADP or roster pool, so a last-week table is relative to
-// last-week lines. The engine is only called, never changed (the Model pick and Win do not see any of this).
-(function (root) {
-  'use strict';
-  const Eng = root.Engine || require('./engine.js'), Points = root.Points || require('./points_core.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), InLeague = root.InLeague || require('./inseason_league.js'), Shared = root.Shared || require('./shared.js'), LeagueStore = root.LeagueStore || require('./league_store.js');
-
-  const WEIGHTS = InPlayers.WEIGHTS;   // fixed: every category x1, TO x0.5 (user ruling D2)
-  const TYPES = ['classic', 'h2h', 'adj'];   // Standard, H2H-Adjusted, ROTO-Adjusted
-
-  // engine config for a league: the board's defaults except teams / roster / categories
-  function cfgFor(o) {
-    o = o || {};
-    return { teams: o.teams || 14, roster: o.roster || 12, slot: 1, order: '3rr', scoring: 'h2h', cats: o.cats || 9, ilSpots: o.ilSpots == null ? 3 : o.ilSpots,
-      field: 'easy', fieldZ: 'std', puntMode: 'off', puntLock: '', catW: WEIGHTS.slice(), adpSrc: 'ftx', scarZ: 'off', scarP: 'off', poBoost: 'off', zdrop: 0,
-      basis: o.basis || 'total' };
-  }
-
-  // every projected player as a source row: {pid, n, t, pos, g, line, adp}
-  function projSource(PLAYERS, proj) { return InPlayers.projLines(PLAYERS, proj).map(q => ({ pid: q.id, n: q.n, t: q.t, pos: q.pos, g: q.g, line: q.line, adp: q.adp, m: Shared.projOf(PLAYERS[q.id], proj).m, ftx: PLAYERS[q.id].ftx != null ? PLAYERS[q.id].ftx : null })); }
-
-  // ESPN season-to-date averages → source rows. The engine gets gp × 80 / (most games played) games so a Season-basis
-  // table counts games played; `gp` stays the real count for display. Percentages come from makes / attempts.
-  function seasonSource(espn, PLAYERS) { return fromAverages(((espn && espn.players) || []), PLAYERS); }
-  function fromAverages(recs, PLAYERS) {
-    const played = recs.filter(r => r.gp > 0), maxGp = Math.max(1, ...played.map(r => r.gp));
-    const list = PLAYERS.map((r, i) => ({ n: r.n, t: r.t, id: i }));
-    return played.map((r, i) => {
-      const m = InPlayers.matchTo(list, InPlayers.OVERRIDES.espn[r.id] || r.n, r.t);
-      return { pid: i, espnId: r.id, n: r.n, t: InLeague.toProjTeam(r.t) || r.t, pos: m ? PLAYERS[m.id].p : '', gp: r.gp, m: r.min, g: r.gp * 80 / maxGp, line: InPlayers.espnLine(r), adp: m ? InPlayers.projLines([PLAYERS[m.id]], 'avg')[0].adp : null };
-    });
-  }
-
-  // the last `days` calendar days (New York dates, as the box files store them) of box-score games → source rows. `files` are the
-  // monthly stats/box-YYYY-MM.json objects. The window ends on the newest game date in the files. Per-game averages are sums of
-  // box lines over games played (minutes > 0), so FG% / FT% come from summed makes / attempts; team = his latest game's team.
-  // Returns {rows, from, to} (rows [] and from / to null when there are no games).
-  function windowSource(files, days, PLAYERS) {
-    const fs = (files || []).filter(Boolean), games = [];
-    fs.forEach(f => Object.keys(f.games || {}).forEach(id => games.push({ d: f.games[id].d, teams: f.games[id].teams, cols: f.cols, names: f.names })));
-    if (!games.length) return { rows: [], from: null, to: null };
-    const to = games.reduce((a, g) => g.d > a ? g.d : a, ''), start = new Date(to + 'T00:00:00Z'); start.setUTCDate(start.getUTCDate() - (days - 1));
-    const from = start.toISOString().slice(0, 10), acc = {};
-    games.filter(g => g.d >= from && g.d <= to).forEach(g => Object.keys(g.teams).forEach(t => g.teams[t].forEach(l => {
-      const min = l[1]; if (!(min > 0)) return;
-      const a = acc[l[0]] || (acc[l[0]] = { id: l[0], n: g.names[l[0]] || l[0], t, d: g.d, gp: 0, sum: {} });
-      if (g.d >= a.d) { a.d = g.d; a.t = t; }
-      a.gp++; g.cols.forEach((c, i) => { a.sum[c] = (a.sum[c] || 0) + l[i + 1]; });
-    })));
-    const recs = Object.values(acc).map(a => { const r = { id: a.id, n: a.n, t: a.t, gp: a.gp }; Object.keys(a.sum).forEach(c => { r[c] = a.sum[c] / a.gp; }); return r; });
-    return { rows: fromAverages(recs, PLAYERS), from, to };
-  }
-
-  // who owns each row: Map pid → {owner (Fantrax team id), slot}. Every rostered Fantrax player goes to the one row his name and
-  // team match (IR included); two Fantrax players claiming one row go to the one whose team matches.
-  function ownersOf(rows, fxPlayers, rosters) {
-    const list = rows.map(r => ({ n: r.n, t: r.t, id: r.pid })), best = new Map();
-    Object.keys(rosters || {}).forEach(team => rosters[team].forEach(x => {
-      const info = (fxPlayers && fxPlayers[x.fid]) || null; if (!info) return;
-      const m = InPlayers.matchTo(list, InPlayers.OVERRIDES.fx[x.fid] || info.name, info.team); if (!m) return;
-      const score = info.team && InLeague.toProjTeam(info.team) === m.t ? 1 : 0, cur = best.get(m.id);
-      if (!cur || score > cur.score) best.set(m.id, { score, owner: team, slot: x.slot });
-    }));
-    return new Map([...best].map(([pid, v]) => [pid, { owner: v.owner, slot: v.slot }]));
-  }
-
-  // ---- sources (shared by the Rankings and Team tabs, 2026-10-26): the lines a player is judged on ----
-  const SOURCES = ['season', 'w7', 'w14', 'w30', 'avg', 'bbm', 'hs'], WINDAYS = { season: 400, w7: 7, w14: 14, w30: 30 };
-  function sourceRows(src, PLAYERS, box) { return WINDAYS[src] ? windowSource(box, WINDAYS[src], PLAYERS).rows : projSource(PLAYERS, src); }
-
-  // monthly box-score files (stats/box-YYYY-MM.json) from the season's first month to this month; missing months are skipped
-  async function loadBox(fetchFn, now) {
-    const out = [], d = now || new Date(); let y = 2026, m = 10;
-    while (y < d.getFullYear() || (y === d.getFullYear() && m <= d.getMonth() + 1)) {
-      try { const r = await fetchFn('stats/box-' + y + '-' + String(m).padStart(2, '0') + '.json', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); if (j && j.games) out.push(j); } } catch (e) {}
-      if (++m > 12) { m = 1; y++; }
-    }
-    return out;
-  }
-
-  // which source row is which Fantrax player: -> { byKey: Map key -> row, byPid: Map row pid -> key }. Projection rows go by the pool player's
-  // pid; box rows by name and team as ownersOf does, each row to one player (the rostered one, then the one whose team matches).
-  function matchRows(src, rows, pool, fxPlayers) {
-    const byKey = new Map(), byPid = new Map();
-    if (!WINDAYS[src]) {
-      const row = new Map(rows.map(r => [r.pid, r]));
-      pool.players.forEach(pp => { if (pp.pid != null && row.has(pp.pid)) { byKey.set(pp.key, row.get(pp.pid)); byPid.set(pp.pid, pp.key); } });
-      return { byKey, byPid };
-    }
-    const list = rows.map(r => ({ n: r.n, t: r.t, id: r.pid })), rowOf = new Map(rows.map(r => [r.pid, r])), best = new Map();
-    pool.players.forEach(pp => {
-      const info = (fxPlayers && fxPlayers[pp.key]) || { name: pp.n, team: pp.t }, m = InPlayers.matchTo(list, InPlayers.OVERRIDES.fx[pp.key] || info.name, info.team); if (!m) return;
-      const score = (pp.owner ? 2 : 0) + (info.team && InLeague.toProjTeam(info.team) === m.t ? 1 : 0), cur = best.get(m.id);
-      if (!cur || score > cur.score) best.set(m.id, { score, key: pp.key });
-    });
-    best.forEach((v, pid) => { byKey.set(v.key, rowOf.get(pid)); byPid.set(pid, v.key); });
-    return { byKey, byPid };
-  }
-
-  // a copy of the pool whose lines (and minutes) are the source's. Everything else (key, games, owner, slot, team) stays; a player with no
-  // usable line in the source keeps his projection line and gets lineFb: true.
-  function sourcePool(pool, match) {
-    const ok = r => r && r.line && r.g > 0 && Object.keys(r.line).every(k => Number.isFinite(r.line[k]));
-    const players = pool.players.map(pp => {
-      const r = match.byKey.get(pp.key);
-      return ok(r) ? Object.assign({}, pp, { line: r.line, mpg: r.m == null ? null : r.m, lineFb: false }) : Object.assign({}, pp, { lineFb: true });
-    });
-    return { players, byKey: new Map(players.map(p => [p.key, p])), unmatched: pool.unmatched, stats: pool.stats };
-  }
-
-  const SAME = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
-
-  // rows → [{pid, z, cats[9], inPool}] best first; players with no games get z null and sort last.
-  // opts: {teams, roster, type 'classic' | 'h2h' | 'adj', basis 'total' | 'pergame' | 'mix', cats 9 | 8}
-  function table(rows, opts) {
-    const cfg = cfgFor(opts), type = TYPES.includes(opts.type) ? opts.type : 'classic';
-    const live = rows.filter(r => r.g > 0).sort((a, b) => a.pid - b.pid);   // fixed order: the engine's draft sims draw noise by index
-    const dead = rows.filter(r => !(r.g > 0));
-    const out = [];
-    if (live.length) {
-      const mk = adpOf => Eng.prepPlayers(live.map((r, i) => Object.assign({}, r.line, { g: r.g, ftx: adpOf(r, i) })));
-      // pass 1 ranks by the room's value (ADP where known, else last); pass 2 drafts in that order, so the engine's spread
-      // numbers describe this source's own player pool
-      const P1 = mk(r => r.adp != null ? r.adp : 400); Eng.buildContext(P1, cfg);
-      const order = P1.map((p, i) => i).sort((a, b) => P1[b].fieldV - P1[a].fieldV), rank = new Array(live.length);
-      order.forEach((i, k) => { rank[i] = k + 1; });
-      const P = mk((r, i) => rank[i]), ctx = Eng.buildContext(P, cfg);
-      const W = Eng.catWeights(cfg), NC = Eng.NC, K = Math.min(P.length, cfg.teams * cfg.roster);
-      const X = P.map(p => p.x), val = (x, m) => { let v = 0; for (let c = 0; c < NC; c++) v += (x[c] - m[c]) / ctx.sdH[c] * W[c]; return v; };
-      let mean = Array.from(ctx.avgX), pool = [];
-      for (let it = 0; it < 40; it++) {
-        const v = X.map(x => val(x, mean)), next = v.map((q, i) => [q, i]).sort((a, b) => b[0] - a[0]).slice(0, K).map(a => a[1]).sort((a, b) => a - b);
-        const same = SAME(next, pool); pool = next;
-        mean = Array.from({ length: NC }, (_, c) => pool.reduce((s, i) => s + X[i][c], 0) / K);
-        if (same) break;
-      }
-      const sd = type === 'h2h' ? ctx.sdH : type === 'adj' ? ctx.teamSd
-        : Array.from({ length: NC }, (_, c) => Math.sqrt(Math.max(1e-9, pool.reduce((s, i) => s + (X[i][c] - mean[c]) ** 2, 0) / K)));
-      const inPool = new Set(pool);
-      P.forEach((p, i) => {
-        const cats = Array.from({ length: NC }, (_, c) => (p.x[c] - mean[c]) / sd[c]);
-        out.push({ pid: live[i].pid, z: cats.reduce((s, v, c) => s + v * W[c], 0), cats, inPool: inPool.has(i) });
-      });
-      out.sort((a, b) => b.z - a.z);
-    }
-    return out.concat(dead.map(r => ({ pid: r.pid, z: null, cats: null, inPool: false })));
-  }
-
-  // ---- playoffs: his team's games in your playoff weeks, and the board's Playoff boost ----
-  const PO_LAMBDA = { off: 0, light: 0.25, medium: 0.5, strong: 0.75, vstrong: 1 };   // strength, as in app.html
-  // returns {byTeam: {ABBR: {per[], total}}, avg}; s = league settings {asb, poStart, poFmt}
-  function playoffGames(SCHED, s) {
-    const { plan, rounds } = LeagueStore.playoffRounds(SCHED, s), byTeam = {};
-    Object.keys(SCHED.games).forEach(t => {
-      const g = SCHED.games[t], per = rounds.filter(ws => ws.length).map(ws => ws.reduce((a, w) => a + plan.idx[w - 1].reduce((b, i) => b + g[i], 0), 0));
-      byTeam[t] = { per, total: per.reduce((a, b) => a + b, 0) };
-    });
-    const tot = Object.values(byTeam).map(x => x.total);
-    return { byTeam, avg: tot.reduce((a, b) => a + b, 0) / (tot.length || 1) };
-  }
-  // table rows + playoff games (po, per) and multiplier (mult); a boost scales z and every category, then re-ranks
-  function withPlayoffs(tab, rows, pg, level) {
-    const lam = PO_LAMBDA[level] || 0, team = new Map(rows.map(r => [r.pid, r.t]));
-    const out = tab.map(x => {
-      const g = pg.byTeam[team.get(x.pid)], mult = lam && g && pg.avg ? Math.max(0.5, Math.min(1.5, 1 + lam * (g.total / pg.avg - 1))) : 1;
-      return Object.assign({}, x, { po: g ? g.total : null, per: g ? g.per : null, mult, z: x.z == null ? null : x.z * mult, cats: x.cats && x.cats.map(v => v * mult) });
-    });
-    return lam ? out.filter(x => x.z != null).sort((a, b) => b.z - a.z).concat(out.filter(x => x.z == null)) : out;
-  }
-
-  // ---- Win C / Win M: Engine.evaluate exactly as the Draft tab runs it (season-long, gain over a replacement-level slot) ----
-  // Projection rows use the Fantrax ADP the board uses; season rows have none, so the table's value order stands in.
-  // "Average player" view = gain minus the gain of an average player (with a league: the average of my roster; else the Zscore pool; a made-up entry behind every real player,
-  // so it stays out of the replacement window; early in the season, with few live rows, it can sit inside the engine's wider
-  // typical-player window and move real gains by under 0.01 points) in the same run. With no league: all picks empty, slot 1 (the board
-  // at pick 1). With a league: o.lists = [my pids, then each other team's pids] (non-IR, best first, up to roster size) fill
-  // their slots; my weakest player's slot is open, so a free agent is measured in place of him. My own players each get a run with
-  // their slot open (step()), since a player already on the team has no gain in the main run.
-  // winStart(rows, tab, o) → {rep, avg: Map pid → {c, m}, pending: [pids], step()}; c = Win C (hundredths), m = Win M (points)
-  function winStart(rows, tab, o) {
-    const cfg = cfgFor(o), N = cfg.teams, Rr = cfg.roster;
-    const live = rows.filter(r => r.g > 0).sort((a, b) => a.pid - b.pid), idx = new Map(live.map((r, i) => [r.pid, i]));
-    const rank = new Map(tab.filter(t => t.z != null).map((t, i) => [t.pid, i + 1]));
-    let P = Eng.prepPlayers(live.map(r => Object.assign({}, r.line, { g: r.g, ftx: r.ftx !== undefined ? r.ftx : (rank.get(r.pid) || null) })));
-    let ctx = Eng.buildContext(P, cfg);
-    const n0 = P.length, pts = o.points ? Points.FP_SLOT : -1;   // points mode: one FP total in a category slot (points_core.engineView)
-    if (o.points) { const v = Points.engineView(P, ctx, cfg, o.points); P = v.P; ctx = v.ctx; }
-    const sk = o.shrink && pts < 0 ? o.shrink : { match: 1, cat: 1 };   // #147: the Team tab's pull toward 50% (WinK.SHRINK), display only; a gain is a difference of chances, so it scales by k
-    const cOf = p => pts < 0 ? p.gain * 100 * sk.cat : null, mOf = p => pts < 0 ? p.gainM * 100 * sk.match : p.gainC[pts] * 100;
-    const lists = o.lists || null;
-    const full = lists ? lists.map(l => l.filter(pid => idx.has(pid)).slice(0, Rr)) : null;
-    // average-player entry: the average player on my roster when a league is loaded, else the Zscore pool's average; needs enough
-    // real players that the replacement window never reaches it
-    let ai = -1;
-    const pool = full && full[0].length ? full[0].map(pid => P[idx.get(pid)]) : tab.filter(t => t.inPool && idx.has(t.pid)).map(t => P[idx.get(t.pid)]);
-    if (pool.length && n0 >= N * Rr + 8) {
-      const x = Array.from(pool[0].x, (_, c) => pool.reduce((a, p) => a + p.x[c], 0) / pool.length), pv = Array.from(pool[0].pv, (_, c) => pool.reduce((a, p) => a + p.pv[c], 0) / pool.length);
-      const a = Object.assign({}, pool[0], { id: n0, x: Float64Array.from(x), pv: Float64Array.from(pv), adpUse: 1e4, sd: 1, fieldV: -1e9, boardRaw: -1e9, adpE: 1e4, sdE: 1 });
-      P.push(a); ai = n0;
-    }
-    const gains = (picks, owner) => {
-      Eng.evaluate(P, ctx, cfg, { picks, owner });
-      const base = ai < 0 ? { c: pts < 0 ? 0 : null, m: 0 } : { c: cOf(P[ai]), m: mOf(P[ai]) };
-      return { g: P.slice(0, n0).map(p => ({ c: cOf(p), m: mOf(p) })), base };
-    };
-    const rep = new Map(), avg = new Map(), put = (r, pid) => { const i = idx.get(pid), v = r.g[i]; rep.set(pid, v); avg.set(pid, { c: pts < 0 ? v.c - r.base.c : null, m: v.m - r.base.m }); };
-    const build = skip => {   // my team in slots 0..R-1 (minus the skipped pid), team t in slots t*R..
-      const picks = new Array(N * Rr).fill(null), owner = new Array(N * Rr);
-      for (let k = 0; k < N * Rr; k++) owner[k] = Math.floor(k / Rr);
-      if (full) full.forEach((l, t) => l.forEach((pid, s) => { if (pid !== skip) picks[t * Rr + s] = idx.get(pid); }));
-      return { picks, owner };
-    };
-    const weakest = full && full[0].length >= Rr ? full[0][full[0].length - 1] : null;
-    const main = build(weakest), r0 = gains(main.picks, lists ? main.owner : undefined);
-    live.forEach(r => put(r0, r.pid));
-    const pending = full ? full[0].filter(pid => pid !== weakest) : [];
-    return { rep, avg, pending, hasAvg: ai >= 0, step() { const pid = pending.shift(); if (pid == null) return null; const b = build(pid); put(gains(b.picks, b.owner), pid); return pid; } };
-  }
-
-  const api = { WEIGHTS, TYPES, PO_LAMBDA, cfgFor, projSource, seasonSource, windowSource, ownersOf, SOURCES, WINDAYS, sourceRows, loadBox, matchRows, sourcePool, table, playoffGames, withPlayoffs, winStart };
-  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Rankings = api;
-})(this);
-
 // Team tab core (#131, 2026-10-25): preview roster state and swaps. Pure; browser and Node. Nothing here touches the saved league.
 // Slots: active, reserve, il. Fantrax RESERVE is the reserve (it fills the nights Active leaves open, so it counts); IL does not count.
 (function (root) {
@@ -970,7 +735,7 @@
   function ilPairs(ctx, state) {
     if (!ctx.teamTab || ctx.basis === 'pergame') return [];
     const c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), act = keys.filter(k => state.slots[k] === 'active'), il = keys.filter(k => state.slots[k] === 'il');
-    if (act.length < ctx.L.maxActive || !il.length) return [];
+    if (!(act.length >= ctx.L.maxActive) || !act.length || !il.length) return [];
     const v = k => Matchup.nightValue(ctx, ctx.pool.byKey.get(k)), worst = act.slice().sort((a, b) => v(a) - v(b));
     return il.map((k, n) => [worst[n % worst.length], k]);
   }
@@ -1041,6 +806,17 @@
 
   const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, ilPairs, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
+})(typeof self !== 'undefined' ? self : this);
+
+// The one shrink every Win C / Win M display reads (#139, #147): Team, Rankings and the Trade Analyzer. Display only, never in the Model pick.
+// Fitted leave-one-season-out on 3 seasons of rest-of-season forecasts (calib_ros_k.js): pooled k 0.43 match, 0.65 per category; shipped at
+// 0.6 / 0.75 (user, 2026-10-26) because the backtest keeps draft rosters and preseason lines, so the live app is likely less overconfident.
+(function (root) {
+  'use strict';
+  const SHRINK = { match: 0.6, cat: 0.75 };
+  const shrink = (p, k) => 0.5 + k * (p - 0.5);
+  const api = { SHRINK, shrink };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.WinK = api;
 })(typeof self !== 'undefined' ? self : this);
 
 // Team tab win numbers (#131 PR 2, 2026-10-25; moved onto the Rankings / Draft-tab engine 2026-10-26): the matrix of the previewed
@@ -1380,236 +1156,157 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
-// Team tab page logic (#131 PR 3, 2026-10-25): the roster table rows and team average, the stepwise Win scoring job with its cache, and the
-// swap-box helpers. Pure; browser and Node. team.html only draws what this returns. Nothing here touches ctx, the pool or the saved league.
-// Plays % is a team-makeup share (who gets a lineup slot each night); GL is projected games left (team games x g/82, which already
-// covers injuries and rest), so GL is never multiplied by Plays %. Only the team average and Win always use Plays %; the player rows use
-// it only when the "adjust by Plays %" box is checked (opts.adjust).
+// Trade core (2026-10-20): rest-of-season Win M for a roster change, perceived player value and trade likelihood.
+// Pure; browser and Node. Builds on matchup_core (a team's week vs its real opponent) and inseason_players (value scale).
 (function (root) {
   'use strict';
-  const Team = root.Team || require('./team_core.js'), TeamWin = root.TeamWin || require('./team_win.js'), Points = root.Points || require('./points_core.js'), Matchup = root.Matchup || require('./matchup_core.js'), Rk = root.Rankings || require('./rankings_core.js');
-  const SLOT_ORDER = Team.SLOTS;
-  const COUNT = ['tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'];
+  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), TeamWin = root.TeamWin || require('./team_win.js');
 
-  // projected remaining games: the team's games to the end of the NBA season times the player's availability (g/82)
-  // (the Team tab's ctx scales by Team.avail instead: Per game compares everyone at peak non-injury performance, so full team games)
-  const gamesLeft = (ctx, pp) => Team.seasonGamesLeft(ctx, pp.t) * (ctx.teamTab ? Team.avail(ctx, pp) : Math.min(1, pp.g / 82));
+  // winM was 0.1 on the old pairMatchup scale; #147 moved dB to the TeamWin forecaster, where dB is larger, so 0.1 x 0.672 (a fit of old dB on new dB over
+  // the 2145 one-for-one candidates of the fixture league, scratch script fit_winm.js) keeps the likelihood moving with dB as much as before.
+  // #151 moved dB onto the Team tab's Season rules (IL at g/82, bench Active): the same fit of the 2145 candidates, dB(#147) on dB(#151), gave slope 0.922
+  // (R2 0.785), so 0.07 x 0.922 = 0.065
+  const TRADE_W = { cur: 0.4, proj: 0.3, adp: 0.3, shrinkGames: 20, slope: 2.0, winM: 0.065, tagGap: 0.5, bias: -0.75 };   // bias: a manager wants to come out ahead, so an even-looking swap is not a coin flip
 
-  // a per-game line times f; percentages stay, attempts and counting stats scale
-  function scaled(line, f) {
-    const o = { fgp: line.fgp, ftp: line.ftp, fga: line.fga * f, fta: line.fta * f };
-    COUNT.forEach(k => { o[k] = line[k] * f; });
-    return o;
-  }
-
-  // opts: zCats (pool player -> per-game category Zs[9], or null), weights (0-1 per category), cats (9 | 8), adjust (bool),
-  // view 'game' (per game) | 'ros' (per game x GL). -> { groups: [{ slot, rows }], rows, avg, avgZ }
-  // row: { key, n, t, pos, slot, gl, mpg, pct, hypo, stat, cats, z }; avg is Team.teamLine over the counted players (Plays % always in),
-  // avgZ is the Plays % weighted Z per lineup slot (null without zCats)
-  function rows(ctx, state, opts) {
-    const o = opts || {}, plays = Team.playsPct(ctx, state), nc = o.cats === 8 ? 8 : 9, slots = ctx.L.maxActive;
-    const all = state.order.map(key => {
-      const pp = ctx.pool.byKey.get(key), p = plays[key], gl = gamesLeft(ctx, pp), f = o.adjust ? (p.pct == null ? 0 : p.pct) : 1;
-      const cats = o.zCats ? o.zCats(pp) : null;
-      return { key, n: pp.n, t: pp.t, pos: pp.pos, slot: state.slots[key], gl, mpg: pp.mpg == null ? null : pp.mpg, pct: p.pct, hypo: !!p.hypo,
-        stat: scaled(pp.line, (o.view === 'ros' ? gl : 1) * f),
-        cats: cats && cats.map(v => v * f), z: cats ? Team.weightedZ(cats.map(v => v * f), o.weights, nc) : null };
+  // Rest-of-season Win M with the rosters as given (fids per team): the Team tab's forecaster (TeamWin.leagueWin, one Engine.evaluate run, the
+  // shared WinK.SHRINK on every term), the mean over every other team weighted equally (user, 2026-10-26: until playoff odds are in).
+  // On the Team tab's Season rules (#151): IL players count at their availability g/82, the bench is Active. opts: cats, points, shrink as TeamWin.leagueWin. -> { mean, opps: [{ opp, p }] }, mean null with no weeks left
+  function rosMeans(ctx, roster, teams, opts) {
+    const none = { mean: null, opps: [] }, lw = ctx.cur == null ? null : TeamWin.leagueWin(ctx, roster, Object.assign({}, opts, { rows: teams })), out = {};
+    teams.forEach(t => {
+      if (!lw) { out[t] = none; return; }
+      const row = lw.P[lw.ids.indexOf(t)], opps = lw.ids.map((o, j) => ({ opp: o, p: row[j] })).filter(x => x.opp !== t);
+      out[t] = { mean: opps.length ? opps.reduce((s, x) => s + x.p, 0) / opps.length : null, opps };
     });
-    // points leagues (#137): FP of the row's scaled line, so the column follows Per game / Rest of season and the Plays % box
-    if (o.points) all.forEach(r => { r.fp = Points.perGame(r.stat, o.points); });
-    const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
-    // Plays % is the lineup share only; Win also counts how much of the time a player is there (Team.avail: 1 on Per game and on a plain ctx),
-    // so the team line and avgZ weight each player by both
-    const wt = k => plays[k].wt !== undefined ? plays[k].wt : plays[k].pct == null ? null : plays[k].pct * (ctx.teamTab ? Team.avail(ctx, ctx.pool.byKey.get(k)) : 1);
-    const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: wt(k), hypo: plays[k].hypo })), slots);
-    let avgCats = null;
-    if (o.zCats) {
-      avgCats = Array(9).fill(0);
-      state.order.forEach(k => { const p = plays[k], c = o.zCats(ctx.pool.byKey.get(k)); if (!p.hypo && p.pct != null && c) c.forEach((v, i) => { avgCats[i] += wt(k) * v / slots; }); });
+    return out;
+  }
+  const rosWinM = (ctx, roster, teamId, opts) => rosMeans(ctx, roster, [teamId], opts)[teamId];
+  const optKey = o => o ? JSON.stringify([o.cats, o.points, o.shrink, o.basis]) : '';
+
+  // projected players' values, best first (the ADP-implied value of a rank)
+  function projValues(ctx) {
+    if (!ctx._projVals) ctx._projVals = ctx.pool.players.filter(p => p.src === 'proj').map(p => InPlayers.valueZ(p.line, p.g, ctx.ref)).sort((a, b) => b - a);
+    return ctx._projVals;
+  }
+  // an IL player's season value: his projected games (which already hold the time he misses) at his line, the rest of the season at the
+  // line of his owner's worst non-IL player (user, 2026-10-26; the receiving team's in a trade, user 2026-10-27); everyone else is valued over his own games
+  const FULL_G = 82;
+  function worstLine(ctx, owner) {
+    const c = ctx._worst = ctx._worst || {};
+    if (!(owner in c)) {
+      const ps = (ctx.roster[owner] || []).map(f => ctx.pool.byKey.get(f)).filter(p => p.slot !== 'IR').sort((a, b) => InPlayers.valueZ(a.line, a.g, ctx.ref) - InPlayers.valueZ(b.line, b.g, ctx.ref));
+      c[owner] = ps.length ? ps[0].line : null;
     }
-    const avgZ = avgCats ? Team.weightedZ(avgCats, o.weights, nc) : null;
-    return { groups, rows: all, avg, avgZ, avgCats, avgFp: o.points ? Points.perGame(avg, o.points) : null };
+    return c[owner];
+  }
+  // fillOwner: the team whose worst player fills the rest (default his owner; in a trade the team that receives him, #153)
+  function seasonZ(ctx, pp, line, fillOwner) {
+    const fill = pp.slot === 'IR' && pp.g < FULL_G ? worstLine(ctx, fillOwner || pp.owner) : null;
+    return fill ? InPlayers.valueZFill(line, pp.g, fill, FULL_G, ctx.ref) : InPlayers.valueZ(line, pp.g, ctx.ref);
+  }
+  function perceived(ctx, pp, fillOwner) {
+    const proj = seasonZ(ctx, pp, pp.line, fillOwner), cur = seasonZ(ctx, pp, InPlayers.curLine(pp, TRADE_W.shrinkGames), fillOwner);
+    const vals = projValues(ctx), rank = Math.max(1, Math.min(vals.length, Math.round(pp.adp == null ? 168 : pp.adp)));
+    const adp = vals[rank - 1];
+    return { cur, proj, adp, pv: TRADE_W.cur * cur + TRADE_W.proj * proj + TRADE_W.adp * adp, rv: proj };
   }
 
-  // each category's share of the weighted Z (cats x base weight x user weight), so the parts add up to Team.weightedZ
-  function zParts(cats, weights, nc) {
-    return cats.map((v, c) => Team.weightedZ(cats.map((x, i) => i === c ? x : 0), weights, nc));
+  function baseline(ctx, t, opts) {
+    const ro = ctx._ros = ctx._ros || {}, k = t + '#' + optKey(opts);
+    return ro[k] === undefined ? (ro[k] = rosWinM(ctx, ctx.roster, t, opts).mean) : ro[k];
+  }
+  // aGets: fids A receives from B; bGets: fids B receives from A. dA, dB in percentage points of rest-of-season Win M (opts: see rosMeans).
+  function evaluateTrade(ctx, { a, b, aGets, bGets }, opts) {
+    if (a === b) throw new Error('A trade needs two different teams');
+    const ra = new Set(ctx.roster[a]), rb = new Set(ctx.roster[b]);
+    aGets.forEach(f => { if (!rb.has(f)) throw new Error('Player ' + f + ' is not on the giving team'); if (bGets.includes(f)) throw new Error('Player ' + f + ' is on both sides'); });
+    bGets.forEach(f => { if (!ra.has(f)) throw new Error('Player ' + f + ' is not on the giving team'); });
+    const R = Object.assign({}, ctx.roster);
+    R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets);
+    R[b] = ctx.roster[b].filter(f => !aGets.includes(f)).concat(bGets);
+    // a side left with more non-IL players than the limit drops its worst ones (#153); a team already over it is not charged for the trade
+    const nonIR = f => ctx.pool.byKey.get(f).slot !== 'IR', val = f => { const p = ctx.pool.byKey.get(f); return InPlayers.valueZ(p.line, p.g, ctx.ref); };
+    const capDrops = t => {
+      const over = R[t].filter(nonIR).length - Math.max(ctx.L.maxPlayers || 0, ctx.roster[t].filter(nonIR).length);
+      return ctx.L.maxPlayers > 0 && over > 0 ? R[t].filter(nonIR).sort((x, y) => val(x) - val(y) || (x < y ? -1 : 1)).slice(0, over) : [];
+    };
+    const drops = { [a]: capDrops(a), [b]: capDrops(b) };
+    R[a] = R[a].filter(f => !drops[a].includes(f)); R[b] = R[b].filter(f => !drops[b].includes(f));
+    // one league run gives both sides; cached per (the two changed rosters, options)
+    const sig = t => R[t].slice().sort().join(','), cache = ctx._rosCache = ctx._rosCache || new Map(), key = a + '#' + sig(a) + '|' + b + '#' + sig(b) + '|' + optKey(opts);
+    if (!cache.has(key)) { const m = rosMeans(ctx, R, [a, b], opts); cache.set(key, [m[a].mean, m[b].mean]); }
+    const after = cache.get(key), dA = 100 * (after[0] - baseline(ctx, a, opts)), dB = 100 * (after[1] - baseline(ctx, b, opts));
+    // B's view of the swap: an IL player is filled by B's worst player on either side (the fill swaps with him)
+    const pvSum = fs => fs.reduce((s, f) => s + perceived(ctx, ctx.pool.byKey.get(f), b).pv, 0);
+    const gapB = pvSum(bGets) - pvSum(aGets);
+    return { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi: aGets.length !== bGets.length, drops };
   }
 
-  // ---- Win scoring, one piece per step() so the page stays responsive: the matrix first, then one roster player per step ----
-  // -> { done, matrix, players, step() }; step() returns true while there is more to do. players: { key: { c, m, dCat[9], hypo? } }
-  function winJob(ctx, state, opts) {
-    const keys = state.order.slice();
-    let po = opts;   // for 'avg' the average player is built once, not per roster player
-    const job = { done: false, matrix: null, players: {}, step() {
-      if (job.done) return false;
-      if (!job.matrix) { job.matrix = TeamWin.matrix(ctx, state, opts); if (job.matrix.mean && opts && opts.baseline === 'avg') po = Object.assign({}, opts, { ap: TeamWin.avgParts(ctx, state, job.matrix.weeks) }); }
-      else {
-        const k = keys[Object.keys(job.players).length];
-        job.players[k] = TeamWin.playerGain(ctx, state, k, job.matrix, po);
-      }
-      if (job.matrix && Object.keys(job.players).length === keys.length) job.done = true;
-      return true;
-    } };
-    return job;
-  }
-
-  // ---- player list scoring (the Team tab module), in pieces of about `budgetMs` so the page stays responsive ----
-  // pieces: the matrix, one raw gain per counted player ('rep' only), the setup, then one candidate row each.
-  // opts: baseline 'rep' | 'avg', cats (weights are not an input: they only re-sort, TeamWin.moduleSort). candidates default to the whole pool.
-  // -> { done, rows (unsorted, in candidate order), n, total, step(budgetMs, clock) }; step() returns true while it did work
-  function moduleJob(ctx, state, opts, candidates) {
-    const o = opts || {}, mo = { cats: o.cats, points: o.points }, cand = candidates || ctx.pool.players.map(p => p.key);
-    const counted = Team.counted(state, ctx);
-    let base = null, pw = {}, su = null;
-    const job = { done: false, rows: [], n: 0, total: cand.length, step(budgetMs, clock) {
-      if (job.done) return false;
-      const now = clock || Date.now, t0 = now();
-      do {
-        if (!base) { base = TeamWin.matrix(ctx, state, mo); if (!base.mean || !counted.length) { job.done = true; break; } }
-        else if (o.baseline !== 'avg' && Object.keys(pw).length < state.order.length) { const k = state.order[Object.keys(pw).length]; pw[k] = TeamWin.playerGain(ctx, state, k, base, mo); }
-        else if (!su) { su = TeamWin.moduleSetup(ctx, state, Object.assign({}, o, { base, pw })); if (!su) { job.done = true; break; } }
-        else { job.rows.push(TeamWin.moduleRow(ctx, state, su, cand[job.n++])); if (job.n >= cand.length) job.done = true; }
-      } while (!job.done && now() - t0 < budgetMs);
-      return true;
-    } };
-    return job;
-  }
-
-  // the first job that is not done, or null (the page steps one job per tick: roster Win first, then the list)
-  const nextJob = jobs => jobs.find(j => j && !j.done) || null;
-
-  // what a change did to the preview roster: keys out, keys in, and slot moves of players who stayed
-  function diff(before, after) {
-    return { out: before.order.filter(k => !(k in after.slots)), in: after.order.filter(k => !(k in before.slots)),
-      moves: after.order.filter(k => k in before.slots && before.slots[k] !== after.slots[k]).map(k => ({ key: k, from: before.slots[k], to: after.slots[k] })) };
-  }
-
-  // rows ordered by `val(row)` (a number or a string; null / undefined / NaN = missing, always last), 'asc' or 'desc'; ties keep the input order. A copy.
-  function sortRows(rows, val, dir) {
-    const sg = dir === 'asc' ? 1 : -1, miss = v => v == null || v !== v;
-    return rows.map((r, i) => ({ r, i, v: val(r) })).sort((a, b) => {
-      if (miss(a.v) || miss(b.v)) return miss(a.v) - miss(b.v) || a.i - b.i;
-      return (a.v < b.v ? -1 : a.v > b.v ? 1 : 0) * sg || a.i - b.i;
-    }).map(x => x.r);
-  }
-
-  // ctx given: the players the opponents received count too (the same roster reached by different trades scores differently)
-  const signature = (state, ctx) => state.order.map(k => k + ':' + state.slots[k]).join('|') + (ctx ? '>' + Object.entries(TeamWin.received(ctx, state)).map(([t, r]) => t + ':' + r.map(x => x.key + x.slot).join(',')).sort().join(';') + '~' + TeamWin.goneKeys(ctx, state).join(',') : '');
-
-  // finished and half-finished jobs by ctx object, roster and win options (cats); the weights are not an input, so moving a slider never rescores
-  function createScorer() {
-    const by = new WeakMap();
-    const bucket = ctx => { let m = by.get(ctx); if (!m) by.set(ctx, m = new Map()); return m; };
-    const keyOf = (ctx, state, o) => signature(state, ctx) + '#' + (o.cats || '') + '#' + (o.baseline || '') + '#' + (o.points ? Points.key(o.points) : '');
-    return {
-      get(ctx, state, opts) {
-        const m = bucket(ctx), sig = keyOf(ctx, state, opts || {});
-        if (!m.has(sig)) m.set(sig, winJob(ctx, state, opts));
-        return m.get(sig);
-      },
-      getModule(ctx, state, opts) {
-        const m = bucket(ctx), sig = 'module#' + keyOf(ctx, state, opts || {});
-        if (!m.has(sig)) m.set(sig, moduleJob(ctx, state, opts));
-        return m.get(sig);
-      } };
-  }
-
-  // ---- sources (2026-10-26): the same TeamWin math on another source's lines ----
-  // The context for source `src` ('avg' = the pool as the Team tab builds it, the plain Matchup.makeCtx). Any other source gets a copy of
-  // the pool with that source's lines (Rankings.sourcePool; a player with no row keeps his projection, lineFb) and the plain context's
-  // projection ref, so only the lines change. args = Matchup.makeCtx's argument; rows = Rankings.sourceRows(src, ...).
-  // opts { teamTab, basis } (2026-10-26) is how the Team tab and Rankings with a team ask for the Team-tab rules (Team.countedSlots, Team.avail);
-  // a ctx made without opts carries neither field, which is what keeps the Trade Analyzer and Rankings with no team on today's numbers
-  function sourceCtx(args, src, rows, fxPlayers, opts) {
-    const base = Matchup.makeCtx(args);
-    const ctx = src === 'avg' ? base : Matchup.makeCtx(Object.assign({}, args, { pool: Rk.sourcePool(args.pool, Rk.matchRows(src, rows, args.pool, fxPlayers)), ref: base.ref }));
-    if (opts && opts.teamTab) { ctx.teamTab = true; ctx.basis = opts.basis || 'pergame'; }
-    return ctx;
-  }
-
-  // ---- the list as drawn ----
-  const SLOT_LABEL = { active: 'Active', reserve: 'Reserve', il: 'IL' };
-  // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query.
-  // -> { rows: [{ ...row, n, t, pos, label }], total (after the filters) }; every row is returned. My players sent out of the preview are
-  // free agents here ("Sent out"). The search only filters (Team.search would reorder by name match), so the Win M order stays.
-  function moduleView(rows, ctx, state, opts) {
-    const o = opts || {}, me = ctx.me, teamName = id => ((ctx.L.teams || []).find(t => t.id === id) || {}).name || String(id);
-    let list = rows.map(r => {
-      const pp = ctx.pool.byKey.get(r.key) || {}, mine = r.key in state.slots, sent = !mine && pp.owner === me;
-      const label = mine ? 'You · ' + SLOT_LABEL[state.slots[r.key]] : sent ? 'Sent out' : pp.owner ? teamName(pp.owner) : 'Free agent';
-      return Object.assign({}, r, { n: pp.n, t: pp.t, pos: pp.pos, label, _own: mine ? 'me' : (sent || !pp.owner) ? 'fa' : pp.owner });
-    });
-    if (o.owner && o.owner !== 'all') list = list.filter(r => r._own === o.owner);
-    if (o.query) { const hit = new Set(Team.search(list, o.query, Infinity).map(r => r.key)); list = list.filter(r => hit.has(r.key)); }
-    return { rows: list.map(r => { const x = Object.assign({}, r); delete x._own; return x; }), total: list.length };
-  }
-
-  // ---- drops from the list ----
-  // a list player dropped on a roster row takes that player's slot (one of mine: the two trade slots); dropped on a slot group he joins it
-  function dropSwap(state, inKey, outKey) {
-    if (inKey in state.slots) return Team.moveSlot(Team.moveSlot(state, inKey, state.slots[outKey]), outKey, state.slots[inKey]);
-    return Team.moveSlot(Team.applySwap(state, [outKey], [inKey]), inKey, state.slots[outKey]);
-  }
-  // max (the Team tab passes maxPlayers): Active never goes above it; a player who would make it larger is refused with an error
-  // ilMax (the league's IL spots): IL never goes above it either, so IL cannot park a healthy player to get round the Active limit
-  const slotCount = (state, slot) => state.order.filter(k => state.slots[k] === slot).length;
-  const activeCount = state => slotCount(state, 'active');
-  const LIMITS = { active: 'Active', il: 'IL' };
-  const full = (state, key, slot, max, ilMax) => {
-    const cap = slot === 'active' ? max : slot === 'il' ? ilMax : null;
-    return cap != null && state.slots[key] !== slot && slotCount(state, slot) >= cap;
+  // ---- finder ----
+  const oneForOne = (ctx, give, target, team) => {
+    const r = evaluateTrade(ctx, { a: ctx.me, b: team, aGets: [target.key], bGets: [give.key] }), v = perceived(ctx, target);
+    return { give, target, team, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, buyLow: v.rv - v.pv >= TRADE_W.tagGap };
   };
-  const FULL_MSG = (slot, cap) => LIMITS[slot] + ' is full (' + cap + ')';
-  function dropIn(state, key, slot, max, ilMax) {
-    if (full(state, key, slot, max, ilMax)) throw new Error(FULL_MSG(slot, slot === 'active' ? max : ilMax));
-    return key in state.slots ? Team.moveSlot(state, key, slot) : Team.moveSlot(Team.applySwap(state, [], [key]), key, slot);
+  const byValue = (a, b) => b.dA * b.likelihood - a.dA * a.likelihood;
+  // every one-for-one trade for one of my players (myKey) with every other team's player, helpful or not, unfiltered; 'any' offers each of my players
+  function tradeCandidates(ctx, myKey) {
+    const gives = myKey === 'any' ? ctx.roster[ctx.me] : [myKey], rows = [];
+    gives.forEach(g => {
+      const give = ctx.pool.byKey.get(g);
+      Object.keys(ctx.roster).forEach(t => {
+        if (t === ctx.me) return;
+        ctx.roster[t].forEach(f => rows.push(oneForOne(ctx, give, ctx.pool.byKey.get(f), t)));
+      });
+    });
+    return rows;
+  }
+  // minLikelihood is 0-1; minDA and minDB are Win M points. The filters run before the limit.
+  function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = -Infinity, minDB = -Infinity } = {}) {
+    return rows.filter(r => r.likelihood >= minLikelihood && r.dA >= minDA && r.dB >= minDB).sort(byValue).slice(0, limit);
+  }
+  // Text box input. Likelihood: "50%", "0.5" or "50" (above 1 means percent; a bare 1 is 100%). Win M points: "2", "2%".
+  // Blank is no limit (null); anything else that is not a number is invalid (undefined).
+  function parseFilter(kind, text) {
+    const t = String(text == null ? '' : text).trim().toLowerCase().replace('％', '%').replace(/^(-?\d+),(\d+)/, '$1.$2');
+    if (t === '' || t === 'any') return null;
+    const m = /^(-?\d*\.?\d+)\s*(%|percent|pcts?|pts?|points?)?$/.exec(t);
+    if (!m) return undefined;
+    const v = parseFloat(m[1]);
+    if (kind === 'lik') { const f = (m[2] && /^(%|percent|pcts?)$/.test(m[2])) || v > 1 ? v / 100 : v; return f >= 0 && f <= 1 ? f : undefined; }
+    return v;
+  }
+  // Saved candidates (the page keeps them in the browser so a reload does not search again): compact rows, rebuilt from the pool
+  const packCandidates = rows => rows.map(r => [r.give.key, r.target.key, r.team, r.likelihood, r.dA, r.dB, r.total, r.buyLow ? 1 : 0]);
+  function unpackCandidates(packed, pool) {
+    const out = [];
+    packed.forEach(([g, t, team, likelihood, dA, dB, total, bl]) => {
+      const give = pool.byKey.get(g), target = pool.byKey.get(t);
+      if (give && target) out.push({ give, target, team, likelihood, dA, dB, total, buyLow: !!bl });
+    });
+    return out;
+  }
+  // What the candidates depend on: both sides' rosters, my team, the current period, the day, the weights and a model version
+  function candSig(ctx, day, version) {
+    const ros = Object.keys(ctx.roster).sort().map(t => t + ':' + ctx.roster[t].slice().sort().join(',')).join(';');
+    let h = 0; const str = [ros, ctx.me, ctx.cur, day, version, JSON.stringify(TRADE_W)].join('|');
+    for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
+    return day + ':' + ctx.me + ':' + ctx.cur + ':' + (h >>> 0).toString(36) + ':' + str.length;
+  }
+  const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), Object.assign({ minDA: 1e-9 }, opts));   // by default only trades that help me
+  function sellHighBuyLow(ctx, { limit = 8, targets = 3, candidates = null } = {}) {
+    const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
+    const mine = ctx.roster[ctx.me].map(f => tag(ctx.pool.byKey.get(f), 1)).filter(x => x.gap >= TRADE_W.tagGap).sort((a, b) => b.gap - a.gap).slice(0, limit);
+    const sellHigh = mine.map(x => ({ player: x.player, gap: x.gap, trades: candidates ? filterTrades(candidates(x.player.key), { limit: targets, minDA: 1e-9 }) : findTrades(ctx, x.player.key, { limit: targets }) }));
+    const theirs = [];
+    Object.keys(ctx.roster).forEach(t => { if (t !== ctx.me) ctx.roster[t].forEach(f => { const x = tag(ctx.pool.byKey.get(f), -1); if (x.gap >= TRADE_W.tagGap) theirs.push(Object.assign(x, { team: t })); }); });
+    const buyLow = theirs.sort((a, b) => b.gap - a.gap).slice(0, limit).map(x => ({
+      player: x.player, gap: x.gap,
+      trades: (candidates ? [].concat.apply([], ctx.roster[ctx.me].map(f => candidates(f).filter(r => r.target.key === x.player.key && r.dA > 0))) : ctx.roster[ctx.me].map(f => oneForOne(ctx, ctx.pool.byKey.get(f), x.player, x.team)).filter(r => r.dA > 0)).sort(byValue).slice(0, targets)
+    }));
+    return { sellHigh, buyLow };
   }
 
-  // ---- slots ----
-  // a move to another slot; the same slot returns the same state object; max and ilMax as in dropIn
-  function move(state, key, slot, max, ilMax) {
-    if (state.slots[key] === slot) return state;
-    if (full(state, key, slot, max, ilMax)) throw new Error(FULL_MSG(slot, slot === 'active' ? max : ilMax));
-    return Team.moveSlot(state, key, slot);
-  }
-
-  // Fill Active (2026-10-26): the probe every non-IL player is scored on (as if all were Active, since a Reserve player's Win M would be
-  // measured on leftovers), then the top n by score go to Active and the rest to Reserve; IL is untouched. score(key) -> number | null (null
-  // last), ties keep roster order. Goes through Team.moveSlot so state.moves is kept; nothing to change returns the same object
-  const fillProbe = state => state.order.reduce((s, k) => state.slots[k] === 'il' || s.slots[k] === 'active' ? s : Team.moveSlot(s, k, 'active'), state);
-  function autoFill(state, score, n) {
-    const miss = v => v == null || v !== v, non = state.order.filter(k => state.slots[k] !== 'il');
-    const ranked = non.map((k, i) => ({ k, i, v: score(k) })).sort((a, b) => (miss(a.v) - miss(b.v)) || (miss(a.v) ? 0 : b.v - a.v) || a.i - b.i).map(x => x.k);
-    return ranked.reduce((s, k, i) => { const to = i < n ? 'active' : 'reserve'; return s.slots[k] === to ? s : Team.moveSlot(s, k, to); }, state);
-  }
-  // players per slot; over is set only for Active above the league limit
-  function slotCounts(state, maxActive) {
-    const o = {};
-    SLOT_ORDER.forEach(sl => { const n = state.order.filter(k => state.slots[k] === sl).length; o[sl] = { n, over: sl === 'active' && n > maxActive }; });
-    return o;
-  }
-
-  // ---- swap boxes ----
-  const sendOutList = (ctx, state) => state.order.map(k => ctx.pool.byKey.get(k));
-  const bringInList = (ctx, state) => ctx.pool.players.filter(p => !(p.key in state.slots));
-  const pick = (chips, item) => (item && !chips.some(c => c.key === item.key) ? chips.concat([item]) : chips);
-  // max (Team tab): incoming players take Active while there is room after the outgoing ones leave, else Reserve; without it they land in Reserve.
-  // ctx (Team tab, with max): on the seasonal bases, where IL counts, an incoming player who finds Active full takes an IL slot an outgoing
-  // player vacated before the Reserve, as TeamWin's list scores him (swapSlot)
-  function apply(state, outs, ins, max, ctx) {
-    const s = Team.applySwap(state, outs.map(x => x.key), ins.map(x => x.key));
-    if (max == null) return s;
-    let room = max - activeCount(s), freedIl = ctx && Team.countedSlots(ctx).includes('il') ? outs.filter(x => state.slots[x.key] === 'il').length : 0;
-    return ins.reduce((t, x) => {
-      if (t.slots[x.key] === 'active') return t;
-      if (room > 0) { room--; return Team.moveSlot(t, x.key, 'active'); }
-      if (freedIl > 0) { freedIl--; return Team.moveSlot(t, x.key, 'il'); }
-      return t;
-    }, s);
-  }
-
-  const api = { gamesLeft, rows, zParts, move, fillProbe, autoFill, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, signature, sendOutList, bringInList, search: Team.search, pick, apply };
-  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
-})(typeof self !== 'undefined' ? self : this);
+  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
+})(this);
 
