@@ -95,7 +95,8 @@ function build(season, n0) {
       }
     });
   }
-  const n = cols.y.length, D = { n, y: Float32Array.from(cols.y), wk: Uint8Array.from(cols.wk), sd: Uint8Array.from(cols.sd), cat: Uint8Array.from(cols.cat), ck: Uint8Array.from(cols.ck), p: {} };
+  for (const k of ['wk', 'sd', 'cat', 'ck']) if (cols[k].some(v => v > 255)) throw new Error(`calib_ros: ${k} above 255 would wrap in a Uint8Array`);
+  const n = cols.y.length, D = { n, y:Float32Array.from(cols.y), wk: Uint8Array.from(cols.wk), sd: Uint8Array.from(cols.sd), cat: Uint8Array.from(cols.cat), ck: Uint8Array.from(cols.ck), p: {} };
   SRC.forEach(s => { D.p[s] = Float32Array.from(cols.p[s]); });
   return { D, pairWeeks, checks, season };
 }

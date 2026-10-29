@@ -76,6 +76,7 @@ function pushRows(cols, fc, i, j, out, meta) {
   add(9, out.match, f => f.match(i, j));
 }
 function finish(cols) {
+  for (const k of ['wk', 'sd', 'cat', 'ck']) if (cols[k].some(v => v > 255)) throw new Error(`calib_live: ${k} above 255 would wrap in a Uint8Array`);
   const D = { n: cols.y.length, y: Float32Array.from(cols.y), wk: Uint8Array.from(cols.wk), sd: Uint8Array.from(cols.sd), cat: Uint8Array.from(cols.cat), ck: Uint8Array.from(cols.ck), p: {} };
   Object.keys(cols.p).forEach(a => { D.p[a] = Float32Array.from(cols.p[a]); });
   return D;

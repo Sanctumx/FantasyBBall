@@ -108,7 +108,7 @@ log('\nk* of arm A by checkpoint (period), match: ' + CPS.map((c, ci) => `${c}: 
 log('k* of arm A by lag (outcome period - checkpoint), match: ' + lagB.map(([a, b]) => `${a}-${b}: ${f2(S.fitK(D, 'A', { kind: 'M', f: i => { const lag = D.wk[i] - CPS[D.ck[i]]; return lag >= a && lag <= b; } }))}`).join('  '));
 log(`k* without the two-week period 16: arm A match ${f2(S.fitK(D, 'A', { kind: 'M', f: i => D.wk[i] !== 16 }))}, category ${f2(S.fitK(D, 'A', { kind: 'C', f: i => D.wk[i] !== 16 }))}`);
 log(`Frozen draft arm C against the backtest: match ${f2(K.C.m.k)} vs .43, category ${f2(K.C.c.k)} vs .65`);
-log(`Season-to-date lines (S) vs preseason lines (A), match Brier at each arm's k*: ${f4(arm.S.m.brierFit)} vs ${f4(arm.A.m.brierFit)}; engine N = 120 (N) vs N = 12 (A): k ${f2(K.N.m.k)} vs ${f2(K.A.m.k)}`);
+log(`Season-to-date lines (S) vs preseason lines (A), match Brier at each arm's k*: ${f4(arm.S.m.brierFit)} vs ${f4(arm.A.m.brierFit)}; engine N = 120 (N, INVALID: the pool cannot fill 120 rosters, not a result) vs N = 12 (A): k ${f2(K.N.m.k)} vs ${f2(K.A.m.k)}`);
 log('\n== Verdict (rules fixed in docs/superpowers/specs/2026-10-29-live-roster-k-design.md before any result; the analyst judges)');
 V.forEach(log);
 fs.writeFileSync(SMOKE ? 'results_calib_live_smoke.txt' : 'results_calib_live.txt', OUT.join('\n') + '\n');
