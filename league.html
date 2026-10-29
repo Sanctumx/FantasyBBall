@@ -96,7 +96,7 @@ td b .chip,.chip.b{font-weight:700}
 header.top .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-radius:6px}
 @media (max-width:640px){header.top #how-open{padding:8px 14px}}
-/* How it works dialog: same markup and look as the Draft Kit (markup copied in by gen.py from app.html) */
+/* How it works dialog: same look as the Draft Kit's, with this tab's own text */
 .how{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:0;width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
 .how::backdrop{background:rgba(0,0,0,.45)}
 .how-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);padding:14px 20px 10px;border-bottom:1px solid var(--line)}
@@ -118,83 +118,37 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
 </header>
 <dialog class="how" id="how" aria-labelledby="how-title">
-  <div class="how-head"><h2 id="how-title">How it works</h2><button class="btn" type="button" id="how-close">Close</button></div>
-  <p class="how-intro">Formulas, fitted numbers and every backtest behind these choices are in <a href="math.html" target="_blank" rel="noopener">The Math Behind the Model</a>.</p>
+  <div class="how-head"><h2 id="how-title">How the League tab works</h2><button class="btn" type="button" id="how-close">Close</button></div>
+  <p class="how-intro">Every team in your Fantrax league, scored by the same rules as the Team tab. Nothing here is saved or sent to Fantrax.</p>
   <div class="how-grid">
    <div class="how-col">
     <section class="how-card">
-      <h3>The values</h3>
-      <h4>Zscore</h4>
-      <p>Season value against an average drafted player. Zscore type picks the scaling: Standard (the default; each category's mean and spread over the top players, as BBM and Hashtag compute it), ROTO-Adjusted (each category scaled by how far apart teams finish in simulated drafts, about 2.5× smaller; what the Model pick uses) or H2H-Adjusted (scaled by the weekly head-to-head gap, season spread plus week-to-week swing, so swingy categories like points and steals count less). It changes the Zscore column, sorting, and # and Edge when they use Zscore, never Win or the Model pick. −1 and −2 take out his worst one or two categories, as on a punt team: 100% leaves them out, 50% counts them half.</p>
-      <h4>Projections</h4>
-      <p>Average (the default), BBM (Basketball Monster) or Hashtag (Hashtag Basketball). Average is the mean of both: games, minutes and per-game stats averaged, with FG% and FT% from the averaged makes and attempts. The two players Hashtag doesn't project keep their BBM numbers. On 2024-25 preseason projections scored against what happened, Average ranked players best and had the smallest stat errors, though the gaps were small, so the Model pick always uses Average. Backtests use each season's real preseason projections.</p>
-      <h4>Basis and IL spots</h4>
-      <p>How much projected missed games count: in full (Season), not at all (Per game, the default, as BBM ranks) or half (Mix). Season did best in backtests, so the Model pick always uses it. BBM's projected games already expect injury-prone players to bounce back, so counting them in full doesn't over-penalize risk. IL spots then count a share of missed games at waiver level: 47% with 1 spot, 70% with 2, 79% with 3, 81% with 4. Each extra spot adds less, because injuries overlap and short absences can't use one.</p>
-      <h4>Win C</h4>
-      <p>How much he raises your chance of winning each category against the other teams, compared with leaving the pick to waivers, summed in hundredths of a category win (72 is about three-quarters of a win). Your forecast is your picks plus a typical player at each pick left, so it changes every pick: a third big man adds less once you have two.</p>
-      <h4>Win M</h4>
-      <p>How much he raises your chance of winning the whole matchup (more categories than the opponent, ties half), in percentage points, averaged over opponents. It rewards close categories and gives little for ones you already win or can't.</p>
-      <h4>Weekly swing (H2H)</h4>
-      <p>Each category's week-to-week swing compared with how far apart teams sit; higher means a lead there is less reliable, so it counts for less. Teams with more games in a week tend to win the counting stats together, and the board accounts for that.</p>
-      <div class="swing" id="swing"></div>
-    </section>
-    <section class="how-card">
-      <h3>Picking</h3>
-      <h4># and the Model pick / Likely pick</h4>
-      <p># ranks available players by "# order by": Win C, Win M or the Zscore shown. Off the clock the badge reads Likely pick, your best target for your next pick, using Win M: his Win M if he's still there at your pick (if he's gone, the best player left instead), plus what is likely left at your following pick. On the clock it reads Model pick: everyone left is 100% there. Your first picks lean on value (half Zscore with a player's worst category counting half when negative, half Win C): 95% at your first pick, 73% at your second, 27% at your third, 5% at your fourth. After that it is Win M plus a look two picks ahead: the board re-runs with each candidate on your roster and adds the best player likely left at your next pick, so that pick is valued for the roster it will join. It always drafts with the settings that did best in backtests (Season, Average projections, Playoff boost Off), whatever the list shows; only league settings and Draft field reach it. In a backtest league where every team drafted by one pure strategy, it earned 14.8 prize equity per 100 seasons against 13.0 for H2H-Adjusted Zscore, 11.7 for ADP and 8.1 for Standard Zscore (an even share is 11.9). Grey names probably won't reach you.</p>
-      <h4>There at, Lasts to, Pick range</h4>
-      <p>His chance of still being there at your next pick and the one after, from ADP and how far real drafters stray from it (fitted on 50 real 12-team Fantrax drafts). Value drafters in the room are assumed to rank by Standard Zscore with TO ×0.5, whatever you choose here. Pick range is ADP ± one standard deviation.</p>
-      <h4>Edge</h4>
-      <p>ADP minus the pick his value says he deserves. Positive means he is going later than he should. Edge vs picks the value; an ADP past your draft's last pick counts as just after it (marked *).</p>
-      <h4>ADP</h4>
-      <p>Fantrax average draft position. Players without one are treated as late picks with a wide range.</p>
+      <h3>Where the numbers come from</h3>
+      <h4>The same rules as the Team tab</h4>
+      <p>Each team is built from the players on its current Fantrax roster, Active and Reserve, with its IL players counted on Total only. Plays % decides how often each player is in the lineup (the league's active limit caps each night), and the chances to win are computed by the Team tab's code, shrunk toward 50%. A team is scored on the players it has; open roster spots get no filler. For one team, the numbers here equal what the Team tab shows for it under the same Source and Stats.</p>
+      <h4>Source</h4>
+      <p>Which lines judge the players. Projections (Average, BBM or Hashtag; the default is the average) are what the Win numbers were calibrated on. Season to date and the recent-games windows (last week, 2 weeks, month) use this season's box scores, so they show form, and their Win numbers are uncalibrated. A player with no game in the source keeps his projection line.</p>
+      <h4>Stats: Total or Per game</h4>
+      <p>Total is the rest of the season: each player's line times his projected games left, with IL players counted at their availability. Per game is the team line the Team tab shows, IL players not counted. It changes every number on the page.</p>
+      <h4>Team in focus</h4>
+      <p>The team the first two sections are about. It starts as your team (Settings) and you can pick any other.</p>
     </section>
    </div>
    <div class="how-col">
     <section class="how-card">
-      <h3>League</h3>
-      <h4>Punting</h4>
-      <p>The board doesn't punt for you. With real projections and real ADP, every automatic punt tried (planned, softened or opportunistic) did worse than not punting in four seasons of backtests. To lean into a punt yourself, set that category's weight to ×0, which changes Zscore.</p>
-      <h4>Draft field</h4>
-      <p>How sharp the room is: the share of opponents' picks made by value instead of Fantrax ADP. Easy (the default) is mostly ADP drafters (8% by value), Average a mix of ADP, sharp and value drafters (31%, the league every backtest uses), Strong mostly sharp drafters (46%) and Very strong sharp and value drafters only (62%). A sharper field takes good-value players earlier, which changes who will still be there. Measured on real rooms it sits between Easy and Average, and a wrong guess either way cost little in backtests.</p>
-      <h4>Playoff games</h4>
-      <p>His team's games in your playoff weeks (2026-27 schedule; small numbers per round), Playoff boost scales Win and Zscore by 1 + strength × (his games ÷ the average − 1), kept within ×0.5–×1.5. Schedules differ by about ±11%, so it is a tiebreaker more than a driver. The Model pick keeps it Off, which did best in backtests.</p>
-      <h4>Scarcity</h4>
-      <p>Information only. Category scarcity is how thin each category is per roster spot once the next round's best in it are gone, among the players still likely to be drafted, against the whole pool before the draft and the other categories: a few players holding most of a category (blocks) makes it scarce from the start, and a category already drafted out (points late) makes it scarce later; position scarcity compares slots teams still need with good players left. Above 1× (red) there is less left than usual, below 1× (green) more. Boosting values by it cost about 5 points in backtests, because Win already counts what will be left.</p>
+      <h3>The four sections</h3>
+      <h4>Team in focus vs each team</h4>
+      <p>One row per opponent: the chance to win the weekly matchup (Match) and the chance to win each category. Click a heading to sort.</p>
+      <h4>Category profile</h4>
+      <p>Where the focus team stands: its rank among the teams, the categories it wins per week and its matchup win rate against the whole league. The table gives its win chance in each category against an average team here, its projected stat and its rank in that category (1 is best; fewest turnovers).</p>
+      <h4>Matchup matrix</h4>
+      <p>Every team against every other, row beats column. Matchup win % is the chance to win the match, Category win % is the chance to win one category (or the average over all), Expected categories is the expected number of categories won. Avg is the row's mean over all opponents.</p>
+      <h4>Team stats</h4>
+      <p>Each team's line as the Team tab shows it: Active and Reserve players weighted by Plays % (FG% and FT% from makes and attempts). Raw is the line on the chosen Stats basis (rest-of-season totals, or per game), Per week divides the totals by the matchup weeks left, Zscore is the team's Plays % weighted Zscore per lineup slot, and Rank orders the teams (1 is best). The Zscore select picks the type: Normal, H2H-adjusted or Roto-adjusted. Z and Rank compare teams across this league, with turnovers negated.</p>
     </section>
     <section class="how-card">
-      <h3>Using the board</h3>
-      <h4>Logging picks</h4>
-      <p>Type a name and press Enter or Taken, or press Taken on his row; the pick goes to the team on the clock. Undo pick takes back the last one; tap a recent pick twice to take back an earlier one.</p>
-      <h4>Fantrax sync</h4>
-      <p>The league comes from Settings (top right): open your league's home page on Fantrax, copy the address from the browser bar (it looks like fantrax.com/fantasy/league/<b>abc123xyz</b>/home), paste it under Fantrax league and press Load; the ID alone works too. Settings reads the teams, roster size and lineup slots from the league, saves the league for one-click switching (Rename gives one your own name) and asks which team is yours. On the board, the Fantrax draft panel's Import draft from league puts the league's picks on the board, and with Auto-sync on they keep arriving every 10 seconds on the right teams, traded picks included. Your team there only picks who is on the clock for you. Sync runs on the hosted site only.</p>
-      <h4>Stats and weights</h4>
-      <p>Stats picks what the nine category columns show: Win added, Zscore or projected stats. Category weights (×0 to ×2; TO starts at ×0.5) change Zscore only; Win always counts every category.</p>
-      <h4>League Dashboard</h4>
-      <p>League Dashboard (top right) analyzes the league loaded in Settings as it stands now: every team's current roster, scored by the Team tab's rules (Plays % lineups, win chances shrunk toward 50%). Players on IL are listed in the header; on Total they count at their availability, on Per game they do not. On top, the team in focus against each opponent (chance to win the matchup and each category) and its category profile (win chance against an average team, projected total, rank). Below, every team against every team (matchup win %, category win % or expected categories) and every team's projected stats (raw, per week, Zscore or rank). Basis Total or Per game sets the basis for every number on that page (Per game ignores missed games); Source picks the projections (or recent games) and Zscore type the Zscore view, as on the Team tab, so a team's numbers here match what the Team tab shows for it. Click any column header to sort; percentages show one decimal. Without a loaded league the page asks you to load one in Settings.</p>
-      <h4>Saved drafts</h4>
-      <p>Save, load, rename, delete or start a new draft; anything that would lose work asks for a second tap. Drafts live in this browser; Export (one draft) or Export all saves them to a file, and Import adds a file's drafts here, on any browser or device. Players are matched by name, so an older file still lands on the right players.</p>
-      <h4>Colors</h4>
-      <p>Green helps, red hurts, deeper means a bigger effect. There at and Lasts to are green from 75%, amber from 40%. Playoff games are green or red one game above or below average.</p>
-      <h4>Limits</h4>
-      <p>Games caps aren't modeled. Lineup slots (League settings in Settings: Positions and C, G, F, G/C, F/C and UTIL slots, read from Fantrax when you load the league; the rest of the roster is Reserve) are shown as position coverage under Your team but don't change values or the Model pick: in backtests slot conflicts cost only 0.1–0.3% of player-games, because on a typical day 6–8 of 12 players play and most have 2–3 positions. Fantrax scoring, categories, IL size and playoff start are not read; set them yourself in Settings. The League Dashboard does not count IR players. Matchup and Trade cover 9-cat H2H only.</p>
-    </section>
-    <section class="how-card">
-      <h3>In-season tools</h3>
-      <h4>Weekly Matchup Analyzer</h4>
-      <p>Matchup Analyzer (top right) reads the league loaded in Settings: rosters, this week's opponent and the free agents. Win M is your chance to win the matchup (more categories than the opponent, ties half) against this week's opponent only, from each player's projected per-game line and his team's real games that week. IR players sit out the current week only; on each day only as many players count as your lineup has active slots (10 here). Games left are whole games: every real game his team still has this week counts as one, and a player with no minutes in his team's last 3 games is counted out for the rest of the week (shown as out; a player who is playing now most likely plays his next 3-4 games). On a night with more players than active slots the lowest-value players sit.</p>
-      <h4>This week so far</h4>
-      <p>Once games of the current week are played (2026-27 box scores, updated hourly), Win M counts them: the so-far totals are known, and only the games still to play are projected, with their variance scaled by the share of games left and the shrink easing toward certainty as the week ends. FG% and FT% come from summed makes and attempts. The so-far totals are an estimate from your current non-IR roster (at most 10 players per day), since Fantrax gives no roster history. The Best single adds and the plan score the whole week from box scores like the headline.</p>
-      <h4>Adds and the plan</h4>
-      <p>Best single adds: one free agent in place of your lowest-value player, from tomorrow (claims run overnight). The plan is greedy: the add that helps Win M most, then the next, up to your adds left (4 a week); a player added earlier can be dropped later. May drop limits the drops to your 1 to 5 lowest-value players (players on the keep list are never dropped and don't count); All uses up to 5 for single adds and your bench size for the plan. Plans cover the current week only.</p>
-      <h4>Trade Analyzer</h4>
-      <p>Trade Win M is your average chance against every other team over the rest of the regular season (the Team tab's forecast, opponents weighted equally), with both rosters changed; an IL player counts as healthy, with the games his projection leaves him (it already includes the time he is expected to miss) and the reserve refilling the rest; projected playoffs are not included yet. Likelihood of trade comes from perceived value = 40% current + 30% projection + 30% ADP: the more the other team gains in perceived value, the likelier it accepts. Sell High lists your players valued above what they project, Buy Low other teams' players valued below it. The Trade Builder shows any trade, with extra players on one side allowed.</p>
-      <h4>Rankings</h4>
-      <p>The Rankings tab lists every player from the 2026-27 box-score averages (season to date, last week, last 2 weeks or last month; only players who have played) or from the projections. Zscore is calculated on the top X players by H2H-adjusted value in that source, X = teams × roster size from Settings. Weights (×0 punts a category), Zscore −1 / −2, position, Find and Show shape the list; the pool is chosen with the default weights. Win C and Win M are calculated like the Draft tab: season-long against simulated league teams, pulled toward 50% by the same factors as the Team tab in category leagues (0.75 for Win C, 0.6 for Win M; the order and Edge do not change), as the gain over a replacement-level player (Win vs: Average player gives the Team tab's Vs average for the team picked in My team, scored in the background and shrunk the same way in category leagues (points leagues are not shrunk), so the two tabs agree for the same Source; with no team it subtracts an average pool player). With a saved team in Settings, a player takes the spot of your weakest player, and your own players show what replacing them would cost. Playoff games counts his team's games in your playoff weeks; the Playoff boost is hidden for now and Win ignores it.</p>
-      <h4>Points leagues</h4>
-      <p>Settings can score a league in fantasy points (a value per stat). Draft, League, Matchup, Trade and Rankings don't value points leagues yet and say so; nothing is calculated from the category model for a points league.</p>
-      <h4>Shrinkage and missing projections</h4>
-      <p>Chances are pulled toward 50% because backtests showed projections alone are overconfident: in the Matchup Analyzer (one week) the matchup by 0.83 and each category by 0.85; in the Trade Analyzer and the Team tab (the weeks still to come) by 0.6 and 0.75, a stronger pull because errors in a player's projection last all season. Players with no projection use ESPN's actual per-game stats (marked) or a waiver-level line, and the page lists them. Current form counts actual stats as games next to 20 games of projection.</p>
+      <h3>Reading the colors</h3>
+      <p>A cell's color goes with the chance it shows: green is a likely win, red a likely loss. Standings for H2H each category, H2H most categories and Roto are derived from these win numbers, not from the Fantrax table, so they are a projection of the rest of the season.</p>
     </section>
    </div>
   </div>

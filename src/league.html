@@ -83,7 +83,7 @@ td b .chip,.chip.b{font-weight:700}
 header.top .top-r{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-radius:6px}
 @media (max-width:640px){header.top #how-open{padding:8px 14px}}
-/* How it works dialog: same markup and look as the Draft Kit (markup copied in by gen.py from app.html) */
+/* How it works dialog: same look as the Draft Kit's, with this tab's own text */
 .how{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);padding:0;width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
 .how::backdrop{background:rgba(0,0,0,.45)}
 .how-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);padding:14px 20px 10px;border-bottom:1px solid var(--line)}
@@ -104,7 +104,42 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EC7840"/><g fill="none" stroke="#15191B" stroke-width="4.2" stroke-linecap="round"><path d="M32 2v60M2 32h60"/><path d="M12 10c8 6 8 38 0 44M52 10c-8 6-8 38 0 44"/></g></svg><span class="wm">Courtside</span><span class="pg">League Dashboard</span></h1>
   <div class="top-r"><span id="sitenav"></span><button class="btn" type="button" id="how-open">How it works</button></div>
 </header>
-<!--__HOW__-->
+<dialog class="how" id="how" aria-labelledby="how-title">
+  <div class="how-head"><h2 id="how-title">How the League tab works</h2><button class="btn" type="button" id="how-close">Close</button></div>
+  <p class="how-intro">Every team in your Fantrax league, scored by the same rules as the Team tab. Nothing here is saved or sent to Fantrax.</p>
+  <div class="how-grid">
+   <div class="how-col">
+    <section class="how-card">
+      <h3>Where the numbers come from</h3>
+      <h4>The same rules as the Team tab</h4>
+      <p>Each team is built from the players on its current Fantrax roster, Active and Reserve, with its IL players counted on Total only. Plays % decides how often each player is in the lineup (the league's active limit caps each night), and the chances to win are computed by the Team tab's code, shrunk toward 50%. A team is scored on the players it has; open roster spots get no filler. For one team, the numbers here equal what the Team tab shows for it under the same Source and Stats.</p>
+      <h4>Source</h4>
+      <p>Which lines judge the players. Projections (Average, BBM or Hashtag; the default is the average) are what the Win numbers were calibrated on. Season to date and the recent-games windows (last week, 2 weeks, month) use this season's box scores, so they show form, and their Win numbers are uncalibrated. A player with no game in the source keeps his projection line.</p>
+      <h4>Stats: Total or Per game</h4>
+      <p>Total is the rest of the season: each player's line times his projected games left, with IL players counted at their availability. Per game is the team line the Team tab shows, IL players not counted. It changes every number on the page.</p>
+      <h4>Team in focus</h4>
+      <p>The team the first two sections are about. It starts as your team (Settings) and you can pick any other.</p>
+    </section>
+   </div>
+   <div class="how-col">
+    <section class="how-card">
+      <h3>The four sections</h3>
+      <h4>Team in focus vs each team</h4>
+      <p>One row per opponent: the chance to win the weekly matchup (Match) and the chance to win each category. Click a heading to sort.</p>
+      <h4>Category profile</h4>
+      <p>Where the focus team stands: its rank among the teams, the categories it wins per week and its matchup win rate against the whole league. The table gives its win chance in each category against an average team here, its projected stat and its rank in that category (1 is best; fewest turnovers).</p>
+      <h4>Matchup matrix</h4>
+      <p>Every team against every other, row beats column. Matchup win % is the chance to win the match, Category win % is the chance to win one category (or the average over all), Expected categories is the expected number of categories won. Avg is the row's mean over all opponents.</p>
+      <h4>Team stats</h4>
+      <p>Each team's line as the Team tab shows it: Active and Reserve players weighted by Plays % (FG% and FT% from makes and attempts). Raw is the line on the chosen Stats basis (rest-of-season totals, or per game), Per week divides the totals by the matchup weeks left, Zscore is the team's Plays % weighted Zscore per lineup slot, and Rank orders the teams (1 is best). The Zscore select picks the type: Normal, H2H-adjusted or Roto-adjusted. Z and Rank compare teams across this league, with turnovers negated.</p>
+    </section>
+    <section class="how-card">
+      <h3>Reading the colors</h3>
+      <p>A cell's color goes with the chance it shows: green is a likely win, red a likely loss. Standings for H2H each category, H2H most categories and Roto are derived from these win numbers, not from the Fantrax table, so they are a projection of the rest of the season.</p>
+    </section>
+   </div>
+  </div>
+</dialog>
 
 <main>
   <section class="panel" aria-label="League to analyze">
