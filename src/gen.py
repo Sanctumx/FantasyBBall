@@ -43,8 +43,8 @@ def emit(page,tpl,how=None):
 emit('draft-board','app.html')
 # League page (2026-10-18): same data, engine and shared helpers, plus the league math
 _a=rd('app.html'); _i=_a.index('<dialog class="how"'); _e=_a.index('</dialog>',_i)+len('</dialog>')
-HOW=_a[_i:_e]   # How it works: one copy of the text, shown on the League Dashboard and In-Season pages
-emit('league','league.html',HOW)
+HOW=_a[_i:_e]   # How it works: one copy of the text, shown on the In-Season page (the League Dashboard has its own, in league.html)
+emit('league','league.html')
 # In-Season page (2026-10-20): same data, engine and shared helpers, plus the in-season modules and the daily schedule
 emit('inseason','inseason.html',HOW)
 # Settings page (2026-10-20): the shared league store and toolbar only (no player data)
