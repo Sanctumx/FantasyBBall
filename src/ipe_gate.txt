@@ -35,3 +35,14 @@ exploratory only and are not pooled. Fresh run: seeds 201-280, 4 seasons x 5 slo
   Valid only if:   arm 67 <= -1.0 and negative in all 4 seasons, and refitting without arms 66-69 moves PE by < 0.05.
   Report alongside: paired poAll and actual prize; side fit with poAll in the logistic, flag if it differs from PE by > 1 SE.
   Caveat: gamesIn is hindsight (both arms see it), so benefit may be overstated vs the live app.
+
+TRADE SCREEN GATE (idea 163, analyst A2, written 2026-10-29 BEFORE the full run; pilot seeds 281-290 are exploratory, not pooled).
+Arms 66 (no trades), 70 (Win M), 71 (z-sum), 72 (random), 73 (lowest z gain). Full run: seeds 291-370, 4 seasons x slots 1,4,7,10,14 = 1600 drafts.
+  Primary 70 vs 66:  matters = PE - 1.96*SE > 0 and ahead in >= 3 of 4 seasons; no meaningful benefit = PE + 1.96*SE < 1.0 (delta 1.0, not 0.3: SE 0.34 makes 0.3 unreachable);
+                     harmful = PE + 1.96*SE < 0; else inconclusive.
+  Secondary 70 vs 71: same rule.
+  Extension: if 70 vs 66 is inconclusive with PE > 0, add seeds 371-450 once and judge the pooled set at 2.24 SE.
+  Valid only if: V1 arm 73 <= -2.0, its upper bound < -1.0, negative in all 4 seasons; V2 arm 72 not significantly positive;
+                 V3 refit without arms 66, 70-73 moves each PE by < 0.10; V4 every plan replays without throwing, and arms 72 and 73 make 3 trades in >= 95% of drafts.
+  Report: per arm PE +- SE, CI, four season values, actual prize, paired poAll; trades per draft; share of checkpoints where 70 and 71 differ;
+          slope of per-draft PE difference on summed predicted dA; wall time. Caveats: IL hindsight, offers lean against us, no counter-offers, 70 vs 71 differ only in the ranking rule.
