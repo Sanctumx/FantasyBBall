@@ -1,7 +1,7 @@
 // Pins what Rankings, the engine context and the Team tab's win numbers return in categories (2026-10-26), so adding points
 // mode (#137) can be shown not to move them. `node src/tests/fixtures/make_category_golden.js` rewrites category_golden.json;
 // category_golden.test.js recomputes it with compute() and compares. Only regenerate on purpose.
-// The Team part reads src/players.json, so the file also stores a hash of that input; a projection refresh skips that part.
+// The Team part reads golden_players.json (fixed), so a projection refresh does not move it.
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const E = require('../../engine.js'), R = require('../../rankings_core.js'), GOLD = require('./golden_players.json');
 
@@ -46,7 +46,7 @@ function rankings() {
 
 function team() {
   const I = require('../../inseason_league.js'), T = require('../../team_core.js'), W = require('../../team_win.js'), M = require('../../matchup_core.js'), Pl = require('../../inseason_players.js');
-  const fx = n => require('./' + n), PLAYERS = require('../../players.json');
+  const fx = n => require('./' + n), PLAYERS = GOLD;
   const L = I.parseLeague(fx('fx_league.json')), ROS = I.parseRosters(fx('fx_rosters.json')), me = L.teams[0].id;
   const pool = Pl.buildPool({ PLAYERS, fxPlayers: fx('fx_players.json'), espn: fx('espn_2025_26.json'), L, rosters: ROS });
   const last = L.periods.find(p => p.n === L.lastRegular), teamsAll = [...new Set(pool.players.map(p => p.t).filter(Boolean))];
@@ -63,6 +63,12 @@ function team() {
   o.leagueWin = lw && { ids: lw.ids, P: lw.P };
   o.leagueWinSwap = lws && { ids: lws.ids, P: lws.P };
   o.rosWinM = [Tr.rosWinM(ctx, R0, me), Tr.rosWinM(ctx, swapped, me)];
+  // the Team-tab rules (ctx.teamTab) on the seasonal and per-game bases, for the League tab (2026-10-29)
+  for (const basis of ['total', 'pergame']) {
+    const tl = W.leagueWin(ctx, null, { basis }), tm = W.matrix(W.tabView(ctx, basis), T.tabState(ROS[me]));
+    o['tabLeagueWin_' + basis] = tl && { ids: tl.ids, P: tl.P };
+    o['tabMatrix_' + basis] = { teams: tm.teams.map(t => [t.id, t.match, arr(t.cat), t.winC]), mean: [tm.mean.match, arr(tm.mean.cat), tm.mean.winC] };
+  }
   o.playsPct = T.playsPct(ctx, st);
   const moved = st.order.slice(0, 2).reduce((s, k) => T.moveSlot(s, k, 'reserve'), st);
   o.playsPctMoved = T.playsPct(ctx, moved);

@@ -12,8 +12,7 @@ function same(a, b, path) {
 
 const now = compute();
 test('Rankings tables, win starts and the engine context match the pinned category output', () => same(now.rankings, golden.rankings, 'rankings'));
-test('Team win numbers match the pinned category output', t => {
-  if (now.playersHash !== golden.playersHash) return t.skip('src/players.json changed: regenerate category_golden.json on purpose');
+test('Team win numbers match the pinned category output', () => {
   assert.strictEqual(now.teamError, undefined);
   same(now.team, golden.team, 'team');
 });
