@@ -778,6 +778,7 @@
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
     if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
     else {
+<<<<<<<< HEAD:assets/inseason_mods.35f0fb9c.js
       const il = keys.filter(k => state.slots[k] === 'il'), ret = {}, v = k => Matchup.nightValue(ctx, byKey.get(k));
       il.forEach(k => { ret[k] = ilReturn(ctx, k); });
       const lim = ctx.L.maxPlayers, parked = state.order.filter(k => state.slots[k] === 'reserve').length;
@@ -795,6 +796,10 @@
         ? (dropped.has(k) ? { t: byKey.get(k).t, a: 0, v: v(k), from: w.from, to: w.from } : { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: w.to })
         : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: leave[k] != null ? leave[k] : w.to });
       InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]]); });
+========
+      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: Matchup.nightValue(ctx, byKey.get(k)), from: w.from, to: w.to }));
+      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, items[i].a));
+>>>>>>>> b5b2f67 (fix: Team-tab Plays % fills each night best player first, so only the worst players are cut):assets/inseason_mods.7d96749e.js
     }
     return res;
   }
