@@ -122,6 +122,25 @@ test('moduleScores: the worst Active/Reserve player shows 0, a candidate equals 
   assert.ok(only3.every((r, i) => i === 0 || only3[i - 1].dCat[3] >= r.dCat[3] - 1e-12));
 });
 
+test('Vs replacement, Team tab Season basis, Active full: each IL player + his paired worst Active player is one fictional player; the replacement is the lowest of the N-k real players and k pairs', () => {
+  const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const il = st.order.filter(k => st.slots[k] === 'il'), act = st.order.filter(k => st.slots[k] === 'active');
+  assert.ok(il.length && act.length >= ctx.L.maxActive, 'premise: IL player and full Active slots');
+  const pairs = T.ilPairs(ctx, st), su = W.moduleSetup(ctx, st, { baseline: 'rep' }), base = su.base, pct = m => 100 * m.mean.match, cur = pct(base);
+  assert.strictEqual(pairs.length, il.length);
+  // entries: every counted player outside a pair, and each pair (the team minus the team without both)
+  const inPair = new Set([].concat(...pairs)), contrib = grp => cur - pct(W.matrix(ctx, T.applySwap(st, grp, []), su.mo));
+  const ents = T.counted(st, ctx).filter(k => !inPair.has(k)).map(k => [k]).concat(pairs).map(grp => ({ grp, m: contrib(grp) })).sort((a, b) => a.m - b.m);
+  assert.deepStrictEqual(su.grp.slice().sort(), ents[0].grp.slice().sort(), 'the replacement is the lowest entry');
+  assert.ok(near(su.ref.m, ents[0].m, 1e-9));
+  const row = k => W.moduleRow(ctx, st, su, k);
+  T.counted(st, ctx).filter(k => !su.grp.includes(k)).forEach(k => assert.ok(near(row(k).dM, su.pw[k].m - ents[0].m, 1e-9), 'own player vs the replacement ' + k));
+  su.grp.forEach(k => assert.ok(near(row(k).dM, su.grp.length === 1 ? 0 : su.pw[k].m - ents[1].m, 1e-9), 'member of the replacement ' + k));
+  const c = pool.players.find(p => !p.owner && p.g > 40 && p.t).key, s2 = T.moveSlot(T.applySwap(st, su.grp, [c]), c, 'active');
+  assert.ok(near(row(c).dM, pct(W.matrix(ctx, s2, su.mo)) - cur, 1e-9), 'a candidate replaces the whole entry');
+  assert.ok(near(row(c).new - row(c).old, row(c).dM, 1e-9));
+});
+
 test('moduleSetup + moduleRow + moduleSort equal moduleScores in both baselines; new - old = dM; rep old is the matrix mean', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), own = st.order.filter(k => ['active', 'reserve', 'il'].includes(st.slots[k]));
   const cands = own.concat(ROS[other].map(x => x.fid).slice(0, 4)), w = [1, 1, 1, 0, 1, 1, 1, 1, 1];
@@ -210,7 +229,7 @@ test('avg: an average-line player with an average player\'s games scores the sam
 
 test('rep: when the worst player is in Reserve a candidate is scored as an Active player, not with the Reserve leftovers', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), su0 = W.moduleSetup(ctx, st, {}), c = ROS[other].find(x => x.slot === 'ACTIVE').fid;
-  const rk = st.order.find(k => st.slots[k] === 'reserve'), su = Object.assign({}, su0, { worst: rk, wSlot: 'reserve' });   // force the Reserve player to be the worst
+  const rk = st.order.find(k => st.slots[k] === 'reserve'), su = Object.assign({}, su0, { worst: rk, grp: [rk], wSlot: 'reserve' });   // force the Reserve player to be the worst
   const s0 = T.moveSlot(T.applySwap(st, [su.worst], [c]), c, 'active'), exp = 100 * (W.matrix(ctx, s0).mean.match - su.base.mean.match);
   assert.ok(near(W.moduleRow(ctx, st, su, c).dM, exp, 1e-9), String(W.moduleRow(ctx, st, su, c).dM) + ' vs ' + exp);
 });
@@ -562,7 +581,7 @@ test('Team tab: a candidate in the list scores as the worst counted player\'s sl
   for (const basis of ['pergame', 'total']) {
     const ctx = mkTab(basis), st = tabSt(), c = ctx.roster[other].find(f => ctx.pool.byKey.get(f).slot === 'ACTIVE'), su = W.moduleSetup(ctx, st, { baseline: 'rep' });
     if (su.wSlot !== 'active') continue;
-    const row = W.moduleRow(ctx, st, su, c), after = T.moveSlot(T.applySwap(st, [su.worst], [c]), c, 'active');
+    const row = W.moduleRow(ctx, st, su, c), after = T.moveSlot(T.applySwap(st, su.grp, [c]), c, 'active');   // grp = the worst, plus the IL player sharing his slot
     assert.ok(near(row.dM, 100 * (W.matrix(ctx, after, su.mo).mean.match - su.base.mean.match), 1e-6), basis);
     assert.ok(Number.isFinite(row.dM) && row.dM !== 0, basis);
   }

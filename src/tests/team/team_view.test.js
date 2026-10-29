@@ -402,16 +402,16 @@ test('gamesLeft: plain = team games x min(1, g/82); Team tab Per game = full tea
   assert.ok(near(V.gamesLeft(Object.assign({}, ctx, { teamTab: true, basis: 'mix' }), pp), tg * 0.75));
 });
 
-test('apply with a ctx: the list dM of a candidate equals the Win M change after Apply swap, also when the worst counted player is in IL (Rest of season)', () => {
+test('apply with a ctx: the list dM of a candidate equals the Win M change after Apply swap of the replacement entry (a real player, or a worst Active + IL pair), Rest of season', () => {
   const ctx = V.sourceCtx(baseArgs(), 'avg', [], FXP, { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
   const il = st.order.find(k => st.slots[k] === 'il'), pp = ctx.pool.byKey.get(il), g0 = pp.g, full = st.order.filter(k => st.slots[k] === 'active').length;
   try {
-    pp.g = 3;   // a long-term IL player: his share of the games is tiny, so he is the worst counted player
+    pp.g = 3;   // a long-term IL player: his share of the games is tiny
     const su = W.moduleSetup(ctx, st, { baseline: 'rep' });
-    assert.strictEqual(su.worst, il, 'premise: the IL player is the worst counted player');
+    assert.ok(su.grp.includes(su.worst) && !(su.grp.length === 1 && su.grp[0] === il));   // the replacement entry: one real player, or an Active player + the IL player sharing his slot; never the IL player alone (the old bug)
     const cands = ctx.pool.players.filter(p => !p.owner && p.g > 40 && p.t).slice(0, 5).map(p => p.key);
     cands.forEach(c => {
-      const row = W.moduleRow(ctx, st, su, c), s2 = V.apply(st, [{ key: il }], [{ key: c }], full, ctx), m2 = W.matrix(ctx, s2, su.mo);
+      const row = W.moduleRow(ctx, st, su, c), s2 = V.apply(st, su.grp.map(key => ({ key })), [{ key: c }], full, ctx), m2 = W.matrix(ctx, s2, su.mo);
       assert.ok(near(row.dM, 100 * (m2.mean.match - su.base.mean.match), 1e-6), c + ': list dM ' + row.dM + ' vs after apply ' + 100 * (m2.mean.match - su.base.mean.match));
     });
   } finally { pp.g = g0; }
