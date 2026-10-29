@@ -34,6 +34,13 @@ test('Sell High players are mine and Buy Low players are not', () => {
   for (let i = 1; i < r.sellHigh.length; i++) assert.ok(r.sellHigh[i - 1].gap >= r.sellHigh[i].gap);
 });
 
+test('tradeCandidates takes the basis for Win M: Per game differs from Season, and the default is Season', () => {
+  const give = ctx.roster[me].find(f => pool.byKey.get(f).slot !== 'IR');
+  const season = T.tradeCandidates(ctx, give), same = T.tradeCandidates(ctx, give, { basis: 'total' }), per = T.tradeCandidates(ctx, give, { basis: 'pergame' });
+  assert.deepStrictEqual(same.map(r => r.dA), season.map(r => r.dA));
+  assert.ok(per.some((r, i) => Math.abs(r.dA - season[i].dA) > 1e-6), 'Per game moved no dA');
+});
+
 test('the whole fixture league computes in under 3 seconds', () => {
   const c = M.makeCtx({ L, pool, DAYS, rosters: ROS, me, nowMs: NOW }), t = Date.now();
   T.sellHighBuyLow(c, {});

@@ -85,19 +85,20 @@
   }
 
   // ---- finder ----
-  const oneForOne = (ctx, give, target, team) => {
-    const r = evaluateTrade(ctx, { a: ctx.me, b: team, aGets: [target.key], bGets: [give.key] }), v = perceived(ctx, target);
+  const oneForOne = (ctx, give, target, team, wopts) => {
+    const r = evaluateTrade(ctx, { a: ctx.me, b: team, aGets: [target.key], bGets: [give.key] }, wopts), v = perceived(ctx, target);
     return { give, target, team, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, buyLow: v.rv - v.pv >= TRADE_W.tagGap };
   };
   const byValue = (a, b) => b.dA * b.likelihood - a.dA * a.likelihood;
   // every one-for-one trade for one of my players (myKey) with every other team's player, helpful or not, unfiltered; 'any' offers each of my players
-  function tradeCandidates(ctx, myKey) {
+  // wopts: the Win M options of rosMeans (basis: 'total' Season, the default, 'pergame', 'mix')
+  function tradeCandidates(ctx, myKey, wopts) {
     const gives = myKey === 'any' ? ctx.roster[ctx.me] : [myKey], rows = [];
     gives.forEach(g => {
       const give = ctx.pool.byKey.get(g);
       Object.keys(ctx.roster).forEach(t => {
         if (t === ctx.me) return;
-        ctx.roster[t].forEach(f => rows.push(oneForOne(ctx, give, ctx.pool.byKey.get(f), t)));
+        ctx.roster[t].forEach(f => rows.push(oneForOne(ctx, give, ctx.pool.byKey.get(f), t, wopts)));
       });
     });
     return rows;
