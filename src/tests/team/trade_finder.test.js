@@ -179,8 +179,9 @@ test('evaluateTrade: two-for-one leaves B over the limit, B drops its worst non-
   assert.deepStrictEqual(r.drops[b], [worstOf(R, b)]); assert.deepStrictEqual(r.drops[me], []);
 });
 
-test('finder: giving away my IL player no longer fills the top of the list (M2: at most 5 IL gives, at least 5 different gives in the top 25)', () => {
+// relaxed 5 -> 15 (user, 2026-10-29): an IL player now only takes games from the worst active player (Team.playsPct), so he is worth less and his gives rank higher
+test('finder: giving away my IL player does not fill the whole top of the list (M2: at most 15 IL gives, at least 5 different gives in the top 25)', () => {
   const top = T.filterTrades(T.tradeCandidates(ctx, 'any'), { limit: 25 });
-  assert.ok(top.filter(r => r.give.key === myIR).length <= 5, 'IL gives ' + top.filter(r => r.give.key === myIR).length);
+  assert.ok(top.filter(r => r.give.key === myIR).length <= 15,'IL gives ' + top.filter(r => r.give.key === myIR).length);
   assert.ok(new Set(top.map(r => r.give.key)).size >= 5);
 });
