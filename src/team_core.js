@@ -112,40 +112,53 @@
     return InLeague.rosterGames([{ t: pp.t, a: avail(ctx, pp), from: w.from, to: w.to }], ctx.DAYS, ctx.L.maxActive, null)[0];
   }
 
-  // With the Active slots full on a seasonal basis, the k IL players share the slots of the k worst Active players (lowest nightly value):
-  // -> [[active key, il key]], the n-th IL player with the n-th worst Active player (wrapping when there are more IL than Active). [] otherwise
-  function ilPairs(ctx, state) {
-    if (!ctx.teamTab || ctx.basis === 'pergame') return [];
-    const c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), act = keys.filter(k => state.slots[k] === 'active'), il = keys.filter(k => state.slots[k] === 'il');
-    if (!(act.length >= ctx.L.maxActive) || !act.length || !il.length) return [];
-    const v = k => Matchup.nightValue(ctx, ctx.pool.byKey.get(k)), worst = act.slice().sort((a, b) => v(a) - v(b));
-    return il.map((k, n) => [worst[n % worst.length], k]);
+  // The availability of a typical player in the league: the median of avail over the rostered players who are not on IR (cached per ctx).
+  // Per game and plain ctxs have none (avail is 1)
+  const typMemo = new WeakMap();
+  function typicalAvail(ctx) {
+    if (!ctx || !ctx.teamTab || ctx.basis === 'pergame') return 1;
+    if (typMemo.has(ctx)) return typMemo.get(ctx);
+    const a = ctx.pool.players.filter(p => p.owner && p.slot !== 'IR').map(p => avail(ctx, p)).sort((x, y) => x - y), n = a.length;
+    const med = n ? (a[Math.floor((n - 1) / 2)] + a[Math.ceil((n - 1) / 2)]) / 2 : 1;
+    typMemo.set(ctx, med);
+    return med;
+  }
+
+  // An IL player on the timeline (user 2026-10-29; there are no return dates yet): his projected games (avail) carry both his current absence
+  // and the generic chance of missing games later that every player has, so only the part of his missed games above a typical player's goes up
+  // front. He is out for the first nOut of his team's games in the window (until tRet, ms), then plays at rate a, which keeps his total at
+  // avail x GL. -> { nOut, tRet, a }; a real return date would replace nOut / tRet
+  function ilReturn(ctx, key) {
+    const pp = ctx.pool.byKey.get(key), w = window(ctx), a0 = avail(ctx, pp), aT = typicalAvail(ctx), G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {};
+    const times = (G[pp.t] || []).map(s => s * 1000).filter(ms => ms >= w.from && ms < w.to).sort((x, y) => x - y), gl = times.length;
+    // the cap keeps the rate after the return at 1 or below, so rounding never costs him games
+    const nOut = Math.min(Math.floor(gl * (1 - a0) + 1e-9), aT > 0 ? Math.round(gl * Math.max(0, 1 - a0 / aT)) : 0);
+    return { nOut, tRet: nOut ? (times[nOut] != null ? times[nOut] : w.to) : w.from, a: gl > nOut ? Math.min(1, a0 * gl / (gl - nOut)) : 0 };
   }
 
   // Plays % on the Team tab (ctx.teamTab): Reserve is parked and plays 0%, never hypo. Per game: Active players claim the nights as above
-  // (everyone is there for every team game; IL gets none). Seasonal bases: Active and IL players are there for avail(g) of the team's games,
-  // capped per night at the league's active limit (InLeague.rosterGames); pct is the lineup share of the games a player is there for, so
-  // availability (which GL carries) is not counted twice
+  // (everyone is there for every team game; IL gets none). Seasonal bases: Active players are there for avail(g) of the team's games and an IL
+  // player from his return (ilReturn) on; one call fills the nights best value first, capped per night at the league's active limit
+  // (InLeague.rosterGames). So the cover plays until the IL player is back and whoever is worst by value then loses nights. When the roster
+  // would exceed the league's player limit (maxPlayers) once the IL players are back, the Reserve players go first and then the lowest-value
+  // counted players, dropped from the first return on. pct is the lineup share of the games a player is there for, so availability (which GL
+  // carries) is not counted twice
   function tabPlays(ctx, state) {
     const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k]));
     const done = (k, played, a) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; };
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
     if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
     else {
-      // with the active slots full an IL player shares the worst active player's slot: his games come out of that player's games
-      // (IL 20, worst 80 -> IL 20, worst 60), and their Plays % split what that player's was. Open slots are filled as before.
-      const act = keys.filter(k => state.slots[k] === 'active'), full = act.length >= ctx.L.maxActive;
-      const lineup = full ? act : keys, v = k => Matchup.nightValue(ctx, byKey.get(k));
-      const items = lineup.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: w.to }));
-      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(lineup[i], g, items[i].a));
-      if (full) {
-        ilPairs(ctx, state).forEach(([wk, k]) => {
-          const base = res[wk], take = Math.min(soloGames(ctx, k), base.played), share = base.played > 0 ? take / base.played : 0;
-          res[k] = { gl: gamesLeft(ctx, byKey.get(k).t), played: take, pct: base.pct == null ? null : base.pct * share };
-          res[k].wt = res[k].gl ? take / res[k].gl : null;
-          base.played -= take; base.wt = base.gl ? base.played / base.gl : null; if (base.pct != null) base.pct *= 1 - share;
-        });
-      }
+      const il = keys.filter(k => state.slots[k] === 'il'), ret = {}, v = k => Matchup.nightValue(ctx, byKey.get(k));
+      il.forEach(k => { ret[k] = ilReturn(ctx, k); });
+      const first = il.length ? Math.min(...il.map(k => ret[k].tRet)) : w.to, lim = ctx.L.maxPlayers;
+      const parked = state.order.filter(k => state.slots[k] === 'reserve').length, onRoster = state.order.filter(k => state.slots[k] !== 'il').length;
+      const nDrop = typeof lim === 'number' && il.length ? Math.max(0, onRoster + il.length - lim - parked) : 0;
+      const dropped = new Set(keys.slice().sort((x, y) => v(x) - v(y)).slice(0, nDrop));
+      const items = keys.map(k => il.includes(k)
+        ? { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: dropped.has(k) ? ret[k].tRet : w.to }
+        : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: dropped.has(k) ? first : w.to });
+      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, avail(ctx, byKey.get(keys[i]))));
     }
     return res;
   }
@@ -186,6 +199,6 @@
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, ilPairs, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, typicalAvail, ilReturn, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);

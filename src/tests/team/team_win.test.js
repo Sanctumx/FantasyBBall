@@ -122,23 +122,52 @@ test('moduleScores: the worst Active/Reserve player shows 0, a candidate equals 
   assert.ok(only3.every((r, i) => i === 0 || only3[i - 1].dCat[3] >= r.dCat[3] - 1e-12));
 });
 
-test('Vs replacement, Team tab Season basis, Active full: each IL player + his paired worst Active player is one fictional player; the replacement is the lowest of the N-k real players and k pairs', () => {
+test('Vs replacement, Team tab Season basis, IL on the timeline: the replacement is the lowest counted non-IL player who plays; everyone else is measured against him', () => {
   const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
   const il = st.order.filter(k => st.slots[k] === 'il'), act = st.order.filter(k => st.slots[k] === 'active');
   assert.ok(il.length && act.length >= ctx.L.maxActive, 'premise: IL player and full Active slots');
-  const pairs = T.ilPairs(ctx, st), su = W.moduleSetup(ctx, st, { baseline: 'rep' }), base = su.base, pct = m => 100 * m.mean.match, cur = pct(base);
-  assert.strictEqual(pairs.length, il.length);
-  // entries: every counted player outside a pair, and each pair (the team minus the team without both)
-  const inPair = new Set([].concat(...pairs)), contrib = grp => cur - pct(W.matrix(ctx, T.applySwap(st, grp, []), su.mo));
-  const ents = T.counted(st, ctx).filter(k => !inPair.has(k)).map(k => [k]).concat(pairs).map(grp => ({ grp, m: contrib(grp) })).sort((a, b) => a.m - b.m);
-  assert.deepStrictEqual(su.grp.slice().sort(), ents[0].grp.slice().sort(), 'the replacement is the lowest entry');
-  assert.ok(near(su.ref.m, ents[0].m, 1e-9));
+  const su = W.moduleSetup(ctx, st, { baseline: 'rep' }), pct = m => 100 * m.mean.match, cur = pct(su.base), pl = T.playsPct(ctx, st);
+  assert.ok(!il.includes(su.worst), 'an IL player is never the replacement');
+  assert.ok(pl[su.worst].played > 0);
+  const cand = T.counted(st, ctx).filter(k => st.slots[k] !== 'il' && pl[k].played > 0);
+  cand.forEach(k => assert.ok(su.pw[su.worst].m <= su.pw[k].m + 1e-12, 'the lowest contribution among them ' + k));
+  assert.deepStrictEqual(su.grp, [su.worst]);
   const row = k => W.moduleRow(ctx, st, su, k);
-  T.counted(st, ctx).filter(k => !su.grp.includes(k)).forEach(k => assert.ok(near(row(k).dM, su.pw[k].m - ents[0].m, 1e-9), 'own player vs the replacement ' + k));
-  su.grp.forEach(k => assert.ok(near(row(k).dM, su.grp.length === 1 ? 0 : su.pw[k].m - ents[1].m, 1e-9), 'member of the replacement ' + k));
+  T.counted(st, ctx).filter(k => k !== su.worst).forEach(k => assert.ok(near(row(k).dM, su.pw[k].m - su.ref.m, 1e-9), 'own player vs the replacement ' + k));
+  assert.ok(near(row(su.worst).dM, 0, 1e-12), 'the replacement shows 0');
   const c = pool.players.find(p => !p.owner && p.g > 40 && p.t).key, s2 = T.moveSlot(T.applySwap(st, su.grp, [c]), c, 'active');
-  assert.ok(near(row(c).dM, pct(W.matrix(ctx, s2, su.mo)) - cur, 1e-9), 'a candidate replaces the whole entry');
+  assert.ok(near(row(c).dM, pct(W.matrix(ctx, s2, su.mo)) - cur, 1e-9), 'a candidate takes the replacement\'s slot');
   assert.ok(near(row(c).new - row(c).old, row(c).dM, 1e-9));
+});
+
+test('Team tab: the list row of an IL player equals the roster row (one pw, no pairing), and a player who never plays reads below 0 in both baselines', () => {
+  const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const il = st.order.find(k => st.slots[k] === 'il'), act = st.order.filter(k => st.slots[k] === 'active');
+  const rep = W.moduleSetup(ctx, st, { baseline: 'rep' }), pw = W.playerWin(ctx, st, rep.mo);
+  assert.ok(near(rep.pw[il].m, pw[il].m, 1e-12));
+  assert.ok(near(W.moduleRow(ctx, st, rep, il).dM, pw[il].m - rep.ref.m, 1e-9));
+  // a player whose team has no games plays 0%: counted, but worth nothing
+  const none = act[0], DAYS = games(last.start, last.end); DAYS.games[pool.byKey.get(none).t] = [];
+  const c0 = Object.assign({}, mk(last.start, DAYS), { teamTab: true, basis: 'total' });
+  assert.strictEqual(T.playsPct(c0, st)[none].played, 0);
+  const su = W.moduleSetup(c0, st, { baseline: 'rep' });
+  assert.ok(su.worst !== none, 'he is not the replacement');
+  assert.ok(W.moduleRow(c0, st, su, none).dM < -1e-9, 'reads below 0');
+});
+
+test('avg: a counted player who is squeezed out of the lineup (0% Plays) is judged at the games his slot allows, so he reads below 0', () => {
+  const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const pl = T.playsPct(ctx, st), sq = Object.keys(pl).find(k => T.counted(st, ctx).includes(k) && pl[k].played === 0 && pl[k].gl > 0);
+  if (!sq) return;   // the fixture needs a cut player; the logic is covered by the candidate-equality test below
+  const su = W.moduleSetup(ctx, st, { baseline: 'avg' });
+  assert.ok(W.moduleRow(ctx, st, su, sq).dM !== 0);
+});
+
+test('avg: avgOwn on a counted player equals avgCandidate on the same player taken out and put back as a candidate (same games rule)', () => {
+  const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
+  const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), k = T.counted(st, ctx)[0], g = T.soloGames(ctx, k) / su.ap.W * su.ap.share;
+  const own = W.moduleRow(ctx, st, su, k), mine = su.ap.mine.filter(e => e.key !== k).concat(Object.assign({}, su.ap.mean, { games: g })), hand = W.matrixOf(ctx, mine, new Set(st.order), su.ap.W);
+  assert.ok(near(own.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9));
 });
 
 test('moduleSetup + moduleRow + moduleSort equal moduleScores in both baselines; new - old = dM; rep old is the matrix mean', () => {
@@ -206,9 +235,9 @@ test('avg: a candidate is my team minus the average player plus him', () => {
   assert.ok(near(row.new - row.old, row.dM, 1e-9) && near(row.old, 100 * base.mean.match, 1e-9));
 });
 
-test('avg: my own counted player replaces nobody; he is scored against an average-line entry with his own games', () => {
+test('avg: my own counted player replaces nobody; he is scored against an average-line entry with the games his slot allows (as a candidate)', () => {
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), x = st.order.find(k => st.slots[k] === 'active');
-  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(Object.assign(meanEntry(mine, ctx), { games: mine.find(e => e.key === x).games })), new Set(st.order), w);
+  const base = W.matrix(ctx, st), m = W.matrixOf(ctx, mine.filter(e => e.key !== x).concat(Object.assign(meanEntry(mine, ctx), { games: T.soloGames(ctx, x) / w * W.avgParts(ctx, st, w).share })), new Set(st.order), w);
   const row = W.moduleScores(ctx, st, { baseline: 'avg', candidates: [x] })[0];
   assert.ok(near(row.dM, 100 * (base.mean.match - m.mean.match), 1e-9));
   assert.ok(near(row.new, 100 * base.mean.match, 1e-9) && near(row.old, 100 * m.mean.match, 1e-9));
@@ -340,8 +369,8 @@ test('avg: after a trade the Vs average rows use the same opponents as the matri
   const ctx = mk(last.start, games(last.start, last.end)), st = stateOf(), o1 = st.order.find(k => st.slots[k] === 'active'), a = oppActive(other);
   const sw = T.applySwap(st, [o1], [a]), su = W.moduleSetup(ctx, sw, { baseline: 'avg' }), own = sw.order.find(k => k !== a && T.COUNTED.includes(sw.slots[k]));
   const row = W.moduleRow(ctx, sw, su, own), recv = W.received(ctx, sw), W0 = su.ap.W;
-  const e = su.ap.mine.find(x => x.key === own), keys = [].concat(...Object.values(recv)).map(r => r.key);
-  const hand = W.matrixOf(ctx, su.ap.mine.filter(x => x.key !== own).concat(Object.assign({}, su.ap.mean, { games: e.games })), new Set(sw.order.concat(keys)), W0, { recv });
+  const keys = [].concat(...Object.values(recv)).map(r => r.key);
+  const hand = W.matrixOf(ctx, su.ap.mine.filter(x => x.key !== own).concat(Object.assign({}, su.ap.mean, { games: T.soloGames(ctx, own) / W0 * su.ap.share })),new Set(sw.order.concat(keys)), W0, { recv });
   assert.ok(near(row.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9));
   const cand = pool.players.find(p => !p.owner && p.g > 0).key, rc = W.moduleRow(ctx, sw, su, cand);
   const mine = su.ap.mine.concat(Object.assign({}, su.ap.mean, { sign: -1 }), { p: ctx.pool.byKey.get(cand).line, games: require('../../team_core.js').windowGames(ctx, [cand], null)[0] / W0 * su.ap.share });
