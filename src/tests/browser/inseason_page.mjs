@@ -176,7 +176,7 @@ async function open(opts = {}) {
   await p.selectOption('#zb', 'total'); await p.waitForTimeout(300); await doneSearch();
   ok((await fin()) === f0, 'back on Season the finder is as before');
   await p.check('#inj'); await p.waitForTimeout(300);
-  ok((await nRows()) <= n0 && (await p.$eval('#inj', c => c.checked)), 'Hide injured does not add rows (' + n0 + ' -> ' + (await nRows()) + ')');
+  ok((await nRows()) < n0 && (await p.$eval('#inj', c => c.checked)), 'Hide injured removes rows (' + n0 + ' -> ' + (await nRows()) + ')');
   await p.reload(); await p.waitForSelector('#inj', { timeout: 15000 }); await p.waitForTimeout(500);
   ok(await p.$eval('#inj', c => c.checked), 'Hide injured survives a reload');
   await p.uncheck('#inj'); await p.waitForTimeout(300); await doneSearch();

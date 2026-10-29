@@ -1376,12 +1376,13 @@
     return day + ':' + ctx.me + ':' + ctx.cur + ':' + (h >>> 0).toString(36) + ':' + str.length;
   }
   const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), Object.assign({ minDA: 1e-9 }, opts));   // by default only trades that help me
-  function sellHighBuyLow(ctx, { limit = 8, targets = 3, candidates = null } = {}) {
+  // keep(player) leaves players out before the top `limit` are chosen (the page's Hide injured), so the lists refill instead of shrinking
+  function sellHighBuyLow(ctx, { limit = 8, targets = 3, candidates = null, keep = null } = {}) {
     const tag = (pp, sign) => { const v = perceived(ctx, pp); return { player: pp, gap: sign * (v.pv - v.rv) }; };
-    const mine = ctx.roster[ctx.me].map(f => tag(ctx.pool.byKey.get(f), 1)).filter(x => x.gap >= TRADE_W.tagGap).sort((a, b) => b.gap - a.gap).slice(0, limit);
+    const mine = ctx.roster[ctx.me].map(f => ctx.pool.byKey.get(f)).filter(pp => !keep || keep(pp)).map(pp => tag(pp, 1)).filter(x => x.gap >= TRADE_W.tagGap).sort((a, b) => b.gap - a.gap).slice(0, limit);
     const sellHigh = mine.map(x => ({ player: x.player, gap: x.gap, trades: candidates ? filterTrades(candidates(x.player.key), { limit: targets, minDA: 1e-9 }) : findTrades(ctx, x.player.key, { limit: targets }) }));
     const theirs = [];
-    Object.keys(ctx.roster).forEach(t => { if (t !== ctx.me) ctx.roster[t].forEach(f => { const x = tag(ctx.pool.byKey.get(f), -1); if (x.gap >= TRADE_W.tagGap) theirs.push(Object.assign(x, { team: t })); }); });
+    Object.keys(ctx.roster).forEach(t => { if (t !== ctx.me) ctx.roster[t].forEach(f => { const pp = ctx.pool.byKey.get(f); if (keep && !keep(pp)) return; const x = tag(pp, -1); if (x.gap >= TRADE_W.tagGap) theirs.push(Object.assign(x, { team: t })); }); });
     const buyLow = theirs.sort((a, b) => b.gap - a.gap).slice(0, limit).map(x => ({
       player: x.player, gap: x.gap,
       trades: (candidates ? [].concat.apply([], ctx.roster[ctx.me].map(f => candidates(f).filter(r => r.target.key === x.player.key && r.dA > 0))) : ctx.roster[ctx.me].map(f => oneForOne(ctx, ctx.pool.byKey.get(f), x.player, x.team)).filter(r => r.dA > 0)).sort(byValue).slice(0, targets)
