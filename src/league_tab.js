@@ -25,9 +25,12 @@
   // -> the League page's result { N, nc, cats, me, names, basis, match, cat, expCats, standings, raw, perGame, perWeek, z, rank, profile, il, W, swing },
   //    or null with no weeks left. `raw` is the per game line on 'pergame' and rest-of-season totals on 'total'; perWeek the totals per week left.
   function score(a) {
-    const basis = a.basis === 'pergame' ? 'pergame' : 'total', nc = a.cats === 8 ? 8 : 9, ids = a.ids, N = ids.length;
+    const basis = a.basis === 'pergame' ? 'pergame' : 'total', nc = a.cats === 8 ? 8 : 9;
     const lw = TeamWin.leagueWin(a.ctx, null, { basis, cats: nc, detail: true, points: a.points });
     if (!lw) return null;
+    // a team the league lists but the rosters answer lacks is left out (leagueWin does not score it)
+    const keep = a.ids.map((t, k) => k).filter(k => lw.ids.includes(a.ids[k]) && a.ctx.roster[a.ids[k]]), ids = keep.map(k => a.ids[k]), N = ids.length;
+    if (a.names) a = Object.assign({}, a, { names: keep.map(k => a.names[k]) });
     const tv = TeamWin.tabView(a.ctx, basis), cats = []; for (let c = 0; c < NC; c++) if (c !== TO || nc === 9) cats.push(c);
     const match = [], cat = [], expCats = [];
     for (let i = 0; i < N; i++) {

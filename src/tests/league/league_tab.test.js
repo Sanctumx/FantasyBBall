@@ -75,6 +75,33 @@ test('score: with zCats the Zscore view is each team\'s Team-tab Z per lineup sl
   assert.deepStrictEqual(r.rank, plain.rank);   // ranks stay on the stat lines
 });
 
+test('score: a team in ids but missing from the rosters is left out instead of crashing', () => {
+  const ctx = mkTab('total'), gone = ids[ids.length - 1], roster = Object.assign({}, ctx.roster); delete roster[gone];
+  const r = LT.score({ ctx: Object.assign({}, ctx, { roster }), ids, names, basis: 'total', cats: 9, scoring: 'h2h' });
+  assert.ok(r, 'scores'); assert.strictEqual(r.N, ids.length - 1);
+  assert.ok(!r.names.includes(names[ids.indexOf(gone)]));
+  r.match.forEach(row => assert.strictEqual(row.length, r.N));
+});
+
+test('score: ids in another order than the league give the same per-team numbers', () => {
+  const ctx = mkTab('total'), rev = ids.slice().reverse(), a = LT.score({ ctx, ids, names, basis: 'total', cats: 9, scoring: 'h2h' }),
+    b = LT.score({ ctx, ids: rev, names: rev.map(t => names[ids.indexOf(t)]), basis: 'total', cats: 9, scoring: 'h2h' });
+  ids.forEach((t, i) => {
+    const k = rev.indexOf(t);
+    assert.deepStrictEqual(b.raw[k], a.raw[i]); assert.strictEqual(b.names[k], a.names[i]);
+    ids.forEach((u, j) => { if (i !== j) assert.ok(near(b.match[k][rev.indexOf(u)], a.match[i][j])); });
+  });
+});
+
+test('score: the Total stat line is the sum of each counted player\'s line x games played, perWeek = total / W', () => {
+  const ctx = mkTab('total'), r = LT.score({ ctx, ids, names, basis: 'total', cats: 9, scoring: 'h2h' }), tv = W.tabView(ctx, 'total');
+  ids.forEach((t, i) => {
+    const pts = W.side(tv, W.tradeState(ctx, t, ctx.roster[t]), r.W).reduce((s, e) => s + e.p.pts * e.games * r.W, 0);
+    assert.ok(near(r.raw[i][3], pts, 1e-6), 'PTS total ' + t);
+    assert.ok(near(r.perWeek[i][3], pts / r.W, 1e-6), 'PTS per week ' + t);
+  });
+});
+
 test('score: 8 categories drop turnovers; no weeks left gives null', () => {
   const r8 = LT.score({ ctx: mkTab('total'), ids, names, basis: 'total', cats: 8, scoring: 'h2h' });
   assert.strictEqual(r8.nc, 8); assert.ok(!r8.cats.includes(8));

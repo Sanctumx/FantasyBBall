@@ -23,7 +23,7 @@ async function page(seed, opts = {}) {
   await ctx.route(/stats\/espn\.json/, r => r.fulfill({ body: ESPN, contentType: 'application/json' }));
   let calls = 0;
   await ctx.route(/api\/fantrax/, r => { calls++; (opts.fx || ((q) => q.fulfill({ body: FX[new URL(q.request().url()).searchParams.get('what')] || '{}', contentType: 'application/json' })))(r, calls); });
-  await ctx.addInitScript(t => { Date.now = () => t; }, NOW);
+  await ctx.addInitScript(t => { Date.now = () => t; }, opts.now || NOW);
   await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.clear(); Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)); sessionStorage.setItem('seeded', '1'); } }, seed);
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto('http://localhost:' + PORT + '/league.html'); await p.waitForTimeout(opts.wait || 1500);
@@ -78,6 +78,25 @@ async function page(seed, opts = {}) {
   ok((await p.textContent('#mx')) !== before, 'BBM numbers differ from the Average');
   await p.selectOption('#src', 'w14'); await p.waitForTimeout(2500);
   ok(errs.length === 0 && (await p.$$eval('#mx tbody tr', r => r.length)) === N && /recent games/.test(await p.textContent('#note')), 'Last 2 weeks redraws, note says recent games ' + errs.join('; '));
+  ok((await p.textContent('#mx')) !== before, 'Last 2 weeks numbers differ from the Average (not projection numbers under a recent-games label)');
+  await ctx.close(); }
+
+// after the last regular-season week the message stays (the load must not wipe it)
+{ const { p, errs, ctx } = await page(SEED(), { now: Date.UTC(2027, 11, 1), noWait: true, wait: 2500 });
+  ok(/No regular-season weeks are left/.test(await p.textContent('#msg')) && await p.$eval('#body', e => e.hidden), 'no weeks left: message visible, body hidden: ' + await p.textContent('#msg'));
+  ok(errs.length === 0, 'no weeks left: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+
+// a league without teams says so; a team the rosters answer lacks is left out
+{ const empty = JSON.stringify(Object.assign({}, JSON.parse(FX.league), { teamInfo: {} }));
+  const { p, errs, ctx } = await page(SEED(), { noWait: true, wait: 2500, fx: q => q.fulfill({ body: new URL(q.request().url()).searchParams.get('what') === 'league' ? empty : FX[new URL(q.request().url()).searchParams.get('what')] || '{}', contentType: 'application/json' }) });
+  ok(/no teams yet/.test(await p.textContent('#msg')), 'empty teamInfo: "no teams yet": ' + await p.textContent('#msg'));
+  ok(errs.length === 0, 'empty teamInfo: no page errors ' + errs.join('; '));
+  await ctx.close(); }
+{ const ros = JSON.parse(FX.rosters); const key = Object.keys(ros.rosters || ros)[0]; const bag = ros.rosters || ros; delete bag[Object.keys(bag).pop()];
+  const body = JSON.stringify(ros);
+  const { p, errs, ctx } = await page(SEED(), { fx: q => q.fulfill({ body: new URL(q.request().url()).searchParams.get('what') === 'rosters' ? body : FX[new URL(q.request().url()).searchParams.get('what')] || '{}', contentType: 'application/json' }) });
+  ok(errs.length === 0 && (await p.$$eval('#mx tbody tr', r => r.length)) === N - 1, 'a team missing from the rosters is left out (' + (await p.$$eval('#mx tbody tr', r => r.length)) + ' rows) ' + errs.join('; '));
   await ctx.close(); }
 
 { const { p, errs, ctx } = await page(SEED(), { vp: { width: 390, height: 900 }, dark: true });
