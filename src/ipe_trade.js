@@ -39,7 +39,7 @@ for (const slot of slots) for (let seed = s0; seed <= s1; seed++) {
     // walk rule 70's chain; at each checkpoint compare what 70 and 71 would take from the same offers
     let cur = cores.map(c => c.slice());
     for (const w of CHECKPOINTS) {
-      const ctx = simCtx(season, w, cur, m), s = seed * 1000 + m * 50 + w, offs = offers(ctx, s, 3);
+      const ctx = simCtx(season, w, cur, m, world), s = seed * 1000 + m * 50 + w, offs = offers(ctx, s, 3);
       const a = choose(ctx, offs, 'winM'), b = choose(ctx, offs, 'z'), key = x => x ? x.other + ':' + x.give + '>' + x.get : '-';
       flips.push({ slot, seed, w, offers: offs.length, winM: !!a, z: !!b, differ: key(a) !== key(b), dA: a ? a.dA : null });
       if (a) { const orig = new Map(cur.flat().map(p => [String(p), p])), o = +a.other, give = a.give.map(k => orig.get(k)), get = a.get.map(k => orig.get(k));
@@ -48,7 +48,7 @@ for (const slot of slots) for (let seed = s0; seed <= s1; seed++) {
     continue;
   }
   for (const a of want) {
-    const plan = ARM[a][1] ? planTrades(season, cores, { rule: ARM[a][1], seed, me: m }) : { trades: [] };
+    const plan = ARM[a][1] ? planTrades(season, cores, { rule: ARM[a][1], seed, me: m, world }) : { trades: [] };
     const sc = scoreLeague(season, ro, { seed, target: true, il: 3, me: m, trades: plan.trades });
     const t = titleScore(sc.weekTot, { rsMode: 'each', rsWeeks: 17, rounds: [[17, 18], [19, 20], [21, 22]] });
     out[a].push({ season, arm: a, slot, seed, me: sc.rates[m], made: t.made[m], poAll: t.poAll[m], rounds: t.roundsWon[m], title: t.title[m], ntr: plan.trades.length, roster: ro[m].slice().sort().join(',') });

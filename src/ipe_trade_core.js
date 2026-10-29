@@ -26,14 +26,16 @@ function actualOf(rows, cut) {
 
 // The league at the start of week w (0-based) with every team's core on its roster. Games count only from the checkpoint on; actual stats
 // are the games before it. Team ids are the slot numbers as strings.
-function simCtx(season, w, cores, me) {
+function simCtx(season, w, cores, me, world) {
   const daily = DAILY[season].daily, nweeks = SCHED[season].nweeks;
   const periods = Array.from({ length: nweeks }, (_, k) => ({ n: k + 1, start: t0(season) + 7 * k * DAY_MS, end: t0(season) + 7 * (k + 1) * DAY_MS }));
   const L = { teams: cores.map((_, t) => ({ id: String(t) })), periods, matchups: [], lastRegular: LAST_REG, maxActive: 10, maxPlayers: 10 };
   const owner = {}, rows = {};
   cores.forEach((c, t) => { rows[String(t)] = c.map(pid => ({ fid: String(pid), slot: 'ACTIVE' })); c.forEach(pid => { owner[String(pid)] = String(t); }); });
-  const list = DATA[season].players.map(p => {
-    const key = String(p.pid);
+  // the draft's projection world: the lines the drafters saw (backtest projApply), not bt_data's prior-season ones
+  const proj = world ? new Map(require('./backtest.js').setup(season, { proj: world, realAdp: true }).P.map(p => [p.pid, p])) : null;
+  const list = DATA[season].players.map(p0 => {
+    const p = (proj && proj.get(p0.pid)) || p0, key = String(p.pid);
     return { key, n: p.n, t: p.t, g: p.g, pos: p.p, line: { fgp: p.fgp, fga: p.fga, ftp: p.ftp, fta: p.fta, tpm: p.tpm, pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk, to: p.to },
       adp: p.adp, src: 'proj', owner: owner[key] || null, slot: key in owner ? 'ACTIVE' : null, fxStatus: key in owner ? 'T' : null, actual: actualOf(daily[key] || [], 7 * w) };
   });
@@ -46,7 +48,7 @@ function simCtx(season, w, cores, me) {
 // ---- offers ----
 const InPlayers = require('./inseason_players.js'), Trade = require('./trade_core.js');
 const BAND = 0.5, CHECKPOINTS = [3, 7, 11];
-function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+function rng(seed) { let s = Math.imul((seed >>> 0) ^ 0x9E3779B9, 0x85EBCA6B) >>> 0; s = (s ^ (s >>> 15)) >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 const played = (season, key, w) => (DAILY[season].daily[key] || []).some(r => r[0] >= 7 * w - 7 && r[0] < 7 * w);
 const subsets = (a, k) => k === 1 ? a.map(x => [x]) : a.flatMap((x, i) => a.slice(i + 1).map(y => [x, y]));
 
@@ -100,10 +102,10 @@ function choose(ctx, offs, rule, r) {
 
 // Walk the checkpoints: the offers are drawn on the league as the earlier accepted trades left it. -> { trades (for scoreLeague's opts.trades), log }
 // cores: stream_sim.initialCores; opts: rule, seed, me (0-based slot), checkpoints, K
-function planTrades(season, cores, { rule, seed, me, checkpoints = CHECKPOINTS, K = 3 }) {
+function planTrades(season, cores, { rule, seed, me, world, checkpoints = CHECKPOINTS, K = 3 }) {
   let cur = cores.map(c => c.slice()); const trades = [], log = [];
   for (const w of checkpoints) {
-    const ctx = simCtx(season, w, cur, me), s = seed * 1000 + me * 50 + w, offs = offers(ctx, s, K);
+    const ctx = simCtx(season, w, cur, me, world), s = seed * 1000 + me * 50 + w, offs = offers(ctx, s, K);
     const orig = new Map(cur.flat().map(p => [String(p), p]));
     const pick = choose(ctx, offs, rule, rng(s + 1));
     log.push({ w, offers: offs.length, pick });
