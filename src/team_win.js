@@ -276,13 +276,26 @@
     if (o.baseline === 'avg') { const ap = avgParts(ctx, state, base.weeks); return ap ? { base, ap, mo, avg: true } : null; }
     const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state, ctx);
     if (!counted.length) return null;
-    const worst = counted.reduce((a, b) => pw[b].m < pw[a].m ? b : a), wSlot = state.slots[worst];
-    return { base, pw, worst, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
+    const lowest = ks => ks.reduce((a, b) => pw[b].m < pw[a].m ? b : a);
+    // With the Active slots full on a seasonal basis an IL player shares the worst Active player's slot (tabPlays), so the two are one
+    // fictional player A: the replacement level is A's combined contribution, a candidate replaces both, and A's members are scored
+    // against the next worst player (`next`, null when A is everyone)
+    const act = counted.filter(k => state.slots[k] === 'active'), il = counted.filter(k => state.slots[k] === 'il');
+    let worst, grp, ref, next = null;
+    if (ctx.teamTab && il.length && act.length >= ctx.L.maxActive) {
+      worst = lowest(act); grp = [worst].concat(il);
+      const rest = counted.filter(k => !grp.includes(k)); next = rest.length ? lowest(rest) : null;
+      const both = gain(base, matrix(ctx, Team.applySwap(state, grp, []), mo));
+      ref = both;
+    } else { worst = lowest(counted); grp = [worst]; ref = pw[worst]; }
+    const wSlot = state.slots[worst];
+    return { base, pw, worst, grp, ref, next, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
   }
 
-  // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team
+  // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team; the worst
+  // player's slot is the whole of A when the IL player shares it
   function swapScore(ctx, state, su, cx, key) {
-    const s0 = key in state.slots ? Team.applySwap(state, [su.worst], []) : Team.applySwap(state, [su.worst], [key]);
+    const s0 = key in state.slots ? Team.applySwap(state, su.grp, []) : Team.applySwap(state, su.grp, [key]);
     return gain(matrix(cx, Team.moveSlot(s0, key, swapSlot(ctx, s0, su.wSlot)), su.mo), su.base);
   }
   // The slot a candidate takes in the worst player's place. Active claims nights before the Reserve, so a Reserve slot would score him on leftovers.
@@ -302,8 +315,9 @@
     }
     const pw = su.pw, zero = () => su.mo.points ? null : new Array(9).fill(0);
     let r;
-    if (key === su.worst) r = { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
-    else if (own && Team.countedSlots(ctx).includes(s)) r = { c: sub(pw[key].c, pw[su.worst].c), m: pw[key].m - pw[su.worst].m, dCat: subV(pw[key].dCat, pw[su.worst].dCat) };
+    const vs = (a, b) => ({ c: sub(a.c, b.c), m: a.m - b.m, dCat: subV(a.dCat, b.dCat) });
+    if (su.grp.includes(key)) r = su.grp.length === 1 ? { c: su.mo.points ? null : 0, m: 0, dCat: zero() } : su.next ? vs(pw[key], pw[su.next]) : { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
+    else if (own && Team.countedSlots(ctx).includes(s)) r = vs(pw[key], su.ref);
     else r = swapScore(ctx, state, su, ctx, key);
     return { key, owner, dM: r.m - su.off.m, dC: sub(r.c, su.off.c), dCat: subV(r.dCat, su.off.dCat), old: cur + su.off.m, new: cur + r.m };
   }
