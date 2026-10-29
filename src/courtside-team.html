@@ -2632,8 +2632,21 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
     if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
     else {
-      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: Matchup.nightValue(ctx, byKey.get(k)), from: w.from, to: w.to }));
-      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, items[i].a));
+      // with the active slots full an IL player shares the worst active player's slot: his games come out of that player's games
+      // (IL 20, worst 80 -> IL 20, worst 60), and their Plays % split what that player's was. Open slots are filled as before.
+      const act = keys.filter(k => state.slots[k] === 'active'), full = act.length >= ctx.L.maxActive;
+      const lineup = full ? act : keys, v = k => Matchup.nightValue(ctx, byKey.get(k));
+      const items = lineup.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: w.to }));
+      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(lineup[i], g, items[i].a));
+      if (full) {
+        const worst = act.slice().sort((a, b) => v(a) - v(b)), il = keys.filter(k => state.slots[k] === 'il');
+        il.forEach((k, n) => {
+          const wk = worst[n % worst.length], base = res[wk], take = Math.min(soloGames(ctx, k), base.played), share = base.played > 0 ? take / base.played : 0;
+          res[k] = { gl: gamesLeft(ctx, byKey.get(k).t), played: take, pct: base.pct == null ? null : base.pct * share };
+          res[k].wt = res[k].gl ? take / res[k].gl : null;
+          base.played -= take; base.wt = base.gl ? base.played / base.gl : null; if (base.pct != null) base.pct *= 1 - share;
+        });
+      }
     }
     return res;
   }
@@ -2869,7 +2882,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     });
     const out = evalVecs(e, vecs), F = Pts.FP_SLOT;
     const P = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? out.catProb(out.teams[i], out.teams[j], F) : shr(out.pairProb(out.teams[i], out.teams[j]), k.match)));
-    return { W, ids, P };
+    if (!(o && o.detail)) return { W, ids, P };
+    // detail (the League tab): C[i][j][c] = team i's shrunk chance in category c against team j (null past nc, on the diagonal and in points mode), as the matrix's `cat`
+    const C = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? null : Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(out.teams[i], out.teams[j], c), k.cat))));
+    return { W, ids, P, C, swing: e.ctx.swing };
   }
 
   // one Engine.evaluate run with one entry per team (vecs from teamVec); out.teams[i] is vecs[i], then out.pairProb / out.catProb
@@ -3044,7 +3060,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const groups = SLOT_ORDER.map(slot => ({ slot, rows: all.filter(r => r.slot === slot) }));
     // Plays % is the lineup share only; Win also counts how much of the time a player is there (Team.avail: 1 on Per game and on a plain ctx),
     // so the team line and avgZ weight each player by both
-    const wt = k => plays[k].pct == null ? null : plays[k].pct * (ctx.teamTab ? Team.avail(ctx, ctx.pool.byKey.get(k)) : 1);
+    const wt = k => plays[k].wt !== undefined ? plays[k].wt : plays[k].pct == null ? null : plays[k].pct * (ctx.teamTab ? Team.avail(ctx, ctx.pool.byKey.get(k)) : 1);
     const avg = Team.teamLine(state.order.map(k => ({ line: ctx.pool.byKey.get(k).line, pct: wt(k), hypo: plays[k].hypo })), slots);
     let avgCats = null;
     if (o.zCats) {
@@ -3152,6 +3168,36 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return ctx;
   }
 
+  // sources (2026-10-26, shared with the League tab 2026-10-29): rows per source. The monthly box-score files load only when a box-score
+  // source is asked for (need); a window built before the files arrive is empty: it is returned, but never kept.
+  // -> { rows(src), win(src), need(src, fetchFn), setBox(b), box() }
+  function createSources(PLAYERS) {
+    let box = null, boxP = null; const cache = new Map();
+    const win = src => { const k = 'win:' + src; if (cache.has(k)) return cache.get(k); const w = Rk.windowSource(box || [], Rk.WINDAYS[src], PLAYERS); if (box) cache.set(k, w); return w; };
+    const rows = src => { const k = 'rows:' + src; if (cache.has(k)) return cache.get(k); const r = Rk.WINDAYS[src] ? win(src).rows : Rk.projSource(PLAYERS, src); if (!Rk.WINDAYS[src] || box) cache.set(k, r); return r; };
+    const need = (src, fetchFn) => Rk.WINDAYS[src] ? (boxP = boxP || Rk.loadBox(fetchFn).then(b => (box = b))) : Promise.resolve();
+    return { rows, win, need, setBox: b => { box = b; }, box: () => box };
+  }
+
+  // the category Zscores of the roster tables, by Fantrax key: the source's own table; a player with no game in it keeps his projection
+  // Zscore (the 'avg' table fills the gaps). One table per source rows and settings (R.table + matchRows cost about 90 ms) is kept until
+  // the rows, pool or Fantrax players change. -> zMap(sources, { src, settings, ztype, basis, pool, fxPlayers }) = Map(key -> 9 category Zscores)
+  function createZMap() {
+    const zCache = new WeakMap();
+    return (sources, a) => {
+      const zmap = new Map(), s = a.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: a.ztype, basis: a.basis };
+      const ck = [s.teams, s.roster, s.cats, opt.basis, opt.type].join('|');
+      const tableOf = (src, rows) => {
+        let c = zCache.get(rows); if (!c || c.pool !== a.pool || c.fx !== a.fxPlayers) zCache.set(rows, c = { pool: a.pool, fx: a.fxPlayers, by: new Map() });
+        if (!c.by.has(ck)) { const byPid = Rk.matchRows(src, rows, a.pool, a.fxPlayers).byPid; c.by.set(ck, Rk.table(rows, opt).map(x => x.cats && byPid.get(x.pid) ? [byPid.get(x.pid), x.cats] : null).filter(Boolean)); }
+        return c.by.get(ck);
+      };
+      const add = (src, over) => tableOf(src, sources.rows(src)).forEach(([k, cats]) => { if (over || !zmap.has(k)) zmap.set(k, cats); });
+      add(a.src, true); if (a.src !== 'avg') add('avg', false);
+      return zmap;
+    };
+  }
+
   // ---- the list as drawn ----
   const SLOT_LABEL = { active: 'Active', reserve: 'Reserve', il: 'IL' };
   // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query.
@@ -3233,7 +3279,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     }, s);
   }
 
-  const api = { gamesLeft, rows, zParts, move, fillProbe, autoFill, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, signature, sendOutList, bringInList, search: Team.search, pick, apply };
+  const api = { gamesLeft, rows, zParts, move, fillProbe, autoFill, slotCounts, winJob, moduleJob, nextJob, moduleView, diff, sortRows, dropSwap, dropIn, createScorer, sourceCtx, createSources, createZMap, signature, sendOutList, bringInList, search: Team.search, pick, apply };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamView = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -3332,29 +3378,17 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const zCats = pp => (zmap.has(pp.key) ? zmap.get(pp.key) : null);
 
   // sources (2026-10-26): the monthly box-score files load only when a box-score source is picked; rows and Zscore tables are kept per source
-  let box = null, boxP = null;
-  const needBox = () => R.WINDAYS[ui.src] ? (boxP = boxP || R.loadBox(fetch).then(b => (box = b))) : Promise.resolve();
-  // a window built before the box files arrive (box === null) is empty: use it, but never keep it
-  const srcCache = new Map(), srcWin = src => { const k = 'win:' + src; if (srcCache.has(k)) return srcCache.get(k); const w = R.windowSource(box || [], R.WINDAYS[src], PLAYERS); if (box) srcCache.set(k, w); return w; };
-  const srcRows = src => { const k = 'rows:' + src; if (srcCache.has(k)) return srcCache.get(k); const r = R.WINDAYS[src] ? srcWin(src).rows : R.projSource(PLAYERS, src); if (!R.WINDAYS[src] || box) srcCache.set(k, r); return r; };
+  // (TeamView.createSources, shared with the League tab: a window built before the box files arrive is empty and never kept)
+  const SRCS = TV.createSources(PLAYERS), zMapOf = TV.createZMap();
+  const needBox = () => SRCS.need(ui.src, fetch), srcWin = SRCS.win, srcRows = SRCS.rows;
   const SRC_NAME = { season: 'Season to date', w7: 'Last week', w14: 'Last 2 weeks', w30: 'Last month', avg: 'BBM + Hashtag average', bbm: 'BBM', hs: 'Hashtag' };
   // the category Zscores of the roster table: the source's own table; a player with no game in it keeps his projection Zscore
-  const zCache = new WeakMap();
   // the Per game / Rest of season toggle is the basis of the Win numbers and the Zscore table, as on the Rankings tab (2026-10-26)
   const basisOf = () => ui.view === 'ros' ? 'total' : 'pergame';
   const maxA = () => ctx.L.maxPlayers || ctx.L.maxActive;
   function mkZ() {
     zmap = new Map(); if (pw()) return;
-    const s = SS.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: ui.ztype, basis: basisOf() };
-    // one table per source rows and settings (R.table + matchRows cost about 90 ms): kept until the rows, pool or Fantrax players change
-    const ck = [s.teams, s.roster, s.cats, opt.basis, opt.type].join('|');
-    const tableOf = (src, rows) => {
-      let c = zCache.get(rows); if (!c || c.pool !== pool || c.fx !== fxPlayers) zCache.set(rows, c = { pool, fx: fxPlayers, by: new Map() });
-      if (!c.by.has(ck)) { const byPid = R.matchRows(src, rows, pool, fxPlayers).byPid; c.by.set(ck, R.table(rows, opt).map(x => x.cats && byPid.get(x.pid) ? [byPid.get(x.pid), x.cats] : null).filter(Boolean)); }
-      return c.by.get(ck);
-    };
-    const add = (src, over) => tableOf(src, srcRows(src)).forEach(([k, cats]) => { if (over || !zmap.has(k)) zmap.set(k, cats); });
-    add(ui.src, true); if (ui.src !== 'avg') add('avg', false);
+    zmap = zMapOf(SRCS, { src: ui.src, settings: SS.settings, ztype: ui.ztype, basis: basisOf(), pool, fxPlayers });
   }
 
   function start() {
