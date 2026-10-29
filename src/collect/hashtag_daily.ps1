@@ -7,10 +7,12 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $log = Join-Path $repo 'src\hashtag_fetch.log'
 Set-Location $repo
 function Log($m) { $m | Add-Content $log }
+# after a failed or aborted run on the push branch, drop the build's changes so tomorrow's run starts clean (this checkout is the automation's own)
+function Clean { if ($script:canPush -and -not $DryRun) { git reset -q --hard; git clean -fdq -- assets src/data } }
 function Run($what, [scriptblock]$cmd) {
   $out = & $cmd 2>&1 | Out-String
   if ($out.Trim()) { Log $out.TrimEnd() }
-  if ($LASTEXITCODE -ne 0) { Log "FAILED: $what (exit $LASTEXITCODE)"; exit 1 }
+  if ($LASTEXITCODE -ne 0) { Log "FAILED: $what (exit $LASTEXITCODE)"; Clean; exit 1 }
 }
 Log "--- $(Get-Date -Format 'yyyy-MM-dd HH:mm')$(if ($DryRun) { ' (dry run)' }) ---"
 $want = if ($env:HASHTAG_PUSH_BRANCH) { $env:HASHTAG_PUSH_BRANCH } else { 'main' }
@@ -29,9 +31,9 @@ Run 'tests' { node --test src/tests/ }
 git add -A
 $changed = @(git diff --cached --name-only)
 if (-not $changed) { Log 'No change in the projections'; exit 0 }
-$ok = '^(src/players\.json|src/data/hashtag_[\d-]+\.xlsx|assets/.*|(index|league|inseason|settings|rankings|team|math)\.html)$'
+$ok = '^(src/players\.json|src/data/hashtag_[\d-]+\.xlsx|assets/.*|src/courtside-[a-z]+\.html|(index|league|inseason|settings|rankings|team|math)\.html)$'
 $odd = @($changed | Where-Object { $_ -notmatch $ok })
-if ($odd) { Log ('Push aborted, unexpected files changed: ' + ($odd -join ', ')); git reset -q; exit 1 }
+if ($odd) { Log ('Push aborted, unexpected files changed: ' + ($odd -join ', ')); git reset -q; Clean; exit 1 }
 if ($DryRun) { Log ("Dry run: would commit " + $changed.Count + " files"); git reset -q; exit 0 }
 Run 'commit' { git commit -q -m "chore: Hashtag projections $(Get-Date -Format 'yyyy-MM-dd') (auto)`n`nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" }
 & git push origin $want 2>&1 | Out-String | Add-Content $log
