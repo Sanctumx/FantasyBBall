@@ -18,7 +18,7 @@ $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 $canPush = $branch -eq $want
 if ($canPush) {
   if (git status --porcelain --untracked-files=no) { Log 'Push skipped: tracked files have uncommitted changes'; $canPush = $false }
-  else { Run 'git pull' { git pull --ff-only origin $want } }
+  elseif (-not $DryRun) { Run 'git pull' { git pull --ff-only origin $want } }
 } else { Log "Push skipped: on $branch, not $want" }
 
 Run 'fetch' { node src/collect/hashtag_fetch.mjs fetch }
