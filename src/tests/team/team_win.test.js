@@ -177,7 +177,23 @@ test('avg: a player dropped at an IL return is replaced by an average player who
   assert.ok(row.dM > rowR.dM - 2, 'about the replacement\'s level ' + row.dM + ' vs ' + rowR.dM);
 });
 
-test('avg: avgOwn on a counted player equals avgCandidate on the same player taken out and put back as a candidate (same games rule)', () => {
+test('avg: a dropped IL player gets 0 games and is replaced by an average entry with his slot\'s share of games; the team keeps playing the others', () => {
+  const pp = pool.byKey.get(T.tabState(ROS[me]).order.find(k => T.tabState(ROS[me]).slots[k] === 'il')), was = pp.g;
+  pp.g = 4;   // 5% of a season: the cheapest drop, so he is the one who goes
+  try {
+    const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]), il = pp.key, w = T.window(ctx);
+    const pl = W.plays(ctx, st, { tid: me });
+    assert.strictEqual(pl[il].drop, w.from, 'fixture: the IL player is dropped at the start');
+    assert.strictEqual(pl[il].played, 0);
+    const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), ap = su.ap, g = T.soloGames(ctx, il, pl[il].drop);
+    assert.strictEqual(g, 0, 'a dropped IL player has no games before he leaves');
+    const hand = W.matrixOf(ctx, ap.mine.filter(e => e.key !== il).concat(Object.assign({}, ap.mean, { games: 0 })), new Set(st.order), ap.W);
+    assert.ok(near(W.moduleRow(ctx, st, su, il).dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9));
+    assert.ok(near(W.moduleRow(ctx, st, su, il).dM, 0, 1e-9), 'he adds nothing, so he reads 0 vs average');
+  } finally { pp.g = was; }
+});
+
+test('avg: avgOwn on a counted player equals the team with an average-line entry (his slot\'s games) in his place', () => {
   const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
   const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), k = T.counted(st, ctx)[0], g = T.soloGames(ctx, k) / su.ap.W * su.ap.share;
   const own = W.moduleRow(ctx, st, su, k), mine = su.ap.mine.filter(e => e.key !== k).concat(Object.assign({}, su.ap.mean, { games: g })), hand = W.matrixOf(ctx, mine, new Set(st.order), su.ap.W);

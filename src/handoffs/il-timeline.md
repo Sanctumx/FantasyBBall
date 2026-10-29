@@ -8,10 +8,10 @@ Real league (Paragua, diag `C:/Users/Fefe/Documents/pw-tools/diag6.mjs`, PORT en
 Perf: moduleScores +~200 ms, tradeCandidates('any') +~100 ms. `category_golden.json` regenerated on purpose (its hash was already stale, so it was being skipped).
 Tests changed: "trade and its reverse cancel" runs with maxPlayers 99 (arrivals are never dropped, so with a limit the two directions differ).
 
-Reviewer leftovers, NOT done (should-fix, small): (a) add a test that winJob Vs-average roster rows equal moduleRow for points and cats 8 on an over-limit IL roster (the fix `avgParts(..., opts)` at team_view.js:64 is in, untested); (b) test the dropped-IL avgOwn path (fixture IL player at 5% line); (c) test the s<0 branch of tabPlays (13 Active + 1 IL, lim 12: first drop leaves at window start, second at the return); (d) rename/assert the "avgOwn equals avgCandidate" test (it never computes avgCandidate); (e) assert "a dropped IL player shows 0" in team_view.test.js.
+Reviewer leftovers (a)-(e) done 2026-10-29: tests for winJob Vs-average rows (points, 8 cats, over-limit IL roster), the dropped-IL avgOwn path, the s<0 branch of tabPlays, the renamed avgOwn test, and a dropped IL player's row at 0 Plays %. 530 unit tests pass. These cover fixes already in, so none failed first.
 
 Hazards for other branches: every seasonal Team-tab / Rankings Win number with an IL player changes, as do the Trade Analyzer, trade finder, `calib_live` and #163 on `inseason-pe` (`ipe_trade_core.js` calls `TeamWin.leagueWin`): re-run or pin #163 after this merges. Model pick / backtests untouched.
 
 Cleanup: a scratch git worktree for before/after timing is at `C:/Users/Fefe/AppData/Local/Temp/claude/c--Users-Fefe-Documents-FantasyBBall/310ebeb0-60da-4ee9-84e8-bab970f86f1e/scratchpad/old` (remove: needs the user's OK). A local server may still run on port 8791 from this worktree (`node .claude/scripts/serve-local.mjs 8791`; the user viewed it on their phone at http://192.168.0.51:8791/team.html).
 
-Next: add the five leftover tests (test first where it fails), commit, then wait for the user's "push": push, PR (after fix-roster-rep's). Then land ledger #165 (`node .claude/scripts/ledger.mjs land`). Follow-up ledger rows: `capDrops` in trade_core on `dropRank`; return dates (no source yet).
+Next: wait for the user's "push": push, PR (after fix-roster-rep's). Then land ledger #165 (`node .claude/scripts/ledger.mjs land`). Follow-up ledger rows: `capDrops` in trade_core on `dropRank`; return dates (no source yet).

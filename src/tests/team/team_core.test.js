@@ -197,6 +197,19 @@ test('IL timeline: o.force drops that many even under the limit (at the first re
   });
 });
 
+test('IL timeline: 13 Active + 1 IL over a limit of 12 is two over: the first drop leaves at the window start, the second at the return', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 13).concat(ROS[other][0].fid), act = keys.slice(0, 13), il = keys[13], rank = k => (act.includes(k) ? act.indexOf(k) : Infinity);
+  withG(il, 40, () => {
+    const ctx = timelineCtx(keys, new Array(14).fill(10)), r = T.ilReturn(ctx, il), w = T.window(ctx), res = T.playsPct(ctx, stateOf(act, [], [il]), { rank });
+    assert.ok(r.nOut > 0, 'fixture: a real absence');
+    assert.strictEqual(res[act[0]].drop, w.from, 'already over the limit: gone from the start');
+    assert.strictEqual(res[act[0]].played, 0);
+    assert.strictEqual(res[act[1]].drop, r.tRet, 'the second goes when the IL player is back');
+    assert.strictEqual(res[act[2]].drop, undefined);
+    assert.strictEqual(Object.keys(res).filter(k => res[k].drop != null).length, 2);
+  });
+});
+
 test('IL timeline: soloGames(ctx, key, to) counts the games only up to `to`', () => {
   const keys = ROS[me].map(x => x.fid).slice(0, 3), ctx = timelineCtx(keys, [10, 10, 10]), k = keys[0], w = T.window(ctx);
   assert.ok(near(T.soloGames(ctx, k, w.to), T.soloGames(ctx, k), 1e-9));
