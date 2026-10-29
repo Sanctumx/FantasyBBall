@@ -103,7 +103,7 @@
     o = o || {};
     if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop });
     let rank = null;
-    return Team.playsPct(ctx, state, { rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
+    return Team.playsPct(ctx, state, { extra: o.extra, rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
   }
 
   // The drop order of team tid on the Team tab (IL timeline, user 2026-10-29: drop by Win M contribution): rank(k) = minus the team's mean match
@@ -269,10 +269,10 @@
   // counted players get out of the games their own team schedules allow, with no nightly cap (the team's average lineup share).
   // -> null with no counted player or no games
   function avgParts(ctx, state, W, opts) {
-    const mine = side(ctx, state, W, sideOpts(opts)), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
-    const allowed = Team.counted(state, ctx).reduce((a, k) => a + Team.soloGames(ctx, k), 0);   // each player alone: no nightly cap
+    const r = plays(ctx, state, sideOpts(opts)), mine = sideOf(ctx, state, r, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
+    const allowed = Team.counted(state, ctx).reduce((a, k) => a + Team.soloGames(ctx, k, r[k].drop), 0);   // each player alone: no nightly cap; a dropped one only until he leaves
     if (!n || !(tot > 0) || !(allowed > 0)) return null;
-    return { W, mine, n, tot, M, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
+    return { W, mine, n, tot, M, plays: r, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
   }
 
   // a player not counted on my team replaces the average player: current team - average + him, his games times the share
@@ -286,9 +286,18 @@
   // my counted player replaced by an average-line player who gets the games his slot allows, as a candidate does (avgCandidate): his games
   // times the team's share, not the games he plays, so a player who never plays costs what his slot would hold (user 2026-10-29, reverses #138's
   // "keeps his games") and the list and the roster agree
+  // A player who is dropped at an IL return (non-IL) is replaced by an average player who cannot be dropped, so the drop moves on to the
+  // next-ranked player (the roster is the same size): without that he would read far below the replacement for games he never plays.
+  // The average player counts against the player limit but takes no nightly slot (a: 0 item); the rest of the team is replayed without D
   function avgOwn(ctx, state, ap, key, opts) {
-    const t = trade(ctx, state), g = Team.soloGames(ctx, key) / ap.W * ap.share;
-    return matrixOf(ctx, ap.mine.filter(x => x.key !== key).concat(Object.assign({}, ap.mean, { games: g })), new Set(state.order.concat([...t.gone])), ap.W, Object.assign({}, opts, { recv: t.recv }));
+    const t = trade(ctx, state), g = Team.soloGames(ctx, key) / ap.W * ap.share, so = sideOpts(opts);
+    const dropped = state.slots[key] !== 'il' && ap.plays && ap.plays[key] && ap.plays[key].drop != null;
+    let mine = ap.mine.filter(x => x.key !== key);
+    if (dropped) {
+      const w = Team.window(ctx), without = Team.applySwap(state, [key], []), A0 = { t: ctx.pool.byKey.get(key).t, a: 0, v: 0, from: w.from, to: w.from };
+      mine = sideOf(ctx, without, plays(ctx, without, Object.assign({ extra: [A0] }, so)), ap.W);
+    }
+    return matrixOf(ctx, mine.concat(Object.assign({}, ap.mean, { games: g })), new Set(state.order.concat([...t.gone])), ap.W, Object.assign({}, opts, { recv: t.recv }));
   }
 
   // points my counted players produce in an average remaining week: sum of FP per game x Plays % games per week

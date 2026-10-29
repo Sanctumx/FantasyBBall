@@ -166,6 +166,7 @@
       const s = typeof lim === 'number' ? lim - onRoster : Infinity, times = s >= 0 ? keptRet.slice(s) : new Array(-s).fill(w.from).concat(keptRet), leave = {}, outs = order.slice(0, nDrop).filter(k => !il.includes(k));
       while (times.length < outs.length) times.unshift(keptRet.length ? keptRet[0] : w.from + (w.to - w.from) / 2);   // only a forced drop is short of a time
       outs.forEach((k, j) => { leave[k] = times[j]; });
+      il.forEach(k => { if (dropped.has(k)) leave[k] = w.from; });   // a dropped IL player never plays: he left at the start
       const items = keys.map(k => il.includes(k)
         ? (dropped.has(k) ? { t: byKey.get(k).t, a: 0, v: v(k), from: w.from, to: w.from } : { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: w.to })
         : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: leave[k] != null ? leave[k] : w.to });

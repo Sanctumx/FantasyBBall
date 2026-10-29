@@ -155,12 +155,26 @@ test('Team tab: the list row of an IL player equals the roster row (one pw, no p
   assert.ok(W.moduleRow(c0, st, su, none).dM < -1e-9, 'reads below 0');
 });
 
-test('avg: a counted player who is squeezed out of the lineup (0% Plays) is judged at the games his slot allows, so he reads below 0', () => {
+test('avg: a player dropped at an IL return is replaced by an average player who takes his slot games and cannot be dropped, so the drop moves on', () => {
   const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
-  const pl = W.plays(ctx, st, { tid: me }), sq = Object.keys(pl).find(k => T.counted(st, ctx).includes(k) && pl[k].played === 0 && pl[k].gl > 0);
-  if (!sq) return;   // the fixture needs a cut player; the logic is covered by the candidate-equality test below
-  const su = W.moduleSetup(ctx, st, { baseline: 'avg' });
-  assert.ok(W.moduleRow(ctx, st, su, sq).dM !== 0);
+  const pl = W.plays(ctx, st, { tid: me }), D = Object.keys(pl).find(k => pl[k].drop != null && st.slots[k] !== 'il'), Wk = W.weeksLeft(ctx);
+  assert.ok(D, 'fixture: a counted player is dropped');
+  const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), ap = su.ap;
+  // the share counts a dropped player's games only up to his leave time
+  const allowed = T.counted(st, ctx).reduce((a, k) => a + T.soloGames(ctx, k, pl[k].drop), 0);
+  assert.ok(allowed < T.counted(st, ctx).reduce((a, k) => a + T.soloGames(ctx, k), 0), 'the dropped player counts less than a full window');
+  assert.ok(near(ap.share, ap.tot * Wk / allowed, 1e-12), 'share ' + ap.share);
+  // his row = the team minus the team with an average player in his place, the next-ranked player dropped instead
+  const st2 = T.applySwap(st, [D], []), w = T.window(ctx), A0 = { t: pool.byKey.get(D).t, a: 0, v: 0, from: w.from, to: w.from };
+  const r2 = T.playsPct(ctx, st2, { rank: W.dropRank(ctx, me), extra: [A0] });
+  const mine = T.counted(st2, ctx).map(k => ({ key: k, p: pool.byKey.get(k).line, games: r2[k].played / Wk })).concat(Object.assign({}, ap.mean, { games: T.soloGames(ctx, D) / Wk * ap.share }));
+  const hand = W.matrixOf(ctx, mine, new Set(st.order), Wk, { recv: {} }), row = W.moduleRow(ctx, st, su, D);
+  assert.ok(near(row.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9), 'dropped row ' + row.dM);
+  assert.ok(Object.keys(r2).some(k => r2[k].drop != null && k !== D), 'the drop moved to another player');
+  // he reads at the replacement's level, not far below it
+  const rep = W.moduleSetup(ctx, st, { baseline: 'rep' }), rowR = W.moduleRow(ctx, st, su, rep.worst);
+  assert.ok(row.dM <= rowR.dM + 1e-9, 'D ' + row.dM + ' vs R ' + rowR.dM);
+  assert.ok(row.dM > rowR.dM - 2, 'about the replacement\'s level ' + row.dM + ' vs ' + rowR.dM);
 });
 
 test('avg: avgOwn on a counted player equals avgCandidate on the same player taken out and put back as a candidate (same games rule)', () => {
