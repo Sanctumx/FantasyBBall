@@ -15,6 +15,6 @@ for (const [name, c] of arms) {
     for (const a of ADDS) row['a' + a] = scoreLeague(season, ro, { seed, target: true, adds: a }).rates[slot - 1];
     rows.push(row);
   }
-  out.push({ name, rows }); require('fs').writeFileSync('bt_wadds_' + season + '_' + s0 + '-' + s1 + '.json', JSON.stringify(out));
+  out.push({ name, rows }); require('fs').writeFileSync(require('./results_path').resultPath('bt_wadds_' + season + '_' + s0 + '-' + s1 + '.json'), JSON.stringify(out));
   console.log(season, name, ADDS.map(a => (100 * rows.reduce((s, r) => s + r['a' + a], 0) / rows.length).toFixed(2)).join(' '), ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }

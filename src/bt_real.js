@@ -107,5 +107,5 @@ for (const slot of [1, 4, 7, 10, 14]) for (let seed = s0; seed <= s1; seed++) {
   const t = titleScore(sc.weekTot, old ? {} : { rsMode: 'each', rsWeeks: 17, rounds: [[17, 18], [19, 20], [21, 22]] }), m = slot - 1;
   rows.push({ season, arm, slot, seed, me: sc.rates[m], made: t.made[m], poAll: t.poAll[m], rounds: t.roundsWon[m], title: t.title[m], roster: ro[m].slice().sort().join(',') });
 }
-require('fs').writeFileSync(`bt_real_${season}_a${arm}_${s0}-${s1}.json`, JSON.stringify({ name, rows }));
+require('fs').writeFileSync(require('./results_path').resultPath(`bt_real_${season}_a${arm}_${s0}-${s1}.json`), JSON.stringify({ name, rows }));
 console.log(season, name, ((Date.now() - t0) / 1000).toFixed(0) + 's');

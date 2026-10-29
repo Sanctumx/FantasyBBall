@@ -15,6 +15,6 @@ for (const [name, c] of arms) {
     const sc = scoreLeague(season, ro, { seed, target: true, slots: SLOTS, pos: POS });
     rows.push({ season, slot, seed, me: sc.rates[slot - 1], played: sc.played[slot - 1], roster: ro[slot - 1].slice().sort().join(',') });
   }
-  out.push({ name, rows }); require('fs').writeFileSync('bt_posscar_' + season + '_' + s0 + '-' + s1 + '.json', JSON.stringify(out));
+  out.push({ name, rows }); require('fs').writeFileSync(require('./results_path').resultPath('bt_posscar_' + season + '_' + s0 + '-' + s1 + '.json'), JSON.stringify(out));
   console.log(season, name, (rows.reduce((a, r) => a + r.me, 0) / rows.length).toFixed(4), ((Date.now() - t0) / 1000).toFixed(0) + 's');
 }
