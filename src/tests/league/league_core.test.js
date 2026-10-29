@@ -123,3 +123,9 @@ test('per game basis changes the win chances and shows per-game stats', () => {
   assert.strictEqual(G.perWeek, null);
   for (const c of G.cats) assert.deepStrictEqual(G.rank.map(r => r[c]).sort((a, b) => a - b), Array.from({ length: 14 }, (_, i) => i + 1));
 });
+
+test('teamOrder: by standings rank, then team name (numbers in names sort naturally); unranked teams last', () => {
+  const info = { a: { name: 'Team 10' }, b: { name: 'Team 2' }, c: { name: 'Zed' }, d: { name: 'Alpha' } };
+  assert.deepStrictEqual(L.teamOrder(info, [{ teamId: 'c', rank: 1 }, { teamId: 'd', rank: 2 }]), ['c', 'd', 'b', 'a']);
+  assert.deepStrictEqual(L.teamOrder(info, null), ['d', 'b', 'a', 'c']);
+});

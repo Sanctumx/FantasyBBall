@@ -65,6 +65,16 @@ test('score: standings rank by the scoring mode, profile win is the mean categor
   assert.strictEqual(r.me, ids.indexOf(me));
 });
 
+test('score: with zCats the Zscore view is each team\'s Team-tab Z per lineup slot', () => {
+  const ctx = mkTab('total'), zCats = pp => Array.from({ length: 9 }, (_, c) => (pp.line.pts + c) / 10);
+  const r = LT.score({ ctx, ids, names, basis: 'total', cats: 9, scoring: 'h2h', zCats }), plain = LT.score({ ctx, ids, names, basis: 'total', cats: 9, scoring: 'h2h' });
+  ids.forEach((a, i) => {
+    const want = TV.rows(W.tabView(ctx, 'total'), W.tradeState(ctx, a, ctx.roster[a]), { cats: 9, view: 'game', zCats }).avgCats;
+    want.forEach((v, c) => assert.ok(near(r.z[i][c], v, 1e-9), 'team ' + a + ' cat ' + c));
+  });
+  assert.deepStrictEqual(r.rank, plain.rank);   // ranks stay on the stat lines
+});
+
 test('score: 8 categories drop turnovers; no weeks left gives null', () => {
   const r8 = LT.score({ ctx: mkTab('total'), ids, names, basis: 'total', cats: 8, scoring: 'h2h' });
   assert.strictEqual(r8.nc, 8); assert.ok(!r8.cats.includes(8));

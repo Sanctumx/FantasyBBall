@@ -21,7 +21,7 @@
   }
 
   // a = { ctx (a Team-tab context: teamTab, any basis), ids (team ids in display order), names, basis 'total' | 'pergame', cats 9 | 8,
-  //       scoring 'h2h' | 'most' | 'roto' }
+  //       scoring 'h2h' | 'most' | 'roto', zCats? (pool player -> category Zscores, TeamView.rows's option) }
   // -> the League page's result { N, nc, cats, me, names, basis, match, cat, expCats, standings, raw, perGame, perWeek, z, rank, profile, il, W, swing },
   //    or null with no weeks left. `raw` is the per game line on 'pergame' and rest-of-season totals on 'total'; perWeek the totals per week left.
   function score(a) {
@@ -38,11 +38,12 @@
         match[i].push(lw.P[li][lj]); cat[i].push(cp); expCats[i].push(cp ? cats.reduce((s, c) => s + cp[c], 0) : null);
       }
     }
-    const il = [], perGame = [], total = [];
+    const il = [], perGame = [], total = [], zSlot = [];
     ids.forEach(t => {
       const state = TeamWin.tradeState(a.ctx, t, a.ctx.roster[t]);
       il.push(state.order.filter(k => state.slots[k] === 'il'));
-      perGame.push(ofLine(TeamView.rows(tv, state, { cats: nc, view: 'game' }).avg));
+      const rows = TeamView.rows(tv, state, { cats: nc, view: 'game', zCats: a.zCats });
+      perGame.push(ofLine(rows.avg)); zSlot.push(rows.avgCats);
       total.push(totals(TeamWin.side(tv, state, lw.W).map(e => ({ p: e.p, games: e.games * lw.W }))));
     });
     const raw = basis === 'pergame' ? perGame : total;
@@ -54,6 +55,9 @@
       col.forEach((v, t) => { z[t][c] = sign * (v - m) / sd; });
       col.map((v, t) => [sign * v, t]).sort((x, y) => y[0] - x[0]).forEach(([, t], k) => { rank[t][c] = k + 1; });
     }
+    // with a.zCats (player -> his 9 category Zscores of the chosen type) the Zscore view shows each team's Plays % weighted Z per lineup slot,
+    // the Team tab's own number; ranks stay across teams on the stat line above
+    if (zSlot.every(Boolean)) zSlot.forEach((zs, t) => { z[t] = zs.slice(); });
     // standings: expected categories per game and mean match chance against the others; roto = 1 + the expected teams beaten, per category
     const sums = (M, f) => M.map(row => row.reduce((s, v) => s + (v == null ? 0 : f(v)), 0));
     const catsSum = sums(expCats, v => v), matchSum = sums(match, v => v);
