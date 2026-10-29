@@ -44,6 +44,32 @@ test('L30 drops rows older than 30 days; it equals STD at week 4', () => {
   assert.deepStrictEqual(CB.blendLine(line, wk4, 3, 'L30', n0), CB.blendLine(line, wk4, 3, 'STD', n0));                  // cut 21: 21 days fit in 30
 });
 
+test('L60 and L90 (#156): window is the last N days, equal to STD while the checkpoint is within N days', () => {
+  const n0 = { g: 5, min: 200, fg: 50, ft: 50 }, rs = rows.filter(r => r[0] < 112);
+  for (const [win, days] of [['L60', 60], ['L90', 90]]) {
+    const w0 = 15, cut = 7 * w0, kept = rs.filter(r => r[0] >= cut - days && r[0] < cut);   // cut 105
+    assert.deepStrictEqual(CB.blendLine(line, rs, w0, win, n0), CB.blendLine(line, kept, w0, 'STD', n0));
+    assert.deepStrictEqual(CB.blendLine(line, rs, 8, win, n0), CB.blendLine(line, rs, 8, 'STD', n0));   // cut 56 <= 60
+  }
+  assert.notDeepStrictEqual(CB.blendLine(line, rs, 15, 'L60', n0), CB.blendLine(line, rs, 15, 'STD', n0));
+});
+
+test('makeSample holds the sums of every window (#156)', () => {
+  const s = CB.makeSample(line, rows, 12);
+  for (const w of ['STD', 'L30', 'L60', 'L90']) assert.ok(s.w[w] && s.w[w].gp >= 0, w);
+  assert.strictEqual(s.w.STD, s.std); assert.strictEqual(s.w.L30, s.l30);
+  assert.ok(s.w.L30.gp <= s.w.L60.gp && s.w.L60.gp <= s.w.L90.gp && s.w.L90.gp <= s.w.STD.gp);
+});
+
+test('fitOn fits n0 on the named seasons only (#156)', () => {
+  const mk = (seed, bias) => { const r = require('../../calib_ros_stats.js').rng(seed); return Array.from({ length: 60 }, () => {
+    const rs = Array.from({ length: 20 }, (_, i) => row(i, { pts: 20 + 5 * r() })), rest = Array.from({ length: 20 }, (_, i) => row(30 + i, { pts: 20 + bias + 5 * r() }));
+    return CB.makeSample(Object.assign({}, line), rs.concat(rest), 3); }); };
+  const grids = { g: [0, 10, Infinity], min: [0, 100, Infinity], a: [0, 100, Infinity] }, by = { a: mk(1, 0), b: mk(2, 0), c: mk(3, 0) };
+  const base = CB.fitOn(by, ['a', 'b'], { grids }).n0;
+  assert.deepStrictEqual(CB.fitOn({ a: by.a, b: by.b, c: mk(3, 50) }, ['a', 'b'], { grids }).n0, base);
+});
+
 test('percentages are weighted by attempts', () => {
   const rs = [row(1, { fgm: 1, fga: 2, ftm: 0, fta: 2 }), row(2, { fgm: 9, fga: 18, ftm: 8, fta: 8 })], b = CB.blendLine(line, rs, 4, 'STD', { g: Infinity, min: Infinity, fg: 0, ft: 0 });
   assert.ok(Math.abs(b.fgp - 10 / 20) < 1e-9 && Math.abs(b.ftp - 8 / 10) < 1e-9);

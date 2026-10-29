@@ -24,7 +24,9 @@ function aggregate(rows, lo, hi) {
   }
   return a;
 }
-const window = (w0, win) => [win === 'L30' ? 7 * w0 - 30 : -Infinity, 7 * w0 - 1];
+// win: 'STD' or 'L<days>' (L30, L60, L90; #156)
+const WINDOWS = ['STD', 'L30', 'L60', 'L90'];
+const window = (w0, win) => [win === 'STD' ? -Infinity : 7 * w0 - Number(win.slice(1)), 7 * w0 - 1];
 
 function blendAgg(line, a, n0) {
   const out = Object.assign({}, line);
@@ -50,7 +52,8 @@ function makeSample(line, rows, w0) {
   const cut = 7 * w0, rest = aggregate(rows, cut, Infinity), pg = {};
   for (const k of COUNT.concat(ATT)) pg[k] = rest.gp ? (k === 'fga' ? rest.fga : k === 'fta' ? rest.fta : rest.s[k]) / rest.gp : 0;
   pg.m = rest.gp ? rest.min / rest.gp : 0;
-  return { line, w0, std: aggregate(rows, ...window(w0, 'STD')), l30: aggregate(rows, ...window(w0, 'L30')), rest, pg,
+  const w = {}; WINDOWS.forEach(x => { w[x] = aggregate(rows, ...window(w0, x)); });
+  return { line, w0, w, std: w.STD, l30: w.L30, rest, pg,
     fgp: rest.fga ? rest.fgm / rest.fga : 0, ftp: rest.fta ? rest.ftm / rest.fta : 0 };
 }
 
@@ -62,7 +65,7 @@ function spreads(S) {
   sp.fg = wsd(S.map(s => (s.line.fgp - 0.46) * s.line.fga), ws); sp.ft = wsd(S.map(s => (s.line.ftp - 0.78) * s.line.fta), ws);
   return sp;
 }
-const agg = (s, win) => (win === 'L30' ? s.l30 : s.std);
+const agg = (s, win) => s.w[win];
 
 // weighted squared error of the blended per-game lines vs rest-of-season per game; fam: 'count' (minutes and rates) | 'fg' | 'ft'
 function loss(S, n0, win, sp, fam) {
@@ -90,6 +93,8 @@ function fitHoldout(bySeason, hold, opts = {}) {
   const S = [].concat(...Object.keys(bySeason).filter(s => s !== hold).map(s => bySeason[s]));
   return fitN0(S, opts);
 }
+// n0 fitted on the named seasons only (#156: nested folds leave out the training season and the held-out one)
+function fitOn(bySeason, names, opts = {}) { return fitN0([].concat(...names.map(s => bySeason[s])), opts); }
 // held-out weighted player RMSE by stat for a source: 'PRE' (preseason), 'STD' or 'L30' with its n0
 function rmse(S, win, n0) {
   const out = {}, tot = {}; let W = 0;
@@ -107,4 +112,4 @@ function rmse(S, win, n0) {
   out.fgp = Math.sqrt(out.fgp / (wf || 1)); out.ftp = Math.sqrt(out.ftp / (wt || 1));
   return out;
 }
-module.exports = { GRIDS, aggregate, blendAgg, blendLine, makeSample, spreads, loss, fitN0, fitHoldout, rmse };
+module.exports = { GRIDS, WINDOWS, fitOn, aggregate, blendAgg, blendLine, makeSample, spreads, loss, fitN0, fitHoldout, rmse };
