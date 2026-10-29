@@ -101,6 +101,16 @@ test('sellHighBuyLow from saved candidates matches the direct computation', () =
   assert.strictEqual(sig(b), sig(a));
 });
 
+test('sellHighBuyLow keep leaves players out before the top picks are chosen', () => {
+  const all = T.sellHighBuyLow(ctx, { limit: 8, targets: 3 }), gone = new Set([all.sellHigh[0], all.buyLow[0]].filter(Boolean).map(x => x.player.key));
+  const r = T.sellHighBuyLow(ctx, { limit: 8, targets: 3, keep: p => !gone.has(p.key) });
+  assert.ok(!r.sellHigh.some(x => gone.has(x.player.key)) && !r.buyLow.some(x => gone.has(x.player.key)));
+  assert.strictEqual(r.sellHigh.length, all.sellHigh.length);   // the list refills from the next player instead of shrinking
+  const cache = {}, cands = g => (cache[g] = cache[g] || T.tradeCandidates(ctx, g).filter(t => !gone.has(t.target.key)));
+  const c = T.sellHighBuyLow(ctx, { limit: 8, targets: 3, candidates: cands });
+  c.sellHigh.forEach(x => assert.ok(x.trades.every(t => !gone.has(t.target.key))));
+});
+
 test('candSig changes with rosters, day and period', () => {
   const s1 = T.candSig(ctx, '2026-10-21', 'v1'), same = T.candSig(ctx, '2026-10-21', 'v1');
   assert.strictEqual(s1, same);
