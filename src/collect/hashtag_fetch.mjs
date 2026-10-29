@@ -51,7 +51,19 @@ if (mode === 'login') {
   const head = rows[0], body = rows.slice(1).filter(r => r.length === COLS.length && r[1] && r[1] !== 'PLAYER');
   if (JSON.stringify(head) !== JSON.stringify(COLS)) throw new Error('Columns changed: ' + head.join(','));
   if (body.length < MIN_ROWS) throw new Error(`Only ${body.length} players (expected at least ${MIN_ROWS}); the login may have lapsed`);
-  const date = new Date().toISOString().slice(0, 10), out = path.join(root, 'src', 'data', `hashtag_${date}.xlsx`), tmp = out + '.json';
+  // format checks (reviewer, 2026-10-29): hashtag.py silently skips rows it cannot parse, so refuse a table it would mostly drop
+  const SHOT = /^[\d.]+\s*\([\d.]+\/[\d.]+\)$/, STAT = ['GP', 'MPG', '3PM', 'PTS', 'TREB', 'AST', 'STL', 'BLK', 'TO'].map(c => COLS.indexOf(c));
+  const badShot = body.filter(r => !SHOT.test(r[COLS.indexOf('FG%')]) || !SHOT.test(r[COLS.indexOf('FT%')])).length;
+  if (badShot > 0.1 * body.length) throw new Error(`FG% / FT% not in the "0.45 (5.2/11.5)" form on ${badShot} of ${body.length} rows`);
+  const badStat = body.filter(r => STAT.some(i => r[i] === '' || !isFinite(+r[i]))).length;
+  if (badStat) throw new Error(`${badStat} rows have an empty or non-numeric stat cell`);
+  const dataDir = path.join(root, 'src', 'data'), prev = fs.readdirSync(dataDir).filter(f => /^hashtag_[\d-]+\.xlsx$/.test(f)).sort().pop();
+  if (prev) {
+    const { execFileSync: ex } = await import('node:child_process');
+    const n = +ex('python', ['-I', '-c', 'import sys,pandas as pd; print(len(pd.read_excel(sys.argv[1])))', path.join(dataDir, prev)]).toString().trim();
+    if (body.length < 0.9 * n) throw new Error(`Only ${body.length} players, ${prev} had ${n}`);
+  }
+  const date = new Date().toISOString().slice(0, 10), out =path.join(root, 'src', 'data', `hashtag_${date}.xlsx`), tmp = out + '.json';
   fs.writeFileSync(tmp, JSON.stringify({ cols: COLS, body }));
   const { execFileSync } = await import('node:child_process');
   execFileSync('python', ['-I', '-c', 'import json,sys,pandas as pd; d=json.load(open(sys.argv[1],encoding="utf-8")); df=pd.DataFrame(d["body"],columns=d["cols"]); df=df.apply(lambda c: pd.to_numeric(c) if pd.to_numeric(c,errors="coerce").notna().sum()==c.replace("",None).notna().sum() else c); df.to_excel(sys.argv[2],index=False)', tmp, out]);
