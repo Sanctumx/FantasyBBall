@@ -101,6 +101,21 @@ test('Team-tab Plays %: an IL player gets no games on Per game; on the seasonal 
   assert.strictEqual(T.playsPct(mkCtx(keys), st)[il].hypo, true);   // a plain ctx is as before
 });
 
+test('Team-tab Plays %: with the active slots full, an IL player shares the worst active player\'s slot by his availability, and their Plays % add up to what that slot had', () => {
+  const keys = ROS[me].map(x => x.fid).slice(0, 11), act = keys.slice(0, 10), il = keys[10];
+  for (const basis of ['total', 'mix']) {
+    const ctx = tabCtx(keys, basis), base = T.playsPct(ctx, stateOf(act, [])), r = T.playsPct(ctx, stateOf(act, [], [il]));
+    const worst = act.slice().sort((a, b) => valueOf(ctx, a) - valueOf(ctx, b))[0], aI = T.avail(ctx, pool.byKey.get(il));
+    // his games come out of the worst player's games (IL 20, worst 80 -> IL 20, worst 60), capped at what the worst had
+    const take = Math.min(T.soloGames(ctx, il), base[worst].played);
+    assert.ok(near(r[il].played, take) && near(r[worst].played, base[worst].played - take), basis + ' games');
+    assert.ok(near(r[il].pct + r[worst].pct, base[worst].pct), basis + ' sum');
+    assert.ok(near(r[il].pct, base[worst].pct * take / base[worst].played), basis + ' IL share');
+    assert.ok(near(r[il].wt, r[il].played / r[il].gl) && near(r[worst].wt, r[worst].played / r[worst].gl), basis + ' weight');
+    act.filter(k => k !== worst).forEach(k => assert.deepStrictEqual([r[k].played, r[k].pct], [base[k].played, base[k].pct], basis + k));
+  }
+});
+
 test('Team-tab Plays %: a player under 82 projected games plays fewer games on total than on Per game, and the same on a full-season player', () => {
   const keys = ROS[me].map(x => x.fid).slice(0, 4), st = stateOf(keys, []);
   const per = T.playsPct(tabCtx(keys, 'pergame'), st), tot = T.playsPct(tabCtx(keys, 'total'), st), mix = T.playsPct(tabCtx(keys, 'mix'), st);

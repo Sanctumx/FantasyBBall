@@ -740,8 +740,21 @@
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
     if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
     else {
-      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: Matchup.nightValue(ctx, byKey.get(k)), from: w.from, to: w.to }));
-      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, items[i].a));
+      // with the active slots full an IL player shares the worst active player's slot: his games come out of that player's games
+      // (IL 20, worst 80 -> IL 20, worst 60), and their Plays % split what that player's was. Open slots are filled as before.
+      const act = keys.filter(k => state.slots[k] === 'active'), full = act.length >= ctx.L.maxActive;
+      const lineup = full ? act : keys, v = k => Matchup.nightValue(ctx, byKey.get(k));
+      const items = lineup.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: w.to }));
+      InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(lineup[i], g, items[i].a));
+      if (full) {
+        const worst = act.slice().sort((a, b) => v(a) - v(b)), il = keys.filter(k => state.slots[k] === 'il');
+        il.forEach((k, n) => {
+          const wk = worst[n % worst.length], base = res[wk], take = Math.min(soloGames(ctx, k), base.played), share = base.played > 0 ? take / base.played : 0;
+          res[k] = { gl: gamesLeft(ctx, byKey.get(k).t), played: take, pct: base.pct == null ? null : base.pct * share };
+          res[k].wt = res[k].gl ? take / res[k].gl : null;
+          base.played -= take; base.wt = base.gl ? base.played / base.gl : null; if (base.pct != null) base.pct *= 1 - share;
+        });
+      }
     }
     return res;
   }

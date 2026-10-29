@@ -424,7 +424,7 @@ test('rows on the Team tab: the team line and avgZ weight each counted player by
   try {
     pp.g = 3;
     const r = V.rows(ctxT, st, { zCats: zc }), pl = T.playsPct(ctxT, st), slots = ctxT.L.maxActive;
-    const want = st.order.reduce((s, k) => { const q = ctxT.pool.byKey.get(k); return s + (pl[k].pct || 0) * T.avail(ctxT, q) * q.line.pts; }, 0) / slots;
+    const want = st.order.reduce((s, k) => { const q = ctxT.pool.byKey.get(k); return s + (pl[k].wt !== undefined ? pl[k].wt : (pl[k].pct || 0) * T.avail(ctxT, q)) * q.line.pts; }, 0) / slots;
     assert.ok(near(r.avg.pts, want, 1e-9), 'team pts ' + r.avg.pts + ' vs ' + want);
     assert.ok(near(r.avgCats[1], want, 1e-9), 'avgCats ' + r.avgCats[1]);
     const pg = mkTab('pergame'), rp = V.rows(pg, st, { zCats: zc }), pp2 = T.playsPct(pg, st);
