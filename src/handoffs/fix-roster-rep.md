@@ -10,6 +10,8 @@ Open (user, 2026-10-29): player list "Vs average" does not look right; user expe
 - Stars below the team average (Harden -0.1, Durant -0.3, Giannis -0.6) are legit for a strong team but may be what looks wrong.
 Ask the user what exactly looks wrong before changing `avgCandidate` / `avgOwn` (hard area, use the `planner`).
 
+Open (user question, 2026-10-29): Champagnie shows Plays 0% while Murray (IL now) shows 96%. Reading of the code (unverified): on Rest of season an IL player is there for avail(g) of the games with no return date, so 13 players for 12 slots and the lowest nightValue (Champagnie) is cut; he should still play the ~4% of nights Murray is not there (check the unrounded value in ), and 96% for a player who is out now may be too high (where does his avail come from: g/82 only, or the current injury?).
+
 Not done: help text still says "worst counted player" / "the worst shows 0" (team.html 161,167,168,236,523; rankings.html 96,333); forced pair-as-replacement test; `team_page.mjs` fails at the drag-and-drop swap on main too (pre-existing).
 
 Debug tools (not in the repo): `C:/Users/Fefe/Documents/pw-tools/diag*.mjs` load the real league through the local server and read ctx/state by injecting `window.__dbg` into team.html.
