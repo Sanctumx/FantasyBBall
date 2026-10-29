@@ -54,7 +54,7 @@ if (mode === 'login') {
   const date = new Date().toISOString().slice(0, 10), out = path.join(root, 'src', 'data', `hashtag_${date}.xlsx`), tmp = out + '.json';
   fs.writeFileSync(tmp, JSON.stringify({ cols: COLS, body }));
   const { execFileSync } = await import('node:child_process');
-  execFileSync('python', ['-I', '-c', 'import json,sys,pandas as pd; d=json.load(open(sys.argv[1])); df=pd.DataFrame(d["body"],columns=d["cols"]); df=df.apply(lambda c: pd.to_numeric(c) if pd.to_numeric(c,errors="coerce").notna().sum()==c.replace("",None).notna().sum() else c); df.to_excel(sys.argv[2],index=False)', tmp, out]);
+  execFileSync('python', ['-I', '-c', 'import json,sys,pandas as pd; d=json.load(open(sys.argv[1],encoding="utf-8")); df=pd.DataFrame(d["body"],columns=d["cols"]); df=df.apply(lambda c: pd.to_numeric(c) if pd.to_numeric(c,errors="coerce").notna().sum()==c.replace("",None).notna().sum() else c); df.to_excel(sys.argv[2],index=False)', tmp, out]);
   fs.unlinkSync(tmp);
   console.log(`Wrote ${out}: ${body.length} players`);
   if (process.argv[3] !== '--no-merge') execFileSync('python', ['-I', 'hashtag.py'], { cwd: path.join(root, 'src'), stdio: 'inherit' });
