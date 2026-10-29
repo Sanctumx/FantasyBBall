@@ -70,3 +70,15 @@ test('planTrades: valid opts.trades for every rule; z accepts only a positive z 
   const zp = planTrades(season, C, { rule: 'z', seed: 301, me: 3 });
   zp.log.forEach(l => { if (l.pick) assert.ok(l.pick.zGain > 0); });
 });
+
+test('arm 72 (random) picks differently across seeds, not the same offer index every time', () => {
+  const C = initialCores(season, ro), picks = new Set();
+  for (let seed = 301; seed < 321; seed++) planTrades(season, C, { rule: 'random', seed, me: 3 }).log.forEach(l => picks.add(l.pick && l.pick.other + ':' + l.pick.give));
+  assert.ok(picks.size > 20, 'only ' + picks.size + ' distinct picks in 60 checkpoints');
+});
+
+test('simCtx with a projection world uses the draft projections, not the prior-season lines', () => {
+  const C = initialCores(season, ro), a = simCtx(season, 3, C, 3), b = simCtx(season, 3, C, 3, 'bbm');
+  const diff = b.pool.players.filter(p => a.pool.byKey.get(p.key).line.pts !== p.line.pts).length;
+  assert.ok(diff > 100, 'only ' + diff + ' lines changed');
+});
