@@ -45,7 +45,7 @@ function scoreLeague(season, rosters, opts = {}) {
     // opts.trades: [{ w, me?, other, give: [pid], get: [pid] }] swaps core players between two teams at the start of week w
     for (const tr of opts.trades || []) if (tr.w === w) {
       const a = teams[tr.me ?? opts.me], b = teams[tr.other];
-      const swap = (T, out, inn) => { if (out.some(x => !T.core.includes(x))) throw new Error('trade: a traded player is not in the core'); T.core = T.core.filter(x => !out.includes(x)).concat(inn).sort((x, y) => val[y] - val[x]); };
+      const swap = (T, out, inn) => { if (out.some(x => !T.core.includes(x))) throw new Error('trade: a traded player is not in the core'); if (out.some(x => T.ilOn.includes(x))) throw new Error('trade: a traded player is on the IL (his replacement would stay)'); T.core = T.core.filter(x => !out.includes(x)).concat(inn).sort((x, y) => val[y] - val[x]); };
       swap(a, tr.give, tr.get); swap(b, tr.get, tr.give);
     }
     const order = [...Array(N).keys()].sort(() => r() - 0.5);
@@ -114,7 +114,12 @@ function scoreLeague(season, rosters, opts = {}) {
   }
   return { rates: wins.map(x => x / (games * (N - 1))), weekTot, played };
 }
-module.exports = { scoreLeague };
+// The core each team starts with (scoreLeague's own rule: the best by value, all but 2 of the drafted players), for planning trades before the replay
+function initialCores(season, rosters, opts = {}) {
+  const adds = opts.adds ?? 4, val = perGameValue(DATA[season].players);
+  return rosters.map(ro => { const s = ro.slice().sort((a, b) => val[b] - val[a]); return adds > 0 ? s.slice(0, ro.length - 2) : s; });
+}
+module.exports = { scoreLeague, initialCores };
 if (require.main === module) {
   const { draft, score } = require('./backtest.js');
   const ro = draft('2025-26', 7, 2, { puntMode: 'auto' });
