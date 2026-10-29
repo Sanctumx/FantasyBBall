@@ -111,10 +111,14 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
     <div class="ctl">
       <p class="f" id="lgname" style="font-weight:600;margin:0"></p>
       <label class="f" for="team">Team in focus<select id="team"></select></label>
-      <label class="f" for="basis" title="Total counts projected games; Per game ignores games missed. Changes every number on the page.">Stats<select id="basis"><option value="total">Total</option><option value="pergame">Per game</option></select></label>
-      <label class="f" for="proj">Projections<select id="proj"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></select></label>
+      <label class="f" for="basis" title="Total: rest of the season, with IL players counted at their availability. Per game: the team line the Team tab shows, IL players not counted. Changes every number on the page.">Stats<select id="basis"><option value="total">Total</option><option value="pergame">Per game</option></select></label>
+      <label class="f" for="src">Source<select id="src" title="Which lines judge the players. Projections (the default) are what the Win numbers were calibrated on; the box-score sources show recent form, and their Win numbers are uncalibrated. A player with no game in the source keeps his projection line.">
+        <option value="season">Season to date</option>
+        <optgroup label="Recent games"><option value="w7">Last week</option><option value="w14">Last 2 weeks</option><option value="w30">Last month</option></optgroup>
+        <optgroup label="Projections"><option value="avg">Average</option><option value="bbm">BBM</option><option value="hs">Hashtag</option></optgroup></select></label>
       <p id="fmt"></p>
     </div>
+    <p class="hint" id="note"></p>
     <div class="msgrow"><p class="msg" id="msg" role="status"></p><button type="button" class="retry" id="retry" hidden>Retry</button></div>
   </section>
 
@@ -143,21 +147,25 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
 
     <section class="panel">
       <h2>Team stats <span class="meta" id="ts-sub">Projected season totals for each current roster</span></h2>
-      <div class="ctl"><span class="seg" id="tsv" role="group" aria-label="Stats view"><button type="button" data-v="raw">Raw</button><button type="button" data-v="week">Per week</button><button type="button" data-v="z">Zscore</button><button type="button" data-v="rank">Rank</button></span></div>
+      <div class="ctl"><span class="seg" id="tsv" role="group" aria-label="Stats view"><button type="button" data-v="raw">Raw</button><button type="button" data-v="week">Per week</button><button type="button" data-v="z">Zscore</button><button type="button" data-v="rank">Rank</button></span>
+        <label class="f" for="ztype" id="ztype-lab">Zscore<select id="ztype" title="Which Zscore the Zscore view shows: Standard, H2H-adjusted or Roto-adjusted (the Rankings tab's types)"><option value="classic">Normal</option><option value="h2h">H2H-adjusted</option><option value="adj">Roto-adjusted</option></select></label></div>
       <div class="scroll"><table id="ts"></table></div>
-      <p class="hint">Per game is the average per-game line of the active players (FG% and FT% from makes and attempts). Zscore is against the league's teams; Rank 1 is best (fewest TO).</p>
+      <p class="hint">Each team's line is the one the Team tab shows for it: the players in Active and Reserve, weighted by Plays % (FG% and FT% from makes and attempts). Zscore is each team's Plays % weighted Zscore per lineup slot, of the chosen type; Rank 1 is best (fewest TO), across the league's teams.</p>
     </section>
     </div>
   </div>
 </main>
 
 <script>/*__DATA__*/
+/*__DAYS__*/
 /*__SCHED__*/</script>
 <script>/*__ENGINE__*/</script>
 <script>/*__SHARED__*/</script>
 <script>/*__STORE__*/</script>
 <script>/*__FXCACHE__*/</script>
 <script>/*__LEAGUE__*/</script>
+<script>/*__TEAM__*/</script>
+<script>/*__LEAGUETAB__*/</script>
 <script>
 (function () {
   'use strict';
@@ -165,7 +173,7 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML('league');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-league-v1';
-  let ui = { teamBy: {}, proj: null, mxv: 'match', mxc: 'all', tsv: 'raw' };
+  let ui = { teamBy: {}, src: 'avg', ztype: 'classic', mxv: 'match', mxc: 'all', tsv: 'raw' };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   if (!ui.teamBy || typeof ui.teamBy !== 'object') ui.teamBy = {};   // team per league id (a Fantrax team id); old src/team keys are ignored
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
@@ -179,13 +187,19 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   const band = q => q < .45 ? 'lo' : q <= .55 ? 'mid' : 'hi';
   const pct = v => (v * 100).toFixed(1);
   const LS = LeagueStore;
-  let SS = LS.load(LS.local.get), src = null, R = null, raw = null, fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0;
+  const Rk = Rankings, InL = InLeague, InP = InPlayers, TV = TeamView;
+  let SS = LS.load(LS.local.get), R = null, L = null, rosters = null, standings = null, pool = null, espn = null, ids = [], fxPlayers = null, fxTimer = null, fxWait = 0, loadSeq = 0;
   const sayHtml = h => { $('msg').innerHTML = h; $('msg').className = 'msg'; };
 
-  function boardProj() { try { const b = JSON.parse(localStorage.getItem('courtside-board-v1') || 'null'); return b && b.cfg && b.cfg.proj; } catch (e) { return null; } }
-  $('proj').value = ui.proj || boardProj() || 'avg';
+  ui.src = Rk.SOURCES.includes(ui.src) ? ui.src : 'avg'; ui.ztype = ['h2h', 'adj'].includes(ui.ztype) ? ui.ztype : 'classic';
+  $('src').value = ui.src; $('ztype').value = ui.ztype;
   if (ui.basis !== 'pergame') ui.basis = 'total';
   $('basis').value = ui.basis;
+  // sources (shared with the Team tab, TeamView.createSources): the monthly box-score files load only when a box-score source is picked
+  const SRCS = TV.createSources(PLAYERS), zMapOf = TV.createZMap();
+  async function loadStats() {
+    try { const r = await fetch('stats/espn.json', { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && Array.isArray(j.players) ? j : null; } catch (e) { return null; }
+  }
 
   const FXC = FxCache.create({ manual: LeagueStore.manualHook(LeagueStore.local.get, () => SCHED) });   // Fantrax answers saved in this browser: the page draws from them at once, then refreshes
   // Busy (429), relay or Fantrax hiccups (5xx) and dropped connections: wait 10 s, 20 s, 40 s … up to 2 minutes and retry
@@ -194,23 +208,25 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   async function loadSource() {
     const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer);
     // nothing from the previous league stays on screen while this one loads or if it fails
-    $('body').hidden = true; $('fmt').textContent = ''; $('retry').hidden = true; src = null; raw = null; memo.clear(); memoGen++;
+    $('body').hidden = true; $('fmt').textContent = ''; $('note').textContent = ''; $('retry').hidden = true; L = null; pool = null; memo.clear(); memoGen++;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
     if (LS.isPoints(SS.settings)) { sayHtml(LS.POINTS_NOTE_HTML); return; }
     if (!lg) { sayHtml(LS.NO_LEAGUE_HTML); return; }
     say('Loading ' + (lg.name || lg.id) + ' from Fantrax…');
-    let shown = false;
+    let shown = false; const stats = loadStats();
     // draws the page from [league, rosters, standings, players]; new Fantrax data clears the saved results first
-    const draw = b => {
-      if (seq !== loadSeq) return false;
-      raw = { league: b[0], rosters: b[1], standings: b[2] }; fxPlayers = b[3];
+    const draw = async b => {
+      const sp = await stats; await SRCS.need(ui.src, fetch); if (seq !== loadSeq) return false;
+      L = InL.parseLeague(b[0]); rosters = InL.parseRosters(b[1]); standings = b[2]; fxPlayers = b[3]; espn = sp;
+      ids = League.teamOrder((b[0] && b[0].teamInfo) || {}, standings).filter(t => L.teams.some(q => q.id === t));
+      pool = InP.buildPool({ PLAYERS, fxPlayers, espn, L, rosters });
       memo.clear(); memoGen++; fxWait = 0; build(); return true;
     };
     await FXC.swr([['league', lg.id], ['rosters', lg.id], ['standings', lg.id], ['players']], {
-      onCached: b => { try { if (draw(b)) { shown = true; say('Showing the saved Fantrax data, checking for newer…'); } } catch (e) { shown = false; } },
-      onFresh: (b, at, changed) => {
+      onCached: async b => { try { if (await draw(b)) { shown = true; say('Showing the saved Fantrax data, checking for newer…'); } } catch (e) { shown = false; } },
+      onFresh: async (b, at, changed) => {
         if (seq !== loadSeq) return;
-        try { if (!shown || changed) shown = draw(b); } catch (e) { say(e.message, true); return; }
+        try { if (!shown || changed) shown = await draw(b); } catch (e) { say(e.message, true); return; }
         say('');
       },
       onError: e => {
@@ -232,38 +248,44 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   const memo = new Map(); let memoGen = 0, warmTimer = 0, curMine = null;
   const memoed = (key, fn) => { if (!memo.has(key)) memo.set(key, fn()); return memo.get(key); };
   const setKey = () => JSON.stringify(SS.settings);
-  const teamIds = () => Object.keys((raw.league && raw.league.teamInfo) || {});
-  const srcFor = mine => memoed('src|' + mine + '|' + setKey(), () => League.sourceFromRosters(raw.league, raw.rosters, raw.standings, fxPlayers, PLAYERS, SS.settings, mine));
-  const resultFor = (mine, proj, basis) => memoed(['R', mine, proj, basis, setKey()].join('|'), () => League.computeLeague(PLAYERS, srcFor(mine), proj, basis));
+  const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
+  // The result does not depend on the team in focus (every team is scored by the same rules), so it is kept per source, basis, Zscore type and settings.
+  // The Team-tab context is built once per source and basis (as the Team tab does).
+  const ctxFor = basis => memoed(['ctx', ui.src, basis].join('|'), () => TV.sourceCtx({ L, pool, DAYS: SCHED_DAYS, rosters, me: ids[0], nowMs: Date.now(), box: [] }, ui.src, SRCS.rows(ui.src), fxPlayers, { teamTab: true, basis }));
+  const resultFor = basis => memoed(['R', ui.src, basis, ui.ztype, setKey()].join('|'), () => {
+    const zmap = zMapOf(SRCS, { src: ui.src, settings: SS.settings, ztype: ui.ztype, basis, pool, fxPlayers });
+    return LeagueTab.score({ ctx: ctxFor(basis), ids, names: ids.map(t => L.teams.find(q => q.id === t).name), basis, cats: nCats(), scoring: (SS.settings && SS.settings.scoring) || 'h2h', zCats: pp => (zmap.has(pp.key) ? zmap.get(pp.key) : null) });
+  });
   function prewarm() {
-    clearTimeout(warmTimer); if (!raw || !src) return;
-    const gen = memoGen, me = curMine, todo = [];
-    [...$('proj').options].forEach(o => ['pergame', 'total'].forEach(b => { if (o.value !== $('proj').value || b !== ui.basis) todo.push([me, o.value, b]); }));
-    teamIds().forEach(t => { if (t !== me) todo.push([t, $('proj').value, ui.basis]); });
-    const next = () => { if (gen !== memoGen) return; const j = todo.shift(); if (!j) return; try { resultFor(j[0], j[1], j[2]); } catch (e) {} warmTimer = setTimeout(next, 30); };
-    warmTimer = setTimeout(next, 600);
+    clearTimeout(warmTimer); if (!L) return;
+    const gen = memoGen, other = ui.basis === 'total' ? 'pergame' : 'total';
+    warmTimer = setTimeout(() => { if (gen === memoGen) try { resultFor(other); } catch (e) {} }, 600);
   }
   function build() {
-    const lg = SS.league, ids = Object.keys((raw.league && raw.league.teamInfo) || {});
-    const mine = LS.pickTeam(ui.teamBy[lg.id], ids, LS.defaultTeam(LS.local.get, lg.id));
-    curMine = mine;
-    try { src = srcFor(mine); } catch (e) { say(e.message, true); return; }
+    const lg = SS.league;
+    curMine = LS.pickTeam(ui.teamBy[lg.id], ids, LS.defaultTeam(LS.local.get, lg.id));
     compute();
   }
 
   function compute() {
-    if (!src) return;
-    R = resultFor(curMine, $('proj').value, ui.basis);
+    if (!L) return;
+    let base; try { base = resultFor(ui.basis); } catch (e) { say(e.message, true); return; }
+    if (!base) { $('body').hidden = true; say('No regular-season weeks are left to forecast.'); return; }
+    say('');
+    R = Object.assign({}, base, { me: Math.max(0, ids.indexOf(curMine)) });
     if ($('swing')) $('swing').innerHTML = CATS.map((c, i) => '<span>' + c.l + ' ' + R.swing[i].toFixed(2) + '</span>').join('');
-    $('ts-sub').textContent = R.basis === 'pergame' ? 'Projected per game for each current roster (missed games don\'t count)' : 'Projected season totals for each active lineup';
+    $('ts-sub').textContent = R.basis === 'pergame' ? 'Per game: the team line the Team tab shows for each roster' : 'Rest-of-season totals for each roster (Plays % lineups)';
     $('tsv').querySelector('[data-v="week"]').hidden = R.basis === 'pergame';
     if (R.basis === 'pergame' && ui.tsv === 'week') ui.tsv = 'raw';
+    $('ztype-lab').hidden = ui.tsv !== 'z';
     $('body').hidden = false;
     $('team').innerHTML = R.names.map((n, t) => '<option value="' + t + '">' + esc(name(t)) + '</option>').join('');
-    $('team').value = String(R.me); ui.teamBy[SS.league.id] = src.ids[R.me];
-    const c = R.cfg, sc = { h2h: 'H2H each category', most: 'H2H most categories', roto: 'Roto' }[c.scoring] || c.scoring;
-    $('fmt').textContent = R.N + ' teams · ' + sc + ' · ' + R.nc + '-cat · ' + R.picked + ' of ' + R.total + ' roster spots filled' + (src.ir.length ? ' · ' + src.ir.length + ' on IR left out' : '');
-    $('fmt').title = src.ir.length ? 'On IR, not counted: ' + src.ir.map(x => R.names[x.t] + ': ' + x.name).join('; ') : '';
+    $('team').value = String(R.me); ui.teamBy[SS.league.id] = ids[R.me];
+    const sc = { h2h: 'H2H each category', most: 'H2H most categories', roto: 'Roto' }[SS.settings && SS.settings.scoring] || 'H2H each category';
+    const il = R.il.reduce((a, l, t) => a.concat(l.map(f => R.names[t] + ': ' + ((pool.byKey.get(f) || {}).n || f))), []);
+    $('fmt').textContent = R.N + ' teams · ' + sc + ' · ' + R.nc + '-cat' + (il.length ? ' · ' + il.length + ' on IL' : '');
+    $('fmt').title = il.length ? 'On IL' + (R.basis === 'pergame' ? ' (not counted per game)' : ' (counted at their availability)') + ': ' + il.join('; ') : '';
+    $('note').textContent = (R.basis === 'pergame' ? 'Per game: IL players do not count, as on the Team tab. ' : 'Total: IL players count at their availability (games / 82). ') + 'Win numbers are uncalibrated' + (Rk.WINDAYS[ui.src] ? ' (recent games, not projections)' : '') + '; a player with no game in the source keeps his projection line.';
     $('mxc').innerHTML = '<option value="all">All (average)</option>' + R.cats.map(k => '<option value="' + k + '">' + CATS[k].l + '</option>').join('');
     if (ui.mxc !== 'all' && !R.cats.includes(+ui.mxc)) ui.mxc = 'all';
     $('mxc').value = String(ui.mxc);
@@ -343,18 +365,22 @@ header.top #how-open{padding:10px 18px;font-size:.95rem;font-weight:600;border-r
   $('how-open').addEventListener('click', () => { const d = $('how'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); });
   $('how-close').addEventListener('click', () => { const d = $('how'); if (d.close) d.close(); else d.removeAttribute('open'); });
   $('how').addEventListener('click', e => { if (e.target === e.currentTarget && e.currentTarget.close) e.currentTarget.close(); });
-  $('team').addEventListener('change', e => { ui.teamBy[SS.league.id] = src.ids[+e.target.value]; save(); build(); });
+  $('team').addEventListener('change', e => { ui.teamBy[SS.league.id] = ids[+e.target.value]; save(); build(); });
   // Settings changed in another tab (a different league, or other settings): load again
   window.addEventListener('storage', e => {   // reload only for another league or other settings; a rename or team choice in Settings changes neither
     if (e.key !== LS.KEYS.settings && e.key !== LS.KEYS.leagues) return;
     const was = JSON.stringify([SS.league && SS.league.id, SS.settings]); SS = LS.load(LS.local.get);
-    if (JSON.stringify([SS.league && SS.league.id, SS.settings]) !== was) loadSource(); else if (src) build();
+    if (JSON.stringify([SS.league && SS.league.id, SS.settings]) !== was) loadSource(); else if (L) build();
   });
-  $('proj').addEventListener('change', e => { ui.proj = e.target.value; save(); compute(); });
+  $('src').addEventListener('change', async e => {
+    ui.src = e.target.value; save(); await SRCS.need(ui.src, fetch);
+    if (L && $('src').value === ui.src) compute();   // the select may have moved on while the box files loaded
+  });
+  $('ztype').addEventListener('change', e => { ui.ztype = e.target.value; save(); compute(); });
   $('basis').addEventListener('change', e => { ui.basis = e.target.value; save(); compute(); });
   $('mxv').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.mxv = b.dataset.v; save(); render(); });
   $('mxc').addEventListener('change', e => { ui.mxc = e.target.value; save(); render(); });
-  $('tsv').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.tsv = b.dataset.v; save(); render(); });
+  $('tsv').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.tsv = b.dataset.v; $('ztype-lab').hidden = ui.tsv !== 'z'; save(); render(); });
   loadSource();
 })();
 </script>

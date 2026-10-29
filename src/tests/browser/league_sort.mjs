@@ -1,16 +1,15 @@
 // League page: sortable columns and one-decimal percentages (2026-10-18). Needs playwright and the repo root on :8765.
 import { chromium } from 'playwright';
 import fs from 'fs';
-import { mockLeague } from './league_mock.mjs';
-const M = mockLeague(process.env.REPO || '/root/FantasyBBall');
+import { leagueFx } from './league_fx.mjs';
+const M = leagueFx(process.env.REPO || '/root/FantasyBBall');
 const fails = []; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.push(m); };
 const num = s => parseFloat(String(s).replace(/[,%+]/g, '').replace('−', '-'));
 const sortedDesc = a => a.every((v, i) => i === 0 || a[i - 1] >= v), sortedAsc = a => a.every((v, i) => i === 0 || a[i - 1] <= v);
 
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1500, height: 1000 } });
-await ctx.route(/fonts\.g/, r => r.fulfill({ body: '', contentType: 'text/css' }));
-await ctx.route(/api\/fantrax/, M.route);
+await M.setup(ctx);
 await ctx.addInitScript(s => { if (!sessionStorage.getItem('s')) { localStorage.clear(); Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)); sessionStorage.setItem('s', '1'); } }, M.seed());
 const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.goto('http://localhost:8765/league.html'); await p.waitForTimeout(2000);

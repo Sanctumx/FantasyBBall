@@ -6,7 +6,7 @@ await ctx.route(/fonts\.g/, r => r.fulfill({ body: '', contentType: 'text/css' }
 const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
 await p.goto('http://localhost:8765/league.html'); await p.waitForTimeout(1500);
 ok(/^League Dashboard/.test(await p.title()), 'title says League Dashboard');
-ok((await p.textContent('header.top h1')).trim() === 'League Dashboard', 'heading says League Dashboard');
+ok((await p.textContent('header.top h1 .pg')).trim() === 'League Dashboard', 'heading says League Dashboard');
 ok(!(await p.isVisible('#how')), 'How it works closed at start');
 await p.click('#how-open'); await p.waitForTimeout(200);
 ok(await p.isVisible('#how'), 'How it works opens');
