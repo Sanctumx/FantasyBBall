@@ -158,7 +158,7 @@ tr.lrow{cursor:pointer}
      </section>
     <section class="how-card">
       <h3>Z and category weights</h3>
-      <p>Z is the Rankings Zscore (Standard, per game). The Z button above the table swaps the stat columns for each category's weighted Z, which add up to the Z column. The weights are a punt lens: 1 counts a category fully, 0 leaves it out of the Z total. They only change Z and the Z order; Win C, Win M and the matrix always count every category.</p>
+      <p>Z is the Rankings Zscore, per game; the Zscore select picks the type: Normal (Standard), H2H-adjusted or Roto-adjusted. The Win M select picks what each roster row is compared with: a made-up average player of your team (Vs average) or your worst counted player (Vs replacement). The Z button above the table swaps the stat columns for each category's weighted Z, which add up to the Z column. The weights are a punt lens: 1 counts a category fully, 0 leaves it out of the Z total. They only change Z and the Z order; Win C, Win M and the matrix always count every category.</p>
       <h3 style="margin-top:14px">Swapping players</h3>
       <p>Type part of a name in Send out (your roster) and Bring in (every other player), press Enter or click to add chips, then Apply swap. Any number can go out and in. Incoming players take Active while there is room, otherwise Reserve. A player taken from another team leaves that team, and the team receives the player you send out, in the slot he left (extra players go to its reserve; free agents send nothing back). Accents and capitals don't matter. Every change (a swap, a slot move, a drag) is listed under the cards as Changes with its effect on Win M; Undo last steps back one change and Clear list empties the list. The three cards under the boxes show your team now against the saved roster: Team Zscore, Win C and Win M, each with what it was and the change.</p>
     </section>
@@ -192,6 +192,8 @@ tr.lrow{cursor:pointer}
       <div class="ctl">
         <span class="seg" id="view" role="group" aria-label="Stat view"><button type="button" data-v="game">Per game</button><button type="button" data-v="ros">Rest of season</button></span>
         <span class="seg" id="zview" role="group" aria-label="Columns show"><button type="button" data-z="stats" title="Show each player's projected stats">Stats</button><button type="button" data-z="z" title="Show each category's Zscore, weighted, adding up to the Zscore column">Zscore</button></span>
+        <label class="f" for="ztype">Zscore<select id="ztype" title="Which Zscore the Z column shows: Standard, H2H-adjusted or Roto-adjusted (the Rankings tab's types)"><option value="classic">Normal</option><option value="h2h">H2H-adjusted</option><option value="adj">Roto-adjusted</option></select></label>
+        <label class="f" for="rvs">Win M vs<select id="rvs" title="What each player's Win M is compared with: a made-up average player of your team, or your worst counted player"><option value="avg">Vs average</option><option value="rep">Vs replacement</option></select></label>
         <label class="chk" for="adj" title="Multiply each player's stats and Z by his Plays %"><input type="checkbox" id="adj"> Adjust player stats by Plays %</label>
         <button class="btn" type="button" id="fill" title="Rank every non-IL player by his Win M and put the top ones in Active (up to the roster limit); the rest go to Reserve, which counts for nothing">Fill Active</button>
         <button class="btn" type="button" id="reset" title="Put back the roster saved on Fantrax">Reset roster</button>
@@ -1745,9 +1747,18 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // in the window, each worth a. On a local day where the entries' combined value exceeds maxActive (only that many
   // players can start), that day's contributions are scaled down to maxActive.
   // `used` {local day: players already counted that day} lowers the cap of a partly played day.
+  // With a value `v` on every entry the best players fill the night first, so only the worst ones are cut (Team tab Plays %).
   function rosterGames(entries, DAYS, maxActive, used) {
     const G = (DAYS && DAYS.games) || DAYS || {};
     const hits = entries.map(e => (G[e.t] || []).map(s => s * 1000).filter(ms => ms >= e.from && ms < e.to).map(ms => [localDay(ms), e.a]));
+    if (entries.length && entries.every(e => e.v != null)) {
+      const left = {}, out = entries.map(() => 0);
+      entries.map((_, i) => i).sort((a, b) => (entries[b].v - entries[a].v) || (a - b)).forEach(i => hits[i].forEach(([d, a]) => {
+        if (left[d] == null) left[d] = Math.max(0, maxActive - ((used && used[d]) || 0));
+        const take = Math.min(a, left[d]); left[d] -= take; out[i] += take;
+      }));
+      return out;
+    }
     const sum = {};
     hits.forEach(h => h.forEach(([d, a]) => { sum[d] = (sum[d] || 0) + a; }));
     return hits.map(h => h.reduce((acc, [d, a]) => { const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); return acc + a * (sum[d] > cap ? cap / sum[d] : 1); }, 0));
@@ -2154,7 +2165,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return plan;
   }
 
-  const api = { GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { nightValue, GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
 
@@ -2621,7 +2632,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
     if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
     else {
-      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), from: w.from, to: w.to }));
+      const items = keys.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: Matchup.nightValue(ctx, byKey.get(k)), from: w.from, to: w.to }));
       InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(keys[i], g, items[i].a));
     }
     return res;
@@ -3236,10 +3247,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   $('sitenav').outerHTML = Shared.TOOLBAR_HTML('team');
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-team-v1';
-  let ui = { view: 'game', zview: 'stats', adjust: false, weights: null, sort: null, team: null, listVs: 'rep', lown: 'all', src: 'avg' };
+  let ui = { view: 'game', zview: 'stats', adjust: false, weights: null, sort: null, team: null, listVs: 'rep', rosterVs: 'avg', ztype: 'classic', lown: 'all', src: 'avg' };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.view = ui.view === 'ros' ? 'ros' : 'game'; ui.zview = ui.zview === 'z' ? 'z' : 'stats'; ui.adjust = !!ui.adjust; if (ui.sortZ) ui.sort = { col: 'z', dir: 'desc' }; delete ui.sortZ; ui.sort = ui.sort && /^(n|gl|pct|mpg|z|wc|wm|c[0-8])$/.test(ui.sort.col) ? { col: ui.sort.col, dir: ui.sort.dir === 'asc' ? 'asc' : 'desc' } : null; ui.team = typeof ui.team === 'string' ? ui.team : null;
   ui.src = R.SOURCES.includes(ui.src) ? ui.src : 'avg';
+  ui.rosterVs = ui.rosterVs === 'rep' ? 'rep' : 'avg'; ui.ztype = ['h2h', 'adj'].includes(ui.ztype) ? ui.ztype : 'classic';
   ui.listVs = ui.listVs === 'avg' ? 'avg' : 'rep'; ui.lown = typeof ui.lown === 'string' ? ui.lown : 'all';
   ui.weights = Array.isArray(ui.weights) && ui.weights.length === 9 && ui.weights.every(v => v >= 0 && v <= 1) ? ui.weights.map(Number) : new Array(9).fill(1);
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ui)); } catch (e) {} };
@@ -3315,7 +3327,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const nCats = () => (SS.settings && SS.settings.cats === 8 ? 8 : 9);
   // points leagues (#137): the point values, or null in categories
   const pw = () => LS.isPoints(SS.settings) ? SS.settings.pointVals : null, ptKey = () => pw() ? Points.key(pw()) : '';
-  const winOpts = () => ({ cats: nCats(), baseline: 'avg', points: pw() });
+  const winOpts = () => ({ cats: nCats(), baseline: ui.rosterVs, points: pw() });
   const teamName = id => { const t = L.teams.find(q => q.id === id); return t ? t.name : id; };
   const zCats = pp => (zmap.has(pp.key) ? zmap.get(pp.key) : null);
 
@@ -3333,9 +3345,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const maxA = () => ctx.L.maxPlayers || ctx.L.maxActive;
   function mkZ() {
     zmap = new Map(); if (pw()) return;
-    const s = SS.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: 'classic', basis: basisOf() };
+    const s = SS.settings || {}, opt = { teams: s.teams, roster: s.roster, cats: s.cats, type: ui.ztype, basis: basisOf() };
     // one table per source rows and settings (R.table + matchRows cost about 90 ms): kept until the rows, pool or Fantrax players change
-    const ck = [s.teams, s.roster, s.cats, opt.basis].join('|');
+    const ck = [s.teams, s.roster, s.cats, opt.basis, opt.type].join('|');
     const tableOf = (src, rows) => {
       let c = zCache.get(rows); if (!c || c.pool !== pool || c.fx !== fxPlayers) zCache.set(rows, c = { pool, fx: fxPlayers, by: new Map() });
       if (!c.by.has(ck)) { const byPid = R.matchRows(src, rows, pool, fxPlayers).byPid; c.by.set(ck, R.table(rows, opt).map(x => x.cats && byPid.get(x.pid) ? [byPid.get(x.pid), x.cats] : null).filter(Boolean)); }
@@ -3616,6 +3628,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function applyMode() { const p = !!pw(); $('zview').hidden = p; document.querySelector('details.wts').hidden = p; }
   function viewButtons() { document.querySelectorAll('#view button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.view)); document.querySelectorAll('#zview button').forEach(b => b.classList.toggle('on', b.dataset.z === ui.zview)); }
   $('zview').addEventListener('click', e => { const b = e.target.closest('button[data-z]'); if (!b) return; ui.zview = b.dataset.z; save(); viewButtons(); draw(); });
+  $('ztype').value = ui.ztype; $('rvs').value = ui.rosterVs;
+  $('ztype').addEventListener('change', () => { ui.ztype = $('ztype').value; save(); mkZ(); render(); });
+  $('rvs').addEventListener('change', () => { ui.rosterVs = $('rvs').value; save(); render(); });
   $('view').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (!b) return; ui.view = b.dataset.v; save(); viewButtons(); srcCtx(); freshness(); render(); });   // the toggle is the basis of the Win numbers, so the context changes
   $('adj').checked = ui.adjust; viewButtons();
   $('adj').addEventListener('change', () => { ui.adjust = $('adj').checked; save(); draw(); });
