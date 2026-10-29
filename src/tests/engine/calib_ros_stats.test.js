@@ -23,6 +23,39 @@ test('a fitted k beats k = 1 on Brier and puts the slope near 1', () => {
   const d = S.diffSE(D, fit, raw, o); assert.ok(d.d < 0 && d.se > 0);
 });
 
+// rows whose truth is k(t) = a + b t with t by checkpoint index (#156)
+function synthLin(n, a, b, tck, seed) {
+  const D = synth(n, 1, seed), r = S.rng(seed + 100);
+  for (let i = 0; i < n; i++) D.y[i] = r() < S.shr(D.p.A[i], a + b * tck[D.ck[i]]) ? 1 : 0;
+  return D;
+}
+const TCK = [0.1, 0.3, 0.5, 0.7];
+
+test('fitKLin recovers a and b; with b = 0 it is fitK (#156)', () => {
+  const D = synthLin(400000, 0.4, 0.5, TCK, 5), f = S.fitKLin(D, 'A', { kind: 'C' }, TCK);
+  assert.ok(Math.abs(f.a - 0.4) < 0.05 && Math.abs(f.b - 0.5) < 0.1, JSON.stringify(f));
+  const flat = synthLin(200000, 0.6, 0, TCK, 6), g = S.fitKLin(flat, 'A', { kind: 'C' }, TCK);
+  assert.ok(Math.abs(g.b) < 0.1);
+  const z = S.fitKLin(flat, 'A', { kind: 'C' }, TCK.map(() => 0.3));   // t constant: a and b are not separable, a + b t is fitK
+  assert.ok(Math.abs(z.a + z.b * 0.3 - S.fitK(flat, 'A', { kind: 'C' })) < 1e-6);
+});
+
+test('a per-checkpoint k table equals a constant k when the table is flat (#156)', () => {
+  const D = synth(20000, 0.7, 7), c = { src: 'A', kM: 0.7, kC: 0.7 }, t = { src: 'A', kM: [0.7, 0.7, 0.7, 0.7], kC: [0.7, 0.7, 0.7, 0.7] };
+  for (const kind of ['M', 'C']) {
+    assert.strictEqual(S.brier(D, t, { kind }), S.brier(D, c, { kind })); assert.strictEqual(S.slope(D, t, { kind }), S.slope(D, c, { kind }));
+    assert.deepStrictEqual(S.bins(D, t, { kind }), S.bins(D, c, { kind }));
+  }
+  const D2 = Object.assign({ sd: Uint8Array.from({ length: 20000 }, (_, i) => i % 5) }, D);
+  assert.deepStrictEqual(S.diffSE(D2, t, c, { kind: 'C' }), S.diffSE(D2, c, c, { kind: 'C' }));
+});
+
+test('kLinSE gives a positive SE on b, and the o.f predicate restricts rows (#156)', () => {
+  const D = Object.assign({ sd: Uint8Array.from({ length: 100000 }, (_, i) => i % 5) }, synthLin(100000, 0.4, 0.5, TCK, 8));
+  const e = S.kLinSE(D, 'A', { kind: 'C' }, TCK); assert.ok(e.seB > 0 && e.seB < 1 && Number.isFinite(e.b));
+  assert.strictEqual(S.bins(D, { src: 'A', kM: 1, kC: 1 }, { kind: 'C', f: i => D.ck[i] < 2 }).reduce((s, b) => s + b.n, 0), 45000);
+});
+
 test('bins hold every row once; ck and single-category filters restrict rows', () => {
   const D = synth(10000, 1, 3), a = { src: 'A', kM: 1, kC: 1 };
   assert.strictEqual(S.bins(D, a, { kind: 'C' }).reduce((s, b) => s + b.n, 0), 9000);
