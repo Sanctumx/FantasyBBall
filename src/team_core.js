@@ -112,6 +112,16 @@
     return InLeague.rosterGames([{ t: pp.t, a: avail(ctx, pp), from: w.from, to: w.to }], ctx.DAYS, ctx.L.maxActive, null)[0];
   }
 
+  // With the Active slots full on a seasonal basis, the k IL players share the slots of the k worst Active players (lowest nightly value):
+  // -> [[active key, il key]], the n-th IL player with the n-th worst Active player (wrapping when there are more IL than Active). [] otherwise
+  function ilPairs(ctx, state) {
+    if (!ctx.teamTab || ctx.basis === 'pergame') return [];
+    const c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), act = keys.filter(k => state.slots[k] === 'active'), il = keys.filter(k => state.slots[k] === 'il');
+    if (act.length < ctx.L.maxActive || !il.length) return [];
+    const v = k => Matchup.nightValue(ctx, ctx.pool.byKey.get(k)), worst = act.slice().sort((a, b) => v(a) - v(b));
+    return il.map((k, n) => [worst[n % worst.length], k]);
+  }
+
   // Plays % on the Team tab (ctx.teamTab): Reserve is parked and plays 0%, never hypo. Per game: Active players claim the nights as above
   // (everyone is there for every team game; IL gets none). Seasonal bases: Active and IL players are there for avail(g) of the team's games,
   // capped per night at the league's active limit (InLeague.rosterGames); pct is the lineup share of the games a player is there for, so
@@ -129,9 +139,8 @@
       const items = lineup.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: w.to }));
       InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(lineup[i], g, items[i].a));
       if (full) {
-        const worst = act.slice().sort((a, b) => v(a) - v(b)), il = keys.filter(k => state.slots[k] === 'il');
-        il.forEach((k, n) => {
-          const wk = worst[n % worst.length], base = res[wk], take = Math.min(soloGames(ctx, k), base.played), share = base.played > 0 ? take / base.played : 0;
+        ilPairs(ctx, state).forEach(([wk, k]) => {
+          const base = res[wk], take = Math.min(soloGames(ctx, k), base.played), share = base.played > 0 ? take / base.played : 0;
           res[k] = { gl: gamesLeft(ctx, byKey.get(k).t), played: take, pct: base.pct == null ? null : base.pct * share };
           res[k].wt = res[k].gl ? take / res[k].gl : null;
           base.played -= take; base.wt = base.gl ? base.played / base.gl : null; if (base.pct != null) base.pct *= 1 - share;
@@ -177,6 +186,6 @@
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, ilPairs, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);

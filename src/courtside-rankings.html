@@ -2492,6 +2492,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return InLeague.rosterGames([{ t: pp.t, a: avail(ctx, pp), from: w.from, to: w.to }], ctx.DAYS, ctx.L.maxActive, null)[0];
   }
 
+  // With the Active slots full on a seasonal basis, the k IL players share the slots of the k worst Active players (lowest nightly value):
+  // -> [[active key, il key]], the n-th IL player with the n-th worst Active player (wrapping when there are more IL than Active). [] otherwise
+  function ilPairs(ctx, state) {
+    if (!ctx.teamTab || ctx.basis === 'pergame') return [];
+    const c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), act = keys.filter(k => state.slots[k] === 'active'), il = keys.filter(k => state.slots[k] === 'il');
+    if (act.length < ctx.L.maxActive || !il.length) return [];
+    const v = k => Matchup.nightValue(ctx, ctx.pool.byKey.get(k)), worst = act.slice().sort((a, b) => v(a) - v(b));
+    return il.map((k, n) => [worst[n % worst.length], k]);
+  }
+
   // Plays % on the Team tab (ctx.teamTab): Reserve is parked and plays 0%, never hypo. Per game: Active players claim the nights as above
   // (everyone is there for every team game; IL gets none). Seasonal bases: Active and IL players are there for avail(g) of the team's games,
   // capped per night at the league's active limit (InLeague.rosterGames); pct is the lineup share of the games a player is there for, so
@@ -2509,9 +2519,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       const items = lineup.map(k => ({ t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: w.to }));
       InLeague.rosterGames(items, ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => done(lineup[i], g, items[i].a));
       if (full) {
-        const worst = act.slice().sort((a, b) => v(a) - v(b)), il = keys.filter(k => state.slots[k] === 'il');
-        il.forEach((k, n) => {
-          const wk = worst[n % worst.length], base = res[wk], take = Math.min(soloGames(ctx, k), base.played), share = base.played > 0 ? take / base.played : 0;
+        ilPairs(ctx, state).forEach(([wk, k]) => {
+          const base = res[wk], take = Math.min(soloGames(ctx, k), base.played), share = base.played > 0 ? take / base.played : 0;
           res[k] = { gl: gamesLeft(ctx, byKey.get(k).t), played: take, pct: base.pct == null ? null : base.pct * share };
           res[k].wt = res[k].gl ? take / res[k].gl : null;
           base.played -= take; base.wt = base.gl ? base.played / base.gl : null; if (base.pct != null) base.pct *= 1 - share;
@@ -2557,7 +2566,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return hits[0].concat(hits[1]).slice(0, limit || 50);
   }
 
-  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
+  const api = { SLOTS, COUNTED, countedSlots, counted, avail, windowGames, soloGames, ilPairs, initState, tabState, moveSlot, applySwap, window, gamesLeft, seasonGamesLeft, playsPct, weightedZ, teamLine, search };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Team = api;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2840,19 +2849,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const pw = o.pw || playerWin(ctx, state, mo), counted = Team.counted(state, ctx);
     if (!counted.length) return null;
     const lowest = ks => ks.reduce((a, b) => pw[b].m < pw[a].m ? b : a);
-    // With the Active slots full on a seasonal basis an IL player shares the worst Active player's slot (tabPlays), so the two are one
-    // fictional player A: the replacement level is A's combined contribution, a candidate replaces both, and A's members are scored
-    // against the next worst player (`next`, null when A is everyone)
-    const act = counted.filter(k => state.slots[k] === 'active'), il = counted.filter(k => state.slots[k] === 'il');
-    let worst, grp, ref, next = null;
-    if (ctx.teamTab && il.length && act.length >= ctx.L.maxActive) {
-      worst = lowest(act); grp = [worst].concat(il);
-      const rest = counted.filter(k => !grp.includes(k)); next = rest.length ? lowest(rest) : null;
-      const both = gain(base, matrix(ctx, Team.applySwap(state, grp, []), mo));
-      ref = both;
-    } else { worst = lowest(counted); grp = [worst]; ref = pw[worst]; }
-    const wSlot = state.slots[worst];
-    return { base, pw, worst, grp, ref, next, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
+    // With the Active slots full on a seasonal basis the k IL players share the slots of the k worst Active players (Team.ilPairs, as
+    // tabPlays), so each pair is one fictional player. My entries are then the N - k other counted players plus the k pairs (a pair's
+    // contribution = the team minus the team without both); the replacement level is the lowest entry, usually the (N - k)th real player
+    // unless a pair is lowest. A candidate replaces the whole entry; a pair's members are scored against the next lowest entry (`nextRef`)
+    const pairs = Team.ilPairs(ctx, state), inPair = new Set([].concat(...pairs));
+    const ents = counted.filter(k => !inPair.has(k)).map(k => ({ grp: [k], ref: pw[k] }));
+    pairs.forEach(g => { if (!ents.some(e => e.grp.includes(g[0]))) { const grp = pairs.filter(q => q[0] === g[0]).map(q => q[1]).concat(g[0]); ents.push({ grp, ref: gain(base, matrix(ctx, Team.applySwap(state, grp, []), mo)) }); } });
+    const sorted = ents.slice().sort((a, b) => a.ref.m - b.ref.m), low = sorted[0], nextRef = sorted[1] ? sorted[1].ref : null;
+    const worst = low.grp.length === 1 ? low.grp[0] : lowest(low.grp.filter(k => state.slots[k] === 'active')), grp = low.grp, ref = low.ref, wSlot = state.slots[worst];
+    return { base, pw, worst, grp, ref, nextRef, wSlot, mo, off: { c: o.points ? null : 0, m: 0, dCat: o.points ? null : new Array(9).fill(0) }, avg: false };
   }
 
   // the preview with `key` in the worst player's slot (Active when that is the Reserve), scored against the current team; the worst
@@ -2879,7 +2885,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const pw = su.pw, zero = () => su.mo.points ? null : new Array(9).fill(0);
     let r;
     const vs = (a, b) => ({ c: sub(a.c, b.c), m: a.m - b.m, dCat: subV(a.dCat, b.dCat) });
-    if (su.grp.includes(key)) r = su.grp.length === 1 ? { c: su.mo.points ? null : 0, m: 0, dCat: zero() } : su.next ? vs(pw[key], pw[su.next]) : { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
+    if (su.grp.includes(key)) r = su.grp.length === 1 ? { c: su.mo.points ? null : 0, m: 0, dCat: zero() } : su.nextRef ? vs(pw[key], su.nextRef) : { c: su.mo.points ? null : 0, m: 0, dCat: zero() };
     else if (own && Team.countedSlots(ctx).includes(s)) r = vs(pw[key], su.ref);
     else r = swapScore(ctx, state, su, ctx, key);
     return { key, owner, dM: r.m - su.off.m, dC: sub(r.c, su.off.c), dCat: subV(r.dCat, su.off.dCat), old: cur + su.off.m, new: cur + r.m };

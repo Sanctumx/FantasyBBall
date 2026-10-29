@@ -122,20 +122,22 @@ test('moduleScores: the worst Active/Reserve player shows 0, a candidate equals 
   assert.ok(only3.every((r, i) => i === 0 || only3[i - 1].dCat[3] >= r.dCat[3] - 1e-12));
 });
 
-test('Vs replacement, Team tab Season basis, Active full: the worst Active player + the IL player are one fictional player A', () => {
+test('Vs replacement, Team tab Season basis, Active full: each IL player + his paired worst Active player is one fictional player; the replacement is the lowest of the N-k real players and k pairs', () => {
   const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
   const il = st.order.filter(k => st.slots[k] === 'il'), act = st.order.filter(k => st.slots[k] === 'active');
   assert.ok(il.length && act.length >= ctx.L.maxActive, 'premise: IL player and full Active slots');
-  const su = W.moduleSetup(ctx, st, { baseline: 'rep' }), A = [su.worst].concat(il), base = su.base, pct = m => 100 * m.mean.match;
-  assert.strictEqual(st.slots[su.worst], 'active');
-  act.forEach(k => assert.ok(su.pw[k].m >= su.pw[su.worst].m - 1e-9, 'A holds the worst Active player'));
-  const pwA = pct(base) - pct(W.matrix(ctx, T.applySwap(st, A, []), su.mo)), counted = T.counted(st, ctx).filter(k => !A.includes(k));
-  const next = counted.reduce((a, b) => su.pw[b].m < su.pw[a].m ? b : a), cur = pct(base);
+  const pairs = T.ilPairs(ctx, st), su = W.moduleSetup(ctx, st, { baseline: 'rep' }), base = su.base, pct = m => 100 * m.mean.match, cur = pct(base);
+  assert.strictEqual(pairs.length, il.length);
+  // entries: every counted player outside a pair, and each pair (the team minus the team without both)
+  const inPair = new Set([].concat(...pairs)), contrib = grp => cur - pct(W.matrix(ctx, T.applySwap(st, grp, []), su.mo));
+  const ents = T.counted(st, ctx).filter(k => !inPair.has(k)).map(k => [k]).concat(pairs).map(grp => ({ grp, m: contrib(grp) })).sort((a, b) => a.m - b.m);
+  assert.deepStrictEqual(su.grp.slice().sort(), ents[0].grp.slice().sort(), 'the replacement is the lowest entry');
+  assert.ok(near(su.ref.m, ents[0].m, 1e-9));
   const row = k => W.moduleRow(ctx, st, su, k);
-  counted.forEach(k => assert.ok(near(row(k).dM, su.pw[k].m - pwA, 1e-9), 'own player vs A ' + k));
-  A.forEach(k => assert.ok(near(row(k).dM, su.pw[k].m - su.pw[next].m, 1e-9), 'A member vs the next worst ' + k));
-  const c = pool.players.find(p => !p.owner && p.g > 40 && p.t).key, s2 = T.moveSlot(T.applySwap(st, A, [c]), c, 'active');
-  assert.ok(near(row(c).dM, pct(W.matrix(ctx, s2, su.mo)) - cur, 1e-9), 'a candidate replaces A');
+  T.counted(st, ctx).filter(k => !su.grp.includes(k)).forEach(k => assert.ok(near(row(k).dM, su.pw[k].m - ents[0].m, 1e-9), 'own player vs the replacement ' + k));
+  su.grp.forEach(k => assert.ok(near(row(k).dM, su.grp.length === 1 ? 0 : su.pw[k].m - ents[1].m, 1e-9), 'member of the replacement ' + k));
+  const c = pool.players.find(p => !p.owner && p.g > 40 && p.t).key, s2 = T.moveSlot(T.applySwap(st, su.grp, [c]), c, 'active');
+  assert.ok(near(row(c).dM, pct(W.matrix(ctx, s2, su.mo)) - cur, 1e-9), 'a candidate replaces the whole entry');
   assert.ok(near(row(c).new - row(c).old, row(c).dM, 1e-9));
 });
 
