@@ -41,6 +41,46 @@ test('a dropped player has 0 after his leave time', () => {
   gone.forEach(k => cuts.slice(0, -1).forEach((c, i) => { if (c >= res[k].drop) assert.strictEqual(res[k].by[i], 0, k + ' period ' + (i + 1)); }));
 });
 
+const swap1 = (g, t) => { const other = Object.keys(ctx.roster).find(x => x !== me); return Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(f => f !== g).concat(t), [other]: ctx.roster[other].filter(f => f !== t).concat(g) }); };
+
+test('periodsLeft: the regular phi sum is weeksLeft, 20 periods on the fixture, playoffs flagged', () => {
+  const reg = W.periodsLeft(ctx, 'regular'), all = W.periodsLeft(ctx, 'all');
+  assert.ok(Math.abs(sum(reg.map(p => p.phi)) - W.weeksLeft(ctx)) < 1e-9);
+  assert.strictEqual(all.length, 20);
+  assert.ok(all.every(p => p.playoff === (p.n > L.lastRegular)) && reg.every(p => !p.playoff));
+  assert.ok(all.every(p => p.phi > 0 && p.phi <= 1));
+});
+
+test('one period left equals leagueWin, bit for bit apart from rounding, on every basis and category setup', () => {
+  const last = L.periods.find(p => p.n === L.lastRegular), ctx2 = M.makeCtx({ L, pool, DAYS, rosters: ROS, me, nowMs: last.start + 3 * 86400000 });
+  const other = Object.keys(ctx2.roster).find(x => x !== me), g = ctx2.roster[me][1], t = ctx2.roster[other][1];
+  const R = Object.assign({}, ctx2.roster, { [me]: ctx2.roster[me].filter(f => f !== g).concat(t), [other]: ctx2.roster[other].filter(f => f !== t).concat(g) });
+  const YAHOO = { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, to: -1 };
+  ['total', 'pergame', 'mix'].forEach(basis => [{ cats: 9 }, { cats: 8 }, { points: YAHOO }].forEach(o => {
+    const opts = Object.assign({ basis, rows: [me, other] }, o), by = W.leagueWinByPeriod(ctx2, R, Object.assign({ through: 'regular' }, opts)), lw = W.leagueWin(ctx2, R, opts);
+    assert.strictEqual(by.periods.length, 1);
+    by.periods[0].P.forEach((row, i) => row && row.forEach((x, j) => assert.ok(x === lw.P[i][j] || Math.abs(x - lw.P[i][j]) < 1e-12, basis + ' ' + JSON.stringify(o) + ' ' + i + ',' + j)));
+    assert.deepStrictEqual(by.ids, lw.ids);
+  }));
+});
+
+test('windowView shares the engine context with its ctx', () => {
+  const v = W.windowView(ctx, 'all');
+  assert.notStrictEqual(v, ctx);
+  assert.strictEqual(W.engCtx(v, 9), W.engCtx(ctx, 9));
+  assert.strictEqual(W.windowView(ctx, 'all'), v, 'cached');
+  assert.strictEqual(v.L.lastRegular, 20);
+});
+
+test('leagueWinByPeriod: about 2 ms per one-for-one trade over all 20 periods', () => {
+  const other = Object.keys(ctx.roster).find(x => x !== me), mine = ctx.roster[me].filter(f => ctx.pool.byKey.get(f).slot !== 'IR'), theirs = ctx.roster[other];
+  const all = []; mine.forEach(g => theirs.forEach(t => all.push(swap1(g, t))));   // distinct rosters: the forecasts are memoized per roster
+  W.leagueWinByPeriod(ctx, all[0], { rows: [me] });   // warm: engine context and drop ranks
+  const runs = [0, 1, 2].map(b => { const trades = all.slice(1 + b * 50, 51 + b * 50), t0 = process.hrtime.bigint(); trades.forEach(R => W.leagueWinByPeriod(ctx, R, { rows: [me] })); return Number(process.hrtime.bigint() - t0) / 1e6 / trades.length; });
+  const ms = Math.min.apply(null, runs);   // the best of three batches: other test files run alongside (standalone: about 1.7 ms)
+  assert.ok(ms < 2.5, ms.toFixed(2) + ' ms per trade');
+});
+
 test('rosterGamesBy buckets sum to rosterGames, with and without a value, and a game at a cut lands in the later bucket', () => {
   const cuts = cutsOf();
   [false, true].forEach(withV => {
