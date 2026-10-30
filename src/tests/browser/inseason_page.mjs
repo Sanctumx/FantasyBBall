@@ -108,10 +108,9 @@ async function open(opts = {}) {
   const rows = await p.$$eval('#finder tbody tr', r => r.length);
   ok(rows >= 1, 'finder has rows (' + rows + ')');
   const col = async i => (await p.$$eval('#finder tbody tr', (r, i) => r.map(x => parseFloat(x.children[i].textContent.replace('−', '-'))), i));
-  await p.click('#finder thead th:nth-child(4)'); await p.waitForTimeout(100);
-  let l1 = await col(3); ok(l1.every((v, i) => i === 0 || l1[i - 1] >= v), 'click Likelihood sorts best first');
-  await p.click('#finder thead th:nth-child(4)'); await p.waitForTimeout(100);
-  l1 = await col(3); ok(l1.every((v, i) => i === 0 || l1[i - 1] <= v), 'second click reverses');
+  // Likelihood is hidden for now (SHOW_LIK = false in inseason.html); the column stays in the table, so the indices below do not move
+  ok(!(await p.isVisible('#finder thead th:nth-child(4)')) && !(await p.isVisible('#finder tbody tr td:nth-child(4)')) && !(await p.isVisible('#f-lik')), 'Likelihood column and filter are hidden');
+  ok(!/% likely/.test(await p.textContent('#sell')) && !/% likely/.test(await p.textContent('#buy')), 'Sell High / Buy Low show no likelihood');
   ok(await p.$eval('#give', s => s.value) === '', 'finder starts on Any of my players (blank box)');
   ok((await p.$$eval('#finder tbody tr', r => new Set(r.map(x => x.children[0].textContent)).size)) > 1, 'Any shows several of my players in the give column');
   ok((await p.$$eval('#finder tbody tr', r => r.some(x => /^−/.test(x.children[4].textContent)))) && /\d+ trades match/.test(await p.textContent('#finder-msg')), 'with no limits the finder lists every trade, including ones that hurt you');
@@ -121,16 +120,9 @@ async function open(opts = {}) {
   await p.fill('#f-da', '0'); await p.waitForTimeout(200);
   ok((await p.$$eval('#finder tbody tr', r => r.length > 0 && r.every(x => !/^−/.test(x.children[4].textContent)))), '+Win M you at least 0 keeps only trades that do not hurt you');
   await p.fill('#f-da', '');
-  await p.fill('#f-lik', '50%'); await p.waitForTimeout(200);
-  ok((await p.$$eval('#finder tbody tr', r => r.every(x => parseFloat(x.children[3].textContent) >= 50))), 'Likelihood filter keeps trades at 50% or more');
-  await p.fill('#f-lik', '0.5'); await p.waitForTimeout(200);
-  ok((await p.$$eval('#finder tbody tr', r => r.every(x => parseFloat(x.children[3].textContent) >= 50))), '0.5 means the same as 50%');
-  await p.fill('#f-lik', 'abc'); await p.waitForTimeout(200);
-  ok(await p.$eval('#f-lik', e => e.classList.contains('bad')), 'an unreadable filter is marked');
   const nm = await p.$eval('#finder tbody tr td', e => e.textContent); await p.fill('#give', nm); await p.dispatchEvent('#give', 'change'); await p.waitForTimeout(500);
   ok((await p.$$eval('#finder tbody tr', (r, nm) => r.length > 0 && r.every(x => x.children[0].textContent === nm), nm)), 'typing a name offers only that player');
   await p.fill('#give', ''); await p.dispatchEvent('#give', 'change');
-  await p.fill('#f-lik', ''); await p.waitForTimeout(200);
   ok((await p.$$eval('#sell .tl, #buy .tl', d => d.length)) >= 1, 'Sell High / Buy Low lists show items');
   ok(/40% current \+ 30% projection \+ 30% ADP/.test(await p.textContent('#weights')), 'weights line');
   ok((await p.$$eval('#ta option', o => o.length)) === 14 && (await p.$$eval('#tb option', o => o.length)) === 13, 'Team A 14 options, Team B 13 without Team A');
