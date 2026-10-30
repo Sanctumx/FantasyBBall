@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const L = '3j4mzn4ym0uezl91';
+const L = process.env.LEAGUE || '3j4mzn4ym0uezl91';   // LEAGUE=<id> OUT_DIR=<folder> fetches another season into HERE/<folder>
+const OUT = process.env.OUT_DIR ? join(HERE, process.env.OUT_DIR) : HERE;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function get(url, init) {
@@ -19,9 +20,9 @@ async function get(url, init) {
 }
 
 async function standings() {
-  mkdirSync(join(HERE, 'standings'), { recursive: true });
+  mkdirSync(join(OUT, 'standings'), { recursive: true });
   for (let p = 1; p <= 19; p++) {
-    const f = join(HERE, 'standings', `p${p}.json`);
+    const f = join(OUT, 'standings', `p${p}.json`);
     if (existsSync(f)) continue;
     const body = JSON.stringify({ msgs: [{ method: 'getStandings', data: { leagueId: L, view: 'SCHEDULE', period: String(p) } }] });
     const t = await get(`https://www.fantrax.com/fxpa/req?leagueId=${L}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
@@ -32,9 +33,9 @@ async function standings() {
 }
 
 async function rosters(from, to) {
-  mkdirSync(join(HERE, 'rosters'), { recursive: true });
+  mkdirSync(join(OUT, 'rosters'), { recursive: true });
   for (let d = from; d <= to; d++) {
-    const f = join(HERE, 'rosters', `d${d}.json`);
+    const f = join(OUT, 'rosters', `d${d}.json`);
     if (existsSync(f)) continue;
     const t = await get(`https://www.fantrax.com/fxea/general/getTeamRosters?leagueId=${L}&period=${d}`);
     writeFileSync(f, t);
