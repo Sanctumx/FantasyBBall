@@ -1,0 +1,166 @@
+TRADE 2x1 / 2x2 GATE 1 (idea 169, analyst, written 2026-10-29 BEFORE any slot, recall or comparison run; branch trade-speed).
+Units: Win M points = 100 x change in the all-play match share (the expected match win chance averaged over the 13 others), per matchup.
+The slot value is display/sort only in-season and never enters the Model pick, so #6b (Rejected: -2.1 +- 0.9, streamability in DRAFT win
+chances) is not evidence against it. Old-world results (items < 50) are not used here.
+Seeds: 501-550, all fresh. Used so far: 21-100, 145-160, 181-190, 201-370. 371-450 are reserved for #163's extension and 451-500 are left
+for #164 (analyst call, change if wrong).
+
+A. SLOT MEASUREMENT (stream_sim opts.slotArm, Task 5-6)
+Arms. The treated team is one seat t. Before week `from` every arm is the default (core top 10 + 2 stream slots, 4 adds). From week `from`
+the treated team drops its 10th player and runs one of these arms (all other teams are unchanged):
+  STATIC_P  core top 9 + static pickup + 2 stream slots, 4 adds. The static pickup = best FA not held at week `from`, ranked by the draft
+            world's projected value (backtest.setup with the arm-23 cfg), like the app's valueZ. It is held every week from then on and
+            added to `held` so nobody else streams it. It costs no add (analyst call).
+  STATIC_H  as STATIC_P, but ranked by stream_sim's hindsight `val`. Diagnostic only: it flatters the static arm, so s comes out low.
+  S4        core top 9 + 3 stream slots, 4 adds (the league cap, as stream_sim assumes; analyst call, change if the league's cap differs).
+            stream_sim's own plan rule: h0 fills slots 0,1,2, h1 refills slot 0, and slots 1-2 keep their h0 streamer.
+  S6        as S4, but the treated team gets 6 adds with half-week periods kept (all 3 slots rotate). This is the upper bound for "a free
+            slot also frees more adds".
+  Primary contrast: S4 - STATIC_P. If the projected ranking cannot be had in a few lines, use S4 - STATIC_H and label s "conservative".
+  Answer to "more adds or one more spot?": with a fixed weekly cap, the slot gives one more spot, not more adds, so S4 ships.
+  S6 - S4 is reported only, and it is also a validity check (V2).
+from = 1, the second week. Before that the arms are identical, so week 0 must give d = 0 exactly (V1). A per-week profile does not need
+several `from` values: the static pickup, ranked by season value, is the same player whatever the week.
+Drafts. 4 seasons x seeds 501-550 = 200 drafts. Draft call: draft(season, 1 + (seed % 14), seed, arm-23 cfg). scoreLeague runs with
+{ seed, target: true }, as bt_adds does. The treated team rotates over all 14 seats of every draft. The arms are paired: same draft, same
+scoreLeague seed, and `r()` is called the same number of times in every arm.
+Halves: seeds 501-525 = H1, seeds 526-550 = H2. This is the built-in fresh-seed confirmation (items 53 and 73).
+Cost: per draft, 0.7 s draft + 14 seats x 4 arms x ~0.05 s = 3.5 s. 200 drafts = about 12 min serial, about 3 min with the 4 seasons in
+parallel, so it runs locally. Write a PC bat only if --smoke projects more than 10 min with seasons in parallel.
+Statistic.
+  d(season, seed, seat, w) = weekShare(arm) - weekShare(STATIC_P), for each week w >= from, and the same over 2-week blocks
+  (block starting at w = all-play majority on the summed weekTot of weeks w and w+1).
+  Cell c(season, w) = mean of d over drafts x seats. Its SE comes from per-draft means across the 50 drafts (drafts are the cluster).
+  Pooled values and every SE: per-draft means over the 200 drafts.
+  Robust level: s_bar = 10%-trimmed mean of the 96 cells (4 seasons x weeks 1-24). The untrimmed mean is reported alongside.
+  Extreme-weeks failure (the spec's failure condition): fails if |untrimmed - trimmed| > 25% of |trimmed|, or if dropping the 5 largest
+  cells moves the mean below half of itself.
+  Option floor: s = max(0, value) everywhere, because the user can always just keep the static pickup.
+Week map: w = 7-day blocks from opening night (stream_sim's weeks).
+  The fixture calendar has 25 weeks: regular = weeks 0-15 (15 periods, period 7 is 14 days), playoffs = weeks 16-24 (period 16 is 7 days,
+  periods 17-20 are 14 days).
+  14-day periods (7 and 17-20) use s14, measured directly on 2-week blocks at the period's first week. It is not scaled from s, because a
+  2-week matchup is a different, less noisy, contest. phi counts such a period as 1, so s14 is the right per-matchup unit.
+  The ratio s14/s is reported only.
+Constant or profile (early vs late). Three blocks: E = weeks 1-8, M = weeks 9-15, L = weeks 16-24 (the fantasy playoffs). D = L - E,
+pooled, with its SE.
+  Profile only if all four hold: D - 1.96 SE > 0; D >= 0.2 points (about a quarter of the +0.88 mean dA of an accepted #163 trade); L > E
+  in at least 3 of 4 seasons; the extreme-weeks check passes.
+  Profile form: three step values per block (trimmed mean of each block's cells), for s and for s14. No finer smoothing: All-Star and
+  NBA Cup weeks fall on different week numbers in each season and would not carry over to another calendar.
+  Otherwise: constant s = s_bar, and s14 = the trimmed mean of the 2-week block cells.
+Also log (for E and diagnostics): mean per-category weekTot difference by week for S4 - STATIC_P (all 11 raw columns), and extra games per
+week of S4 vs STATIC_P.
+Caveats. gamesIn and `val` are hindsight in every arm. Main's stream rule is the weak one (#161: a better rule is on the unmerged
+inseason-pe branch, +0.56 PE), so s is probably a lower bound: re-measure once #161's rule merges. Win M in the app uses the shrink .60,
+which sits above every fitted season (#150 pooled k_M .37), so the trade term P may be overstated relative to a realized s. As the spec
+says, no conversion is applied.
+
+B. WEIGHT CURVE
+Family:
+  u_k = delta^(t_k) for regular periods, and u_k = beta * delta^(t_k) for playoff periods;
+  t_k = weeks from now to the start of period k (0 for the current period); omega_k = phi_k * u_k / sum_j phi_j * u_j.
+Evidence on delta conflicts:
+  - #157's frozen-roster k by lag (.79/.59/.48/.39/.30) implies delta about 0.93 a week.
+  - #146's live-roster k by lag is flat (.55/.58/.57/.54), which implies delta = 1.
+  - In the H2H regular season every week counts the same toward the record.
+  So delta = 1.
+beta (the value of a playoff matchup relative to a regular one) can only be tuned with a prize-equity simulator, which is on unmerged
+inseason-pe. Method there: regress the title or prize equity on per-week match shares in the existing #161/#163 runs; beta = (coefficient
+per playoff period) / (coefficient per regular week). A survival factor per playoff round (0.5 for an even team) belongs to the same
+follow-up.
+What can be validated here: weight arithmetic only (Task 7 tests) and how much the curve reorders lists (C).
+What cannot be validated here: any prize-equity benefit of delta or beta.
+Default: flat, delta = 1, beta = 1. With this default, approach 2 differs from approach 1 only in two ways: it includes the playoff
+periods, and it averages per period instead of averaging the plays.
+The user's "early long-term, late near-term" behaviour therefore stays unvalidated and is a follow-up row.
+
+C. A1 vs A2 "SIGNIFICANTLY BETTER" GATE (trade_2x1_compare.js)
+Setup. Fixture, my team, list "any". nowMs = the start of periods 1, 5, 9, 13, 15 and 16, with rosters frozen.
+Both approaches are scored exactly on all 12,870 trades; no two-stage search here (about 30 s per date, 3 min in total).
+Rank by sort key P (S is the same for every row, so it cannot reorder).
+At period 16, A1 is empty (plain rosMeans is null in the playoffs). Report that as a functional fact; it is not a ranking win. Trades are
+normally locked by then.
+Metrics per date:
+  O10 and O25 (top-10 and top-25 overlap);
+  Kendall tau-b on the union of the two top-25 lists;
+  top-1 identical or not;
+  mean |P2 - P1| over the A2 top 25;
+  count of top-25 rows whose sign of P flips.
+Also report the same metrics under an illustrative curve (delta 0.93, beta 2). This is report only and does not decide anything.
+"Same": at every date where both lists exist, O10 >= 8, O25 >= 20 and tau >= 0.80, and the top 1 is identical at all but at most one date.
+  Then A2 cannot be better in a way the user would see, so APPROACH = 1.
+"Differ": any date fails.
+  This triggers a paired prize-equity screen on inseason-pe, like #163: arms "accept the best 2x1 by A1" vs "by A2" at weeks 3, 7, 11,
+  1600 drafts.
+  Bar: A2 - A1 PE - 1.96 SE > 0 and ahead in >= 3 of 4 seasons. Below that, APPROACH = 1.
+  Expectation, stated now: #163's SE was 0.34 for whole trade rules, and A1 vs A2 decisions differ far less, so that screen will very
+  likely be inconclusive.
+The screen cannot run on this branch. The user's decision 2 applies: ship APPROACH = 1 as the default with A2 behind its switch, and open a
+follow-up idea row for the screen.
+
+D. RECALL (trade_recall.js, dates: period starts 1 and 9; 2x1 also at 13)
+2x2: the exact enumeration (75,816 trades) is the reference: exact top 25 by dA among trades with exact likelihood >= likFloor.
+  likFloor = 0.02, fixed. The user wants a low floor and likelihood stays secondary (analyst call).
+  Screen top in {400, 1000, 2000, 4000}; exact scoring at 0.35 ms makes 4000 cost about 1.4 s.
+  Recall = how many of the screen's exact top 25 are in the reference top 25.
+  Choose the smallest `top` with recall >= 24/25 at both dates.
+  Fallbacks:
+    - top = 4000 at >= 20/25: ship 4000 and log the misses (estimated vs exact dA, lineup-cap cases).
+    - < 20/25 at 4000: replace the screen by full enumeration in background chunks (about 27 s on "any"), if the timing allows; else
+      hold 2x2.
+2x1: the reference is A2 (flat curve) exact on all 12,870 "any" trades, against the two-stage search with k in {5, 10, 15, 25}; the same
+  pickup rule on both sides.
+  Choose the smallest k with >= 24/25 at all three dates.
+  Fallbacks: k = 25 if >= 22/25 at all three dates (log it); below that, stage 1 cannot screen for A2, so set k = 25 and leave A2 off
+  even if C were met.
+  Under APPROACH = 1 stage 1 is exact (recall 25/25); KEEP_2X1 is still set for the switch.
+  Re-check recall whenever CURVE moves off flat.
+Also report the time per stage.
+
+E. TEAM-SPECIFIC SPREAD (slot_team_spread.js, exploration only)
+Delta x = the weekly per-category difference for S4 - STATIC_P from A (block E, M or L as for the fixture's date).
+For each of the 14 fixture teams at periods 1 and 9:
+  s_t = Win M(team + a pseudo-player whose weekly line is Delta x) - Win M(team), plain rest-of-season, 9 cats, shipped shrink.
+  This is direct, with no linearization. Per-category pseudo-players give the breakdown.
+Meaningful if, at both dates, (2nd highest - 2nd lowest s_t) >= max(0.2 points, 0.5 x |s_bar|).
+If s_bar is 0 under the A rules, skip E and record it as moot.
+
+RESULT FILES (under src/results/, each with a `summary` block at the top)
+- slotprof_<date>.json
+  - Per (season, seed, seat, w): d for S4, S6 and STATIC_H vs STATIC_P, on weeks and on 2-week blocks.
+  - Per-week extra games, and mean per-category Delta weekTot.
+  - Summary: cells, block means, s_bar (trimmed and untrimmed), D +- SE by season, H1 and H2 separately, V1 and V2.
+- slotspread_<date>.json: s_t per team, per date, per category.
+- trade_recall_<date>.json: 2x2 recall per top and date with the misses; 2x1 recall per k and date; timings.
+- trade_cmp_<date>.json: C's metrics per date for the flat and illustrative curves.
+- src/slot_profile.json, written by the rules below: { weeks: [{w, s, s14, se, n}], form: 'constant' | 'blocks', adds: 4, arm: 'S4-STATIC_P' }.
+
+NEEDED FROM THE MAIN SESSION BEFORE THE RUNS (Task 5)
+- stream_sim: opts.slotArm = { team, mode: 'static' | 'static_h' | 'stream', from, adds (treated team only), log }.
+  - Takes the static pickup at week `from` before that team's IL step, adds it to `held` and puts it in `base` every week.
+  - The stream mode sets that team's stream-slot count to 3.
+  - Exports weekShares(weekTot) and blockShares(weekTot, 2).
+- Hazard: inside the team loop, `const slots = adds > 0 ? 2 : 0` shadows the lineup `slots` (opts.slots) that daily scoring reads. Rename
+  it when editing; the SNAP test must stay exact.
+- Projected value for STATIC_P: the arm-23 setup's prepared players.
+
+GATE 2 QUESTIONS (Task 12) AND THE RULE FOR EACH. Gate 2 applies these and nothing else.
+Validity first. If any of these fails, stop and fix before ruling:
+  V1: d = 0 exactly in week 0;
+  V2: S6 - S4 >= -2 SE (pooled);
+  V3: the SNAP test passes.
+Q1 Profile:
+  - s = 0 everywhere if trimmed s_bar - 1.96 SE <= 0 pooled, or in either half H1 or H2.
+  - Otherwise 'blocks' if every B condition above (D) holds in the pooled set and D > 0 in both halves.
+  - Otherwise constant s_bar.
+  - If the extreme-weeks check fails, the shipped value is the trimmed constant.
+Q2 CURVE: delta = 1, beta = 1. The only exception: inseason-pe's regression exists by then and gives beta > 1 + 2 SE. Then beta = that
+  ratio rounded to 0.5, delta stays 1, and D is re-checked at the new curve.
+Q3 Team-specific: always ship the constant. If E is meaningful, open a follow-up idea row with the spread numbers; else record "teams
+  barely differ".
+Q4 APPROACH: 1 unless C is "differ" AND a paired PE screen exists that meets C's bar. Inconclusive or not run: 1, with A2 behind the switch
+  and a follow-up row (user decision 2).
+Q5 SLOT_IN_SORT = true only if V1-V3 pass, s > 0 under Q1 (both halves), and the extreme-weeks check passes. Else false.
+Q6 KEEP_2X1: D's 2x1 rule.
+Q7 2x2: likFloor 0.02; `top` from D's 2x2 rule.
