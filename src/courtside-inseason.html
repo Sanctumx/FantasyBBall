@@ -4169,7 +4169,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const isInj = pp => pp.slot === 'IR' || !!(ctx.out && ctx.out.has(pp.key));
   const showP = pp => !ui.hideInj || !isInj(pp);
   const mineSorted = () => ctx.roster[ctx.me].map(f => pool.byKey.get(f)).filter(showP).sort((a, b) => pvOf(b) - pvOf(a));
-  const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b></td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td>';
+  const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b>' + (r.pickup ? '<span class="src"> of which ' + signed(r.dAPickup) + ' from the pickup</span>' : '') + '</td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td><td>' + (r.pickup ? signed(r.slot) : '—') + '</td>';
 
   // One player's candidate trades take about 0.07 s (all 13 about 0.9 s), so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
@@ -4208,8 +4208,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       const all = (ty.t11 ? [].concat.apply([], gives.map(g => (tradeCache[ck(g)] || []).map(one))) : []).concat([].concat.apply([], pairs.map(x => tradeCache[kU(x)] || [])), ty.t22 ? tradeCache[kU(key22)] || [] : []);
       opts.by = ty.t21 || ty.t22 ? 'sort' : 'value';   // 1-for-1 alone keeps its dA x likelihood order; a mix is ordered by the sort key
       const matched = Trade.filterTrades(all.filter(r => r.gives.every(showP) && r.targets.every(showP)), opts), rows = matched.slice(0, SHOW), busy = todo.length || jobs2.length ? 'Searching ' + (mineAll.length + total2 - todo.length - jobs2.length) + '/' + (mineAll.length + total2) + '… ' : '';
-      $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th></tr></thead><tbody>' +
-        rows.map(r => '<tr class="click" data-type="' + r.type + '" data-give="' + esc(r.gives.map(p => p.key).join('+')) + '" data-target="' + esc(r.targets.map(p => p.key).join('+')) + '" data-team="' + esc(r.team) + '"><td class="l">' + names(r.gives) + '</td><td class="l">' + r.targets.map(p => esc(p.n) + '<span class="src">' + esc(p.pos) + '</span>').join(' + ') + '</td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '</tr>').join('') + '</tbody>' : '';
+      $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th><th title="Regular season only: the value of the roster spot a 2-for-1 frees for the free agent (about 0.6 Win M points per matchup, uncertain). It is not in the sort.">Slot value</th></tr></thead><tbody>' +
+        rows.map(r => '<tr class="click" data-type="' + r.type + '" data-pickup="' + esc(r.pickup ? r.pickup.key : '') + '" data-give="' + esc(r.gives.map(p => p.key).join('+')) + '" data-target="' + esc(r.targets.map(p => p.key).join('+')) + '" data-team="' + esc(r.team) + '"><td class="l">' + names(r.gives) + '</td><td class="l">' + r.targets.map(p => esc(p.n) + '<span class="src">' + esc(p.pos) + '</span>').join(' + ') + (r.pickup ? ' <span class="src">+ ' + esc(r.pickup.n) + (Trade.isWaiver(r.pickup) ? ' (waiver)' : '') + '</span>' : '') + '</td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '</tr>').join('') + '</tbody>' : '';
       const waiting = gives.some(g => !tradeCache[ck(g)]) || jobs2.length > 0;
       $('finder-msg').textContent = busy + (rows.length ? matched.length + ' trade' + (matched.length === 1 ? '' : 's') + ' match' + (matched.length > SHOW ? ' (best ' + SHOW + ' shown)' : '') + '. Click a row to load it into the Trade Builder.' : waiting ? '' : 'No trade of the chosen types matches these filters.');
       applySort('finder');
@@ -4258,7 +4258,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }
   function builderState() {
     const ids = L.teams.map(t => t.id);
-    if (!bd || !ids.includes(bd.a) || !ids.includes(bd.b) || bd.a === bd.b) { const a = ctx.me; bd = { a, b: ids.find(t => t !== a), aGets: [], bGets: [], stat: (bd && bd.stat) || 'proj' }; }
+    if (!bd || !ids.includes(bd.a) || !ids.includes(bd.b) || bd.a === bd.b) { const a = ctx.me; bd = { a, b: ids.find(t => t !== a), aGets: [], bGets: [], aAdds: [], stat: (bd && bd.stat) || 'proj' }; }
     return bd;
   }
   const lineFor = (pp, stat) => stat === 'cur' ? InP.curLine(pp, Trade.TRADE_W.shrinkGames) : (ctx.pool.byKey.get(pp.key) || pp).line;   // the picked Source's line
@@ -4288,23 +4288,32 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const opts = (team, picked) => ctx.roster[team].filter(f => !picked.includes(f)).map(f => pool.byKey.get(f)).filter(showP).map(p => '<option value="' + esc(p.n + ' · ' + p.t) + '"></option>').join('');
     $('dl-a').innerHTML = opts(S.b, S.aGets); $('dl-b').innerHTML = opts(S.a, S.bGets);
     const chips = (keys, side) => keys.map(k => '<li>' + esc(pool.byKey.get(k).n) + '<button type="button" data-side="' + side + '" data-rm="' + esc(k) + '" aria-label="Remove ' + esc(pool.byKey.get(k).n) + '">×</button></li>').join('');
-    $('list-a').innerHTML = chips(S.aGets, 'a'); $('list-b').innerHTML = chips(S.bGets, 'b');
+    S.aAdds = (S.aAdds || []).filter(k => pool.byKey.get(k));
+    const pick = S.aAdds.map(k => { const pp = pool.byKey.get(k); return '<li class="pick" title="The free agent or waiver player who fills the spot this trade frees">+ ' + esc(pp.n) + (Trade.isWaiver(pp) ? ' <span class="src">waiver</span>' : '') + '<button type="button" data-side="p" data-rm="' + esc(k) + '" aria-label="Remove pickup ' + esc(pp.n) + '">×</button></li>'; }).join('');
+    $('list-a').innerHTML = chips(S.aGets, 'a') + pick; $('list-b').innerHTML = chips(S.bGets, 'b');
     $('multi').textContent = '';
     $('bt').innerHTML = S.aGets.length + S.bGets.length ? '<thead><tr><th class="l">Player</th>' + CATS.map(c => '<th>' + c.l + '</th>').join('') + '<th title="Zscore of the chosen type and basis; players without a projection show a dash and are left out of the average and total">Total</th></tr></thead><tbody>' + sideRows(nameOfTeam(S.a) + ' receives', S.aGets, S.stat) + sideRows(nameOfTeam(S.b) + ' receives', S.bGets, S.stat) + '</tbody>' : '';
     $('sum').innerHTML = ''; $('sum-msg').textContent = '';
     if (!S.aGets.length || !S.bGets.length) { $('sum-msg').textContent = 'Add at least one player on each side to see the effect on rest-of-season Win M.'; return; }
     try {
-      const r = Trade.evaluateTrade(ctx, { a: S.a, b: S.b, aGets: S.aGets, bGets: S.bGets }, wopts());
-      $('multi').textContent = [S.a, S.b].filter(t => r.drops[t].length).map(t => 'Roster limit ' + L.maxPlayers + ': ' + nameOfTeam(t) + ' drops ' + r.drops[t].map(k => pool.byKey.get(k).n).join(', ') + ' (lowest value).').join(' ');
+      const ev = adds => Trade.evaluateTrade(ctx, { a: S.a, b: S.b, aGets: S.aGets, bGets: S.bGets, aAdds: adds }, wopts());
+      let r = S.aAdds.length && S.a === ctx.me && S.bGets.length > S.aGets.length ? ev(S.aAdds) : null;
+      if (!r || !r.freed) {   // the trade no longer frees a spot (or is not mine / not uneven): the pickup chip goes and the numbers are the plain ones
+        if (S.aAdds.length) { S.aAdds = []; $('list-a').innerHTML = chips(S.aGets, 'a'); }
+        r = ev([]);
+      }
+      const pk = S.aAdds.length > 0;
+      $('multi').textContent = [S.a, S.b].filter(t => r.drops[t].length).map(t => 'Roster limit ' + L.maxPlayers + ': ' + nameOfTeam(t) + ' drops ' + r.drops[t].map(k => pool.byKey.get(k).n).join(', ') + ' (lowest value).' + (t === S.b && r.multi ? ' Their likelihood counts losing him.' : '')).join(' ');
       $('sum').innerHTML = '<div class="kpi"><b>' + signed(r.dA) + '</b><span>' + esc(nameOfTeam(S.a)) + ' Win M (points)</span></div><div class="kpi"><b>' + signed(r.dB) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Win M</span></div>' +
-        '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>'
+        '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>' +
+        (pk ? '<div class="kpi"><b>' + signed(r.dAPickup) + '</b><span>of which from the pickup</span></div><div class="kpi" title="Regular season only; about 0.6 Win M points per matchup, uncertain"><b>' + signed(r.slot) + '</b><span>Slot value (regular season, ~0.6, uncertain)</span></div>' : '')
       const zsum = ks => { const v = ks.map(k => InP.zscoreOf(PLAYERS, pool.byKey.get(k), ui.zt, ui.basis)).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
       const zA = zsum(S.aGets), zB = zsum(S.bGets);
       const dz = zA == null && zB == null ? null : (zA || 0) - (zB || 0), zl = ' Zscore';
       $('sum').innerHTML += '<div class="kpi"><b>' + (dz == null ? '—' : zsg(dz)) + '</b><span>' + esc(nameOfTeam(S.a)) + zl + '</span></div><div class="kpi"><b>' + (dz == null ? '—' : zsg(-dz)) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Zscore</span></div>';
     } catch (e) { $('sum-msg').textContent = e.message; }
   }
-  function loadTrade(give, target, team) { bd = { a: ctx.me, b: team, aGets: [target], bGets: [give], stat: builderState().stat }; renderBuilder(); $('builder').scrollIntoView({ block: 'nearest' }); }
+  function loadTrade(give, target, team, pickup) { bd = { a: ctx.me, b: team, aGets: target.split('+'), bGets: give.split('+'), aAdds: pickup ? [pickup] : [], stat: builderState().stat }; renderBuilder(); $('builder').scrollIntoView({ block: 'nearest' }); }
   function addPlayer(side, text) {
     const S = builderState(), from = side === 'a' ? S.b : S.a, picked = side === 'a' ? S.aGets : S.bGets, t = text.trim().toLowerCase();
     const cands = ctx.roster[from].filter(f => !picked.includes(f)).map(f => pool.byKey.get(f));
@@ -4325,7 +4334,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     ui.types[k] = e.target.checked; if (!ui.types.t11 && !ui.types.t21 && !ui.types.t22) { ui.types.t11 = true; $('ty-11').checked = true; }   // at least one type stays on
     save(); renderFinder();
   }));
-  $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr && tr.dataset.type === '1x1') loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team); });
+  $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr) loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team, tr.dataset.pickup); });
   ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
   $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });
   $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; renderBuilder(); });
@@ -4335,7 +4344,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   $('statv').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { builderState().stat = b.dataset.v; renderBuilder(); } });
   $('reset').addEventListener('click', () => { const S = builderState(); S.aGets = []; S.bGets = []; renderBuilder(); });
   [['in-a', 'a'], ['in-b', 'b']].forEach(([id, side]) => { const el = $(id); el.addEventListener('change', () => { addPlayer(side, el.value); el.value = ''; }); });
-  ['list-a', 'list-b'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button[data-rm]'); if (!b) return; const S = builderState(), arr = b.dataset.side === 'a' ? S.aGets : S.bGets; arr.splice(arr.indexOf(b.dataset.rm), 1); renderBuilder(); }));
+  ['list-a', 'list-b'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button[data-rm]'); if (!b) return; const S = builderState(), arr = b.dataset.side === 'p' ? S.aAdds : b.dataset.side === 'a' ? S.aGets : S.bGets; arr.splice(arr.indexOf(b.dataset.rm), 1); renderBuilder(); }));
 
   // Sortable columns, as on the League Dashboard: first click puts the best first, second reverses; names sort A to Z; kept in storage.
   const cellKey = td => { const t = td.textContent.trim(); if (t === '—' || t === '') return null; const v = parseFloat(t.replace(/[,%+]/g, '').replace('−', '-')); return isNaN(v) ? t : v; };
