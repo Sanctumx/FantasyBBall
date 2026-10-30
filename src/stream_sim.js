@@ -36,7 +36,21 @@ function scoreLeague(season, rosters, opts = {}) {
   const r = rng(seed * 31 + 7);
   const weekTot = Array.from({ length: N }, () => Array.from({ length: nweeks }, () => new Array(11).fill(0)));
   const held = new Set();   // free agents currently on someone's roster as IL fill-ins
+  // opts.slotArm = { team, mode: 'static' | 'static_h' | 'stream', from, adds, log, rank }: from week `from` the treated team drops its
+  // 10th core player. static: takes one free agent for good (best of opts.slotArm.rank, else best by hindsight val; static_h always val)
+  // and keeps 2 stream spots; stream: 3 stream spots. adds replaces the weekly add cap for that team. Other teams are untouched.
+  const arm = opts.slotArm || null; let pickup = null;
   for (let w = 0; w < nweeks; w++) {
+    if (arm && w === arm.from) {
+      const T = teams[arm.team], gone = T.core[T.core.length - 1];
+      T.core = T.core.slice(0, -1);
+      if (T.ilOn.includes(gone)) { T.ilOn = T.ilOn.filter(x => x !== gone); held.delete(T.ilRep.get(gone)); T.ilRep.delete(gone); }
+      if (arm.mode !== 'stream') {
+        const ok = pid => !held.has(pid) && !drafted.has(pid) && val[pid] != null;
+        pickup = (arm.mode === 'static' && arm.rank ? arm.rank.find(ok) : null) ?? fa.filter(ok).sort((a, b) => val[b] - val[a])[0] ?? null;
+        if (pickup != null) held.add(pickup);
+      }
+    }
     const d0 = w * 7, mid = d0 + 4, d1 = Math.min(ndays, d0 + 7);
     // streaming periods: Mon-Thu / Fri-Sun, or daily when adds allow more than 4 a week (opts.periods overrides)
     const H = opts.periods ?? (adds > 4 ? 7 : 2);
@@ -54,7 +68,7 @@ function scoreLeague(season, rosters, opts = {}) {
     }
     const tval = (t, pid) => { const z = val.zc[pid]; if (!target || !z) return val[pid]; let s2 = 0; for (let c = 0; c < 9; c++) s2 += catW[t][c] * z[c]; return s2; };
     for (const t of order) {
-      const T = teams[t]; let left = adds;
+      const T = teams[t], treated = arm && t === arm.team && w >= arm.from; let left = treated && arm.adds != null ? arm.adds : adds;
       // IL: a core player with no games last week and none this week goes to IL (max il); best free agent fills his spot
       for (const pid of T.core) {
         const out = gamesIn(pid, Math.max(0, d0 - 7), d0) === 0 && gamesIn(pid, d0, d1) === 0 && w > 0;
@@ -64,13 +78,14 @@ function scoreLeague(season, rosters, opts = {}) {
         } else if (!out && T.ilOn.includes(pid)) { T.ilOn = T.ilOn.filter(x => x !== pid); held.delete(T.ilRep.get(pid)); T.ilRep.delete(pid); }
       }
       const base = T.core.filter(pid => !T.ilOn.includes(pid)).concat([...T.ilRep.values()]);
-      // streaming: remaining adds over the 2 open spots, half-weeks Mon-Thu and Fri-Sun; pick among the 15 best available by games then value
-      const slots = adds > 0 ? 2 : 0; const plan = [new Array(H).fill(0), new Array(H).fill(0)], cur = [null, null];
-      let a = left; for (let h = 0; h < H && a > 0; h++) for (let sl = 0; sl < slots && a > 0; sl++) { plan[sl][h] = 1; a--; }
+      if (treated && pickup != null) base.push(pickup);
+      // streaming: remaining adds over the open spots (2; 3 for the stream arm), half-weeks Mon-Thu and Fri-Sun; pick among the 15 best available by games then value
+      const nSl = adds > 0 ? (treated && arm.mode === 'stream' ? 3 : 2) : 0; const plan = Array.from({ length: nSl }, () => new Array(H).fill(0)), cur = new Array(nSl).fill(null);
+      let a = left; for (let h = 0; h < H && a > 0; h++) for (let sl = 0; sl < nSl && a > 0; sl++) { plan[sl][h] = 1; a--; }
       for (let h = 0; h < H; h++) {
         const s0 = bnd[h], s1 = bnd[h + 1];
         const roster = base.slice();
-        for (let sl = 0; sl < slots; sl++) {
+        for (let sl = 0; sl < nSl; sl++) {
           if (!plan[sl][h]) { if (cur[sl] != null) roster.push(cur[sl]); continue; }   // keep the earlier streamer
           const pool = fa.filter(x => !held.has(x) && !claimed[h].has(x)).sort((x, y) => tval(t, y) - tval(t, x)).slice(0, 15);
           const pick = pool.sort((x, y) => gamesIn(y, s0, s1) - gamesIn(x, s0, s1) || tval(t, y) - tval(t, x))[0];
@@ -78,6 +93,7 @@ function scoreLeague(season, rosters, opts = {}) {
         }
         lineups[t][h] = roster;
       }
+      if (arm && arm.log && t === arm.team) arm.log.push({ w, pickup: treated ? pickup : null, core: T.core.length, streamSlots: nSl, rosters: lineups[t].map(ro => ro.slice()) });
     }
     // daily scoring with an active-slot cap
     for (let t = 0; t < N; t++) for (let d = d0; d < d1; d++) {
@@ -99,7 +115,23 @@ function scoreLeague(season, rosters, opts = {}) {
   }
   return { rates: wins.map(x => x / (games * (N - 1))), weekTot, played };
 }
-module.exports = { scoreLeague };
+// all-play match share per team and week (wins over the other 13 teams, ties half), null for an empty week; blockShares sums `size` weeks
+// starting at each week w (the last size-1 weeks start no block)
+function shares(tot) {
+  const cs = tot.map(t => [t[1] ? t[0] / t[1] : 0, t[3] ? t[2] / t[3] : 0, t[4], t[5], t[6], t[7], t[8], t[9], -t[10]]);
+  return cs.map((a, i) => { let w = 0; for (let b = 0; b < N; b++) if (b !== i) { let wa = 0, wb = 0; for (let c = 0; c < 9; c++) { if (a[c] > cs[b][c]) wa++; else if (a[c] < cs[b][c]) wb++; } w += wa > wb ? 1 : wa === wb ? 0.5 : 0; } return w / (N - 1); });
+}
+function blockShares(weekTot, size) {
+  const nw = weekTot[0].length, out = weekTot.map(() => []);
+  for (let w = 0; w + size <= nw; w++) {
+    const tot = weekTot.map(t => { const s = new Array(11).fill(0); for (let k = w; k < w + size; k++) t[k].forEach((x, c) => { s[c] += x; }); return s; });
+    const sh = tot.every(t => t[5] === 0) ? null : shares(tot);
+    out.forEach((o, t) => o.push(sh ? sh[t] : null));
+  }
+  return out;
+}
+const weekShares = weekTot => blockShares(weekTot, 1);
+module.exports = { scoreLeague, weekShares, blockShares };
 if (require.main === module) {
   const { draft, score } = require('./backtest.js');
   const ro = draft('2025-26', 7, 2, { puntMode: 'auto' });
