@@ -131,6 +131,25 @@ test('tradeCandidates2x1: one give covers every pair that holds it', () => {
   assert.ok(rows.every(r => r.gives.some(p => p.key === mine[0])));
 });
 
+// ---- tradeCandidates2x2 ----
+test('tradeCandidates2x2: exact plain rows, both targets from one team, capped, one give only, input untouched', () => {
+  const one = T.tradeCandidates(ctx, 'any', OPT), snap = JSON.stringify(one.map(r => [r.give.key, r.target.key, r.dA, r.dB, r.likelihood]));
+  const rows = T.tradeCandidates2x2(ctx, 'any', one, OPT, { top: 12 });
+  assert.ok(rows.length > 0 && rows.length <= 12);
+  rows.forEach((r, i) => {
+    assert.strictEqual(r.type, '2x2');
+    assert.strictEqual(r.gives.length, 2); assert.strictEqual(r.targets.length, 2);
+    assert.ok(r.targets.every(p => ctx.roster[r.team].includes(p.key)));
+    const e = T.evaluateTrade(ctx, { a: me, b: r.team, aGets: r.targets.map(p => p.key), bGets: r.gives.map(p => p.key) }, OPT);
+    ['dA', 'dB', 'likelihood'].forEach(k => assert.ok(near(r[k], e[k]), k));
+    assert.strictEqual(r.sortKey, r.dA); assert.strictEqual(r.pickup, null);
+    if (i) assert.ok(rows[i - 1].sortKey >= r.sortKey);
+  });
+  const one1 = T.tradeCandidates2x2(ctx, mine[0], one, OPT, { top: 12 });
+  assert.ok(one1.length > 0 && one1.every(r => r.gives.some(p => p.key === mine[0])));
+  assert.strictEqual(JSON.stringify(one.map(r => [r.give.key, r.target.key, r.dA, r.dB, r.likelihood])), snap);
+});
+
 test('2x1 with no free agent: pickup null, slot 0; no periods left: empty list', () => {
   const owned = Object.assign({}, ROS), none = M.makeCtx({ L, pool: Pl.buildPool({ PLAYERS, fxPlayers: fx('fx_players.json'), espn: fx('espn_2025_26.json'), L, rosters: ROS }), DAYS, rosters: ROS, me, nowMs: NOW });
   none.pool.players.forEach(p => { if (!p.owner) p.fxStatus = 'T'; });

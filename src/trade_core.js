@@ -176,6 +176,35 @@
     givePairs(ctx, myKey).forEach(p => candidates2x1ForPair(ctx, p, wopts).forEach(r => rows.push(r)));
     return rows;
   }
+
+  // ---- 2-for-2 finder (#169) ----
+  // Screen: for each give-pair and each other team's target pair, the better of the two pairings of the 1x1 rows (dA and dB summed), with the exact
+  // perceived-value gap for B; keep estimated dA > 0 and likelihood >= likFloor, score the best `top` with evaluateTrade. oneRows are the
+  // 1x1 rows of ALL my players ('any'); a pair with a missing 1x1 row is skipped. Likelihood is shown but does not drive the order.
+  function tradeCandidates2x2(ctx, myKey, oneRows, wopts, { top = 400, likFloor = 0.02 } = {}) {
+    if (ctx.cur == null || !TeamWin.periodsLeft(ctx, 'all').length) return [];
+    const one = new Map(oneRows.map(r => [r.give.key + '|' + r.target.key, r])), est = [];
+    const pvB = {}, pv = (k, b) => { const m = pvB[b] = pvB[b] || {}; return k in m ? m[k] : (m[k] = perceived(ctx, ctx.pool.byKey.get(k), b).pv); };
+    const pairs = givePairs(ctx, myKey);
+    Object.keys(ctx.roster).forEach(t => {
+      if (t === ctx.me) return;
+      const ts = ctx.roster[t].slice().sort();
+      for (let i = 0; i < ts.length; i++) for (let j = i + 1; j < ts.length; j++) pairs.forEach(([g1, g2]) => {
+        const gap = pv(g1, t) + pv(g2, t) - pv(ts[i], t) - pv(ts[j], t), best = [[ts[i], ts[j]], [ts[j], ts[i]]].map(([x, y]) => {
+          const r1 = one.get(g1 + '|' + x), r2 = one.get(g2 + '|' + y);
+          return r1 && r2 ? { dA: r1.dA + r2.dA, dB: r1.dB + r2.dB } : null;
+        }).filter(Boolean).sort((p, q) => q.dA - p.dA)[0];
+        if (!best || !(best.dA > 0)) return;
+        const lik = 1 / (1 + Math.exp(-(TRADE_W.slope * gap + TRADE_W.winM * best.dB + TRADE_W.bias)));
+        if (lik >= likFloor) est.push({ t, g: [g1, g2], x: [ts[i], ts[j]], dA: best.dA });
+      });
+    });
+    est.sort((p, q) => q.dA - p.dA);
+    return est.slice(0, top).map(c => {
+      const r = evaluateTrade(ctx, { a: ctx.me, b: c.t, aGets: c.x, bGets: c.g }, wopts), pp = k => ctx.pool.byKey.get(k);
+      return { type: '2x2', gives: c.g.map(pp), targets: c.x.map(pp), team: c.t, pickup: null, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, dAPlayer: r.dA, dAPickup: 0, slot: 0, sortKey: r.dA };
+    }).sort((p, q) => q.sortKey - p.sortKey);
+  }
   const byValue = (a, b) => b.dA * b.likelihood - a.dA * a.likelihood;
   // every one-for-one trade for one of my players (myKey) with every other team's player, helpful or not, unfiltered; 'any' offers each of my players
   // wopts: the Win M options of rosMeans (basis: 'total' Season, the default, 'pergame', 'mix')
@@ -238,6 +267,6 @@
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosMeans, rosWinM, weightedWinM, perceived, evaluateTrade, pickupShortlist, isWaiver, givePairs, candidates2x1ForPair, tradeCandidates2x1, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosMeans, rosWinM, weightedWinM, perceived, evaluateTrade, pickupShortlist, isWaiver, givePairs, candidates2x1ForPair, tradeCandidates2x1, tradeCandidates2x2, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
