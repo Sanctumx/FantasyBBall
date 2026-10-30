@@ -13,9 +13,10 @@
 
   // the engine context of a ctx's player pool: noise and pool averages from simulated drafts of the real league (rostered players
   // first), IL fill off because Plays % already counts the games a player misses. Built once per ctx and category count.
-  const ectxs = new WeakMap();
+  const ectxs = new WeakMap(), viewBase = new WeakMap();
   // Points leagues (#137): w = the point values; the engine view puts one FP total in category slot Points.FP_SLOT and the rest is unchanged.
   function engCtx(ctx, nc, w) {
+    ctx = viewBase.get(ctx) || ctx;   // a windowView shares its ctx's engine context (same pool and rosters)
     let by = ectxs.get(ctx); if (!by) ectxs.set(ctx, by = {});
     const bk = w ? 'p|' + Pts.key(w) : nc;
     if (!by[bk]) {
@@ -101,9 +102,9 @@
   // players with the lowest Win M contribution go (dropRank). o: tid, cats, points, e (the engine context when the caller has it), noDrop
   function plays(ctx, state, o) {
     o = o || {};
-    if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop });
+    if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop, cuts: o.cuts });
     let rank = null;
-    return Team.playsPct(ctx, state, { extra: o.extra, rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
+    return Team.playsPct(ctx, state, { extra: o.extra, cuts: o.cuts, rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
   }
 
   // The drop order of team tid on the Team tab (IL timeline, user 2026-10-29: drop by Win M contribution): rank(k) = minus the team's mean match
@@ -242,6 +243,50 @@
     // detail (the League tab): C[i][j][c] = team i's shrunk chance in category c against team j (null past nc, on the diagonal and in points mode), as the matrix's `cat`
     const C = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? null : Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(out.teams[i], out.teams[j], c), k.cat))));
     return { W, ids, P, C, swing: e.ctx.swing };
+  }
+
+  // ---- Win M per period (#169, uneven trades) ----
+  // The periods that still have time left: { n, from, to, phi, playoff }, phi = the share of the period still to play (weeksLeft's count,
+  // so a 14-day period is 1). through 'regular' stops at L.lastRegular, 'all' adds the playoff periods. Call it on the real ctx, not a view
+  function periodsLeft(ctx, through) {
+    const reg = ctx.L.lastRegular, now = ctx.nowMs;
+    return ctx.L.periods.filter(p => through !== 'regular' || p.n <= reg)
+      .map(p => ({ n: p.n, from: p.start, to: p.end, phi: Math.max(0, p.end - Math.max(p.start, now)) / (p.end - p.start), playoff: p.n > reg })).filter(p => p.phi > 0);
+  }
+
+  // A shallow copy of ctx whose regular season runs to the last period of `through` (Team.window then reaches the playoffs). Cached per ctx;
+  // engCtx(view) is engCtx(ctx), so nothing is rebuilt. 'regular' is ctx itself
+  const views = new WeakMap();
+  function windowView(ctx, through) {
+    const last = through === 'regular' ? ctx.L.lastRegular : Math.max.apply(null, ctx.L.periods.map(p => p.n));
+    if (last === ctx.L.lastRegular) return ctx;
+    let by = views.get(ctx); if (!by) views.set(ctx, by = {});
+    if (!by[last]) { by[last] = Object.assign({}, ctx, { L: Object.assign({}, ctx.L, { lastRegular: last }) }); viewBase.set(by[last], ctx); }
+    return by[last];
+  }
+
+  // leagueWin with one match-chance matrix per period: the plays are computed once over the whole window and split by period (Team.playsPct
+  // cuts), so the IL timeline and the drops are global; period k's games per average week are its games / phi_k. -> null with no period
+  // left, else { ids, periods: [{ n, phi, playoff, P }] } (P as in leagueWin). opts: rows, cats, points, shrink, basis, through ('all' default)
+  const lbMemos = new WeakMap();
+  function leagueWinByPeriod(ctx, R, o) {
+    o = o || {};
+    const through = o.through === 'regular' ? 'regular' : 'all', per = periodsLeft(ctx, through);
+    if (!per.length) return null;
+    const nc = o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o.points), ids = Object.keys(ctx.roster), rows = new Set(o.rows || ids), k = o.shrink || SHRINK;
+    const view = windowView(ctx, through), tv = tabView(view, o.basis), cuts = per.map(p => p.from).concat(per[per.length - 1].to), c = Team.countedSlots(tv);
+    let memo = lbMemos.get(ctx); if (!memo) lbMemos.set(ctx, memo = new Map());
+    const vecs = ids.map(t => {
+      const fids = (R || ctx.roster)[t], id = t + '|' + fids.slice().sort().join(',') + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '') + '|' + tv.basis + '|' + through;
+      if (!memo.has(id)) {
+        const st = tradeState(view, t, fids), r = plays(tv, st, { tid: t, cats: nc, points: o.points, e, cuts }), live = st.order.filter(f => c.includes(st.slots[f]) && !r[f].hypo);
+        memo.set(id, per.map((p, i) => teamVec(e, live.map(f => ({ key: f, p: ctx.pool.byKey.get(f).line, games: r[f].by[i] / p.phi })))));
+      }
+      return memo.get(id);
+    });
+    const kit = pairKit(e), F = Pts.FP_SLOT;
+    return { ids, periods: per.map((p, i) => ({ n: p.n, phi: p.phi, playoff: p.playoff,
+      P: ids.map((a, x) => !rows.has(a) ? null : ids.map((b, y) => x === y ? null : e.w ? kit.winP(vecs[x][i].mu, vecs[x][i].v, vecs[y][i].mu, vecs[y][i].v, F) : shr(kit.pairMatch(vecs[x][i].mu, vecs[x][i].v, vecs[y][i].mu, vecs[y][i].v), k.match))) })) };
   }
 
   // the pairing chances of evalVecs without the run: winP(mu, v, mu, v, c) one category, pairMatch(...) the matchup
@@ -395,6 +440,6 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, pairKit, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, pairKit, tabView, tradeState, leagueWin, periodsLeft, windowView, leagueWinByPeriod, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);

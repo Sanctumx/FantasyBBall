@@ -1,3 +1,4 @@
+self.SLOT_PROFILE={"version":3,"made":"2026-10-30","source":"season mean of S4 - STATIC_P (user choice 2026-10-30, until more seasons are measured); pooled trimmed was 0.70 +- 0.22, per season -0.78/-0.34/+0.62/+2.90","form":"constant","arm":"S4-STATIC_P","adds":4,"unit":"Win M points per matchup","weeks":[{"w":1,"s":0.6,"s14":0.71}]};
 // In-season league calendar (2026-10-20): Fantrax league/roster/standings parsing, matchup periods, team-code mapping and
 // the expected games a roster plays in a window (from the daily tip-off times in sched_days.json).
 (function (root) {
@@ -113,7 +114,28 @@
     return hits.map(h => h.reduce((acc, [d, a]) => { const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); return acc + a * (sum[d] > cap ? cap / sum[d] : 1); }, 0));
   }
 
-  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodLast, periodDays, periodMonths, rosterGames };
+  // rosterGames with each entry's games split into buckets: cuts = ascending ms, a game at ms in [cuts[i], cuts[i+1]) goes to
+  // bucket i (games outside the cuts still use up the day's cap). Returns entry × bucket; the row sums equal rosterGames.
+  function rosterGamesBy(entries, DAYS, maxActive, used, cuts) {
+    const G = (DAYS && DAYS.games) || DAYS || {}, nb = cuts.length - 1;
+    const bucket = ms => { if (ms < cuts[0] || ms >= cuts[nb]) return -1; let lo = 0, hi = nb - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (cuts[m] <= ms) lo = m; else hi = m - 1; } return lo; };
+    const hits = entries.map(e => (G[e.t] || []).map(s => s * 1000).filter(ms => ms >= e.from && ms < e.to).map(ms => [localDay(ms), e.a, bucket(ms)]));
+    const out = entries.map(() => new Array(nb).fill(0));
+    if (entries.length && entries.every(e => e.v != null)) {
+      const left = {};
+      entries.map((_, i) => i).sort((a, b) => (entries[b].v - entries[a].v) || (a - b)).forEach(i => hits[i].forEach(([d, a, k]) => {
+        if (left[d] == null) left[d] = Math.max(0, maxActive - ((used && used[d]) || 0));
+        const take = Math.min(a, left[d]); left[d] -= take; if (k >= 0) out[i][k] += take;
+      }));
+      return out;
+    }
+    const sum = {};
+    hits.forEach(h => h.forEach(([d, a]) => { sum[d] = (sum[d] || 0) + a; }));
+    hits.forEach((h, i) => h.forEach(([d, a, k]) => { if (k < 0) return; const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); out[i][k] += a * (sum[d] > cap ? cap / sum[d] : 1); }));
+    return out;
+  }
+
+  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodLast, periodDays, periodMonths, rosterGames, rosterGamesBy };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InLeague = api;
 })(this);
 
@@ -704,6 +726,20 @@
     return a.map((x, i) => x + b[i]);
   }
 
+  // windowGames split into buckets (cuts: ascending ms, bucket i = [cuts[i], cuts[i+1])) -> keys × buckets, row sums equal windowGames.
+  // One segGames call per part of the window carries every key's segment of every bucket, so the nightly caps see the same players as the
+  // unsplit call (keys stay in order, so ties break the same way). Games outside the cuts are dropped from the buckets
+  function windowGamesBy(ctx, keys, used, cuts) {
+    const w = window(ctx), nb = cuts.length - 1, cut = Math.min(Math.max(ctx.curEnd || 0, w.from), w.to), out = keys.map(() => new Array(nb).fill(0));
+    const part = (pf, pt) => {
+      const segs = [];
+      keys.forEach(key => { for (let b = 0; b < nb; b++) { const from = Math.max(cuts[b], pf), to = Math.min(cuts[b + 1], pt); segs.push({ key, from, to: Math.max(from, to) }); } });
+      Matchup.segGames(ctx, segs, used, true).forEach((g, j) => { out[Math.floor(j / nb)][j % nb] += g; });
+    };
+    if (cut <= w.from || cut >= w.to) part(w.from, w.to); else { part(w.from, cut); part(cut, w.to); }
+    return out;
+  }
+
   // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
   // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
@@ -712,19 +748,20 @@
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
     const act = by('active'), bench = by('reserve'), res = {};
-    const done = (k, played, hypo) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; };
-    const gA = windowGames(ctx, act, null), count = {}, used = {};
+    const cuts = o && o.cuts, nb = cuts ? cuts.length - 1 : 0;
+    const done = (k, played, hypo, by) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; if (cuts) res[k].by = by || new Array(nb).fill(0); };
+    const gA = windowGames(ctx, act, null), count = {}, used = {}, byA = cuts ? windowGamesBy(ctx, act, null, cuts) : null;
     act.forEach((k, i) => {
-      done(k, gA[i]);
+      done(k, gA[i], false, byA && byA[i]);
       const out = ctx.out && ctx.out.has(k);
       (G[byKey.get(k).t] || []).map(s => s * 1000).filter(ms => ms >= w.from && ms < w.to && !(out && ms < ctx.curEnd)).forEach(ms => { const d = InLeague.localDay(ms); count[d] = (count[d] || 0) + 1; });
     });
     Object.keys(count).forEach(d => { used[d] = Math.min(max, count[d]); });
-    const gB = windowGames(ctx, bench, used);
-    bench.forEach((k, i) => done(k, gB[i]));
+    const gB = windowGames(ctx, bench, used), byB = cuts ? windowGamesBy(ctx, bench, used, cuts) : null;
+    bench.forEach((k, i) => done(k, gB[i], false, byB && byB[i]));
     by('il').forEach(k => {
       const g = windowGames(ctx, bench.concat(k), used);
-      done(k, g[g.length - 1], true);
+      done(k, g[g.length - 1], true, cuts ? windowGamesBy(ctx, bench.concat(k), used, cuts).pop() : null);
     });
     return res;
   }
@@ -774,9 +811,10 @@
   function tabPlays(ctx, state, o) {
     o = o || {};
     const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), extra = o.extra || [];
-    const done = (k, played, a, drop) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; if (drop != null) res[k].drop = drop; };
+    const cuts = o.cuts, nb = cuts ? cuts.length - 1 : 0;   // o.cuts: also return res[k].by, the games in each bucket [cuts[i], cuts[i+1]) (the sums equal played)
+    const done = (k, played, a, drop, by) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; if (drop != null) res[k].drop = drop; if (cuts) res[k].by = by || new Array(nb).fill(0); };
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
-    if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
+    if (ctx.basis === 'pergame') { const byG = cuts ? windowGamesBy(ctx, keys, null, cuts) : null; windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1, undefined, byG && byG[i])); }
     else {
       const il = keys.filter(k => state.slots[k] === 'il'), ret = {}, v = k => Matchup.nightValue(ctx, byKey.get(k));
       il.forEach(k => { ret[k] = ilReturn(ctx, k); });
@@ -794,7 +832,8 @@
       const items = keys.map(k => il.includes(k)
         ? (dropped.has(k) ? { t: byKey.get(k).t, a: 0, v: v(k), from: w.from, to: w.from } : { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: w.to })
         : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: leave[k] != null ? leave[k] : w.to });
-      InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]]); });
+      const byG = cuts ? InLeague.rosterGamesBy(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null, cuts) : null;
+      InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]], byG && byG[i]); });
     }
     return res;
   }
@@ -865,9 +904,10 @@
 
   // the engine context of a ctx's player pool: noise and pool averages from simulated drafts of the real league (rostered players
   // first), IL fill off because Plays % already counts the games a player misses. Built once per ctx and category count.
-  const ectxs = new WeakMap();
+  const ectxs = new WeakMap(), viewBase = new WeakMap();
   // Points leagues (#137): w = the point values; the engine view puts one FP total in category slot Points.FP_SLOT and the rest is unchanged.
   function engCtx(ctx, nc, w) {
+    ctx = viewBase.get(ctx) || ctx;   // a windowView shares its ctx's engine context (same pool and rosters)
     let by = ectxs.get(ctx); if (!by) ectxs.set(ctx, by = {});
     const bk = w ? 'p|' + Pts.key(w) : nc;
     if (!by[bk]) {
@@ -953,9 +993,9 @@
   // players with the lowest Win M contribution go (dropRank). o: tid, cats, points, e (the engine context when the caller has it), noDrop
   function plays(ctx, state, o) {
     o = o || {};
-    if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop });
+    if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop, cuts: o.cuts });
     let rank = null;
-    return Team.playsPct(ctx, state, { extra: o.extra, rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
+    return Team.playsPct(ctx, state, { extra: o.extra, cuts: o.cuts, rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
   }
 
   // The drop order of team tid on the Team tab (IL timeline, user 2026-10-29: drop by Win M contribution): rank(k) = minus the team's mean match
@@ -1094,6 +1134,50 @@
     // detail (the League tab): C[i][j][c] = team i's shrunk chance in category c against team j (null past nc, on the diagonal and in points mode), as the matrix's `cat`
     const C = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? null : Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(out.teams[i], out.teams[j], c), k.cat))));
     return { W, ids, P, C, swing: e.ctx.swing };
+  }
+
+  // ---- Win M per period (#169, uneven trades) ----
+  // The periods that still have time left: { n, from, to, phi, playoff }, phi = the share of the period still to play (weeksLeft's count,
+  // so a 14-day period is 1). through 'regular' stops at L.lastRegular, 'all' adds the playoff periods. Call it on the real ctx, not a view
+  function periodsLeft(ctx, through) {
+    const reg = ctx.L.lastRegular, now = ctx.nowMs;
+    return ctx.L.periods.filter(p => through !== 'regular' || p.n <= reg)
+      .map(p => ({ n: p.n, from: p.start, to: p.end, phi: Math.max(0, p.end - Math.max(p.start, now)) / (p.end - p.start), playoff: p.n > reg })).filter(p => p.phi > 0);
+  }
+
+  // A shallow copy of ctx whose regular season runs to the last period of `through` (Team.window then reaches the playoffs). Cached per ctx;
+  // engCtx(view) is engCtx(ctx), so nothing is rebuilt. 'regular' is ctx itself
+  const views = new WeakMap();
+  function windowView(ctx, through) {
+    const last = through === 'regular' ? ctx.L.lastRegular : Math.max.apply(null, ctx.L.periods.map(p => p.n));
+    if (last === ctx.L.lastRegular) return ctx;
+    let by = views.get(ctx); if (!by) views.set(ctx, by = {});
+    if (!by[last]) { by[last] = Object.assign({}, ctx, { L: Object.assign({}, ctx.L, { lastRegular: last }) }); viewBase.set(by[last], ctx); }
+    return by[last];
+  }
+
+  // leagueWin with one match-chance matrix per period: the plays are computed once over the whole window and split by period (Team.playsPct
+  // cuts), so the IL timeline and the drops are global; period k's games per average week are its games / phi_k. -> null with no period
+  // left, else { ids, periods: [{ n, phi, playoff, P }] } (P as in leagueWin). opts: rows, cats, points, shrink, basis, through ('all' default)
+  const lbMemos = new WeakMap();
+  function leagueWinByPeriod(ctx, R, o) {
+    o = o || {};
+    const through = o.through === 'regular' ? 'regular' : 'all', per = periodsLeft(ctx, through);
+    if (!per.length) return null;
+    const nc = o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o.points), ids = Object.keys(ctx.roster), rows = new Set(o.rows || ids), k = o.shrink || SHRINK;
+    const view = windowView(ctx, through), tv = tabView(view, o.basis), cuts = per.map(p => p.from).concat(per[per.length - 1].to), c = Team.countedSlots(tv);
+    let memo = lbMemos.get(ctx); if (!memo) lbMemos.set(ctx, memo = new Map());
+    const vecs = ids.map(t => {
+      const fids = (R || ctx.roster)[t], id = t + '|' + fids.slice().sort().join(',') + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '') + '|' + tv.basis + '|' + through;
+      if (!memo.has(id)) {
+        const st = tradeState(view, t, fids), r = plays(tv, st, { tid: t, cats: nc, points: o.points, e, cuts }), live = st.order.filter(f => c.includes(st.slots[f]) && !r[f].hypo);
+        memo.set(id, per.map((p, i) => teamVec(e, live.map(f => ({ key: f, p: ctx.pool.byKey.get(f).line, games: r[f].by[i] / p.phi })))));
+      }
+      return memo.get(id);
+    });
+    const kit = pairKit(e), F = Pts.FP_SLOT;
+    return { ids, periods: per.map((p, i) => ({ n: p.n, phi: p.phi, playoff: p.playoff,
+      P: ids.map((a, x) => !rows.has(a) ? null : ids.map((b, y) => x === y ? null : e.w ? kit.winP(vecs[x][i].mu, vecs[x][i].v, vecs[y][i].mu, vecs[y][i].v, F) : shr(kit.pairMatch(vecs[x][i].mu, vecs[x][i].v, vecs[y][i].mu, vecs[y][i].v), k.match))) })) };
   }
 
   // the pairing chances of evalVecs without the run: winP(mu, v, mu, v, c) one category, pairMatch(...) the matchup
@@ -1247,15 +1331,57 @@
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, pairKit, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, pairKit, tabView, tradeState, leagueWin, periodsLeft, windowView, leagueWinByPeriod, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
+})(typeof self !== 'undefined' ? self : this);
+
+// Slot value for uneven trades (#169): the week weights, the measured slot profile (slot_profile.json, made by slot_profile.js) and the
+// switches the analyst sets (gate src/trade_2x1_gate.txt). Display and trade search only, never in the Model pick.
+(function (root) {
+  'use strict';
+  const DAY = 864e5, TeamWin = root.TeamWin || require('./team_win.js');
+  const PROFILE = root.SLOT_PROFILE || (typeof require !== 'undefined' ? require('./slot_profile.json') : null);
+  const CURVE = { delta: 1, playoff: 1 };   // u_k = delta^(k-k0) for regular periods, x playoff for playoff periods; flat until tuned
+  const APPROACH = 1;                       // 1 = plain rest-of-season (slot term only), 2 = week-weighted Win M (behind this switch, not shown better: analyst gate 2)
+  const SLOT_IN_SORT = false;               // true once the analyst validates the slot value for ordering
+  const KEEP_2X1 = 5;                    // per give-pair, how many plain-screened targets get the weighted score
+  const sig = (curve, profile) => ['v' + ((profile || PROFILE) || {}).version, curve.delta, curve.playoff, APPROACH, SLOT_IN_SORT].join('|');
+  const SIG = sig(CURVE);
+
+  // Per-period weights over the periods that still have time: w_k = phi_k * u_k / sum. -> [{ n, phi, w }]
+  function weights(ctx, curve) {
+    curve = curve || CURVE;
+    const per = TeamWin.periodsLeft(ctx, 'all');
+    const raw = per.map((p, i) => p.phi * Math.pow(curve.delta, i) * (p.playoff ? curve.playoff : 1)), tot = raw.reduce((s, x) => s + x, 0);
+    return per.map((p, i) => ({ n: p.n, phi: p.phi, w: tot > 0 ? raw[i] / tot : 0 }));
+  }
+
+  // The slot value in Win M points per matchup for one period: the profile week at the period's midpoint (a 14-day period reads s14 at its
+  // first week, since a two-week matchup is a different contest). Weeks outside the table clamp to the nearest.
+  function slotOfPeriod(ctx, per, profile) {
+    profile = profile || PROFILE;
+    const t0 = ctx.L.periods[0].start, long = per.to - per.from > 8 * DAY, at = long ? per.from : (per.from + per.to) / 2;
+    const wk = profile.weeks, w = Math.min(wk[wk.length - 1].w, Math.max(wk[0].w, 1 + Math.floor((at - t0) / (7 * DAY))));
+    const row = wk.find(x => x.w === w) || wk.reduce((b, x) => Math.abs(x.w - w) < Math.abs(b.w - w) ? x : b);
+    const v = long && row.s14 != null ? row.s14 : row.s;
+    return v;
+  }
+
+  // S = sum of w_k * s(period k), in Win M points
+  function slotTerm(ctx, curve, profile) {
+    const per = TeamWin.periodsLeft(ctx, 'all'), w = weights(ctx, curve);
+    return w.reduce((s, x, i) => s + x.w * slotOfPeriod(ctx, per[i], profile), 0);
+  }
+
+  const api = { PROFILE, CURVE, APPROACH, SLOT_IN_SORT, KEEP_2X1, SIG, sig, weights, slotOfPeriod, slotTerm };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.SlotValue = api;
 })(typeof self !== 'undefined' ? self : this);
 
 // Trade core (2026-10-20): rest-of-season Win M for a roster change, perceived player value and trade likelihood.
 // Pure; browser and Node. Builds on matchup_core (a team's week vs its real opponent) and inseason_players (value scale).
 (function (root) {
   'use strict';
-  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), TeamWin = root.TeamWin || require('./team_win.js');
+  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), TeamWin = root.TeamWin || require('./team_win.js'), SlotValue = root.SlotValue || require('./slot_value.js');
 
   // winM was 0.1 on the old pairMatchup scale; #147 moved dB to the TeamWin forecaster, where dB is larger, so 0.1 x 0.672 (a fit of old dB on new dB over
   // the 2145 one-for-one candidates of the fixture league, scratch script fit_winm.js) keeps the likelihood moving with dB as much as before.
@@ -1311,20 +1437,26 @@
     return ro[k] === undefined ? (ro[k] = rosWinM(ctx, ctx.roster, t, opts).mean) : ro[k];
   }
   // aGets: fids A receives from B; bGets: fids B receives from A. dA, dB in percentage points of rest-of-season Win M (opts: see rosMeans).
-  function evaluateTrade(ctx, { a, b, aGets, bGets }, opts) {
+  // aAdds (#169): free agents A picks up in the freed slot (2x1 trades). With them the result also carries the breakdown
+  // dA = dAPlayer + slot + dAPickup (dAPickup: the pickup alone, dAPlayer: the trade given the pickup, slot: the measured slot value), sortKey
+  // (dAPlayer, plus slot with opts.slotInSort) and freed. opts also takes approach (1 plain rest-of-season, 2 week-weighted, default SlotValue.APPROACH),
+  // slotInSort and curve, for the scripts and tests. Uneven trades subtract the value of the player B must drop from B's side of the likelihood
+  function evaluateTrade(ctx, { a, b, aGets, bGets, aAdds }, opts) {
     if (a === b) throw new Error('A trade needs two different teams');
-    const ra = new Set(ctx.roster[a]), rb = new Set(ctx.roster[b]);
+    const adds = aAdds || [], ra = new Set(ctx.roster[a]), rb = new Set(ctx.roster[b]);
+    adds.forEach(f => { if (!ctx.pool.byKey.has(f) || Object.keys(ctx.roster).some(t => ctx.roster[t].includes(f))) throw new Error('Player ' + f + ' is not a free agent'); });
     aGets.forEach(f => { if (!rb.has(f)) throw new Error('Player ' + f + ' is not on the giving team'); if (bGets.includes(f)) throw new Error('Player ' + f + ' is on both sides'); });
     bGets.forEach(f => { if (!ra.has(f)) throw new Error('Player ' + f + ' is not on the giving team'); });
     const R = Object.assign({}, ctx.roster);
-    R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets);
+    R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets, adds);
     R[b] = ctx.roster[b].filter(f => !aGets.includes(f)).concat(bGets);
     // a side left with more non-IL players than the limit drops its worst ones (#153); a team already over it is not charged for the trade
     const nonIR = f => ctx.pool.byKey.get(f).slot !== 'IR', val = f => { const p = ctx.pool.byKey.get(f); return InPlayers.valueZ(p.line, p.g, ctx.ref); };
-    const capDrops = t => {
-      const over = R[t].filter(nonIR).length - Math.max(ctx.L.maxPlayers || 0, ctx.roster[t].filter(nonIR).length);
-      return ctx.L.maxPlayers > 0 && over > 0 ? R[t].filter(nonIR).sort((x, y) => val(x) - val(y) || (x < y ? -1 : 1)).slice(0, over) : [];
+    const capFor = (t, list) => {
+      const over = list.filter(nonIR).length - Math.max(ctx.L.maxPlayers || 0, ctx.roster[t].filter(nonIR).length);
+      return ctx.L.maxPlayers > 0 && over > 0 ? list.filter(nonIR).sort((x, y) => val(x) - val(y) || (x < y ? -1 : 1)).slice(0, over) : [];
     };
+    const capDrops = t => capFor(t, R[t]);
     const drops = { [a]: capDrops(a), [b]: capDrops(b) };
     R[a] = R[a].filter(f => !drops[a].includes(f)); R[b] = R[b].filter(f => !drops[b].includes(f));
     // one league run gives both sides; cached per (the two changed rosters, options)
@@ -1333,8 +1465,49 @@
     const after = cache.get(key), dA = 100 * (after[0] - baseline(ctx, a, opts)), dB = 100 * (after[1] - baseline(ctx, b, opts));
     // B's view of the swap: an IL player is filled by B's worst player on either side (the fill swaps with him)
     const pvSum = fs => fs.reduce((s, f) => s + perceived(ctx, ctx.pool.byKey.get(f), b).pv, 0);
-    const gapB = pvSum(bGets) - pvSum(aGets);
-    return { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi: aGets.length !== bGets.length, drops };
+    const multi = aGets.length !== bGets.length;
+    const gapB = pvSum(bGets) - pvSum(aGets) - (multi ? pvSum(drops[b]) : 0);
+    const out = { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi, drops, sortKey: dA, freed: false };
+    const o = opts || {}, curve = o.curve || SlotValue.CURVE, approach = o.approach != null ? o.approach : SlotValue.APPROACH, slotInSort = o.slotInSort != null ? o.slotInSort : SlotValue.SLOT_IN_SORT;
+    if (!adds.length) {
+      // an uneven trade with no pickup is week-weighted too under approach 2, so one sorted list never mixes plain and weighted dA
+      if (multi && approach === 2) {
+        const wT = weightedWinM(ctx, R, a, opts, curve), w0 = weightedWinM(ctx, ctx.roster, a, opts, curve);
+        if (wT != null && w0 != null) { out.dA = 100 * (wT - w0); out.total = out.dA + dB; out.sortKey = out.dA; }
+      }
+      return out;
+    }
+    // the pickup alone: my roster now plus the free agent, under the same cap rule
+    const RF = Object.assign({}, ctx.roster); RF[a] = ctx.roster[a].concat(adds); const dF = capFor(a, RF[a]); RF[a] = RF[a].filter(f => !dF.includes(f));
+    const fkey = 'F#' + a + '#' + sig(a).length + RF[a].slice().sort().join(',') + '|' + optKey(opts);
+    if (!cache.has(fkey)) cache.set(fkey, rosMeans(ctx, RF, [a], opts)[a].mean);
+    let mT = after[0], mF = cache.get(fkey), m0 = baseline(ctx, a, opts);
+    if (approach === 2) {
+      const wT = weightedWinM(ctx, R, a, opts, curve), wF = weightedWinM(ctx, RF, a, opts, curve), w0 = weightedWinM(ctx, ctx.roster, a, opts, curve);
+      if (wT != null && wF != null && w0 != null) { mT = wT; mF = wF; m0 = w0; }
+    }
+    const dAPlayer = 100 * (mT - mF), dAPickup = 100 * (mF - m0);
+    const nFreed = Math.min(adds.length, bGets.filter(nonIR).length - aGets.filter(nonIR).length), freed = nFreed > 0;
+    const slot = freed ? nFreed * SlotValue.slotTerm(ctx, curve) : 0;
+    return Object.assign(out, { dA: dAPlayer + slot + dAPickup, total: dAPlayer + slot + dAPickup + dB, dAPlayer, dAPickup, slot, freed, sortKey: dAPlayer + (slotInSort ? slot : 0) });
+  }
+
+  // My Win M averaged over the periods still to play (SlotValue.weights), from one plays pass split by period. null with no period left.
+  // R is a full roster map; cached per changed rosters, options and curve
+  function weightedWinM(ctx, R, team, opts, curve) {
+    curve = curve || SlotValue.CURVE;
+    const cache = ctx._wmCache = ctx._wmCache || new Map(), changed = Object.keys(R).filter(t => R[t] !== ctx.roster[t]).map(t => t + '#' + R[t].slice().sort().join(',')).join('|');
+    const key = team + '|' + changed + '|' + optKey(opts) + '|' + SlotValue.sig(curve);
+    if (!cache.has(key)) {
+      const o = opts || {}, lw = TeamWin.leagueWinByPeriod(ctx, R, { cats: o.cats, points: o.points, shrink: o.shrink, basis: o.basis, rows: [team], through: 'all' });
+      let m = null;
+      if (lw) {
+        const w = SlotValue.weights(ctx, curve), i = lw.ids.indexOf(team);
+        m = lw.periods.reduce((s, p, k) => { const row = p.P[i].filter(x => x != null); return s + w[k].w * row.reduce((x, y) => x + y, 0) / row.length; }, 0);
+      }
+      cache.set(key, m);
+    }
+    return cache.get(key);
   }
 
   // ---- finder ----
@@ -1342,6 +1515,91 @@
     const r = evaluateTrade(ctx, { a: ctx.me, b: team, aGets: [target.key], bGets: [give.key] }, wopts), v = perceived(ctx, target);
     return { give, target, team, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, buyLow: v.rv - v.pv >= TRADE_W.tagGap };
   };
+
+  // ---- 2-for-1 finder (#169): I give two, get one, and the best free agent or waiver player fills the freed slot ----
+  const isWaiver = pp => pp.fxStatus === 'WW';
+  // the n best pickups by value: free agents and waivers, not out for the current period
+  function pickupShortlist(ctx, n) {
+    const v = p => InPlayers.valueZ(p.line, p.g, ctx.ref);
+    return ctx.pool.players.filter(p => !p.owner && (p.fxStatus === 'FA' || p.fxStatus === 'WW') && !(ctx.out && ctx.out.has(p.key)))
+      .sort((x, y) => v(y) - v(x) || (x.key < y.key ? -1 : 1)).slice(0, n == null ? 10 : n);
+  }
+  // pairs of my players (sorted keys); with one give, only the pairs that hold it
+  function givePairs(ctx, myKey) {
+    const ks = ctx.roster[ctx.me].slice().sort(), out = [];
+    for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) if (myKey === 'any' || ks[i] === myKey || ks[j] === myKey) out.push([ks[i], ks[j]]);
+    return out;
+  }
+  const LIK_BANDS = [0.15, 0.3, 0.5];
+  const nonILCount = (ctx, fs) => fs.filter(f => ctx.pool.byKey.get(f).slot !== 'IR').length;
+  // The rows for one give-pair: the pickup is the shortlist player whose addition helps most (only when the pair frees a non-IL slot), every
+  // other team's player is screened with the plain average (stage 1), and the best `keep` are scored week-weighted (stage 2), best sortKey first
+  function candidates2x1ForPair(ctx, pair, wopts, keep) {
+    keep = keep == null ? SlotValue.KEEP_2X1 : keep;
+    if (ctx.cur == null || !TeamWin.periodsLeft(ctx, 'all').length) return [];
+    const me = ctx.me, base = ctx.roster[me].filter(f => !pair.includes(f));
+    let pickup = null;
+    if (nonILCount(ctx, pair) >= 1) {
+      let best = -Infinity;
+      pickupShortlist(ctx, 10).forEach(pp => {
+        const m = rosWinM(ctx, Object.assign({}, ctx.roster, { [me]: base.concat([pp.key]) }), me, wopts).mean;
+        if (m != null && m > best) { best = m; pickup = pp; }
+      });
+    }
+    // the pickup applies only when the trade frees a non-IL slot: two non-IL gives, or one non-IL give for an IL target
+    const addsFor = f => pickup && nonILCount(ctx, pair) - nonILCount(ctx, [f]) >= 1 ? [pickup.key] : [];
+    const plain = Object.assign({}, wopts, { approach: 1 }), cands = [];
+    Object.keys(ctx.roster).forEach(t => {
+      if (t === me) return;
+      ctx.roster[t].forEach(f => cands.push({ team: t, f, r: evaluateTrade(ctx, { a: me, b: t, aGets: [f], bGets: pair, aAdds: addsFor(f) }, plain) }));
+    });
+    cands.sort((x, y) => y.r.sortKey - x.r.sortKey || (x.f < y.f ? -1 : 1));
+    // keep the best `keep` overall AND the best `keep` at each likelihood floor, so a Likelihood filter on the page still finds the best trades
+    const kept = new Set(cands.slice(0, keep));
+    LIK_BANDS.forEach(fl => cands.filter(c => c.r.likelihood >= fl).slice(0, keep).forEach(c => kept.add(c)));
+    return cands.filter(c => kept.has(c)).map(c => {
+      const ad = addsFor(c.f), r = evaluateTrade(ctx, { a: me, b: c.team, aGets: [c.f], bGets: pair, aAdds: ad }, wopts);
+      return { type: '2x1', gives: pair.map(k => ctx.pool.byKey.get(k)), targets: [ctx.pool.byKey.get(c.f)], team: c.team, pickup, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total,
+        dAPlayer: r.dAPlayer == null ? r.dA : r.dAPlayer, dAPickup: r.dAPickup || 0, slot: r.slot || 0, sortKey: r.sortKey };
+    }).sort((x, y) => y.sortKey - x.sortKey);
+  }
+  function tradeCandidates2x1(ctx, myKey, wopts) {
+    const rows = [];
+    givePairs(ctx, myKey).forEach(p => candidates2x1ForPair(ctx, p, wopts).forEach(r => rows.push(r)));
+    return rows;
+  }
+
+  // ---- 2-for-2 finder (#169) ----
+  // Screen: for each give-pair and each other team's target pair, the better of the two pairings of the 1x1 rows (dA and dB summed), with the exact
+  // perceived-value gap for B; keep estimated dA > 0 and likelihood >= likFloor, score the best `top` with evaluateTrade. oneRows are the
+  // 1x1 rows of ALL my players ('any'); a pair with a missing 1x1 row is skipped. Likelihood is shown but does not drive the order.
+  function tradeCandidates2x2(ctx, myKey, oneRows, wopts, { top = 400, likFloor = 0.02 } = {}) {
+    if (ctx.cur == null || !TeamWin.periodsLeft(ctx, 'all').length) return [];
+    const one = new Map(oneRows.map(r => [r.give.key + '|' + r.target.key, r])), est = [];
+    const pvB = {}, pv = (k, b) => { const m = pvB[b] = pvB[b] || {}; return k in m ? m[k] : (m[k] = perceived(ctx, ctx.pool.byKey.get(k), b).pv); };
+    const pairs = givePairs(ctx, myKey);
+    Object.keys(ctx.roster).forEach(t => {
+      if (t === ctx.me) return;
+      const ts = ctx.roster[t].slice().sort();
+      for (let i = 0; i < ts.length; i++) for (let j = i + 1; j < ts.length; j++) pairs.forEach(([g1, g2]) => {
+        const gap = pv(g1, t) + pv(g2, t) - pv(ts[i], t) - pv(ts[j], t), best = [[ts[i], ts[j]], [ts[j], ts[i]]].map(([x, y]) => {
+          const r1 = one.get(g1 + '|' + x), r2 = one.get(g2 + '|' + y);
+          return r1 && r2 ? { dA: r1.dA + r2.dA, dB: r1.dB + r2.dB } : null;
+        }).filter(Boolean).sort((p, q) => q.dA - p.dA)[0];
+        if (!best || !(best.dA > 0)) return;
+        const lik = 1 / (1 + Math.exp(-(TRADE_W.slope * gap + TRADE_W.winM * best.dB + TRADE_W.bias)));
+        if (lik >= likFloor) est.push({ t, g: [g1, g2], x: [ts[i], ts[j]], dA: best.dA, lik });
+      });
+    });
+    est.sort((p, q) => q.dA - p.dA);
+    // the best `top` overall, plus the best top/4 at each likelihood floor, so a Likelihood filter on the page still finds rows
+    const kept = new Set(est.slice(0, top)), per = Math.max(1, Math.ceil(top / 4));
+    LIK_BANDS.forEach(fl => est.filter(c => c.lik >= fl).slice(0, per).forEach(c => kept.add(c)));
+    return est.filter(c => kept.has(c)).map(c => {
+      const r = evaluateTrade(ctx, { a: ctx.me, b: c.t, aGets: c.x, bGets: c.g }, wopts), pp = k => ctx.pool.byKey.get(k);
+      return { type: '2x2', gives: c.g.map(pp), targets: c.x.map(pp), team: c.t, pickup: null, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, dAPlayer: r.dA, dAPickup: 0, slot: 0, sortKey: r.dA };
+    }).sort((p, q) => q.sortKey - p.sortKey);
+  }
   const byValue = (a, b) => b.dA * b.likelihood - a.dA * a.likelihood;
   // every one-for-one trade for one of my players (myKey) with every other team's player, helpful or not, unfiltered; 'any' offers each of my players
   // wopts: the Win M options of rosMeans (basis: 'total' Season, the default, 'pergame', 'mix')
@@ -1357,8 +1615,10 @@
     return rows;
   }
   // minLikelihood is 0-1; minDA and minDB are Win M points. The filters run before the limit.
-  function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = -Infinity, minDB = -Infinity } = {}) {
-    return rows.filter(r => r.likelihood >= minLikelihood && r.dA >= minDA && r.dB >= minDB).sort(byValue).slice(0, limit);
+  // by 'value' (default) orders by dA x likelihood, by 'sort' by the sort key (uneven rows: dA without the pickup; 1x1 rows: dA). minDA reads the sort key
+  const skey = r => r.sortKey != null ? r.sortKey : r.dA;
+  function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = -Infinity, minDB = -Infinity, by = 'value' } = {}) {
+    return rows.filter(r => r.likelihood >= minLikelihood && skey(r) >= minDA && r.dB >= minDB).sort(by === 'sort' ? ((a, b) => skey(b) - skey(a)) : byValue).slice(0, limit);
   }
   // Text box input. Likelihood: "50%", "0.5" or "50" (above 1 means percent; a bare 1 is 100%). Win M points: "2", "2%".
   // Blank is no limit (null); anything else that is not a number is invalid (undefined).
@@ -1382,6 +1642,18 @@
     });
     return out;
   }
+  // Uneven rows (2x1, 2x2) saved by the page: [type, gives, targets, team, pickup, likelihood, dA, dB, total, dAPlayer, dAPickup, slot, sortKey], keys joined with '+'.
+  // unpackRows returns [] for anything not in this shape (an older 1x1 save), so a stale cache is never misread
+  const packRows = (rows, dp) => { const f = dp == null ? (x => x) : (x => Math.round(x * Math.pow(10, dp)) / Math.pow(10, dp)); return rows.map(r => [r.type, r.gives.map(p => p.key).join('+'), r.targets.map(p => p.key).join('+'), r.team, r.pickup ? r.pickup.key : '', f(r.likelihood), f(r.dA), f(r.dB), f(r.total), f(r.dAPlayer), f(r.dAPickup), f(r.slot), f(r.sortKey)]); };
+  function unpackRows(packed, pool) {
+    if (!Array.isArray(packed) || !packed.every(r => Array.isArray(r) && r.length === 13 && (r[0] === '2x1' || r[0] === '2x2'))) return [];
+    const out = [];
+    packed.forEach(r => {
+      const gives = r[1].split('+').map(k => pool.byKey.get(k)), targets = r[2].split('+').map(k => pool.byKey.get(k)), pickup = r[4] ? pool.byKey.get(r[4]) : null;
+      if (gives.every(Boolean) && targets.every(Boolean) && (!r[4] || pickup)) out.push({ type: r[0], gives, targets, team: r[3], pickup, likelihood: r[5], dA: r[6], dB: r[7], total: r[8], dAPlayer: r[9], dAPickup: r[10], slot: r[11], sortKey: r[12] });
+    });
+    return out;
+  }
   // What the candidates depend on: both sides' rosters, my team, the current period, the day, the weights and a model version
   function candSig(ctx, day, version) {
     const ros = Object.keys(ctx.roster).sort().map(t => t + ':' + ctx.roster[t].slice().sort().join(',')).join(';');
@@ -1389,6 +1661,8 @@
     for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
     return day + ':' + ctx.me + ':' + ctx.cur + ':' + (h >>> 0).toString(36) + ':' + str.length;
   }
+  // the signature of the uneven searches: candSig plus the slot-value settings (curve, approach, profile version)
+  const candSigUneven = (ctx, day, version, curve) => candSig(ctx, day, version + '|' + SlotValue.sig(curve || SlotValue.CURVE));
   const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), Object.assign({ minDA: 1e-9 }, opts));   // by default only trades that help me
   // keep(player) leaves players out before the top `limit` are chosen (the page's Hide injured), so the lists refill instead of shrinking
   function sellHighBuyLow(ctx, { limit = 8, targets = 3, candidates = null, keep = null } = {}) {
@@ -1404,7 +1678,7 @@
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosMeans, rosWinM, weightedWinM, perceived, evaluateTrade, pickupShortlist, isWaiver, givePairs, candidates2x1ForPair, tradeCandidates2x1, tradeCandidates2x2, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, packRows, unpackRows, candSig, candSigUneven, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
 

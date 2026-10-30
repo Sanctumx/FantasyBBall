@@ -1645,7 +1645,28 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return hits.map(h => h.reduce((acc, [d, a]) => { const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); return acc + a * (sum[d] > cap ? cap / sum[d] : 1); }, 0));
   }
 
-  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodLast, periodDays, periodMonths, rosterGames };
+  // rosterGames with each entry's games split into buckets: cuts = ascending ms, a game at ms in [cuts[i], cuts[i+1]) goes to
+  // bucket i (games outside the cuts still use up the day's cap). Returns entry × bucket; the row sums equal rosterGames.
+  function rosterGamesBy(entries, DAYS, maxActive, used, cuts) {
+    const G = (DAYS && DAYS.games) || DAYS || {}, nb = cuts.length - 1;
+    const bucket = ms => { if (ms < cuts[0] || ms >= cuts[nb]) return -1; let lo = 0, hi = nb - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (cuts[m] <= ms) lo = m; else hi = m - 1; } return lo; };
+    const hits = entries.map(e => (G[e.t] || []).map(s => s * 1000).filter(ms => ms >= e.from && ms < e.to).map(ms => [localDay(ms), e.a, bucket(ms)]));
+    const out = entries.map(() => new Array(nb).fill(0));
+    if (entries.length && entries.every(e => e.v != null)) {
+      const left = {};
+      entries.map((_, i) => i).sort((a, b) => (entries[b].v - entries[a].v) || (a - b)).forEach(i => hits[i].forEach(([d, a, k]) => {
+        if (left[d] == null) left[d] = Math.max(0, maxActive - ((used && used[d]) || 0));
+        const take = Math.min(a, left[d]); left[d] -= take; if (k >= 0) out[i][k] += take;
+      }));
+      return out;
+    }
+    const sum = {};
+    hits.forEach(h => h.forEach(([d, a]) => { sum[d] = (sum[d] || 0) + a; }));
+    hits.forEach((h, i) => h.forEach(([d, a, k]) => { if (k < 0) return; const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); out[i][k] += a * (sum[d] > cap ? cap / sum[d] : 1); }));
+    return out;
+  }
+
+  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodLast, periodDays, periodMonths, rosterGames, rosterGamesBy };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InLeague = api;
 })(this);
 
@@ -2471,6 +2492,20 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return a.map((x, i) => x + b[i]);
   }
 
+  // windowGames split into buckets (cuts: ascending ms, bucket i = [cuts[i], cuts[i+1])) -> keys × buckets, row sums equal windowGames.
+  // One segGames call per part of the window carries every key's segment of every bucket, so the nightly caps see the same players as the
+  // unsplit call (keys stay in order, so ties break the same way). Games outside the cuts are dropped from the buckets
+  function windowGamesBy(ctx, keys, used, cuts) {
+    const w = window(ctx), nb = cuts.length - 1, cut = Math.min(Math.max(ctx.curEnd || 0, w.from), w.to), out = keys.map(() => new Array(nb).fill(0));
+    const part = (pf, pt) => {
+      const segs = [];
+      keys.forEach(key => { for (let b = 0; b < nb; b++) { const from = Math.max(cuts[b], pf), to = Math.min(cuts[b + 1], pt); segs.push({ key, from, to: Math.max(from, to) }); } });
+      Matchup.segGames(ctx, segs, used, true).forEach((g, j) => { out[Math.floor(j / nb)][j % nb] += g; });
+    };
+    if (cut <= w.from || cut >= w.to) part(w.from, w.to); else { part(w.from, cut); part(cut, w.to); }
+    return out;
+  }
+
   // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
   // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
@@ -2479,19 +2514,20 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
     const act = by('active'), bench = by('reserve'), res = {};
-    const done = (k, played, hypo) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; };
-    const gA = windowGames(ctx, act, null), count = {}, used = {};
+    const cuts = o && o.cuts, nb = cuts ? cuts.length - 1 : 0;
+    const done = (k, played, hypo, by) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; if (cuts) res[k].by = by || new Array(nb).fill(0); };
+    const gA = windowGames(ctx, act, null), count = {}, used = {}, byA = cuts ? windowGamesBy(ctx, act, null, cuts) : null;
     act.forEach((k, i) => {
-      done(k, gA[i]);
+      done(k, gA[i], false, byA && byA[i]);
       const out = ctx.out && ctx.out.has(k);
       (G[byKey.get(k).t] || []).map(s => s * 1000).filter(ms => ms >= w.from && ms < w.to && !(out && ms < ctx.curEnd)).forEach(ms => { const d = InLeague.localDay(ms); count[d] = (count[d] || 0) + 1; });
     });
     Object.keys(count).forEach(d => { used[d] = Math.min(max, count[d]); });
-    const gB = windowGames(ctx, bench, used);
-    bench.forEach((k, i) => done(k, gB[i]));
+    const gB = windowGames(ctx, bench, used), byB = cuts ? windowGamesBy(ctx, bench, used, cuts) : null;
+    bench.forEach((k, i) => done(k, gB[i], false, byB && byB[i]));
     by('il').forEach(k => {
       const g = windowGames(ctx, bench.concat(k), used);
-      done(k, g[g.length - 1], true);
+      done(k, g[g.length - 1], true, cuts ? windowGamesBy(ctx, bench.concat(k), used, cuts).pop() : null);
     });
     return res;
   }
@@ -2541,9 +2577,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   function tabPlays(ctx, state, o) {
     o = o || {};
     const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), extra = o.extra || [];
-    const done = (k, played, a, drop) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; if (drop != null) res[k].drop = drop; };
+    const cuts = o.cuts, nb = cuts ? cuts.length - 1 : 0;   // o.cuts: also return res[k].by, the games in each bucket [cuts[i], cuts[i+1]) (the sums equal played)
+    const done = (k, played, a, drop, by) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; if (drop != null) res[k].drop = drop; if (cuts) res[k].by = by || new Array(nb).fill(0); };
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
-    if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
+    if (ctx.basis === 'pergame') { const byG = cuts ? windowGamesBy(ctx, keys, null, cuts) : null; windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1, undefined, byG && byG[i])); }
     else {
       const il = keys.filter(k => state.slots[k] === 'il'), ret = {}, v = k => Matchup.nightValue(ctx, byKey.get(k));
       il.forEach(k => { ret[k] = ilReturn(ctx, k); });
@@ -2561,7 +2598,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       const items = keys.map(k => il.includes(k)
         ? (dropped.has(k) ? { t: byKey.get(k).t, a: 0, v: v(k), from: w.from, to: w.from } : { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: w.to })
         : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: leave[k] != null ? leave[k] : w.to });
-      InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]]); });
+      const byG = cuts ? InLeague.rosterGamesBy(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null, cuts) : null;
+      InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]], byG && byG[i]); });
     }
     return res;
   }
@@ -2621,9 +2659,10 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   // the engine context of a ctx's player pool: noise and pool averages from simulated drafts of the real league (rostered players
   // first), IL fill off because Plays % already counts the games a player misses. Built once per ctx and category count.
-  const ectxs = new WeakMap();
+  const ectxs = new WeakMap(), viewBase = new WeakMap();
   // Points leagues (#137): w = the point values; the engine view puts one FP total in category slot Points.FP_SLOT and the rest is unchanged.
   function engCtx(ctx, nc, w) {
+    ctx = viewBase.get(ctx) || ctx;   // a windowView shares its ctx's engine context (same pool and rosters)
     let by = ectxs.get(ctx); if (!by) ectxs.set(ctx, by = {});
     const bk = w ? 'p|' + Pts.key(w) : nc;
     if (!by[bk]) {
@@ -2709,9 +2748,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   // players with the lowest Win M contribution go (dropRank). o: tid, cats, points, e (the engine context when the caller has it), noDrop
   function plays(ctx, state, o) {
     o = o || {};
-    if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop });
+    if (!ctx.teamTab || ctx.basis === 'pergame' || o.noDrop) return Team.playsPct(ctx, state, { noDrop: o.noDrop, cuts: o.cuts });
     let rank = null;
-    return Team.playsPct(ctx, state, { extra: o.extra, rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
+    return Team.playsPct(ctx, state, { extra: o.extra, cuts: o.cuts, rank: k => (rank || (rank = dropRank(ctx, o.tid != null ? o.tid : ctx.me, o)))(k) });   // built only if a player has to go
   }
 
   // The drop order of team tid on the Team tab (IL timeline, user 2026-10-29: drop by Win M contribution): rank(k) = minus the team's mean match
@@ -2850,6 +2889,50 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     // detail (the League tab): C[i][j][c] = team i's shrunk chance in category c against team j (null past nc, on the diagonal and in points mode), as the matrix's `cat`
     const C = ids.map((a, i) => !rows.has(a) ? null : ids.map((b, j) => i === j ? null : e.w ? null : Array.from({ length: 9 }, (_, c) => c >= nc ? null : shr(out.catProb(out.teams[i], out.teams[j], c), k.cat))));
     return { W, ids, P, C, swing: e.ctx.swing };
+  }
+
+  // ---- Win M per period (#169, uneven trades) ----
+  // The periods that still have time left: { n, from, to, phi, playoff }, phi = the share of the period still to play (weeksLeft's count,
+  // so a 14-day period is 1). through 'regular' stops at L.lastRegular, 'all' adds the playoff periods. Call it on the real ctx, not a view
+  function periodsLeft(ctx, through) {
+    const reg = ctx.L.lastRegular, now = ctx.nowMs;
+    return ctx.L.periods.filter(p => through !== 'regular' || p.n <= reg)
+      .map(p => ({ n: p.n, from: p.start, to: p.end, phi: Math.max(0, p.end - Math.max(p.start, now)) / (p.end - p.start), playoff: p.n > reg })).filter(p => p.phi > 0);
+  }
+
+  // A shallow copy of ctx whose regular season runs to the last period of `through` (Team.window then reaches the playoffs). Cached per ctx;
+  // engCtx(view) is engCtx(ctx), so nothing is rebuilt. 'regular' is ctx itself
+  const views = new WeakMap();
+  function windowView(ctx, through) {
+    const last = through === 'regular' ? ctx.L.lastRegular : Math.max.apply(null, ctx.L.periods.map(p => p.n));
+    if (last === ctx.L.lastRegular) return ctx;
+    let by = views.get(ctx); if (!by) views.set(ctx, by = {});
+    if (!by[last]) { by[last] = Object.assign({}, ctx, { L: Object.assign({}, ctx.L, { lastRegular: last }) }); viewBase.set(by[last], ctx); }
+    return by[last];
+  }
+
+  // leagueWin with one match-chance matrix per period: the plays are computed once over the whole window and split by period (Team.playsPct
+  // cuts), so the IL timeline and the drops are global; period k's games per average week are its games / phi_k. -> null with no period
+  // left, else { ids, periods: [{ n, phi, playoff, P }] } (P as in leagueWin). opts: rows, cats, points, shrink, basis, through ('all' default)
+  const lbMemos = new WeakMap();
+  function leagueWinByPeriod(ctx, R, o) {
+    o = o || {};
+    const through = o.through === 'regular' ? 'regular' : 'all', per = periodsLeft(ctx, through);
+    if (!per.length) return null;
+    const nc = o.cats === 8 ? 8 : 9, e = engCtx(ctx, nc, o.points), ids = Object.keys(ctx.roster), rows = new Set(o.rows || ids), k = o.shrink || SHRINK;
+    const view = windowView(ctx, through), tv = tabView(view, o.basis), cuts = per.map(p => p.from).concat(per[per.length - 1].to), c = Team.countedSlots(tv);
+    let memo = lbMemos.get(ctx); if (!memo) lbMemos.set(ctx, memo = new Map());
+    const vecs = ids.map(t => {
+      const fids = (R || ctx.roster)[t], id = t + '|' + fids.slice().sort().join(',') + '|' + nc + '|' + (e.w ? Pts.key(e.w) : '') + '|' + tv.basis + '|' + through;
+      if (!memo.has(id)) {
+        const st = tradeState(view, t, fids), r = plays(tv, st, { tid: t, cats: nc, points: o.points, e, cuts }), live = st.order.filter(f => c.includes(st.slots[f]) && !r[f].hypo);
+        memo.set(id, per.map((p, i) => teamVec(e, live.map(f => ({ key: f, p: ctx.pool.byKey.get(f).line, games: r[f].by[i] / p.phi })))));
+      }
+      return memo.get(id);
+    });
+    const kit = pairKit(e), F = Pts.FP_SLOT;
+    return { ids, periods: per.map((p, i) => ({ n: p.n, phi: p.phi, playoff: p.playoff,
+      P: ids.map((a, x) => !rows.has(a) ? null : ids.map((b, y) => x === y ? null : e.w ? kit.winP(vecs[x][i].mu, vecs[x][i].v, vecs[y][i].mu, vecs[y][i].v, F) : shr(kit.pairMatch(vecs[x][i].mu, vecs[x][i].v, vecs[y][i].mu, vecs[y][i].v), k.match))) })) };
   }
 
   // the pairing chances of evalVecs without the run: winP(mu, v, mu, v, c) one category, pairMatch(...) the matchup
@@ -3003,7 +3086,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     return moduleSort((o.candidates || ctx.pool.players.map(p => p.key)).map(k => moduleRow(ctx, state, su, k)), o.weights);
   }
 
-  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, pairKit, tabView, tradeState, leagueWin, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
+  const api = { SHRINK, engCtx, engCtxFrom, teamVec, plays, dropRank, evalVecs, pairKit, tabView, tradeState, leagueWin, periodsLeft, windowView, leagueWinByPeriod, pointsPerWeek, weeksLeft, oppState, received, goneKeys, side, matrix, matrixOf, avgParts, playerGain, playerWin, moduleSetup, moduleRow, moduleSort, moduleScores };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TeamWin = api;
 })(typeof self !== 'undefined' ? self : this);
 
