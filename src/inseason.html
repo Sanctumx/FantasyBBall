@@ -55,6 +55,7 @@ th,td{padding:3px 5px;text-align:center;border-bottom:1px solid var(--line)}
 th{font:600 .72rem/1.15 var(--f-body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-block:7px;border-bottom:1px solid var(--ink)}
 thead th:not([data-nosort]){cursor:pointer;user-select:none}
 thead th:not([data-nosort]):hover,th[aria-sort]{color:var(--ink)}
+body:not(.show-lik) .lik,body:not(.show-lik) #finder th:nth-child(4),body:not(.show-lik) #finder td:nth-child(4){display:none}   /* likelihood hidden for now (SHOW_LIK in the script) */
 th[aria-sort="descending"]::after{content:" ▼";font-size:.6rem}
 th[aria-sort="ascending"]::after{content:" ▲";font-size:.6rem}
 td.l,th.l{text-align:left}
@@ -215,7 +216,7 @@ tr.click{cursor:pointer}
           <h2>Trade finder <span class="meta">Offer one of your players; pick the trade types below</span></h2>
           <div class="ctl" id="types"><span class="f" title="Which trades to search: any mix. 2-for-1: you give two, get one, and the best free agent or waiver player fills your freed spot. 2-for-2 uses the same screen as one-for-one pairs."><label><input type="checkbox" id="ty-11"> 1-for-1</label> <label><input type="checkbox" id="ty-21"> 2-for-1</label> <label><input type="checkbox" id="ty-22"> 2-for-2</label></span></div>
           <div class="ctl"><label class="f" for="give" title="Type a name, or leave blank / type Any to offer each of your players">Your player<input id="give" type="text" list="givelist" placeholder="Any" autocomplete="off"><datalist id="givelist"></datalist></label>
-            <label class="f" for="f-lik" title="Hide trades the other team is unlikely to accept: 50% or 0.5">Likelihood at least<input id="f-lik" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
+            <label class="f lik" for="f-lik" title="Hide trades the other team is unlikely to accept: 50% or 0.5">Likelihood at least<input id="f-lik" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
             <label class="f" for="f-da" title="Smallest change in your rest-of-season Win M, percentage points (blank: every trade, even ones that hurt you; 0: no loss)">+Win M you at least<input id="f-da" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
             <label class="f" for="f-db" title="Smallest change in their rest-of-season Win M, percentage points (0: not hurt)">+Win M them at least<input id="f-db" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label></div>
           <div class="scroll rows25"><table id="finder"></table></div>
@@ -388,6 +389,8 @@ tr.click{cursor:pointer}
   const fmtStat = (v, c) => c < 2 ? v.toFixed(3).replace(/^0/, '') : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
   // Source (Trade Analyzer only): the same math on another source's lines (TeamView.sourceCtx, as on the Team tab). The monthly box-score
   // files load only when a box-score source is picked; a context made before they arrive is not kept (the key carries whether they are in).
+  const SHOW_LIK = false;   // the likelihood numbers are hidden for now (some trades show outrageously high %); the filter is ignored while hidden
+  document.body.classList.toggle('show-lik', SHOW_LIK);
   const TV = TeamView, SRCS = TV.createSources(PLAYERS), srcOf = () => (ui.tab === 'trades' && ui.src) || 'avg';
   const SRC_NAME = { season: 'Season to date', w7: 'Last week', w14: 'Last 2 weeks', w30: 'Last month', avg: 'BBM + Hashtag average', bbm: 'BBM', hs: 'Hashtag' };
   const ctxFor = team => { const s = srcOf(); return memoed('ctx|' + team + '|' + dayKey() + '|' + s + (SRCS.box() ? 'b' : ''), () => { const a = { L, pool, DAYS: SCHED_DAYS, rosters, me: team, nowMs: Date.now(), box }; return s === 'avg' ? Matchup.makeCtx(a) : TV.sourceCtx(a, s, SRCS.rows(s), fxPlayers); }); };
@@ -542,7 +545,7 @@ tr.click{cursor:pointer}
     const names = ps => ps.map(p => esc(p.n)).join(' + ');
     const draw = () => {
       const pf = (k, id) => { const v = Trade.parseFilter(k, ui.fl[id]); $('f-' + id).classList.toggle('bad', v === undefined); return v; };
-      const lik = pf('lik', 'lik'), da = pf('da', 'da'), db = pf('db', 'db');   // a box that cannot be read is ignored and marked
+      const lik = SHOW_LIK ? pf('lik', 'lik') : null, da = pf('da', 'da'), db = pf('db', 'db');   // a box that cannot be read is ignored and marked
       const SHOW = 3000, opts = { limit: Infinity, minLikelihood: lik == null ? 0 : lik, minDA: da == null ? -Infinity : da, minDB: db == null ? -Infinity : db };
       const all = (ty.t11 ? [].concat.apply([], gives.map(g => (tradeCache[ck(g)] || []).map(one))) : []).concat([].concat.apply([], pairs.map(x => tradeCache[kU(x)] || [])), ty.t22 ? tradeCache[kU(key22)] || [] : []);
       opts.by = ty.t21 || ty.t22 ? 'sort' : 'value';   // 1-for-1 alone keeps its dA x likelihood order; a mix is ordered by the sort key
@@ -580,7 +583,7 @@ tr.click{cursor:pointer}
     const key = ck('sb');   // the candidates' key, so a new Source or Basis builds the lists again
     const sb = tradeCache[key] || (tradeCache[key] = Trade.sellHighBuyLow(ctx, { limit: 8, targets: 3, candidates: g => tradeCache[ck(g)] }));
     const list = (items, kind) => (items = items.filter(x => showP(x.player)).map(x => Object.assign({}, x, { trades: x.trades.filter(t => showP(t.give) && showP(t.target)) }))).length ? items.map(x =>'<div class="tl"><b>' + esc(x.player.n) + '</b><span class="src">' + (kind === 'sell' ? 'valued ' : 'worth ') + x.gap.toFixed(2) + (kind === 'sell' ? ' above real' : ' above what they are valued') + '</span>' +
-      (x.trades.length ? '<ul>' + x.trades.map(t => '<li><button type="button" class="lnk" data-give="' + esc(t.give.key) + '" data-target="' + esc(t.target.key) + '" data-team="' + esc(t.team) + '">' + esc(t.give.n) + ' for ' + esc(t.target.n) + '</button> · ' + esc(nameOfTeam(t.team)) + ' · ' + pct(t.likelihood) + '% likely · ' + signed(t.dA) + ' you</li>').join('') + '</ul>' : '<p class="hint">No one-for-one trade helps you.</p>') + '</div>').join('') : '<p class="hint">None right now.</p>';
+      (x.trades.length ? '<ul>' + x.trades.map(t => '<li><button type="button" class="lnk" data-give="' + esc(t.give.key) + '" data-target="' + esc(t.target.key) + '" data-team="' + esc(t.team) + '">' + esc(t.give.n) + ' for ' + esc(t.target.n) + '</button> · ' + esc(nameOfTeam(t.team)) + ' · ' + (SHOW_LIK ? pct(t.likelihood) + '% likely · ' : '') + signed(t.dA) + ' you</li>').join('') + '</ul>' : '<p class="hint">No one-for-one trade helps you.</p>') + '</div>').join('') : '<p class="hint">None right now.</p>';
     $('sell').innerHTML = list(sb.sellHigh, 'sell');
     $('buy').innerHTML = list(sb.buyLow, 'buy');
   }
@@ -644,7 +647,7 @@ tr.click{cursor:pointer}
       const pk = S.aAdds.length > 0;
       $('multi').textContent = [S.a, S.b].filter(t => r.drops[t].length).map(t => 'Roster limit ' + L.maxPlayers + ': ' + nameOfTeam(t) + ' drops ' + r.drops[t].map(k => pool.byKey.get(k).n).join(', ') + ' (lowest value).' + (t === S.b && r.multi ? ' Their likelihood counts losing him.' : '')).join(' ');
       $('sum').innerHTML = '<div class="kpi"><b>' + signed(r.dA) + '</b><span>' + esc(nameOfTeam(S.a)) + ' Win M (points)</span></div><div class="kpi"><b>' + signed(r.dB) + '</b><span>' + esc(nameOfTeam(S.b)) + ' Win M</span></div>' +
-        '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>' +
+        '<div class="kpi"><b>' + signed(r.total) + '</b><span>Total Win M</span></div><div class="kpi lik"><b>' + pct(r.likelihood) + '%</b><span>Likelihood of trade</span></div>' +
         (pk ? '<div class="kpi"><b>' + signed(r.dAPickup) + '</b><span>of which from the pickup</span></div><div class="kpi" title="Regular season only; about 0.6 Win M points per matchup, uncertain"><b>' + signed(r.slot) + '</b><span>Slot value (regular season, ~0.6, uncertain)</span></div>' : '')
       const zsum = ks => { const v = ks.map(k => InP.zscoreOf(PLAYERS, pool.byKey.get(k), ui.zt, ui.basis)).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
       const zA = zsum(S.aGets), zB = zsum(S.bGets);
