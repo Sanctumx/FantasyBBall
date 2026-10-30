@@ -1599,8 +1599,10 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
     return rows;
   }
   // minLikelihood is 0-1; minDA and minDB are Win M points. The filters run before the limit.
-  function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = -Infinity, minDB = -Infinity } = {}) {
-    return rows.filter(r => r.likelihood >= minLikelihood && r.dA >= minDA && r.dB >= minDB).sort(byValue).slice(0, limit);
+  // by 'value' (default) orders by dA x likelihood, by 'sort' by the sort key (uneven rows: dA without the pickup; 1x1 rows: dA). minDA reads the sort key
+  const skey = r => r.sortKey != null ? r.sortKey : r.dA;
+  function filterTrades(rows, { limit = 25, minLikelihood = 0, minDA = -Infinity, minDB = -Infinity, by = 'value' } = {}) {
+    return rows.filter(r => r.likelihood >= minLikelihood && skey(r) >= minDA && r.dB >= minDB).sort(by === 'sort' ? ((a, b) => skey(b) - skey(a)) : byValue).slice(0, limit);
   }
   // Text box input. Likelihood: "50%", "0.5" or "50" (above 1 means percent; a bare 1 is 100%). Win M points: "2", "2%".
   // Blank is no limit (null); anything else that is not a number is invalid (undefined).
@@ -1624,6 +1626,18 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
     });
     return out;
   }
+  // Uneven rows (2x1, 2x2) saved by the page: [type, gives, targets, team, pickup, likelihood, dA, dB, total, dAPlayer, dAPickup, slot, sortKey], keys joined with '+'.
+  // unpackRows returns [] for anything not in this shape (an older 1x1 save), so a stale cache is never misread
+  const packRows = (rows, dp) => { const f = dp == null ? (x => x) : (x => Math.round(x * Math.pow(10, dp)) / Math.pow(10, dp)); return rows.map(r => [r.type, r.gives.map(p => p.key).join('+'), r.targets.map(p => p.key).join('+'), r.team, r.pickup ? r.pickup.key : '', f(r.likelihood), f(r.dA), f(r.dB), f(r.total), f(r.dAPlayer), f(r.dAPickup), f(r.slot), f(r.sortKey)]); };
+  function unpackRows(packed, pool) {
+    if (!Array.isArray(packed) || !packed.every(r => Array.isArray(r) && r.length === 13 && (r[0] === '2x1' || r[0] === '2x2'))) return [];
+    const out = [];
+    packed.forEach(r => {
+      const gives = r[1].split('+').map(k => pool.byKey.get(k)), targets = r[2].split('+').map(k => pool.byKey.get(k)), pickup = r[4] ? pool.byKey.get(r[4]) : null;
+      if (gives.every(Boolean) && targets.every(Boolean) && (!r[4] || pickup)) out.push({ type: r[0], gives, targets, team: r[3], pickup, likelihood: r[5], dA: r[6], dB: r[7], total: r[8], dAPlayer: r[9], dAPickup: r[10], slot: r[11], sortKey: r[12] });
+    });
+    return out;
+  }
   // What the candidates depend on: both sides' rosters, my team, the current period, the day, the weights and a model version
   function candSig(ctx, day, version) {
     const ros = Object.keys(ctx.roster).sort().map(t => t + ':' + ctx.roster[t].slice().sort().join(',')).join(';');
@@ -1631,6 +1645,8 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
     for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
     return day + ':' + ctx.me + ':' + ctx.cur + ':' + (h >>> 0).toString(36) + ':' + str.length;
   }
+  // the signature of the uneven searches: candSig plus the slot-value settings (curve, approach, profile version)
+  const candSigUneven = (ctx, day, version, curve) => candSig(ctx, day, version + '|' + SlotValue.sig(curve || SlotValue.CURVE));
   const findTrades = (ctx, myKey, opts) => filterTrades(tradeCandidates(ctx, myKey), Object.assign({ minDA: 1e-9 }, opts));   // by default only trades that help me
   // keep(player) leaves players out before the top `limit` are chosen (the page's Hide injured), so the lists refill instead of shrinking
   function sellHighBuyLow(ctx, { limit = 8, targets = 3, candidates = null, keep = null } = {}) {
@@ -1646,7 +1662,7 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosMeans, rosWinM, weightedWinM, perceived, evaluateTrade, pickupShortlist, isWaiver, givePairs, candidates2x1ForPair, tradeCandidates2x1, tradeCandidates2x2, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosMeans, rosWinM, weightedWinM, perceived, evaluateTrade, pickupShortlist, isWaiver, givePairs, candidates2x1ForPair, tradeCandidates2x1, tradeCandidates2x2, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, packRows, unpackRows, candSig, candSigUneven, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
 

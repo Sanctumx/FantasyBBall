@@ -150,6 +150,35 @@ test('tradeCandidates2x2: exact plain rows, both targets from one team, capped, 
   assert.strictEqual(JSON.stringify(one.map(r => [r.give.key, r.target.key, r.dA, r.dB, r.likelihood])), snap);
 });
 
+// ---- packing, sort, signature ----
+test('packRows / unpackRows: a JSON round trip at 4 decimals gives equal rows; a v5-format array is rejected', () => {
+  const rows = T.candidates2x1ForPair(ctx, pairOf(give2), OPT, 3).concat(T.tradeCandidates2x2(ctx, mine[0], T.tradeCandidates(ctx, 'any', OPT), OPT, { top: 3 }));
+  const back = T.unpackRows(JSON.parse(JSON.stringify(T.packRows(rows, 4))), pool);
+  assert.strictEqual(back.length, rows.length);
+  rows.forEach((r, i) => {
+    const b = back[i];
+    assert.strictEqual(b.type, r.type); assert.strictEqual(b.team, r.team);
+    assert.deepStrictEqual(b.gives.map(p => p.key), r.gives.map(p => p.key)); assert.deepStrictEqual(b.targets.map(p => p.key), r.targets.map(p => p.key));
+    assert.strictEqual(b.pickup ? b.pickup.key : null, r.pickup ? r.pickup.key : null);
+    ['likelihood', 'dA', 'dB', 'total', 'dAPlayer', 'dAPickup', 'slot', 'sortKey'].forEach(k => assert.ok(near(b[k], r[k], 6e-5), k));
+  });
+  assert.deepStrictEqual(T.unpackRows(T.packCandidates(T.tradeCandidates(ctx, mine[0], OPT).slice(0, 3), 4), pool), []);
+});
+
+test('filterTrades by "sort" orders and filters on sortKey; the default keeps today\'s order', () => {
+  const mk = (sortKey, dA, lik) => ({ sortKey, dA, dB: 0, likelihood: lik });
+  const rows = [mk(1, 5, 0.5), mk(3, 2, 0.5), mk(2, 9, 0.1)];
+  assert.deepStrictEqual(T.filterTrades(rows, { by: 'sort' }).map(r => r.sortKey), [3, 2, 1]);
+  assert.deepStrictEqual(T.filterTrades(rows, { by: 'sort', minDA: 2 }).map(r => r.sortKey), [3, 2]);
+  assert.deepStrictEqual(T.filterTrades(rows, {}).map(r => r.dA), [5, 2, 9]);   // dA x likelihood: 2.5 > 1 > 0.9
+});
+
+test('candSigUneven changes with the curve', () => {
+  const a = T.candSigUneven(ctx, 1, 'v6'), b = T.candSigUneven(ctx, 1, 'v6', { delta: 0.9, playoff: 1 });
+  assert.notStrictEqual(a, b);
+  assert.strictEqual(a, T.candSigUneven(ctx, 1, 'v6'));
+});
+
 test('2x1 with no free agent: pickup null, slot 0; no periods left: empty list', () => {
   const owned = Object.assign({}, ROS), none = M.makeCtx({ L, pool: Pl.buildPool({ PLAYERS, fxPlayers: fx('fx_players.json'), espn: fx('espn_2025_26.json'), L, rosters: ROS }), DAYS, rosters: ROS, me, nowMs: NOW });
   none.pool.players.forEach(p => { if (!p.owner) p.fxStatus = 'T'; });
