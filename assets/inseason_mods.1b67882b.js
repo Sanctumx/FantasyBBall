@@ -1381,7 +1381,7 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
 // Pure; browser and Node. Builds on matchup_core (a team's week vs its real opponent) and inseason_players (value scale).
 (function (root) {
   'use strict';
-  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), TeamWin = root.TeamWin || require('./team_win.js');
+  const InLeague = root.InLeague || require('./inseason_league.js'), InPlayers = root.InPlayers || require('./inseason_players.js'), TeamWin = root.TeamWin || require('./team_win.js'), SlotValue = root.SlotValue || require('./slot_value.js');
 
   // winM was 0.1 on the old pairMatchup scale; #147 moved dB to the TeamWin forecaster, where dB is larger, so 0.1 x 0.672 (a fit of old dB on new dB over
   // the 2145 one-for-one candidates of the fixture league, scratch script fit_winm.js) keeps the likelihood moving with dB as much as before.
@@ -1437,20 +1437,26 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
     return ro[k] === undefined ? (ro[k] = rosWinM(ctx, ctx.roster, t, opts).mean) : ro[k];
   }
   // aGets: fids A receives from B; bGets: fids B receives from A. dA, dB in percentage points of rest-of-season Win M (opts: see rosMeans).
-  function evaluateTrade(ctx, { a, b, aGets, bGets }, opts) {
+  // aAdds (#169): free agents A picks up in the freed slot (2x1 trades). With them the result also carries the breakdown
+  // dA = dAPlayer + slot + dAPickup (dAPickup: the pickup alone, dAPlayer: the trade given the pickup, slot: the measured slot value), sortKey
+  // (dAPlayer, plus slot with opts.slotInSort) and freed. opts also takes approach (1 plain rest-of-season, 2 week-weighted, default SlotValue.APPROACH),
+  // slotInSort and curve, for the scripts and tests. Uneven trades subtract the value of the player B must drop from B's side of the likelihood
+  function evaluateTrade(ctx, { a, b, aGets, bGets, aAdds }, opts) {
     if (a === b) throw new Error('A trade needs two different teams');
-    const ra = new Set(ctx.roster[a]), rb = new Set(ctx.roster[b]);
+    const adds = aAdds || [], ra = new Set(ctx.roster[a]), rb = new Set(ctx.roster[b]);
+    adds.forEach(f => { if (!ctx.pool.byKey.has(f) || Object.keys(ctx.roster).some(t => ctx.roster[t].includes(f))) throw new Error('Player ' + f + ' is not a free agent'); });
     aGets.forEach(f => { if (!rb.has(f)) throw new Error('Player ' + f + ' is not on the giving team'); if (bGets.includes(f)) throw new Error('Player ' + f + ' is on both sides'); });
     bGets.forEach(f => { if (!ra.has(f)) throw new Error('Player ' + f + ' is not on the giving team'); });
     const R = Object.assign({}, ctx.roster);
-    R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets);
+    R[a] = ctx.roster[a].filter(f => !bGets.includes(f)).concat(aGets, adds);
     R[b] = ctx.roster[b].filter(f => !aGets.includes(f)).concat(bGets);
     // a side left with more non-IL players than the limit drops its worst ones (#153); a team already over it is not charged for the trade
     const nonIR = f => ctx.pool.byKey.get(f).slot !== 'IR', val = f => { const p = ctx.pool.byKey.get(f); return InPlayers.valueZ(p.line, p.g, ctx.ref); };
-    const capDrops = t => {
-      const over = R[t].filter(nonIR).length - Math.max(ctx.L.maxPlayers || 0, ctx.roster[t].filter(nonIR).length);
-      return ctx.L.maxPlayers > 0 && over > 0 ? R[t].filter(nonIR).sort((x, y) => val(x) - val(y) || (x < y ? -1 : 1)).slice(0, over) : [];
+    const capFor = (t, list) => {
+      const over = list.filter(nonIR).length - Math.max(ctx.L.maxPlayers || 0, ctx.roster[t].filter(nonIR).length);
+      return ctx.L.maxPlayers > 0 && over > 0 ? list.filter(nonIR).sort((x, y) => val(x) - val(y) || (x < y ? -1 : 1)).slice(0, over) : [];
     };
+    const capDrops = t => capFor(t, R[t]);
     const drops = { [a]: capDrops(a), [b]: capDrops(b) };
     R[a] = R[a].filter(f => !drops[a].includes(f)); R[b] = R[b].filter(f => !drops[b].includes(f));
     // one league run gives both sides; cached per (the two changed rosters, options)
@@ -1459,8 +1465,42 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
     const after = cache.get(key), dA = 100 * (after[0] - baseline(ctx, a, opts)), dB = 100 * (after[1] - baseline(ctx, b, opts));
     // B's view of the swap: an IL player is filled by B's worst player on either side (the fill swaps with him)
     const pvSum = fs => fs.reduce((s, f) => s + perceived(ctx, ctx.pool.byKey.get(f), b).pv, 0);
-    const gapB = pvSum(bGets) - pvSum(aGets);
-    return { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi: aGets.length !== bGets.length, drops };
+    const multi = aGets.length !== bGets.length;
+    const gapB = pvSum(bGets) - pvSum(aGets) - (multi ? pvSum(drops[b]) : 0);
+    const out = { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi, drops, sortKey: dA, freed: false };
+    if (!adds.length) return out;
+    const o = opts || {}, curve = o.curve || SlotValue.CURVE, approach = o.approach != null ? o.approach : SlotValue.APPROACH, slotInSort = o.slotInSort != null ? o.slotInSort : SlotValue.SLOT_IN_SORT;
+    // the pickup alone: my roster now plus the free agent, under the same cap rule
+    const RF = Object.assign({}, ctx.roster); RF[a] = ctx.roster[a].concat(adds); const dF = capFor(a, RF[a]); RF[a] = RF[a].filter(f => !dF.includes(f));
+    const fkey = 'F#' + a + '#' + sig(a).length + RF[a].slice().sort().join(',') + '|' + optKey(opts);
+    if (!cache.has(fkey)) cache.set(fkey, rosMeans(ctx, RF, [a], opts)[a].mean);
+    let mT = after[0], mF = cache.get(fkey), m0 = baseline(ctx, a, opts);
+    if (approach === 2) {
+      const wT = weightedWinM(ctx, R, a, opts, curve), wF = weightedWinM(ctx, RF, a, opts, curve), w0 = weightedWinM(ctx, ctx.roster, a, opts, curve);
+      if (wT != null && wF != null && w0 != null) { mT = wT; mF = wF; m0 = w0; }
+    }
+    const dAPlayer = 100 * (mT - mF), dAPickup = 100 * (mF - m0);
+    const nFreed = Math.min(adds.length, bGets.filter(nonIR).length - aGets.filter(nonIR).length), freed = nFreed > 0;
+    const slot = freed ? nFreed * SlotValue.slotTerm(ctx, curve) : 0;
+    return Object.assign(out, { dA: dAPlayer + slot + dAPickup, total: dAPlayer + slot + dAPickup + dB, dAPlayer, dAPickup, slot, freed, sortKey: dAPlayer + (slotInSort ? slot : 0) });
+  }
+
+  // My Win M averaged over the periods still to play (SlotValue.weights), from one plays pass split by period. null with no period left.
+  // R is a full roster map; cached per changed rosters, options and curve
+  function weightedWinM(ctx, R, team, opts, curve) {
+    curve = curve || SlotValue.CURVE;
+    const cache = ctx._wmCache = ctx._wmCache || new Map(), changed = Object.keys(R).filter(t => R[t] !== ctx.roster[t]).map(t => t + '#' + R[t].slice().sort().join(',')).join('|');
+    const key = team + '|' + changed + '|' + optKey(opts) + '|' + SlotValue.sig(curve);
+    if (!cache.has(key)) {
+      const o = opts || {}, lw = TeamWin.leagueWinByPeriod(ctx, R, { cats: o.cats, points: o.points, shrink: o.shrink, basis: o.basis, rows: [team], through: 'all' });
+      let m = null;
+      if (lw) {
+        const w = SlotValue.weights(ctx, curve), i = lw.ids.indexOf(team);
+        m = lw.periods.reduce((s, p, k) => { const row = p.P[i].filter(x => x != null); return s + w[k].w * row.reduce((x, y) => x + y, 0) / row.length; }, 0);
+      }
+      cache.set(key, m);
+    }
+    return cache.get(key);
   }
 
   // ---- finder ----
@@ -1530,7 +1570,7 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosMeans, rosWinM, weightedWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
 
