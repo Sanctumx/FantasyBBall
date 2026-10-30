@@ -80,6 +80,20 @@
     return a.map((x, i) => x + b[i]);
   }
 
+  // windowGames split into buckets (cuts: ascending ms, bucket i = [cuts[i], cuts[i+1])) -> keys × buckets, row sums equal windowGames.
+  // One segGames call per part of the window carries every key's segment of every bucket, so the nightly caps see the same players as the
+  // unsplit call (keys stay in order, so ties break the same way). Games outside the cuts are dropped from the buckets
+  function windowGamesBy(ctx, keys, used, cuts) {
+    const w = window(ctx), nb = cuts.length - 1, cut = Math.min(Math.max(ctx.curEnd || 0, w.from), w.to), out = keys.map(() => new Array(nb).fill(0));
+    const part = (pf, pt) => {
+      const segs = [];
+      keys.forEach(key => { for (let b = 0; b < nb; b++) { const from = Math.max(cuts[b], pf), to = Math.min(cuts[b + 1], pt); segs.push({ key, from, to: Math.max(from, to) }); } });
+      Matchup.segGames(ctx, segs, used, true).forEach((g, j) => { out[Math.floor(j / nb)][j % nb] += g; });
+    };
+    if (cut <= w.from || cut >= w.to) part(w.from, w.to); else { part(w.from, cut); part(cut, w.to); }
+    return out;
+  }
+
   // Plays % over the window: active players claim the nightly slots first (best per-game players when over the limit), the
   // reserve takes what is left; IL rows show what they would get as one more reserve player (hypo: true, so teamLine
   // leaves them out). Roster order breaks ties. -> { key: { gl, played, pct, hypo? } }; pct is null when the team has no games left
@@ -88,19 +102,20 @@
     const w = window(ctx), by = slot => state.order.filter(k => state.slots[k] === slot);
     const G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, byKey = ctx.pool.byKey, max = ctx.L.maxActive;
     const act = by('active'), bench = by('reserve'), res = {};
-    const done = (k, played, hypo) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; };
-    const gA = windowGames(ctx, act, null), count = {}, used = {};
+    const cuts = o && o.cuts, nb = cuts ? cuts.length - 1 : 0;
+    const done = (k, played, hypo, by) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl ? played / gl : null }; if (hypo) res[k].hypo = true; if (cuts) res[k].by = by || new Array(nb).fill(0); };
+    const gA = windowGames(ctx, act, null), count = {}, used = {}, byA = cuts ? windowGamesBy(ctx, act, null, cuts) : null;
     act.forEach((k, i) => {
-      done(k, gA[i]);
+      done(k, gA[i], false, byA && byA[i]);
       const out = ctx.out && ctx.out.has(k);
       (G[byKey.get(k).t] || []).map(s => s * 1000).filter(ms => ms >= w.from && ms < w.to && !(out && ms < ctx.curEnd)).forEach(ms => { const d = InLeague.localDay(ms); count[d] = (count[d] || 0) + 1; });
     });
     Object.keys(count).forEach(d => { used[d] = Math.min(max, count[d]); });
-    const gB = windowGames(ctx, bench, used);
-    bench.forEach((k, i) => done(k, gB[i]));
+    const gB = windowGames(ctx, bench, used), byB = cuts ? windowGamesBy(ctx, bench, used, cuts) : null;
+    bench.forEach((k, i) => done(k, gB[i], false, byB && byB[i]));
     by('il').forEach(k => {
       const g = windowGames(ctx, bench.concat(k), used);
-      done(k, g[g.length - 1], true);
+      done(k, g[g.length - 1], true, cuts ? windowGamesBy(ctx, bench.concat(k), used, cuts).pop() : null);
     });
     return res;
   }
@@ -150,9 +165,10 @@
   function tabPlays(ctx, state, o) {
     o = o || {};
     const w = window(ctx), byKey = ctx.pool.byKey, res = {}, c = countedSlots(ctx), keys = state.order.filter(k => c.includes(state.slots[k])), extra = o.extra || [];
-    const done = (k, played, a, drop) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; if (drop != null) res[k].drop = drop; };
+    const cuts = o.cuts, nb = cuts ? cuts.length - 1 : 0;   // o.cuts: also return res[k].by, the games in each bucket [cuts[i], cuts[i+1]) (the sums equal played)
+    const done = (k, played, a, drop, by) => { const gl = gamesLeft(ctx, byKey.get(k).t); res[k] = { gl, played, pct: gl && a > 0 ? played / (gl * a) : gl ? 0 : null }; if (drop != null) res[k].drop = drop; if (cuts) res[k].by = by || new Array(nb).fill(0); };
     state.order.forEach(k => { if (!c.includes(state.slots[k])) done(k, 0, 1); });
-    if (ctx.basis === 'pergame') windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1));
+    if (ctx.basis === 'pergame') { const byG = cuts ? windowGamesBy(ctx, keys, null, cuts) : null; windowGames(ctx, keys, null).forEach((g, i) => done(keys[i], g, 1, undefined, byG && byG[i])); }
     else {
       const il = keys.filter(k => state.slots[k] === 'il'), ret = {}, v = k => Matchup.nightValue(ctx, byKey.get(k));
       il.forEach(k => { ret[k] = ilReturn(ctx, k); });
@@ -170,7 +186,8 @@
       const items = keys.map(k => il.includes(k)
         ? (dropped.has(k) ? { t: byKey.get(k).t, a: 0, v: v(k), from: w.from, to: w.from } : { t: byKey.get(k).t, a: ret[k].a, v: v(k), from: ret[k].tRet, to: w.to })
         : { t: byKey.get(k).t, a: avail(ctx, byKey.get(k)), v: v(k), from: w.from, to: leave[k] != null ? leave[k] : w.to });
-      InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]]); });
+      const byG = cuts ? InLeague.rosterGamesBy(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null, cuts) : null;
+      InLeague.rosterGames(items.concat(extra), ctx.DAYS, ctx.L.maxActive, null).forEach((g, i) => { if (i < keys.length) done(keys[i], g, avail(ctx, byKey.get(keys[i])), leave[keys[i]], byG && byG[i]); });
     }
     return res;
   }
