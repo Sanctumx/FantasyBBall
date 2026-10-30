@@ -293,7 +293,8 @@ tr.click{cursor:pointer}
     <div class="tabpanel" id="tab-trades" hidden>
       <div class="grid2">
         <section class="panel">
-          <h2>Trade finder <span class="meta">Offer one of your players; one-for-one, best first</span></h2>
+          <h2>Trade finder <span class="meta">Offer one of your players; pick the trade types below</span></h2>
+          <div class="ctl" id="types"><span class="f" title="Which trades to search: any mix. 2-for-1: you give two, get one, and the best free agent or waiver player fills your freed spot. 2-for-2 uses the same screen as one-for-one pairs."><label><input type="checkbox" id="ty-11"> 1-for-1</label> <label><input type="checkbox" id="ty-21"> 2-for-1</label> <label><input type="checkbox" id="ty-22"> 2-for-2</label></span></div>
           <div class="ctl"><label class="f" for="give" title="Type a name, or leave blank / type Any to offer each of your players">Your player<input id="give" type="text" list="givelist" placeholder="Any" autocomplete="off"><datalist id="givelist"></datalist></label>
             <label class="f" for="f-lik" title="Hide trades the other team is unlikely to accept: 50% or 0.5">Likelihood at least<input id="f-lik" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
             <label class="f" for="f-da" title="Smallest change in your rest-of-season Win M, percentage points (blank: every trade, even ones that hurt you; 0: no loss)">+Win M you at least<input id="f-da" type="text" inputmode="decimal" placeholder="Any" autocomplete="off"></label>
@@ -1745,7 +1746,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FxCache = api;
 })(this);
 </script>
-<script>self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, gate src/trade_2x1_gate.txt","form":"measured","arm":"S4-STATIC_P","adds":4,"unit":"Win M points per matchup","weeks":[{"w":1,"s":-1.3640109890109886,"s14":-0.22802197802197768,"se":0.4504961518216027,"n":200},{"w":2,"s":0.6140109890109892,"s14":1.1538461538461549,"se":0.4513229666022621,"n":200},{"w":3,"s":1.0769230769230766,"s14":0.3832417582417584,"se":0.47676324595477165,"n":200},{"w":4,"s":-0.46840659340659313,"s14":0.4038461538461538,"se":0.5776647906145904,"n":200},{"w":5,"s":1.1126373626373627,"s14":2.1950549450549453,"se":0.4520315445337622,"n":200},{"w":6,"s":1.9931318681318677,"s14":-0.3516483516483507,"se":0.4905667959064525,"n":200},{"w":7,"s":-3.0274725274725256,"s14":-1.2335164835164842,"se":0.5686227932439729,"n":200},{"w":8,"s":0.9436813186813181,"s14":1.3324175824175832,"se":0.50792386664205,"n":200},{"w":9,"s":1.3406593406593403,"s14":1.696428571428572,"se":0.5160537581772618,"n":200},{"w":10,"s":2.0439560439560447,"s14":2.369505494505495,"se":0.42816415598568713,"n":200},{"w":11,"s":1.7019230769230773,"s14":2.122252747252749,"se":0.44402746990847675,"n":200},{"w":12,"s":0.8997252747252747,"s14":1.1634615384615383,"se":0.40777157388860047,"n":200},{"w":13,"s":0.9656593406593411,"s14":1.6442307692307694,"se":0.521469076162415,"n":200},{"w":14,"s":2.370879120879123,"s14":1.5961538461538467,"se":0.42654304731359816,"n":200},{"w":15,"s":0.06730769230769212,"s14":0.2527472527472526,"se":0.44363353185267235,"n":200},{"w":16,"s":0.5989010989010987,"s14":0.48076923076923106,"se":0.4679771066357514,"n":200},{"w":17,"s":0.6002747252747256,"s14":0.0824175824175827,"se":0.5280751490560891,"n":200},{"w":18,"s":-1.0260989010989012,"s14":0.24313186813186824,"se":0.5274477834260776,"n":200},{"w":19,"s":1.0604395604395611,"s14":1.1854395604395607,"se":0.4388870884855411,"n":200},{"w":20,"s":1.40521978021978,"s14":1.7019230769230769,"se":0.5506956786841006,"n":200},{"w":21,"s":1.927197802197801,"s14":1.072802197802198,"se":0.5098091427984627,"n":200},{"w":22,"s":0.11538461538461522,"s14":-0.4107142857142857,"se":0.4755445700233491,"n":200},{"w":23,"s":-1.166208791208791,"s14":0.4203296703296698,"se":0.4637589662583366,"n":200}]};
+<script>self.SLOT_PROFILE={"version":3,"made":"2026-10-30","source":"season mean of S4 - STATIC_P (user choice 2026-10-30, until more seasons are measured); pooled trimmed was 0.70 +- 0.22, per season -0.78/-0.34/+0.62/+2.90","form":"constant","arm":"S4-STATIC_P","adds":4,"unit":"Win M points per matchup","weeks":[{"w":1,"s":0.6,"s14":0.71}]};
 // In-season league calendar (2026-10-20): Fantrax league/roster/standings parsing, matchup periods, team-code mapping and
 // the expected games a roster plays in a window (from the daily tip-off times in sched_days.json).
 (function (root) {
@@ -3089,9 +3090,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const DAY = 864e5, TeamWin = root.TeamWin || require('./team_win.js');
   const PROFILE = root.SLOT_PROFILE || (typeof require !== 'undefined' ? require('./slot_profile.json') : null);
   const CURVE = { delta: 1, playoff: 1 };   // u_k = delta^(k-k0) for regular periods, x playoff for playoff periods; flat until tuned
-  const APPROACH = 2;                       // 2 = week-weighted Win M, 1 = plain rest-of-season (slot term only)
+  const APPROACH = 1;                       // 1 = plain rest-of-season (slot term only), 2 = week-weighted Win M (behind this switch, not shown better: analyst gate 2)
   const SLOT_IN_SORT = false;               // true once the analyst validates the slot value for ordering
-  const KEEP_2X1 = 15;                      // per give-pair, how many plain-screened targets get the weighted score
+  const KEEP_2X1 = 5;                    // per give-pair, how many plain-screened targets get the weighted score
   const sig = (curve, profile) => ['v' + ((profile || PROFILE) || {}).version, curve.delta, curve.playoff, APPROACH, SLOT_IN_SORT].join('|');
   const SIG = sig(CURVE);
 
@@ -3215,8 +3216,15 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const multi = aGets.length !== bGets.length;
     const gapB = pvSum(bGets) - pvSum(aGets) - (multi ? pvSum(drops[b]) : 0);
     const out = { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi, drops, sortKey: dA, freed: false };
-    if (!adds.length) return out;
     const o = opts || {}, curve = o.curve || SlotValue.CURVE, approach = o.approach != null ? o.approach : SlotValue.APPROACH, slotInSort = o.slotInSort != null ? o.slotInSort : SlotValue.SLOT_IN_SORT;
+    if (!adds.length) {
+      // an uneven trade with no pickup is week-weighted too under approach 2, so one sorted list never mixes plain and weighted dA
+      if (multi && approach === 2) {
+        const wT = weightedWinM(ctx, R, a, opts, curve), w0 = weightedWinM(ctx, ctx.roster, a, opts, curve);
+        if (wT != null && w0 != null) { out.dA = 100 * (wT - w0); out.total = out.dA + dB; out.sortKey = out.dA; }
+      }
+      return out;
+    }
     // the pickup alone: my roster now plus the free agent, under the same cap rule
     const RF = Object.assign({}, ctx.roster); RF[a] = ctx.roster[a].concat(adds); const dF = capFor(a, RF[a]); RF[a] = RF[a].filter(f => !dF.includes(f));
     const fkey = 'F#' + a + '#' + sig(a).length + RF[a].slice().sort().join(',') + '|' + optKey(opts);
@@ -3917,7 +3925,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   document.getElementById('sitenav').outerHTML = Shared.TOOLBAR_HTML(sectionOf());
   { const st = document.createElement('style'); st.textContent = Shared.TOOLBAR_CSS; document.head.appendChild(st); }
   const KEY = 'courtside-inseason-v1', LS = LeagueStore;
-  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, dropCap: {}, keep: {}, sort: {}, zt: 'classic', basis: 'total', hideInj: false, src: 'avg', give: 'any', fl: { lik: '', da: '', db: '' } };
+  let ui = { leagueId: null, teamBy: null, tab: sectionOf(), week: null, adds: {}, dropCap: {}, keep: {}, sort: {}, zt: 'classic', basis: 'total', hideInj: false, src: 'avg', give: 'any', types: { t11: true, t21: false, t22: false }, fl: { lik: '', da: '', db: '' } };
   try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   ui.tab = sectionOf();
   delete ui.zb;   // the old Zscore-only basis (default Per game); the Basis below now also sets the Win M rules, and defaults to Season as Win M always did
@@ -4165,12 +4173,12 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
 
   // One player's candidate trades take about 0.07 s (all 13 about 0.9 s), so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
-  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v5', CAND_KEEP = 6;   // v5: numbers saved at 4 decimals, up to 6 Source / Basis combinations kept
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v6', CAND_KEEP = 6;   // v5: numbers saved at 4 decimals, up to 6 Source / Basis combinations kept; v6: 2-for-1 and 2-for-2 rows (own signature each, per give-pair / per give)
   const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
-  function candSave(sig, ck, gives) {
+  function candSave(sig, ck, gives, pack = Trade.packCandidates) {
     try {
       const st = candStore(), mine = st.sigs[sig] = st.sigs[sig] || {};
-      gives.forEach(g => { if (tradeCache[ck(g)]) mine[g] = Trade.packCandidates(tradeCache[ck(g)], 4); });
+      gives.forEach(g => { if (tradeCache[ck(g)]) mine[g] = pack(tradeCache[ck(g)], 4); });
       st.order = st.order.filter(x => x !== sig).concat(sig);
       while (st.order.length > CAND_KEEP) delete st.sigs[st.order.shift()];
       for (;;) {   // over the browser's quota: drop the oldest saved combination and try again
@@ -4185,22 +4193,34 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const load = b => { const saved = candStore().sigs[sigOf(b)] || {}, k = ckOf(b); mineAll.forEach(g => { if (!tradeCache[k(g)] && saved[g]) tradeCache[k(g)] = Trade.unpackCandidates(saved[g], pool); }); };
     const ck = ckOf(ui.basis), sig = sigOf(ui.basis); load(ui.basis);
     const todo = (ui.give === 'any' ? [] : [ui.give]).concat(mineAll.filter(g => g !== ui.give)).filter(g => !tradeCache[ck(g)]);
+    // 2-for-1 (one give-pair per chunk) and 2-for-2 (one search per give): own cache keys and signature, saved under the current Source / Basis
+    const ty = ui.types, sigU = Trade.candSigUneven(ctx, day, CAND_VER + svOf(ui.basis)), kU = x => 'cu:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + svOf(ui.basis) + ':' + x;
+    const pairs = ty.t21 ? Trade.givePairs(ctx, ui.give).map(p => '2x1:' + p.join('+')) : [], key22 = '2x2:' + ui.give;
+    { const saved = candStore().sigs[sigU] || {}; pairs.concat(ty.t22 ? [key22] : []).forEach(x => { if (!tradeCache[kU(x)] && saved[x]) tradeCache[kU(x)] = Trade.unpackRows(saved[x], pool); }); }
+    const jobs2 = pairs.filter(x => !tradeCache[kU(x)]).map(x => () => { tradeCache[kU(x)] = Trade.candidates2x1ForPair(ctx, x.slice(4).split('+'), wopts()); candSave(sigU, kU, [x], Trade.packRows); });
+    if (ty.t22 && !tradeCache[kU(key22)]) jobs2.push(() => { tradeCache[kU(key22)] = Trade.tradeCandidates2x2(ctx, ui.give, [].concat.apply([], mineAll.map(g => tradeCache[ck(g)] || [])), wopts()); candSave(sigU, kU, [key22], Trade.packRows); });
+    const total2 = jobs2.length, one = r => ({ type: '1x1', gives: [r.give], targets: [r.target], team: r.team, pickup: null, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, sortKey: r.dA });
+    const names = ps => ps.map(p => esc(p.n)).join(' + ');
     const draw = () => {
       const pf = (k, id) => { const v = Trade.parseFilter(k, ui.fl[id]); $('f-' + id).classList.toggle('bad', v === undefined); return v; };
       const lik = pf('lik', 'lik'), da = pf('da', 'da'), db = pf('db', 'db');   // a box that cannot be read is ignored and marked
       const SHOW = 3000, opts = { limit: Infinity, minLikelihood: lik == null ? 0 : lik, minDA: da == null ? -Infinity : da, minDB: db == null ? -Infinity : db };
-      const matched = Trade.filterTrades([].concat.apply([], gives.map(g => tradeCache[ck(g)] || [])).filter(r => showP(r.give) && showP(r.target)), opts), rows = matched.slice(0, SHOW), busy = todo.length ? 'Searching ' + (mineAll.length - todo.length) + '/' + mineAll.length + '… ' : '';
+      const all = (ty.t11 ? [].concat.apply([], gives.map(g => (tradeCache[ck(g)] || []).map(one))) : []).concat([].concat.apply([], pairs.map(x => tradeCache[kU(x)] || [])), ty.t22 ? tradeCache[kU(key22)] || [] : []);
+      opts.by = ty.t21 || ty.t22 ? 'sort' : 'value';   // 1-for-1 alone keeps its dA x likelihood order; a mix is ordered by the sort key
+      const matched = Trade.filterTrades(all.filter(r => r.gives.every(showP) && r.targets.every(showP)), opts), rows = matched.slice(0, SHOW), busy = todo.length || jobs2.length ? 'Searching ' + (mineAll.length + total2 - todo.length - jobs2.length) + '/' + (mineAll.length + total2) + '… ' : '';
       $('finder').innerHTML = rows.length ? '<thead><tr><th class="l" title="The player you would give">You give</th><th class="l" title="The player you would get">Target</th><th class="l">Team</th><th title="How likely the other team is to accept">Likelihood of trade</th><th title="Change in your rest-of-season Win M, percentage points">+Win M you</th><th title="Change in their rest-of-season Win M">+Win M them</th><th>Total Win M</th></tr></thead><tbody>' +
-        rows.map(r => '<tr class="click" data-give="' + esc(r.give.key) + '" data-target="' + esc(r.target.key) + '" data-team="' + esc(r.team) + '"><td class="l">' + esc(r.give.n) + '</td><td class="l">' + esc(r.target.n) + '<span class="src">' + esc(r.target.pos) + '</span></td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '</tr>').join('') + '</tbody>' : '';
-      const waiting = gives.some(g => !tradeCache[ck(g)]);
-      $('finder-msg').textContent = busy + (rows.length ? matched.length + ' trade' + (matched.length === 1 ? '' : 's') + ' match' + (matched.length > SHOW ? ' (best ' + SHOW + ' shown)' : '') + '. Click a row to load it into the Trade Builder.' : waiting ? '' : 'No one-for-one trade matches these filters.');
+        rows.map(r => '<tr class="click" data-type="' + r.type + '" data-give="' + esc(r.gives.map(p => p.key).join('+')) + '" data-target="' + esc(r.targets.map(p => p.key).join('+')) + '" data-team="' + esc(r.team) + '"><td class="l">' + names(r.gives) + '</td><td class="l">' + r.targets.map(p => esc(p.n) + '<span class="src">' + esc(p.pos) + '</span>').join(' + ') + '</td><td class="l">' + esc(nameOfTeam(r.team)) + '</td>' + tradeCells(r) + '</tr>').join('') + '</tbody>' : '';
+      const waiting = gives.some(g => !tradeCache[ck(g)]) || jobs2.length > 0;
+      $('finder-msg').textContent = busy + (rows.length ? matched.length + ' trade' + (matched.length === 1 ? '' : 's') + ' match' + (matched.length > SHOW ? ' (best ' + SHOW + ' shown)' : '') + '. Click a row to load it into the Trade Builder.' : waiting ? '' : 'No trade of the chosen types matches these filters.');
       applySort('finder');
     };
     draw(); drawSellBuy(ck);
     const step = () => {
-      if (run !== finderRun || !todo.length) return;
-      const g = todo.shift(); tradeCache[ck(g)] = Trade.tradeCandidates(ctx, g, wopts()); candSave(sig, ck, [g]); draw();
-      if (todo.length) setTimeout(step, 0); else { drawSellBuy(ck); setTimeout(idle, 30); }
+      if (run !== finderRun || !(todo.length || jobs2.length)) return;
+      if (todo.length) { const g = todo.shift(); tradeCache[ck(g)] = Trade.tradeCandidates(ctx, g, wopts()); candSave(sig, ck, [g]); if (!todo.length) drawSellBuy(ck); }
+      else jobs2.shift()();   // after every one-for-one give is cached: the 2-for-1 pairs one per chunk, then the 2-for-2 search
+      draw();
+      if (todo.length || jobs2.length) setTimeout(step, 0); else setTimeout(idle, 30);
     };
     // then, one player at a time while the page is idle: the other two Basis choices (a change of Basis is then instant), and last the Matchup tab's cache
     const others = ['total', 'pergame', 'mix'].filter(b => b !== ui.basis), loaded = new Set();
@@ -4213,7 +4233,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
       }
       prewarm(true);
     };
-    if (todo.length) setTimeout(step, 0); else setTimeout(idle, 400);
+    if (todo.length || jobs2.length) setTimeout(step, 0); else setTimeout(idle, 400);
   }
   // Sell High / Buy Low use the same candidates, so they appear once every one of my players has been searched
   function drawSellBuy(ck) {
@@ -4230,7 +4250,8 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     if (ui.give !== 'any' && !mine.some(p => p.key === ui.give)) ui.give = 'any';
     $('givelist').innerHTML = mine.map(p => '<option value="' + esc(p.n) + '"></option>').join('');
     const gp = ui.give === 'any' ? null : pool.byKey.get(ui.give); $('give').value = gp ? gp.n : '';
-    $('f-lik').value = ui.fl.lik; $('f-da').value = ui.fl.da; $('f-db').value = ui.fl.db;
+    $('ty-11').checked = !!ui.types.t11; $('ty-21').checked = !!ui.types.t21; $('ty-22').checked = !!ui.types.t22;
+    $('f-lik').value = ui.fl.lik;$('f-da').value = ui.fl.da; $('f-db').value = ui.fl.db;
     renderFinder();
     const w = Trade.TRADE_W; $('weights').textContent = 'Perceived value = ' + Math.round(w.cur * 100) + '% current + ' + Math.round(w.proj * 100) + '% projection + ' + Math.round(w.adp * 100) + '% ADP';
     renderBuilder();
@@ -4300,7 +4321,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     if (hit !== 'any') e.target.value = hit.n;
   });
   [['f-lik', 'lik'], ['f-da', 'da'], ['f-db', 'db']].forEach(([id, k]) => $(id).addEventListener('input', e => { ui.fl[k] = e.target.value; save(); renderFinder(); }));
-  $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr) loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team); });
+  [['ty-11', 't11'], ['ty-21', 't21'], ['ty-22', 't22']].forEach(([id, k]) => $(id).addEventListener('change', e => {
+    ui.types[k] = e.target.checked; if (!ui.types.t11 && !ui.types.t21 && !ui.types.t22) { ui.types.t11 = true; $('ty-11').checked = true; }   // at least one type stays on
+    save(); renderFinder();
+  }));
+  $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr && tr.dataset.type === '1x1') loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team); });
   ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
   $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });
   $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; renderBuilder(); });

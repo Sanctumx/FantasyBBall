@@ -1,4 +1,4 @@
-self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, gate src/trade_2x1_gate.txt","form":"measured","arm":"S4-STATIC_P","adds":4,"unit":"Win M points per matchup","weeks":[{"w":1,"s":-1.3640109890109886,"s14":-0.22802197802197768,"se":0.4504961518216027,"n":200},{"w":2,"s":0.6140109890109892,"s14":1.1538461538461549,"se":0.4513229666022621,"n":200},{"w":3,"s":1.0769230769230766,"s14":0.3832417582417584,"se":0.47676324595477165,"n":200},{"w":4,"s":-0.46840659340659313,"s14":0.4038461538461538,"se":0.5776647906145904,"n":200},{"w":5,"s":1.1126373626373627,"s14":2.1950549450549453,"se":0.4520315445337622,"n":200},{"w":6,"s":1.9931318681318677,"s14":-0.3516483516483507,"se":0.4905667959064525,"n":200},{"w":7,"s":-3.0274725274725256,"s14":-1.2335164835164842,"se":0.5686227932439729,"n":200},{"w":8,"s":0.9436813186813181,"s14":1.3324175824175832,"se":0.50792386664205,"n":200},{"w":9,"s":1.3406593406593403,"s14":1.696428571428572,"se":0.5160537581772618,"n":200},{"w":10,"s":2.0439560439560447,"s14":2.369505494505495,"se":0.42816415598568713,"n":200},{"w":11,"s":1.7019230769230773,"s14":2.122252747252749,"se":0.44402746990847675,"n":200},{"w":12,"s":0.8997252747252747,"s14":1.1634615384615383,"se":0.40777157388860047,"n":200},{"w":13,"s":0.9656593406593411,"s14":1.6442307692307694,"se":0.521469076162415,"n":200},{"w":14,"s":2.370879120879123,"s14":1.5961538461538467,"se":0.42654304731359816,"n":200},{"w":15,"s":0.06730769230769212,"s14":0.2527472527472526,"se":0.44363353185267235,"n":200},{"w":16,"s":0.5989010989010987,"s14":0.48076923076923106,"se":0.4679771066357514,"n":200},{"w":17,"s":0.6002747252747256,"s14":0.0824175824175827,"se":0.5280751490560891,"n":200},{"w":18,"s":-1.0260989010989012,"s14":0.24313186813186824,"se":0.5274477834260776,"n":200},{"w":19,"s":1.0604395604395611,"s14":1.1854395604395607,"se":0.4388870884855411,"n":200},{"w":20,"s":1.40521978021978,"s14":1.7019230769230769,"se":0.5506956786841006,"n":200},{"w":21,"s":1.927197802197801,"s14":1.072802197802198,"se":0.5098091427984627,"n":200},{"w":22,"s":0.11538461538461522,"s14":-0.4107142857142857,"se":0.4755445700233491,"n":200},{"w":23,"s":-1.166208791208791,"s14":0.4203296703296698,"se":0.4637589662583366,"n":200}]};
+self.SLOT_PROFILE={"version":3,"made":"2026-10-30","source":"season mean of S4 - STATIC_P (user choice 2026-10-30, until more seasons are measured); pooled trimmed was 0.70 +- 0.22, per season -0.78/-0.34/+0.62/+2.90","form":"constant","arm":"S4-STATIC_P","adds":4,"unit":"Win M points per matchup","weeks":[{"w":1,"s":0.6,"s14":0.71}]};
 // In-season league calendar (2026-10-20): Fantrax league/roster/standings parsing, matchup periods, team-code mapping and
 // the expected games a roster plays in a window (from the daily tip-off times in sched_days.json).
 (function (root) {
@@ -1342,9 +1342,9 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
   const DAY = 864e5, TeamWin = root.TeamWin || require('./team_win.js');
   const PROFILE = root.SLOT_PROFILE || (typeof require !== 'undefined' ? require('./slot_profile.json') : null);
   const CURVE = { delta: 1, playoff: 1 };   // u_k = delta^(k-k0) for regular periods, x playoff for playoff periods; flat until tuned
-  const APPROACH = 2;                       // 2 = week-weighted Win M, 1 = plain rest-of-season (slot term only)
+  const APPROACH = 1;                       // 1 = plain rest-of-season (slot term only), 2 = week-weighted Win M (behind this switch, not shown better: analyst gate 2)
   const SLOT_IN_SORT = false;               // true once the analyst validates the slot value for ordering
-  const KEEP_2X1 = 15;                      // per give-pair, how many plain-screened targets get the weighted score
+  const KEEP_2X1 = 5;                    // per give-pair, how many plain-screened targets get the weighted score
   const sig = (curve, profile) => ['v' + ((profile || PROFILE) || {}).version, curve.delta, curve.playoff, APPROACH, SLOT_IN_SORT].join('|');
   const SIG = sig(CURVE);
 
@@ -1468,8 +1468,15 @@ self.SLOT_PROFILE={"version":1,"made":"2026-10-30","source":"slot_profile.js, ga
     const multi = aGets.length !== bGets.length;
     const gapB = pvSum(bGets) - pvSum(aGets) - (multi ? pvSum(drops[b]) : 0);
     const out = { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi, drops, sortKey: dA, freed: false };
-    if (!adds.length) return out;
     const o = opts || {}, curve = o.curve || SlotValue.CURVE, approach = o.approach != null ? o.approach : SlotValue.APPROACH, slotInSort = o.slotInSort != null ? o.slotInSort : SlotValue.SLOT_IN_SORT;
+    if (!adds.length) {
+      // an uneven trade with no pickup is week-weighted too under approach 2, so one sorted list never mixes plain and weighted dA
+      if (multi && approach === 2) {
+        const wT = weightedWinM(ctx, R, a, opts, curve), w0 = weightedWinM(ctx, ctx.roster, a, opts, curve);
+        if (wT != null && w0 != null) { out.dA = 100 * (wT - w0); out.total = out.dA + dB; out.sortKey = out.dA; }
+      }
+      return out;
+    }
     // the pickup alone: my roster now plus the free agent, under the same cap rule
     const RF = Object.assign({}, ctx.roster); RF[a] = ctx.roster[a].concat(adds); const dF = capFor(a, RF[a]); RF[a] = RF[a].filter(f => !dF.includes(f));
     const fkey = 'F#' + a + '#' + sig(a).length + RF[a].slice().sort().join(',') + '|' + optKey(opts);

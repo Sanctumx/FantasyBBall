@@ -255,6 +255,32 @@ async function open(opts = {}) {
   ok(errs.length === 0, 'cache: no page errors ' + errs.join('; '));
   await ctx.close(); }
 
+{ // Trade-type checkboxes (#169 Task 14): 1-for-1 on by default; 2-for-1 and 2-for-2 searched per type, saved as v6, one list sorted by the sort key
+  const { p, errs, ctx } = await open();
+  await p.click('.sitenav a[href="inseason.html#trades"]'); await p.waitForTimeout(800);
+  const done = () => p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 120000 });
+  await done();
+  const checks = async () => p.$$eval('#types input', c => c.map(x => x.checked));
+  ok(JSON.stringify(await checks()) === '[true,false,false]', 'only 1-for-1 is on at first');
+  ok((await p.$$eval('#finder tbody tr', r => r.every(x => !/ \+ /.test(x.children[0].textContent) && x.dataset.type === '1x1'))), 'one type on: only one-for-one rows');
+  await p.check('#ty-21'); await p.waitForTimeout(300); await done();
+  const two = await p.$$eval('#finder tbody tr', r => r.filter(x => x.dataset.type === '2x1').map(x => x.children[0].textContent));
+  ok(two.length > 0 && two.every(t => / \+ /.test(t)), '2-for-1 rows give two players (' + two.length + ' rows)');
+  ok((await p.$$eval('#finder tbody tr', r => r.some(x => x.dataset.type === '1x1'))), '1-for-1 rows stay in the mixed list');
+  await p.check('#ty-22'); await p.waitForTimeout(300); await done();
+  const types = await p.$$eval('#finder tbody tr', r => [...new Set(r.map(x => x.dataset.type))].sort().join(','));
+  ok(types === '1x1,2x1,2x2', 'all three types in one list (' + types + ')');
+  await p.reload(); await p.waitForSelector('#body:not([hidden])');
+  ok(JSON.stringify(await checks()) === '[true,true,true]', 'the chosen types survive a reload');
+  { const t0 = Date.now(); await done();
+    ok(Date.now() - t0 < 5000, 'after a reload no search runs again (' + (Date.now() - t0) + ' ms)'); }
+  const store = await p.evaluate(() => { const s = JSON.parse(localStorage.getItem('courtside-trade-cands-v1') || '{"sigs":{}}').sigs; return Object.keys(s).length; });
+  ok(store >= 2 && (await p.$$eval('#finder tbody tr', r => r.length)) > 0, 'rows come from the saved v6 searches (' + store + ' signatures)');
+  await p.uncheck('#ty-21'); await p.uncheck('#ty-22'); await p.click('#ty-11'); await p.waitForTimeout(300);
+  ok(JSON.stringify(await checks()) === '[true,false,false]', 'turning the last type off keeps 1-for-1 on');
+  ok(errs.length === 0, 'no page errors ' + errs.join('; '));
+  await ctx.close(); }
+
 await b.close();
 console.log(fails.length ? 'FAILED ' + fails.length : 'ALL PASS');
 process.exit(fails.length ? 1 : 0);
