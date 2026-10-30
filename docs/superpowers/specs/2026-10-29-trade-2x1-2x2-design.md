@@ -59,6 +59,10 @@ User choice: **2, unless it is not a significant improvement over 1.** So build 
 - **Team-specific slot value:** explored only (analyst measures the spread); build the constant profile and the measurement script first.
 - **Profile data:** a generation script writes a committed table (JSON) that the build embeds; refreshed by re-running the script.
 
+## Sort (user, 2026-10-29: "go with your recommendation")
+
+The slot value enters the 2x1 sort and filter as soon as the analyst validates the measurement, as a switch inside this branch (off until validated, on after). Until then the sort uses dA minus the pickup alone.
+
 ## Left to the builder
 
 Exact data structure of the weekly profile (table by week index vs formula), where the per-week weights live, UI wording and layout of the "A + B" cells and "+ FA Name" tag, chunk sizes, the likelihood floor and top-N for the 2x2 screen, test fixtures.
