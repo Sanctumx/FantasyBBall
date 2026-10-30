@@ -151,6 +151,7 @@
     for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) if (myKey === 'any' || ks[i] === myKey || ks[j] === myKey) out.push([ks[i], ks[j]]);
     return out;
   }
+  const LIK_BANDS = [0.15, 0.3, 0.5];
   const nonILCount = (ctx, fs) => fs.filter(f => ctx.pool.byKey.get(f).slot !== 'IR').length;
   // The rows for one give-pair: the pickup is the shortlist player whose addition helps most (only when the pair frees a non-IL slot), every
   // other team's player is screened with the plain average (stage 1), and the best `keep` are scored week-weighted (stage 2), best sortKey first
@@ -159,21 +160,26 @@
     if (ctx.cur == null || !TeamWin.periodsLeft(ctx, 'all').length) return [];
     const me = ctx.me, base = ctx.roster[me].filter(f => !pair.includes(f));
     let pickup = null;
-    if (nonILCount(ctx, pair) >= 2) {
+    if (nonILCount(ctx, pair) >= 1) {
       let best = -Infinity;
       pickupShortlist(ctx, 10).forEach(pp => {
         const m = rosWinM(ctx, Object.assign({}, ctx.roster, { [me]: base.concat([pp.key]) }), me, wopts).mean;
         if (m != null && m > best) { best = m; pickup = pp; }
       });
     }
+    // the pickup applies only when the trade frees a non-IL slot: two non-IL gives, or one non-IL give for an IL target
+    const addsFor = f => pickup && nonILCount(ctx, pair) - nonILCount(ctx, [f]) >= 1 ? [pickup.key] : [];
     const plain = Object.assign({}, wopts, { approach: 1 }), cands = [];
     Object.keys(ctx.roster).forEach(t => {
       if (t === me) return;
-      ctx.roster[t].forEach(f => cands.push({ team: t, f, r: evaluateTrade(ctx, { a: me, b: t, aGets: [f], bGets: pair, aAdds: pickup ? [pickup.key] : [] }, plain) }));
+      ctx.roster[t].forEach(f => cands.push({ team: t, f, r: evaluateTrade(ctx, { a: me, b: t, aGets: [f], bGets: pair, aAdds: addsFor(f) }, plain) }));
     });
     cands.sort((x, y) => y.r.sortKey - x.r.sortKey || (x.f < y.f ? -1 : 1));
-    return cands.slice(0, keep).map(c => {
-      const r = pickup ? evaluateTrade(ctx, { a: me, b: c.team, aGets: [c.f], bGets: pair, aAdds: [pickup.key] }, wopts) : c.r;
+    // keep the best `keep` overall AND the best `keep` at each likelihood floor, so a Likelihood filter on the page still finds the best trades
+    const kept = new Set(cands.slice(0, keep));
+    LIK_BANDS.forEach(fl => cands.filter(c => c.r.likelihood >= fl).slice(0, keep).forEach(c => kept.add(c)));
+    return cands.filter(c => kept.has(c)).map(c => {
+      const ad = addsFor(c.f), r = evaluateTrade(ctx, { a: me, b: c.team, aGets: [c.f], bGets: pair, aAdds: ad }, wopts);
       return { type: '2x1', gives: pair.map(k => ctx.pool.byKey.get(k)), targets: [ctx.pool.byKey.get(c.f)], team: c.team, pickup, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total,
         dAPlayer: r.dAPlayer == null ? r.dA : r.dAPlayer, dAPickup: r.dAPickup || 0, slot: r.slot || 0, sortKey: r.sortKey };
     }).sort((x, y) => y.sortKey - x.sortKey);
@@ -203,11 +209,14 @@
         }).filter(Boolean).sort((p, q) => q.dA - p.dA)[0];
         if (!best || !(best.dA > 0)) return;
         const lik = 1 / (1 + Math.exp(-(TRADE_W.slope * gap + TRADE_W.winM * best.dB + TRADE_W.bias)));
-        if (lik >= likFloor) est.push({ t, g: [g1, g2], x: [ts[i], ts[j]], dA: best.dA });
+        if (lik >= likFloor) est.push({ t, g: [g1, g2], x: [ts[i], ts[j]], dA: best.dA, lik });
       });
     });
     est.sort((p, q) => q.dA - p.dA);
-    return est.slice(0, top).map(c => {
+    // the best `top` overall, plus the best top/4 at each likelihood floor, so a Likelihood filter on the page still finds rows
+    const kept = new Set(est.slice(0, top)), per = Math.max(1, Math.ceil(top / 4));
+    LIK_BANDS.forEach(fl => est.filter(c => c.lik >= fl).slice(0, per).forEach(c => kept.add(c)));
+    return est.filter(c => kept.has(c)).map(c => {
       const r = evaluateTrade(ctx, { a: ctx.me, b: c.t, aGets: c.x, bGets: c.g }, wopts), pp = k => ctx.pool.byKey.get(k);
       return { type: '2x2', gives: c.g.map(pp), targets: c.x.map(pp), team: c.t, pickup: null, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, dAPlayer: r.dA, dAPickup: 0, slot: 0, sortKey: r.dA };
     }).sort((p, q) => q.sortKey - p.sortKey);

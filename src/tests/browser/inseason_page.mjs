@@ -201,7 +201,8 @@ async function open(opts = {}) {
     await p.click('.sitenav a[href="inseason.html#matchup"]'); await p.waitForTimeout(2500);
     const n = await p.evaluate(() => Object.values((JSON.parse(localStorage.getItem('courtside-trade-cands-v1') || '{"sigs":{}}')).sigs).reduce((s, m) => s + Object.keys(m).length, 0));
     ok(n < 13, 'leaving the Trade tab pauses the trade search (' + n + ' players saved)');
-    await p.click('.sitenav a[href="inseason.html#trades"]'); await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
+    await p.click('.sitenav a[href="inseason.html#trades"]'); await p.waitForFunction(() => /^Trade Analyzer/.test(document.title)); await p.waitForTimeout(300);
+    await p.waitForFunction(() => !/Searching/.test(document.getElementById('finder-msg').textContent), null, { timeout: 60000 });
   }
   ok(/^Trade Analyzer/.test(await p.title()) && (await p.$eval('.sitenav a[aria-current]', a => a.textContent)) === 'Trade', 'title and toolbar follow the section');
   ok(errs.length === 0, 'no page errors on the Trades tab ' + errs.join('; '));
@@ -283,13 +284,18 @@ async function open(opts = {}) {
     ok((await p.$$eval('#list-a li.pick', l => l.length)) === 0 && !/of which/.test(await p.textContent('#sum')), 'removing the pickup chip goes back to plain numbers (' + withPk + ' -> ' + await p.$eval('#sum .kpi b', e => e.textContent) + ')');
     await p.click('#finder tbody tr:nth-child(' + (pickRow + 1) + ')'); await p.waitForTimeout(300);
     await p.click('#list-b li button'); await p.waitForTimeout(300);
-    ok((await p.$$eval('#list-a li.pick', l => l.length)) === 0, 'removing one give (no longer uneven) clears the pickup chip'); }
+    ok((await p.$$eval('#list-a li.pick', l => l.length)) === 0, 'removing one give (no longer uneven) clears the pickup chip');
+    // the "+Win M you" column sorts by the sort key (dA without the pickup), not by the total shown in the cell
+    await p.click('#finder thead th:nth-child(5)'); await p.waitForTimeout(200);
+    let sk = await p.$$eval('#finder tbody tr', r => r.map(x => +x.children[4].dataset.sort)), asc = sk.every((v, i) => !i || sk[i - 1] <= v);
+    if (asc) { await p.click('#finder thead th:nth-child(5)'); await p.waitForTimeout(200); sk = await p.$$eval('#finder tbody tr', r => r.map(x => +x.children[4].dataset.sort)); }
+    ok(sk.length > 1 && sk.every((v, i) => !i || sk[i - 1] >= v), 'clicking the +Win M you header sorts by the sort key'); }
   await p.reload(); await p.waitForSelector('#body:not([hidden])');
   ok(JSON.stringify(await checks()) === '[true,true,true]', 'the chosen types survive a reload');
   { const t0 = Date.now(); await done();
     ok(Date.now() - t0 < 5000, 'after a reload no search runs again (' + (Date.now() - t0) + ' ms)'); }
   const store = await p.evaluate(() => { const s = JSON.parse(localStorage.getItem('courtside-trade-cands-v1') || '{"sigs":{}}').sigs; return Object.keys(s).length; });
-  ok(store >= 2 && (await p.$$eval('#finder tbody tr', r => r.length)) > 0, 'rows come from the saved v6 searches (' + store + ' signatures)');
+  ok(store >= 2 && (await p.$$eval('#finder tbody tr', r => r.length)) > 0, 'rows come from the saved v7 searches (' + store + ' signatures)');
   await p.uncheck('#ty-21'); await p.uncheck('#ty-22'); await p.click('#ty-11'); await p.waitForTimeout(300);
   ok(JSON.stringify(await checks()) === '[true,false,false]', 'turning the last type off keeps 1-for-1 on');
   ok(errs.length === 0, 'no page errors ' + errs.join('; '));

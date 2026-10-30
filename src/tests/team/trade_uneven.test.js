@@ -120,9 +120,33 @@ test('candidates2x1ForPair: rows are mine/theirs, match evaluateTrade, at most k
   assert.strictEqual(rows[0].pickup.key, best.k);
 });
 
-test('candidates2x1ForPair: a pair that frees no slot has no pickup and slot 0', () => {
-  const ilKey = il(me)[0], rows = T.candidates2x1ForPair(ctx, pairOf([ilKey, mine[0]]), OPT, 2);
-  assert.ok(rows.length > 0 && rows.every(r => r.pickup === null && r.slot === 0));
+test('candidates2x1ForPair: IL + non-IL gives free a slot only for an IL target; otherwise no pickup and slot 0', () => {
+  const ilKey = il(me)[0], rows = T.candidates2x1ForPair(ctx, pairOf([ilKey, mine[0]]), OPT, 1000);
+  const isIL = r => pool.byKey.get(r.targets[0].key).slot === 'IR';
+  assert.ok(rows.some(isIL) && rows.some(r => !isIL(r)));
+  assert.ok(rows.filter(r => !isIL(r)).every(r => r.pickup !== null && r.slot === 0 && r.dAPickup === 0), 'non-IL target: nothing freed');
+  assert.ok(rows.filter(isIL).every(r => r.pickup !== null && r.slot > 0), 'IL target: one non-IL slot freed, so the pickup and its slot value count');
+});
+
+test('candidates2x1ForPair under approach 2 scores every row exactly like evaluateTrade (no A1 score kept)', () => {
+  const o = Object.assign({ approach: 2 }, OPT), ilKey = il(me)[0], pair = pairOf([ilKey, mine[0]]);
+  T.candidates2x1ForPair(ctx, pair, o, 4).forEach(r => {
+    const ad = pool.byKey.get(r.targets[0].key).slot === 'IR' && r.pickup ? [r.pickup.key] : [];
+    const e = T.evaluateTrade(ctx, { a: me, b: r.team, aGets: [r.targets[0].key], bGets: pair, aAdds: ad }, o);
+    ['dA', 'sortKey', 'likelihood'].forEach(k => assert.ok(near(r[k], e[k], 1e-7), k));
+  });
+});
+
+test('candidates2x1ForPair keeps the best rows at each likelihood floor, not just overall', () => {
+  const pair = pairOf(give2), keep = 2, rows = T.candidates2x1ForPair(ctx, pair, OPT, keep), got = new Set(rows.map(r => r.team + '|' + r.targets[0].key));
+  const all = [];
+  Object.keys(ctx.roster).forEach(t => { if (t !== me) ctx.roster[t].forEach(f => all.push({ id: t + '|' + f, r: T.evaluateTrade(ctx, { a: me, b: t, aGets: [f], bGets: pair, aAdds: [rows[0].pickup.key] }, Object.assign({ approach: 1 }, OPT)) })); });
+  let checked = 0;
+  [0.15, 0.3, 0.5].forEach(fl => {
+    const ok = all.filter(x => x.r.likelihood >= fl).sort((x, y) => y.r.sortKey - x.r.sortKey).slice(0, keep);
+    ok.forEach(x => { assert.ok(got.has(x.id), 'top ' + keep + ' at likelihood >= ' + fl + ' missing: ' + x.id); checked++; });
+  });
+  assert.ok(checked > 0);
 });
 
 test('uneven trade with no pickup: approach 2 week-weights dA, approach 1 stays plain (no A1/A2 mix in one sort)', () => {
@@ -145,7 +169,7 @@ test('tradeCandidates2x1: one give covers every pair that holds it', () => {
 test('tradeCandidates2x2: exact plain rows, both targets from one team, capped, one give only, input untouched', () => {
   const one = T.tradeCandidates(ctx, 'any', OPT), snap = JSON.stringify(one.map(r => [r.give.key, r.target.key, r.dA, r.dB, r.likelihood]));
   const rows = T.tradeCandidates2x2(ctx, 'any', one, OPT, { top: 12 });
-  assert.ok(rows.length > 0 && rows.length <= 12);
+  assert.ok(rows.length > 0 && rows.length <= 12 + 3 * 3, 'top 12 plus top 3 at each of three likelihood floors');
   rows.forEach((r, i) => {
     assert.strictEqual(r.type, '2x2');
     assert.strictEqual(r.gives.length, 2); assert.strictEqual(r.targets.length, 2);
@@ -158,6 +182,14 @@ test('tradeCandidates2x2: exact plain rows, both targets from one team, capped, 
   const one1 = T.tradeCandidates2x2(ctx, mine[0], one, OPT, { top: 12 });
   assert.ok(one1.length > 0 && one1.every(r => r.gives.some(p => p.key === mine[0])));
   assert.strictEqual(JSON.stringify(one.map(r => [r.give.key, r.target.key, r.dA, r.dB, r.likelihood])), snap);
+});
+
+test('tradeCandidates2x2: a small cut still keeps likely trades, so a Likelihood filter finds rows', () => {
+  const one = T.tradeCandidates(ctx, 'any', OPT), all = T.tradeCandidates2x2(ctx, mine[0], one, OPT, { top: 100000 });
+  const likely = all.filter(r => r.likelihood >= 0.4);
+  assert.ok(likely.length > 0, 'fixture has likely 2x2 trades');
+  const cut = T.tradeCandidates2x2(ctx, mine[0], one, OPT, { top: 4 });
+  assert.ok(cut.some(r => r.likelihood >= 0.3), 'a cut of 4 keeps some rows at likelihood >= 0.3');
 });
 
 // ---- packing, sort, signature ----

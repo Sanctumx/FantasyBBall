@@ -508,11 +508,11 @@ tr.click{cursor:pointer}
   const isInj = pp => pp.slot === 'IR' || !!(ctx.out && ctx.out.has(pp.key));
   const showP = pp => !ui.hideInj || !isInj(pp);
   const mineSorted = () => ctx.roster[ctx.me].map(f => pool.byKey.get(f)).filter(showP).sort((a, b) => pvOf(b) - pvOf(a));
-  const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b>' + (r.pickup ? '<span class="src"> of which ' + signed(r.dAPickup) + ' from the pickup</span>' : '') + '</td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td><td>' + (r.pickup ? signed(r.slot) : '—') + '</td>';
+  const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td data-sort="' + r.sortKey + '"><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b>' + (r.pickup ? '<span class="src"> of which ' + signed(r.dAPickup) + ' from the pickup</span>' : '') + '</td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td><td>' + (r.pickup ? signed(r.slot) : '—') + '</td>';
 
   // One player's candidate trades take about 0.07 s (all 13 about 0.9 s), so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
-  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v6', CAND_KEEP = 6;   // v5: numbers saved at 4 decimals, up to 6 Source / Basis combinations kept; v6: 2-for-1 and 2-for-2 rows (own signature each, per give-pair / per give)
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v7', CAND_KEEP = 12;   // v5: numbers saved at 4 decimals, up to 6 Source / Basis combinations kept; v6: 2-for-1 and 2-for-2 rows (own signature each, per give-pair / per give); v7: rows kept per likelihood floor too, pickup for IL targets, 12 signatures kept (1-for-1 and uneven count separately)
   const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
   function candSave(sig, ck, gives, pack = Trade.packCandidates) {
     try {
@@ -675,18 +675,18 @@ tr.click{cursor:pointer}
   }));
   $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr) loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team, tr.dataset.pickup); });
   ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
-  $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });
-  $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; S.aAdds = []; renderBuilder(); });
+  $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; S.aAdds = []; renderBuilder(); });
   $('zt').addEventListener('change', e => { ui.zt = e.target.value; save(); renderBuilder(); });
   $('zb').addEventListener('change', e => { ui.basis = e.target.value; save(); finderRun++; renderTrades(); });   // new Win M rules: the trade search runs again (kept builder re-scored)
   $('inj').addEventListener('change', e => { ui.hideInj = e.target.checked; save(); renderTrades(); });
   $('statv').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { builderState().stat = b.dataset.v; renderBuilder(); } });
-  $('reset').addEventListener('click', () => { const S = builderState(); S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('reset').addEventListener('click', () => { const S = builderState(); S.aGets = []; S.bGets = []; S.aAdds = []; renderBuilder(); });
   [['in-a', 'a'], ['in-b', 'b']].forEach(([id, side]) => { const el = $(id); el.addEventListener('change', () => { addPlayer(side, el.value); el.value = ''; }); });
   ['list-a', 'list-b'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button[data-rm]'); if (!b) return; const S = builderState(), arr = b.dataset.side === 'p' ? S.aAdds : b.dataset.side === 'a' ? S.aGets : S.bGets; arr.splice(arr.indexOf(b.dataset.rm), 1); renderBuilder(); }));
 
   // Sortable columns, as on the League Dashboard: first click puts the best first, second reverses; names sort A to Z; kept in storage.
-  const cellKey = td => { const t = td.textContent.trim(); if (t === '—' || t === '') return null; const v = parseFloat(t.replace(/[,%+]/g, '').replace('−', '-')); return isNaN(v) ? t : v; };
+  const cellKey = td => { if (td.dataset.sort != null) return +td.dataset.sort; const t = td.textContent.trim(); if (t === '—' || t === '') return null; const v = parseFloat(t.replace(/[,%+]/g, '').replace('−', '-')); return isNaN(v) ? t : v; };
   function applySort(id) {
     const st = (ui.sort || {})[id], tb = $(id).tBodies[0], ths = [...$(id).querySelectorAll('thead th')];
     ths.forEach((th, i) => { th.tabIndex = 0; th.removeAttribute('aria-sort'); if (st && st.col === i) th.setAttribute('aria-sort', st.dir === 'asc' ? 'ascending' : 'descending'); });

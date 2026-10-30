@@ -3278,6 +3278,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) if (myKey === 'any' || ks[i] === myKey || ks[j] === myKey) out.push([ks[i], ks[j]]);
     return out;
   }
+  const LIK_BANDS = [0.15, 0.3, 0.5];
   const nonILCount = (ctx, fs) => fs.filter(f => ctx.pool.byKey.get(f).slot !== 'IR').length;
   // The rows for one give-pair: the pickup is the shortlist player whose addition helps most (only when the pair frees a non-IL slot), every
   // other team's player is screened with the plain average (stage 1), and the best `keep` are scored week-weighted (stage 2), best sortKey first
@@ -3286,21 +3287,26 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     if (ctx.cur == null || !TeamWin.periodsLeft(ctx, 'all').length) return [];
     const me = ctx.me, base = ctx.roster[me].filter(f => !pair.includes(f));
     let pickup = null;
-    if (nonILCount(ctx, pair) >= 2) {
+    if (nonILCount(ctx, pair) >= 1) {
       let best = -Infinity;
       pickupShortlist(ctx, 10).forEach(pp => {
         const m = rosWinM(ctx, Object.assign({}, ctx.roster, { [me]: base.concat([pp.key]) }), me, wopts).mean;
         if (m != null && m > best) { best = m; pickup = pp; }
       });
     }
+    // the pickup applies only when the trade frees a non-IL slot: two non-IL gives, or one non-IL give for an IL target
+    const addsFor = f => pickup && nonILCount(ctx, pair) - nonILCount(ctx, [f]) >= 1 ? [pickup.key] : [];
     const plain = Object.assign({}, wopts, { approach: 1 }), cands = [];
     Object.keys(ctx.roster).forEach(t => {
       if (t === me) return;
-      ctx.roster[t].forEach(f => cands.push({ team: t, f, r: evaluateTrade(ctx, { a: me, b: t, aGets: [f], bGets: pair, aAdds: pickup ? [pickup.key] : [] }, plain) }));
+      ctx.roster[t].forEach(f => cands.push({ team: t, f, r: evaluateTrade(ctx, { a: me, b: t, aGets: [f], bGets: pair, aAdds: addsFor(f) }, plain) }));
     });
     cands.sort((x, y) => y.r.sortKey - x.r.sortKey || (x.f < y.f ? -1 : 1));
-    return cands.slice(0, keep).map(c => {
-      const r = pickup ? evaluateTrade(ctx, { a: me, b: c.team, aGets: [c.f], bGets: pair, aAdds: [pickup.key] }, wopts) : c.r;
+    // keep the best `keep` overall AND the best `keep` at each likelihood floor, so a Likelihood filter on the page still finds the best trades
+    const kept = new Set(cands.slice(0, keep));
+    LIK_BANDS.forEach(fl => cands.filter(c => c.r.likelihood >= fl).slice(0, keep).forEach(c => kept.add(c)));
+    return cands.filter(c => kept.has(c)).map(c => {
+      const ad = addsFor(c.f), r = evaluateTrade(ctx, { a: me, b: c.team, aGets: [c.f], bGets: pair, aAdds: ad }, wopts);
       return { type: '2x1', gives: pair.map(k => ctx.pool.byKey.get(k)), targets: [ctx.pool.byKey.get(c.f)], team: c.team, pickup, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total,
         dAPlayer: r.dAPlayer == null ? r.dA : r.dAPlayer, dAPickup: r.dAPickup || 0, slot: r.slot || 0, sortKey: r.sortKey };
     }).sort((x, y) => y.sortKey - x.sortKey);
@@ -3330,11 +3336,14 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
         }).filter(Boolean).sort((p, q) => q.dA - p.dA)[0];
         if (!best || !(best.dA > 0)) return;
         const lik = 1 / (1 + Math.exp(-(TRADE_W.slope * gap + TRADE_W.winM * best.dB + TRADE_W.bias)));
-        if (lik >= likFloor) est.push({ t, g: [g1, g2], x: [ts[i], ts[j]], dA: best.dA });
+        if (lik >= likFloor) est.push({ t, g: [g1, g2], x: [ts[i], ts[j]], dA: best.dA, lik });
       });
     });
     est.sort((p, q) => q.dA - p.dA);
-    return est.slice(0, top).map(c => {
+    // the best `top` overall, plus the best top/4 at each likelihood floor, so a Likelihood filter on the page still finds rows
+    const kept = new Set(est.slice(0, top)), per = Math.max(1, Math.ceil(top / 4));
+    LIK_BANDS.forEach(fl => est.filter(c => c.lik >= fl).slice(0, per).forEach(c => kept.add(c)));
+    return est.filter(c => kept.has(c)).map(c => {
       const r = evaluateTrade(ctx, { a: ctx.me, b: c.t, aGets: c.x, bGets: c.g }, wopts), pp = k => ctx.pool.byKey.get(k);
       return { type: '2x2', gives: c.g.map(pp), targets: c.x.map(pp), team: c.t, pickup: null, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, dAPlayer: r.dA, dAPickup: 0, slot: 0, sortKey: r.dA };
     }).sort((p, q) => q.sortKey - p.sortKey);
@@ -4169,11 +4178,11 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const isInj = pp => pp.slot === 'IR' || !!(ctx.out && ctx.out.has(pp.key));
   const showP = pp => !ui.hideInj || !isInj(pp);
   const mineSorted = () => ctx.roster[ctx.me].map(f => pool.byKey.get(f)).filter(showP).sort((a, b) => pvOf(b) - pvOf(a));
-  const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b>' + (r.pickup ? '<span class="src"> of which ' + signed(r.dAPickup) + ' from the pickup</span>' : '') + '</td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td><td>' + (r.pickup ? signed(r.slot) : '—') + '</td>';
+  const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td data-sort="' + r.sortKey + '"><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b>' + (r.pickup ? '<span class="src"> of which ' + signed(r.dAPickup) + ' from the pickup</span>' : '') + '</td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td><td>' + (r.pickup ? signed(r.slot) : '—') + '</td>';
 
   // One player's candidate trades take about 0.07 s (all 13 about 0.9 s), so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
-  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v6', CAND_KEEP = 6;   // v5: numbers saved at 4 decimals, up to 6 Source / Basis combinations kept; v6: 2-for-1 and 2-for-2 rows (own signature each, per give-pair / per give)
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v7', CAND_KEEP = 12;   // v5: numbers saved at 4 decimals, up to 6 Source / Basis combinations kept; v6: 2-for-1 and 2-for-2 rows (own signature each, per give-pair / per give); v7: rows kept per likelihood floor too, pickup for IL targets, 12 signatures kept (1-for-1 and uneven count separately)
   const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
   function candSave(sig, ck, gives, pack = Trade.packCandidates) {
     try {
@@ -4336,18 +4345,18 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   }));
   $('finder').addEventListener('click', e => { const tr = e.target.closest('tbody tr'); if (tr) loadTrade(tr.dataset.give, tr.dataset.target, tr.dataset.team, tr.dataset.pickup); });
   ['sell', 'buy'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('.lnk'); if (b) loadTrade(b.dataset.give, b.dataset.target, b.dataset.team); }));
-  $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; renderBuilder(); });
-  $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('ta').addEventListener('change', e => { const S = builderState(); S.a = e.target.value; if (S.b === S.a) S.b = L.teams.map(t => t.id).find(t => t !== S.a); S.aGets = []; S.bGets = []; S.aAdds = []; renderBuilder(); });
+  $('tb').addEventListener('change', e => { const S = builderState(); S.b = e.target.value; S.aGets = []; S.bGets = []; S.aAdds = []; renderBuilder(); });
   $('zt').addEventListener('change', e => { ui.zt = e.target.value; save(); renderBuilder(); });
   $('zb').addEventListener('change', e => { ui.basis = e.target.value; save(); finderRun++; renderTrades(); });   // new Win M rules: the trade search runs again (kept builder re-scored)
   $('inj').addEventListener('change', e => { ui.hideInj = e.target.checked; save(); renderTrades(); });
   $('statv').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { builderState().stat = b.dataset.v; renderBuilder(); } });
-  $('reset').addEventListener('click', () => { const S = builderState(); S.aGets = []; S.bGets = []; renderBuilder(); });
+  $('reset').addEventListener('click', () => { const S = builderState(); S.aGets = []; S.bGets = []; S.aAdds = []; renderBuilder(); });
   [['in-a', 'a'], ['in-b', 'b']].forEach(([id, side]) => { const el = $(id); el.addEventListener('change', () => { addPlayer(side, el.value); el.value = ''; }); });
   ['list-a', 'list-b'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button[data-rm]'); if (!b) return; const S = builderState(), arr = b.dataset.side === 'p' ? S.aAdds : b.dataset.side === 'a' ? S.aGets : S.bGets; arr.splice(arr.indexOf(b.dataset.rm), 1); renderBuilder(); }));
 
   // Sortable columns, as on the League Dashboard: first click puts the best first, second reverses; names sort A to Z; kept in storage.
-  const cellKey = td => { const t = td.textContent.trim(); if (t === '—' || t === '') return null; const v = parseFloat(t.replace(/[,%+]/g, '').replace('−', '-')); return isNaN(v) ? t : v; };
+  const cellKey = td => { if (td.dataset.sort != null) return +td.dataset.sort; const t = td.textContent.trim(); if (t === '—' || t === '') return null; const v = parseFloat(t.replace(/[,%+]/g, '').replace('−', '-')); return isNaN(v) ? t : v; };
   function applySort(id) {
     const st = (ui.sort || {})[id], tb = $(id).tBodies[0], ths = [...$(id).querySelectorAll('thead th')];
     ths.forEach((th, i) => { th.tabIndex = 0; th.removeAttribute('aria-sort'); if (st && st.col === i) th.setAttribute('aria-sort', st.dir === 'asc' ? 'ascending' : 'descending'); });
