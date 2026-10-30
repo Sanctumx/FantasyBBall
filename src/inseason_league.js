@@ -113,6 +113,27 @@
     return hits.map(h => h.reduce((acc, [d, a]) => { const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); return acc + a * (sum[d] > cap ? cap / sum[d] : 1); }, 0));
   }
 
-  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodLast, periodDays, periodMonths, rosterGames };
+  // rosterGames with each entry's games split into buckets: cuts = ascending ms, a game at ms in [cuts[i], cuts[i+1]) goes to
+  // bucket i (games outside the cuts still use up the day's cap). Returns entry × bucket; the row sums equal rosterGames.
+  function rosterGamesBy(entries, DAYS, maxActive, used, cuts) {
+    const G = (DAYS && DAYS.games) || DAYS || {}, nb = cuts.length - 1;
+    const bucket = ms => { if (ms < cuts[0] || ms >= cuts[nb]) return -1; let lo = 0, hi = nb - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (cuts[m] <= ms) lo = m; else hi = m - 1; } return lo; };
+    const hits = entries.map(e => (G[e.t] || []).map(s => s * 1000).filter(ms => ms >= e.from && ms < e.to).map(ms => [localDay(ms), e.a, bucket(ms)]));
+    const out = entries.map(() => new Array(nb).fill(0));
+    if (entries.length && entries.every(e => e.v != null)) {
+      const left = {};
+      entries.map((_, i) => i).sort((a, b) => (entries[b].v - entries[a].v) || (a - b)).forEach(i => hits[i].forEach(([d, a, k]) => {
+        if (left[d] == null) left[d] = Math.max(0, maxActive - ((used && used[d]) || 0));
+        const take = Math.min(a, left[d]); left[d] -= take; if (k >= 0) out[i][k] += take;
+      }));
+      return out;
+    }
+    const sum = {};
+    hits.forEach(h => h.forEach(([d, a]) => { sum[d] = (sum[d] || 0) + a; }));
+    hits.forEach((h, i) => h.forEach(([d, a, k]) => { if (k < 0) return; const cap = Math.max(0, maxActive - ((used && used[d]) || 0)); out[i][k] += a * (sum[d] > cap ? cap / sum[d] : 1); }));
+    return out;
+  }
+
+  const api = { parseFxDate, parseLeague, parseRosters, parseStandings, currentPeriod, opponentOf, regularFrom, toProjTeam, localDay, dayStart, nextDayStart, nyDay, periodLast, periodDays, periodMonths, rosterGames, rosterGamesBy };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.InLeague = api;
 })(this);
