@@ -129,6 +129,53 @@
     const r = evaluateTrade(ctx, { a: ctx.me, b: team, aGets: [target.key], bGets: [give.key] }, wopts), v = perceived(ctx, target);
     return { give, target, team, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total, buyLow: v.rv - v.pv >= TRADE_W.tagGap };
   };
+
+  // ---- 2-for-1 finder (#169): I give two, get one, and the best free agent or waiver player fills the freed slot ----
+  const isWaiver = pp => pp.fxStatus === 'WW';
+  // the n best pickups by value: free agents and waivers, not out for the current period
+  function pickupShortlist(ctx, n) {
+    const v = p => InPlayers.valueZ(p.line, p.g, ctx.ref);
+    return ctx.pool.players.filter(p => !p.owner && (p.fxStatus === 'FA' || p.fxStatus === 'WW') && !(ctx.out && ctx.out.has(p.key)))
+      .sort((x, y) => v(y) - v(x) || (x.key < y.key ? -1 : 1)).slice(0, n == null ? 10 : n);
+  }
+  // pairs of my players (sorted keys); with one give, only the pairs that hold it
+  function givePairs(ctx, myKey) {
+    const ks = ctx.roster[ctx.me].slice().sort(), out = [];
+    for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) if (myKey === 'any' || ks[i] === myKey || ks[j] === myKey) out.push([ks[i], ks[j]]);
+    return out;
+  }
+  const nonILCount = (ctx, fs) => fs.filter(f => ctx.pool.byKey.get(f).slot !== 'IR').length;
+  // The rows for one give-pair: the pickup is the shortlist player whose addition helps most (only when the pair frees a non-IL slot), every
+  // other team's player is screened with the plain average (stage 1), and the best `keep` are scored week-weighted (stage 2), best sortKey first
+  function candidates2x1ForPair(ctx, pair, wopts, keep) {
+    keep = keep == null ? SlotValue.KEEP_2X1 : keep;
+    if (ctx.cur == null || !TeamWin.periodsLeft(ctx, 'all').length) return [];
+    const me = ctx.me, base = ctx.roster[me].filter(f => !pair.includes(f));
+    let pickup = null;
+    if (nonILCount(ctx, pair) >= 2) {
+      let best = -Infinity;
+      pickupShortlist(ctx, 10).forEach(pp => {
+        const m = rosWinM(ctx, Object.assign({}, ctx.roster, { [me]: base.concat([pp.key]) }), me, wopts).mean;
+        if (m != null && m > best) { best = m; pickup = pp; }
+      });
+    }
+    const plain = Object.assign({}, wopts, { approach: 1 }), cands = [];
+    Object.keys(ctx.roster).forEach(t => {
+      if (t === me) return;
+      ctx.roster[t].forEach(f => cands.push({ team: t, f, r: evaluateTrade(ctx, { a: me, b: t, aGets: [f], bGets: pair, aAdds: pickup ? [pickup.key] : [] }, plain) }));
+    });
+    cands.sort((x, y) => y.r.sortKey - x.r.sortKey || (x.f < y.f ? -1 : 1));
+    return cands.slice(0, keep).map(c => {
+      const r = pickup ? evaluateTrade(ctx, { a: me, b: c.team, aGets: [c.f], bGets: pair, aAdds: [pickup.key] }, wopts) : c.r;
+      return { type: '2x1', gives: pair.map(k => ctx.pool.byKey.get(k)), targets: [ctx.pool.byKey.get(c.f)], team: c.team, pickup, likelihood: r.likelihood, dA: r.dA, dB: r.dB, total: r.total,
+        dAPlayer: r.dAPlayer == null ? r.dA : r.dAPlayer, dAPickup: r.dAPickup || 0, slot: r.slot || 0, sortKey: r.sortKey };
+    }).sort((x, y) => y.sortKey - x.sortKey);
+  }
+  function tradeCandidates2x1(ctx, myKey, wopts) {
+    const rows = [];
+    givePairs(ctx, myKey).forEach(p => candidates2x1ForPair(ctx, p, wopts).forEach(r => rows.push(r)));
+    return rows;
+  }
   const byValue = (a, b) => b.dA * b.likelihood - a.dA * a.likelihood;
   // every one-for-one trade for one of my players (myKey) with every other team's player, helpful or not, unfiltered; 'any' offers each of my players
   // wopts: the Win M options of rosMeans (basis: 'total' Season, the default, 'pergame', 'mix')
@@ -191,6 +238,6 @@
     return { sellHigh, buyLow };
   }
 
-  const api = { TRADE_W, rosMeans, rosWinM, weightedWinM, perceived, evaluateTrade, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
+  const api = { TRADE_W, rosMeans, rosWinM, weightedWinM, perceived, evaluateTrade, pickupShortlist, isWaiver, givePairs, candidates2x1ForPair, tradeCandidates2x1, tradeCandidates, filterTrades, parseFilter, packCandidates, unpackCandidates, candSig, findTrades, sellHighBuyLow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trade = api;
 })(this);
