@@ -104,7 +104,7 @@ async function open(opts = {}) {
   ok(!(await p.isVisible('#week')), 'Trades tab has no week dropdown');
   ok((await p.$$eval('#givelist option', o => o.length)) >= 10, 'finder suggests my players');
   const hdr = await p.$$eval('#finder thead th', t => t.map(x => x.textContent).join('|'));
-  ok(hdr === 'You give|Target|Team|Likelihood of trade|+Win M you|+Win M them|Total Win M|Slot value', 'finder header (' + hdr + ')');
+  ok(hdr === 'You give|Target|Team|Likelihood of trade|+Win M you|Win M slot|+Win M them|Total Win M', 'finder header (' + hdr + ')');
   const rows = await p.$$eval('#finder tbody tr', r => r.length);
   ok(rows >= 1, 'finder has rows (' + rows + ')');
   const col = async i => (await p.$$eval('#finder tbody tr', (r, i) => r.map(x => parseFloat(x.children[i].textContent.replace('−', '-'))), i));
@@ -266,14 +266,14 @@ async function open(opts = {}) {
   { // Task 15: a 2-for-1 row with a pickup loads two gives, the target and the pickup chip; breaking the trade clears the chip
     const pickRow = await p.$$eval('#finder tbody tr', r => r.findIndex(x => x.dataset.type === '2x1' && x.dataset.pickup));
     ok(pickRow >= 0, 'a 2-for-1 row names a pickup');
-    const cellTxt = await p.$eval('#finder tbody tr:nth-child(' + (pickRow + 1) + ')', x => x.children[1].textContent + '|' + x.children[4].textContent + '|' + x.children[7].textContent);
-    ok(/of which/.test(cellTxt.split('|')[1]) && /\d/.test(cellTxt.split('|')[2]), 'the dA cell shows "of which" the pickup and the slot cell has a number (' + cellTxt + ')');
+    const cellTxt = await p.$eval('#finder tbody tr:nth-child(' + (pickRow + 1) + ')', x => x.children[1].textContent + '|' + x.children[4].textContent + '|' + x.children[5].textContent);
+    ok(!/of which/.test(cellTxt) && /\d/.test(cellTxt.split('|')[2]), 'the you cell has no "of which" text and the slot cell has a number (' + cellTxt + ')');
     await p.click('#finder tbody tr:nth-child(' + (pickRow + 1) + ')'); await p.waitForTimeout(400);
     ok((await p.$$eval('#list-b li', l => l.length)) === 2 && (await p.$$eval('#list-a li:not(.pick)', l => l.length)) === 1 && (await p.$$eval('#list-a li.pick', l => l.length)) === 1, 'the row loads two gives, the target and the pickup chip');
-    ok(/of which/.test(await p.textContent('#sum')) && /Slot value/.test(await p.textContent('#sum')), 'the KPIs show the pickup and slot breakdown');
+    ok(!/of which/.test(await p.textContent('#sum')) && /Win M slot/.test(await p.textContent('#sum')), 'the KPIs show the slot value and no "of which" pickup line');
     const withPk = await p.$eval('#sum .kpi b', e => e.textContent);
     await p.click('#list-a li.pick button'); await p.waitForTimeout(300);
-    ok((await p.$$eval('#list-a li.pick', l => l.length)) === 0 && !/of which/.test(await p.textContent('#sum')), 'removing the pickup chip goes back to plain numbers (' + withPk + ' -> ' + await p.$eval('#sum .kpi b', e => e.textContent) + ')');
+    ok((await p.$$eval('#list-a li.pick', l => l.length)) === 0 && !/Win M slot/.test(await p.textContent('#sum')), 'removing the pickup chip goes back to plain numbers (' + withPk + ' -> ' + await p.$eval('#sum .kpi b', e => e.textContent) + ')');
     await p.click('#finder tbody tr:nth-child(' + (pickRow + 1) + ')'); await p.waitForTimeout(300);
     await p.click('#list-b li button'); await p.waitForTimeout(300);
     ok((await p.$$eval('#list-a li.pick', l => l.length)) === 0, 'removing one give (no longer uneven) clears the pickup chip');
