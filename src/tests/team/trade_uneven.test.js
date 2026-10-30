@@ -39,7 +39,7 @@ test('aAdds owned throws "is not a free agent"', () => {
 });
 
 test('approach 2 telescopes: dAPlayer + dAPickup = 100 (M(R_T) - M(R0)) and dA = dAPlayer + slot + dAPickup', () => {
-  const r = trade({}, OPT);
+  const r = trade({}, Object.assign({ approach: 2 }, OPT));
   const R = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(k => !give2.includes(k)).concat([target, f]), [other]: ctx.roster[other].filter(k => k !== target).concat(give2) });
   const R0 = r.drops[other].length ? R : R;
   R0[other] = R0[other].filter(k => !r.drops[other].includes(k));
@@ -123,6 +123,16 @@ test('candidates2x1ForPair: rows are mine/theirs, match evaluateTrade, at most k
 test('candidates2x1ForPair: a pair that frees no slot has no pickup and slot 0', () => {
   const ilKey = il(me)[0], rows = T.candidates2x1ForPair(ctx, pairOf([ilKey, mine[0]]), OPT, 2);
   assert.ok(rows.length > 0 && rows.every(r => r.pickup === null && r.slot === 0));
+});
+
+test('uneven trade with no pickup: approach 2 week-weights dA, approach 1 stays plain (no A1/A2 mix in one sort)', () => {
+  const ilKey = il(me)[0], q = { a: me, b: other, aGets: [target], bGets: [ilKey, mine[0]] };
+  const p1 = T.evaluateTrade(ctx, q, Object.assign({ approach: 1 }, OPT)), p2 = T.evaluateTrade(ctx, q, Object.assign({ approach: 2 }, OPT));
+  const R = Object.assign({}, ctx.roster, { [me]: ctx.roster[me].filter(k => !q.bGets.includes(k)).concat([target]), [other]: ctx.roster[other].filter(k => k !== target).concat(q.bGets).filter(k => !p2.drops[other].includes(k)) });
+  const want = 100 * (T.weightedWinM(ctx, R, me, OPT) - T.weightedWinM(ctx, ctx.roster, me, OPT));
+  assert.ok(near(p2.dA, want, 1e-7));
+  assert.ok(near(p2.sortKey, p2.dA));
+  assert.ok(near(p1.dA, 100 * (T.rosMeans(ctx, R, [me], OPT)[me].mean - T.rosMeans(ctx, ctx.roster, [me], OPT)[me].mean), 1e-7));
 });
 
 test('tradeCandidates2x1: one give covers every pair that holds it', () => {

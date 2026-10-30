@@ -8,11 +8,12 @@ const I = require('./inseason_league.js'), Pl = require('./inseason_players.js')
 const fx = n => require('./tests/fixtures/' + n), DAYS = require('./sched_days.json');
 const L = I.parseLeague(fx('fx_league.json')), ROS = I.parseRosters(fx('fx_rosters.json'));
 const pool = Pl.buildPool({ PLAYERS, fxPlayers: fx('fx_players.json'), espn: fx('espn_2025_26.json'), L, rosters: ROS });
-const me = L.teams[0].id, ctx = M.makeCtx({ L, pool, DAYS, rosters: ROS, me, nowMs: Date.UTC(2026, 9, 21, 12) });
-const smoke = process.argv.includes('--smoke'), OPT = { basis: 'total' }, FLOOR = 0.02;
+const argv = process.argv.slice(2), dateArg = argv.includes('--date') ? argv[argv.indexOf('--date') + 1] : '2026-10-21', [dy, dm, dd] = dateArg.split('-').map(Number);
+const me = L.teams[0].id, ctx = M.makeCtx({ L, pool, DAYS, rosters: ROS, me, nowMs: Date.UTC(dy, dm - 1, dd, 12) });
+const smoke = argv.includes('--smoke'), OPT = { basis: 'total' }, FLOOR = 0.02;
 const overlap = (a, b, n) => { const s = new Set(b.slice(0, n)); return a.slice(0, n).filter(x => s.has(x)).length; };
 const top = (rows, n, f) => rows.slice().sort((x, y) => y.sortKey - x.sortKey).slice(0, n).map(f);
-const out = { made: new Date().toISOString().slice(0, 10), smoke, fixture: 'Oct 21 2026, my team ' + me };
+const out = { made: new Date().toISOString().slice(0, 10), smoke, fixture: dateArg + ' (period ' + ctx.cur + '), my team ' + me };
 
 // ---- 2x2 ----
 {
@@ -41,11 +42,12 @@ const out = { made: new Date().toISOString().slice(0, 10), smoke, fixture: 'Oct 
   const pairs = smoke ? T.givePairs(ctx, ctx.roster[me][0]).slice(0, 1) : T.givePairs(ctx, 'any'), key = r => r.gives.map(p => p.key).sort().join('+') + '>' + r.targets[0].key + '@' + r.team;
   const run = keep => { const t0 = Date.now(), rows = []; pairs.forEach(p => T.candidates2x1ForPair(ctx, p, OPT, keep).forEach(r => rows.push(r))); return { rows, ms: Date.now() - t0 }; };
   const exact = run(1e9), ex = top(exact.rows, 25, key), res = { exactRows: exact.rows.length, msExact: exact.ms, byKeep: {} };
-  [5, 10, 15, 25].forEach(k => { const g = run(k); res.byKeep[k] = { rows: g.rows.length, ms: g.ms, top25Overlap: overlap(top(g.rows, 25, key), ex, 25), top10Overlap: overlap(top(g.rows, 10, key), ex, 10) }; });
+  ctx._wmCache = ctx._rosCache = null;   // cold: the exact pass above warmed every cache
+  [15, 5, 10, 25].forEach(k => { const g = run(k); res.byKeep[k] = { rows: g.rows.length, ms: g.ms, top25Overlap: overlap(top(g.rows, 25, key), ex, 25), top10Overlap: overlap(top(g.rows, 10, key), ex, 10) }; });
   out.x21 = res;
   console.log('2x1', JSON.stringify(res));
 }
 
-const file = path.join(__dirname, 'results', 'trade_recall_' + out.made + (smoke ? '_smoke' : '') + '.json');
+const file = path.join(__dirname, 'results', 'trade_recall_' + out.made + '_' + dateArg + (smoke ? '_smoke' : '') + '.json');
 fs.writeFileSync(file, JSON.stringify(out, null, 1));
 console.log('wrote', file);

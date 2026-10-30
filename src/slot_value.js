@@ -5,9 +5,9 @@
   const DAY = 864e5, TeamWin = root.TeamWin || require('./team_win.js');
   const PROFILE = root.SLOT_PROFILE || (typeof require !== 'undefined' ? require('./slot_profile.json') : null);
   const CURVE = { delta: 1, playoff: 1 };   // u_k = delta^(k-k0) for regular periods, x playoff for playoff periods; flat until tuned
-  const APPROACH = 2;                       // 2 = week-weighted Win M, 1 = plain rest-of-season (slot term only)
+  const APPROACH = 1;                       // 1 = plain rest-of-season (slot term only), 2 = week-weighted Win M (behind this switch, not shown better: analyst gate 2)
   const SLOT_IN_SORT = false;               // true once the analyst validates the slot value for ordering
-  const KEEP_2X1 = 15;                      // per give-pair, how many plain-screened targets get the weighted score
+  const KEEP_2X1 = 5;                    // per give-pair, how many plain-screened targets get the weighted score
   const sig = (curve, profile) => ['v' + ((profile || PROFILE) || {}).version, curve.delta, curve.playoff, APPROACH, SLOT_IN_SORT].join('|');
   const SIG = sig(CURVE);
 

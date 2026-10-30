@@ -3,7 +3,8 @@
 // d = week match share of the arm - STATIC_P, per week from week 1 (and over 2-week blocks), averaged over the 14 seats of each draft.
 // Run:   node slot_profile.js --season 2025-26 [--s0 501 --s1 550]     writes results/slotprof_part_<season>.json
 //        node slot_profile.js --smoke                                   1 season, 2 drafts, nothing written to slot_profile.json
-//        node slot_profile.js --merge                                   all parts -> results/slotprof_<date>.json and slot_profile.json
+//        node slot_profile.js --merge                                   all parts -> results/slotprof_<date>.json and slot_profile_measured.json
+//                                                                       (slot_profile.json, the constant the app uses, is written by hand from the analyst's verdict)
 const fs = require('fs'), path = require('path');
 const { resultPath, listResults } = require('./results_path');
 const argv = process.argv.slice(2), flag = k => argv.includes('--' + k), val = (k, d) => (argv.includes('--' + k) ? argv[argv.indexOf('--' + k) + 1] : d);
@@ -77,7 +78,7 @@ if (flag('merge')) {
   const w1 = wk('w', 'S4'), b1 = wk('b', 'S4');
   const weeks = w1.map((c, w) => c && { w, s: c.mean, s14: b1[w] ? b1[w].mean : null, se: c.se, n: c.n }).filter(Boolean);
   fs.writeFileSync(resultPath(`slotprof_${date}.json`), JSON.stringify({ summary, parts }));
-  fs.writeFileSync(path.join(__dirname, 'slot_profile.json'), JSON.stringify({ version: 1, made: date, source: 'slot_profile.js, gate src/trade_2x1_gate.txt', form: 'measured', arm: 'S4-STATIC_P', adds: 4,
+  fs.writeFileSync(path.join(__dirname, 'slot_profile_measured.json'), JSON.stringify({ version: 1, made: date, source: 'slot_profile.js, gate src/trade_2x1_gate.txt', form: 'measured', arm: 'S4-STATIC_P', adds: 4,
     unit: 'Win M points per matchup', weeks }));
   console.log(JSON.stringify(summary, null, 1));
 } else if (flag('smoke')) {

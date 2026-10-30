@@ -41,6 +41,15 @@ test('a profile s(w) = w gives the hand-computed term; 14-day periods read s14',
   assert.ok(Math.abs(SV.slotTerm(ctx, flat, ramp) - want) < 1e-9);
 });
 
+test('shipped constants (analyst gate 2): approach 1, slot 0.70 / 0.83 on every week, flat curve, keep 5, slot not in the sort', () => {
+  assert.strictEqual(SV.APPROACH, 1);
+  assert.strictEqual(SV.SLOT_IN_SORT, false);
+  assert.strictEqual(SV.KEEP_2X1, 5);
+  assert.deepStrictEqual(SV.CURVE, { delta: 1, playoff: 1 });
+  assert.strictEqual(SV.PROFILE.form, 'constant');
+  per.forEach(p => assert.strictEqual(SV.slotOfPeriod(ctx, p), p.to - p.from > 8 * DAY ? 0.83 : 0.7));
+});
+
 test('SIG changes with the curve', () => {
   assert.notStrictEqual(SV.sig(flat), SV.sig({ delta: 0.9, playoff: 1 }));
   assert.strictEqual(SV.SIG, SV.sig(SV.CURVE));

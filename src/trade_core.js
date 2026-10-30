@@ -89,8 +89,15 @@
     const multi = aGets.length !== bGets.length;
     const gapB = pvSum(bGets) - pvSum(aGets) - (multi ? pvSum(drops[b]) : 0);
     const out = { dA, dB, total: dA + dB, likelihood: 1 / (1 + Math.exp(-(TRADE_W.slope * gapB + TRADE_W.winM * dB + TRADE_W.bias))), gapB, multi, drops, sortKey: dA, freed: false };
-    if (!adds.length) return out;
     const o = opts || {}, curve = o.curve || SlotValue.CURVE, approach = o.approach != null ? o.approach : SlotValue.APPROACH, slotInSort = o.slotInSort != null ? o.slotInSort : SlotValue.SLOT_IN_SORT;
+    if (!adds.length) {
+      // an uneven trade with no pickup is week-weighted too under approach 2, so one sorted list never mixes plain and weighted dA
+      if (multi && approach === 2) {
+        const wT = weightedWinM(ctx, R, a, opts, curve), w0 = weightedWinM(ctx, ctx.roster, a, opts, curve);
+        if (wT != null && w0 != null) { out.dA = 100 * (wT - w0); out.total = out.dA + dB; out.sortKey = out.dA; }
+      }
+      return out;
+    }
     // the pickup alone: my roster now plus the free agent, under the same cap rule
     const RF = Object.assign({}, ctx.roster); RF[a] = ctx.roster[a].concat(adds); const dF = capFor(a, RF[a]); RF[a] = RF[a].filter(f => !dF.includes(f));
     const fkey = 'F#' + a + '#' + sig(a).length + RF[a].slice().sort().join(',') + '|' + optKey(opts);
