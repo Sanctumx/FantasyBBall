@@ -14,7 +14,7 @@ def cat(fs): return ''.join(rd(f)+chr(10) for f in fs)
 SRC={'DATA':('players','const PLAYERS='+P+';'),'SCHED':('sched','const SCHED='+S+';'),'DAYS':('sched_days','const SCHED_DAYS='+D+';'),
      'ENGINE':('engine',rd('engine.js')),'SHARED':('shared',rd('shared.js')),'STORE':('store',rd('league_store.js')),'FXCACHE':('fxcache',rd('fx_cache.js')),
      'LEAGUE':('league_core',rd('league_core.js')),
-     'INSEASON':('inseason_mods',cat(['inseason_league.js','inseason_players.js','matchup_core.js','points_core.js','team_core.js','win_k.js','team_win.js','trade_core.js','rankings_core.js','team_view.js'])),
+     'INSEASON':('inseason_mods','self.SLOT_PROFILE='+json.dumps(json.load(open('slot_profile.json')),separators=(',',':'))+';'+chr(10)+cat(['inseason_league.js','inseason_players.js','matchup_core.js','points_core.js','team_core.js','win_k.js','team_win.js','slot_value.js','trade_core.js','rankings_core.js','team_view.js'])),
      'RANKINGS':('rankings_mods',cat(['inseason_league.js','inseason_players.js','points_core.js','win_k.js','rankings_core.js'])),
      'TEAM':('team_mods',cat(['inseason_league.js','inseason_players.js','matchup_core.js','points_core.js','win_k.js','rankings_core.js','team_core.js','team_win.js','team_view.js'])),
      'LEAGUETAB':('league_tab',rd('league_tab.js'))}
