@@ -70,7 +70,13 @@
     return TEAMS.includes(m) ? m : '';
   }
 
-  const localDay = ms => new Date(ms - LOCAL).toISOString().slice(0, 10);
+  // memoized: a trade search asks for the same few thousand tip-off times millions of times (cleared past 50K entries)
+  const dayMemo = new Map();
+  const localDay = ms => {
+    let d = dayMemo.get(ms);
+    if (d === undefined) { if (dayMemo.size >= 50000) dayMemo.clear(); d = new Date(ms - LOCAL).toISOString().slice(0, 10); dayMemo.set(ms, d); }
+    return d;
+  };
   const dayStart = day => Date.parse(day + 'T00:00:00Z') + LOCAL;
   // Fantrax's last day of a period: its end is 18:59:59 ET on the day after (the next period starts at 19:00), so labels stop a day earlier
   const periodLast = per => localDay(per.end - DAY - 1);

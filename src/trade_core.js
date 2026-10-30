@@ -119,7 +119,8 @@
     return v;
   }
   // Saved candidates (the page keeps them in the browser so a reload does not search again): compact rows, rebuilt from the pool
-  const packCandidates = rows => rows.map(r => [r.give.key, r.target.key, r.team, r.likelihood, r.dA, r.dB, r.total, r.buyLow ? 1 : 0]);
+  // dp: round the numbers to that many decimals (the page keeps 4, which saves about 40% of the browser storage)
+  const packCandidates = (rows, dp) => { const f = dp == null ? (x => x) : (x => Math.round(x * Math.pow(10, dp)) / Math.pow(10, dp)); return rows.map(r => [r.give.key, r.target.key, r.team, f(r.likelihood), f(r.dA), f(r.dB), f(r.total), r.buyLow ? 1 : 0]); };
   function unpackCandidates(packed, pool) {
     const out = [];
     packed.forEach(([g, t, team, likelihood, dA, dB, total, bl]) => {

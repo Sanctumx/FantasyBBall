@@ -344,11 +344,11 @@ tr.click{cursor:pointer}
 <script src="assets/players.113e4b07.js"></script>
 <script src="assets/sched_days.72a6a842.js"></script>
 <script src="assets/sched.42cc8c3b.js"></script>
-<script src="assets/engine.00768e2b.js"></script>
+<script src="assets/engine.5b0794fc.js"></script>
 <script src="assets/shared.9f9a6a1b.js"></script>
 <script src="assets/store.22818a7e.js"></script>
 <script src="assets/fxcache.3a003ffb.js"></script>
-<script src="assets/inseason_mods.36e4bc61.js"></script>
+<script src="assets/inseason_mods.1d1eac80.js"></script>
 <script>
 (function () {
   'use strict';
@@ -401,7 +401,7 @@ tr.click{cursor:pointer}
     return Promise.all(InL.periodMonths(per, true).map(async m => { try { const r = await fetch('stats/box-' + m + '.json', { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (e) { return null; } }));
   }
   async function load() {
-    const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0;
+    const seq = ++loadSeq, lg = SS.league; clearTimeout(fxTimer); staleAge = 0; finderRun++;   // (pool is null while loading: a pending idle search must stop)
     memo.clear(); memoGen++; $('body').hidden = true; $('retry').hidden = true; $('fresh').innerHTML = ''; $('nomatch').hidden = true; pool = null;
     $('lgname').textContent = lg ? (lg.name || 'League ' + lg.id) : '';
     if (LS.isPoints(SS.settings)) { ui.leagueId = null; sayHtml(LS.POINTS_NOTE_HTML); return; }
@@ -494,12 +494,14 @@ tr.click{cursor:pointer}
   const mPlan = (c, n, left) => memoed(['pl', c.me, n, left, dayKey(), kept().join(','), dropCap()].join('|'), () => { const cap = dropCap() ? { droppable: dropCap() } : {}; return n === c.cur ? Matchup.addPlan(c, Object.assign({ addsLeft: left, keep: kept() }, cap)) : Matchup.addPlan(c, Object.assign({ periods: [n], keep: kept() }, cap)); });
   // fill the cache for the other weeks of this team, then the other teams' selected week, one piece per idle moment
   let warmTimer = 0;
-  function prewarm() {
-    clearTimeout(warmTimer); const gen = memoGen;
-    if (ui.tab !== 'matchup' || !pool) return;
-    const weeks = [...$('week').options].map(o => +o.value).filter(n => n !== +ui.week), teams = L.teams.map(t => t.id).filter(t => t !== teamFor(ui.tab));
-    const todo = weeks.map(n => () => warm(ctxFor(teamFor(ui.tab)), n)).concat(teams.map(t => () => warm(ctxFor(t), +ui.week)));
-    const next = () => { if (gen !== memoGen || ui.tab !== 'matchup') return; const f = todo.shift(); if (!f) return; try { f(); } catch (e) {} warmTimer = setTimeout(next, 30); };
+  // fromTrades: the trade search has finished, so the Matchup tab's cache is filled from the Trade tab too (its first visit is then quick)
+  function prewarm(fromTrades) {
+    // (from the Trade tab only on Source 'avg': ctxFor builds its contexts from the chosen Source, and the Matchup memo keys do not hold it)
+    clearTimeout(warmTimer); const gen = memoGen, onTab = () => ui.tab === 'matchup' || (fromTrades && ui.tab === 'trades' && srcOf() === 'avg');
+    if (!onTab() || !pool) return;
+    const mt = teamFor('matchup'), weeks = [...$('week').options].map(o => +o.value).filter(n => n !== +ui.week), teams = L.teams.map(t => t.id).filter(t => t !== mt);
+    const todo = (fromTrades ? [() => warm(ctxFor(mt), +ui.week)] : []).concat(weeks.map(n => () => warm(ctxFor(mt), n)), teams.map(t => () => warm(ctxFor(t), +ui.week)));
+    const next = () => { if (gen !== memoGen || !onTab()) return; const f = todo.shift(); if (!f) return; try { f(); } catch (e) {} warmTimer = setTimeout(next, fromTrades ? 200 : 30); };   // (slower on the Trade tab, so clicks and typing there stay smooth)
     warmTimer = setTimeout(next, 400);
   }
   function warm(c, n) { const pw = mPW(c, n); if (pw.opp) { mAdds(c, n); mPlan(c, n, addsLeft(n)); } }
@@ -507,6 +509,7 @@ tr.click{cursor:pointer}
     $('team').value = teamFor(ui.tab);   // each tab keeps its own team
     const meNow = teamFor(ui.tab); if (ctx && ctx.me !== meNow) { bd = null; finderRun++; }   // a different team: the Trade Builder starts over and a running trade search stops
     ctx = ctxFor(teamFor(ui.tab));
+    if (ui.tab !== 'trades') finderRun++;   // the trade search pauses off the Trade tab (what it found is saved; coming back resumes it)
     $('sect').textContent = ui.tab === 'trades' ? 'Trade Analyzer' : 'Matchup Analyzer'; document.title = $('sect').textContent + ' · Courtside Draft Kit';
     document.querySelector('.sitenav').outerHTML = Shared.TOOLBAR_HTML(ui.tab);
     $('srclab').hidden = $('baslab').hidden = $('injlab').hidden = ui.tab !== 'trades'; $('src').value = ui.src; $('zb').value = ui.basis; $('inj').checked = !!ui.hideInj;
@@ -600,25 +603,27 @@ tr.click{cursor:pointer}
   const mineSorted = () => ctx.roster[ctx.me].map(f => pool.byKey.get(f)).filter(showP).sort((a, b) => pvOf(b) - pvOf(a));
   const tradeCells = r => '<td>' + pct(r.likelihood) + '%</td><td><b class="' + (r.dA >= 0 ? 'pos-n' : 'neg-n') + '">' + signed(r.dA) + '</b></td><td>' + signed(r.dB) + '</td><td>' + signed(r.total) + '</td>';
 
-  // One player's candidate trades take about 0.7 s, so they are searched one player at a time and drawn as they come. Results are
+  // One player's candidate trades take about 0.07 s (all 13 about 0.9 s), so they are searched one player at a time and drawn as they come. Results are
   // saved in the browser under a signature of the rosters, day and period, so a reload or another page does not search again.
-  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v4';
+  const CAND_KEY = 'courtside-trade-cands-v1', CAND_VER = 'v5', CAND_KEEP = 6;   // v5: numbers saved at 4 decimals, up to 6 Source / Basis combinations kept
   const candStore = () => { try { return JSON.parse(localStorage.getItem(CAND_KEY)) || { order: [], sigs: {} }; } catch (e) { return { order: [], sigs: {} }; } };
   function candSave(sig, ck, gives) {
     try {
       const st = candStore(), mine = st.sigs[sig] = st.sigs[sig] || {};
-      gives.forEach(g => { if (tradeCache[ck(g)]) mine[g] = Trade.packCandidates(tradeCache[ck(g)]); });
+      gives.forEach(g => { if (tradeCache[ck(g)]) mine[g] = Trade.packCandidates(tradeCache[ck(g)], 4); });
       st.order = st.order.filter(x => x !== sig).concat(sig);
-      while (st.order.length > 3) delete st.sigs[st.order.shift()];
-      localStorage.setItem(CAND_KEY, JSON.stringify(st));
+      while (st.order.length > CAND_KEEP) delete st.sigs[st.order.shift()];
+      for (;;) {   // over the browser's quota: drop the oldest saved combination and try again
+        try { localStorage.setItem(CAND_KEY, JSON.stringify(st)); break; } catch (e) { if (st.order.length <= 1) throw e; delete st.sigs[st.order.shift()]; }
+      }
     } catch (e) {}
   }
   let finderRun = 0;
   function renderFinder() {
     const run = ++finderRun, mineAll = ctx.roster[ctx.me], gives = ui.give === 'any' ? mineAll : [ui.give];
-    const sv = srcOf() + (SRCS.box() ? 'b' : '') + ':' + ui.basis, ck = g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + sv + ':' + g, sig = Trade.candSig(ctx, InL.localDay(Date.now()), CAND_VER + sv);
-    const saved = candStore().sigs[sig] || {};
-    mineAll.forEach(g => { if (!tradeCache[ck(g)] && saved[g]) tradeCache[ck(g)] = Trade.unpackCandidates(saved[g], pool); });
+    const day = InL.localDay(Date.now()), svOf = b => srcOf() + (SRCS.box() ? 'b' : '') + ':' + b, ckOf = b => g => 'c:' + ui.leagueId + ':' + ctx.me + ':' + ctx.cur + ':' + svOf(b) + ':' + g, sigOf = b => Trade.candSig(ctx, day, CAND_VER + svOf(b));
+    const load = b => { const saved = candStore().sigs[sigOf(b)] || {}, k = ckOf(b); mineAll.forEach(g => { if (!tradeCache[k(g)] && saved[g]) tradeCache[k(g)] = Trade.unpackCandidates(saved[g], pool); }); };
+    const ck = ckOf(ui.basis), sig = sigOf(ui.basis); load(ui.basis);
     const todo = (ui.give === 'any' ? [] : [ui.give]).concat(mineAll.filter(g => g !== ui.give)).filter(g => !tradeCache[ck(g)]);
     const draw = () => {
       const pf = (k, id) => { const v = Trade.parseFilter(k, ui.fl[id]); $('f-' + id).classList.toggle('bad', v === undefined); return v; };
@@ -635,9 +640,20 @@ tr.click{cursor:pointer}
     const step = () => {
       if (run !== finderRun || !todo.length) return;
       const g = todo.shift(); tradeCache[ck(g)] = Trade.tradeCandidates(ctx, g, wopts()); candSave(sig, ck, [g]); draw();
-      if (todo.length) setTimeout(step, 0); else drawSellBuy(ck);
+      if (todo.length) setTimeout(step, 0); else { drawSellBuy(ck); setTimeout(idle, 30); }
     };
-    if (todo.length) setTimeout(step, 0);
+    // then, one player at a time while the page is idle: the other two Basis choices (a change of Basis is then instant), and last the Matchup tab's cache
+    const others = ['total', 'pergame', 'mix'].filter(b => b !== ui.basis), loaded = new Set();
+    const idle = () => {
+      if (run !== finderRun) return;
+      for (const b of others) {
+        if (!loaded.has(b)) { loaded.add(b); load(b); }
+        const k = ckOf(b), g = mineAll.find(x => !tradeCache[k(x)]);
+        if (g) { tradeCache[k(g)] = Trade.tradeCandidates(ctx, g, { basis: b }); candSave(sigOf(b), k, [g]); setTimeout(idle, 30); return; }
+      }
+      prewarm(true);
+    };
+    if (todo.length) setTimeout(step, 0); else setTimeout(idle, 400);
   }
   // Sell High / Buy Low use the same candidates, so they appear once every one of my players has been searched
   function drawSellBuy(ck) {

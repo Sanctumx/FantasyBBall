@@ -1,0 +1,12 @@
+# trade-speed
+
+State (2026-10-29): part A (idea 168, search speed) is built, tested and reviewed on this branch in worktree `C:/Users/Fefe/Documents/FantasyBBall-tradeui`; 3 code commits, nothing pushed. Full numbers: archive 168 and 169 in the ledger worktree (rows 168-169 committed there, not landed).
+
+Done: `Engine.pairKit` (extracted from `evaluate`, which now calls it) + `TeamWin.leagueWin` non-detail path computes only the requested rows (bit-equal to the full run for 9 cats, 8 cats, points, all bases; detail path for the League tab unchanged); `InLeague.localDay` memo; `packCandidates(rows, dp)`; page: `CAND_VER` v5, saves at 4 decimals, 6 combinations (`CAND_KEEP`, drops the oldest on a quota error), idle fill of the other two Basis choices, search pauses off the Trade tab (`finderRun++` in `render`, also in `load`), Matchup prewarm after the search (only on Source 'avg', every 200 ms). Fixture league: 5.07 s down to 0.86 s per combination, rows equal to the golden (`src/tests/fixtures/trade_candidates_golden.json`, 6 decimals). Tests: `src/tests/team/trade_speed.test.js`; browser `inseason_page.mjs` (two new checks). Reviewer (high) found one wrong-number bug (Matchup warm on a non-avg Source) and smaller points; all fixed. Not re-measured in a browser: Trade to Matchup switch time (was 1.2 s mid-search); no browser test of the non-avg Source guard.
+
+Waiting on the user: the push word for part A; the four 2x1 decisions for part B (recommended answers, user said "go" on 2026-10-29 with them standing): (1) dA shows the total with "of which X from the pickup", sort/filter on dA minus the pickup alone; (2) the other team's likelihood subtracts the value of the player it must drop; (3) waiver-wire players in the free-agent pool, tagged; (4) no 1-for-2 for now.
+
+Next:
+1. Part A to PR (user says push): `git push -u origin trade-speed`, PR with the numbers above. Built pages are committed (restore line-ending-only asset diffs after each build).
+2. Part B (big feature, idea 169): brainstorm with the user first, then the planner writes the plan: `evaluateTrade` `aAdds`, `tradeCandidates2x1`, `tradeCandidates2x2` (screen then top 400 exact; recall script for the analyst), "Trade type" select. With the speed gain a 2x1 pass is cheap.
+3. Browser test: copy `src/tests/browser/inseason_page.mjs` to the Playwright folder (scratchpad `pw/` of session 17acf9ec), swap the port with sed into a new file, serve the repo root on a free port; a leftover `python -m http.server 8778` may still run (stop it).
