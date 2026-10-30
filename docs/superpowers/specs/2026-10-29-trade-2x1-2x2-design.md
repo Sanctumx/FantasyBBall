@@ -59,6 +59,12 @@ User choice: **2, unless it is not a significant improvement over 1.** So build 
 - **Team-specific slot value:** explored only (analyst measures the spread); build the constant profile and the measurement script first.
 - **Profile data:** a generation script writes a committed table (JSON) that the build embeds; refreshed by re-running the script.
 
+## User answers after the first read (2026-10-29)
+
+- **Trade type is checkboxes, not a select:** 1-for-1, 2-for-1, 2-for-2, any mix shown at once (all three together too). Replaces the "Trade type" select above; candidates still cached per type.
+- **Likelihood is secondary.** It has not been fine-tuned yet; the priority is finding Win M-positive trades. So: the 2x2 screen ranks by estimated dA, not dA x likelihood; the likelihood floor is low; likelihood is shown but does not drive the order. Decision 2 (subtract the dropped player's value) stays but is a guess to tune later.
+- Decisions 1 to 5 confirmed ("tagged" = a small "waiver" label on the pickup name, nothing more). 1-for-2 not yet.
+
 ## Sort (user, 2026-10-29: "go with your recommendation")
 
 The slot value enters the 2x1 sort and filter as soon as the analyst validates the measurement, as a switch inside this branch (off until validated, on after). Until then the sort uses dA minus the pickup alone.
