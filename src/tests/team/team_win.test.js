@@ -167,7 +167,7 @@ test('avg: a player dropped at an IL return is replaced by an average player who
   // his row = the team minus the team with an average player in his place, the next-ranked player dropped instead
   const st2 = T.applySwap(st, [D], []), w = T.window(ctx), A0 = { t: pool.byKey.get(D).t, a: 0, v: 0, from: w.from, to: w.from };
   const r2 = T.playsPct(ctx, st2, { rank: W.dropRank(ctx, me), extra: [A0] });
-  const mine = T.counted(st2, ctx).map(k => ({ key: k, p: pool.byKey.get(k).line, games: r2[k].played / Wk })).concat(Object.assign({}, ap.mean, { games: T.soloGames(ctx, D) / Wk * ap.share }));
+  const mine = T.counted(st2, ctx).map(k => ({ key: k, p: pool.byKey.get(k).line, games: r2[k].played / Wk })).concat(ap.mean);   // the team's average player (ap.mean.games), the same for every row
   const hand = W.matrixOf(ctx, mine, new Set(st.order), Wk, { recv: {} }), row = W.moduleRow(ctx, st, su, D);
   assert.ok(near(row.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9), 'dropped row ' + row.dM);
   assert.ok(Object.keys(r2).some(k => r2[k].drop != null && k !== D), 'the drop moved to another player');
@@ -193,10 +193,10 @@ test('avg: a dropped IL player gets 0 games and is replaced by an average entry 
   } finally { pp.g = was; }
 });
 
-test('avg: avgOwn on a counted player equals the team with an average-line entry (his slot\'s games) in his place', () => {
+test('avg: avgOwn on a counted player equals the team with the team\'s average player (ap.mean) in his place', () => {
   const ctx = Object.assign({}, mk(last.start, games(last.start, last.end)), { teamTab: true, basis: 'total' }), st = T.tabState(ROS[me]);
-  const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), k = T.counted(st, ctx)[0], g = T.soloGames(ctx, k) / su.ap.W * su.ap.share;
-  const own = W.moduleRow(ctx, st, su, k), mine = su.ap.mine.filter(e => e.key !== k).concat(Object.assign({}, su.ap.mean, { games: g })), hand = W.matrixOf(ctx, mine, new Set(st.order), su.ap.W);
+  const su = W.moduleSetup(ctx, st, { baseline: 'avg' }), k = T.counted(st, ctx)[0];
+  const own = W.moduleRow(ctx, st, su, k), mine = su.ap.mine.filter(e => e.key !== k).concat(su.ap.mean), hand = W.matrixOf(ctx, mine, new Set(st.order), su.ap.W);
   assert.ok(near(own.dM, 100 * (su.base.mean.match - hand.mean.match), 1e-9));
 });
 
@@ -634,6 +634,39 @@ test('Team tab: Vs average on the seasonal basis: the share is a fraction of the
     assert.ok(ap && ap.share > 0 && ap.share <= 1 + 1e-9, basis + ' share ' + (ap && ap.share));
     try { const hi = row(82), lo = row(10); if (basis === 'total') assert.ok(hi > lo, 'total: ' + hi + ' vs ' + lo); else assert.ok(near(hi, lo, 1e-9), 'pergame ' + hi + ' vs ' + lo); } finally { pp.g = g0; }
   }
+});
+
+// ---- Vs average on the Team tab (user 2026-11-02): one stand-in for every row, the real average player of my team ----
+// his games = my counted players' games played (games x play %) / the players who play (Season, Mix); / the counted players (Per game);
+// a plain ctx keeps total / Active spots. My own player and an outsider are measured against the same stand-in.
+test('Team tab Vs average: the average player plays total / the players who play (Season) or / the counted players (Per game); a plain ctx keeps / Active spots', () => {
+  const plain = mk(last.start, games(last.start, last.end)), st = tabSt();
+  for (const basis of ['total', 'pergame']) {
+    const ctx = mkTab(basis), w = W.weeksLeft(ctx), mine = sideOf(ctx, st), ap = W.avgParts(ctx, st, w);
+    const div = basis === 'total' ? mine.filter(e => e.games > 0).length : mine.length;
+    assert.ok(near(ap.mean.games, sumG(mine) / div, 1e-12), basis + ' ' + ap.mean.games + ' vs ' + sumG(mine) / div);
+  }
+  assert.ok(near(W.avgParts(plain, stateOf(), W.weeksLeft(plain)).mean.games, sumG(sideOf(plain, stateOf())) / plain.L.maxActive, 1e-12));
+});
+
+test('Team tab Vs average: my own player is the team minus the team with him swapped for that same average player', () => {
+  for (const basis of ['total', 'pergame']) {
+    const ctx = mkTab(basis), st = tabSt(), w = W.weeksLeft(ctx), ap = W.avgParts(ctx, st, w), base = W.matrix(ctx, st);
+    const x = st.order.find(k => st.slots[k] === 'active' && ap.plays[k].played > 0 && ap.plays[k].drop == null);
+    const m = W.matrixOf(ctx, ap.mine.filter(e => e.key !== x).concat(ap.mean), new Set(st.order), w);
+    const row = W.moduleScores(ctx, st, { baseline: 'avg', candidates: [x] })[0];
+    assert.ok(near(row.dM, 100 * (base.mean.match - m.mean.match), 1e-9), basis + ' ' + row.dM);
+  }
+});
+
+test('Team tab Vs average: an own player and the same player as an outsider (taken off the roster) score about the same', () => {
+  const ctx = mkTab('total'), st = tabSt(), w = W.weeksLeft(ctx), ap = W.avgParts(ctx, st, w);
+  const own = st.order.filter(k => st.slots[k] === 'active' && ap.plays[k].played > 0 && ap.plays[k].drop == null), gaps = own.map(x => {
+    const rest = T.applySwap(st, [x], []), su = W.moduleSetup(ctx, rest, { baseline: 'avg' });
+    return W.moduleScores(ctx, st, { baseline: 'avg', candidates: [x] })[0].dM - W.moduleRow(ctx, rest, su, x).dM;
+  });
+  const mean = gaps.reduce((a, v) => a + v, 0) / gaps.length;
+  assert.ok(Math.abs(mean) < 0.5, 'mean gap ' + mean);
 });
 
 test('Team tab: a candidate in the list scores as the worst counted player\'s slot swapped for him, in Active', () => {
