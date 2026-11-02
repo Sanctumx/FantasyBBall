@@ -1218,7 +1218,10 @@ self.SLOT_PROFILE={"version":3,"made":"2026-10-30","source":"season mean of S4 -
     const r = plays(ctx, state, sideOpts(opts)), mine = sideOf(ctx, state, r, W), n = mine.length, tot = mine.reduce((a, e) => a + e.games, 0), M = ctx.L.maxActive || n;
     const allowed = Team.counted(state, ctx).reduce((a, k) => a + Team.soloGames(ctx, k, r[k].drop), 0);   // each player alone: no nightly cap; a dropped one only until he leaves
     if (!n || !(tot > 0) || !(allowed > 0)) return null;
-    return { W, mine, n, tot, M, plays: r, share: tot * W / allowed, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / M } };
+    // Team tab (user 2026-11-02): the average player plays what an average player of my team really plays, the same for every row: total /
+    // the players who play (Season, Mix) or / the counted players (Per game, where nobody is out); a plain ctx keeps total / Active spots
+    const div = !ctx.teamTab ? M : ctx.basis === 'pergame' ? n : mine.filter(e => e.games > 0).length || n;
+    return { W, mine, n, tot, M, plays: r, share: tot * W / allowed, common: !!ctx.teamTab, mean: { p: Team.teamLine(mine.map(e => ({ line: e.p, pct: e.games })), tot), games: tot / div } };
   }
 
   // a player not counted on my team replaces the average player: current team - average + him, his games times the share
@@ -1237,7 +1240,8 @@ self.SLOT_PROFILE={"version":3,"made":"2026-10-30","source":"season mean of S4 -
   // The average player counts against the player limit but takes no nightly slot (a: 0 item); the rest of the team is replayed without D
   function avgOwn(ctx, state, ap, key, opts) {
     const pk = ap.plays && ap.plays[key], isDrop = pk && pk.drop != null, il = state.slots[key] === 'il';
-    const t = trade(ctx, state), g = Team.soloGames(ctx, key, il && isDrop ? pk.drop : undefined) / ap.W * ap.share, so = sideOpts(opts);   // a dropped IL player never plays: 0 games, as in avgParts
+    // Team tab: the stand-in is the team's average player, as for a candidate (ap.mean.games); a dropped IL player still never plays
+    const t = trade(ctx, state), g = ap.common && !(il && isDrop) ? ap.mean.games : Team.soloGames(ctx, key, il && isDrop ? pk.drop : undefined) / ap.W * ap.share, so = sideOpts(opts);   // a dropped IL player never plays: 0 games, as in avgParts
     const dropped = !il && isDrop;
     let mine = ap.mine.filter(x => x.key !== key);
     if (dropped) {
