@@ -61,6 +61,12 @@ async function open(opts = {}) {
   ok(await p.$eval('#adds', t => t.closest('section').contains(document.getElementById('plan-moves'))), 'adds table shares a panel with the add plan');
   ok((await p.$$eval('#sched tbody tr', r => r.length)) >= 2 && (await p.$$eval('#sched thead th', h => h.length)) >= 4, 'team schedule grid has player rows and day columns');
   ok((await p.$$eval('#sched tbody tr:not(.tot) td.g', c => c.length)) >= 1, 'team schedule marks at least one game');
+  const sg = await p.evaluate(() => {
+    const lim = +document.querySelector('#sched tr.tot .src').textContent.replace(/\D/g, ''), tot = document.querySelectorAll('#sched tr.tot td'), rows = Array.from(document.querySelectorAll('#sched tbody tr:not(.tot)'));
+    return { lim, days: Array.from(tot).slice(2, -1).map((c, i) => ({ txt: c.textContent, n: rows.filter(r => /^(g|g past)$/.test(r.cells[i + 2].className)).length })), rows: rows.map(r => [+r.cells[r.cells.length - 1].textContent, Array.from(r.cells).filter(c => /^g/.test(c.className)).length]) };
+  });
+  ok(sg.rows.every(r => r[0] === r[1]), 'schedule Games column counts only start / played marks');
+  ok(sg.days.every(d => /^\d+( \(\d+\))?$/.test(d.txt) && d.n <= sg.lim), 'schedule Playing row reads "10 (12)" style and no night starts more than the limit (' + sg.lim + ')');
   const hs = await p.evaluate(() => { const a = document.querySelector('#tab-matchup .grid2>.panel').getBoundingClientRect(), b = document.querySelector('#tab-matchup .side>.plan').getBoundingClientRect(); return [a.width, b.width, a.height, b.height]; });
   ok(hs[0] > hs[1] * 1.5, 'matchup panel is wider than the waiver panel (' + hs.map(Math.round) + ')');
   ok(Math.abs(hs[2] - hs[3]) < 2, 'waiver panel is as tall as the matchup panel');
