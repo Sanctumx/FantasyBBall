@@ -3280,13 +3280,15 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
   const SLOT_LABEL = { active: 'Active', reserve: 'Reserve', il: 'IL' };
   // rows: TeamWin.moduleSort output. opts: owner 'all' | 'fa' | 'me' | team id, query.
   // -> { rows: [{ ...row, n, t, pos, label }], total (after the filters) }; every row is returned. My players sent out of the preview are
-  // free agents here ("Sent out"). The search only filters (Team.search would reorder by name match), so the Win M order stays.
+  // listed under the team that receives them in the previewed trade (TeamWin.received), else they are free agents ("Sent out"). The search only filters (Team.search would reorder by name match), so the Win M order stays.
   function moduleView(rows, ctx, state, opts) {
     const o = opts || {}, me = ctx.me, teamName = id => ((ctx.L.teams || []).find(t => t.id === id) || {}).name || String(id);
+    const to = new Map();   // a player I sent in a previewed trade (D3) belongs to the team that receives him
+    Object.entries(TeamWin.received(ctx, state)).forEach(([t, rs]) => rs.forEach(x => to.set(x.key, t)));
     let list = rows.map(r => {
-      const pp = ctx.pool.byKey.get(r.key) || {}, mine = r.key in state.slots, sent = !mine && pp.owner === me;
-      const label = mine ? 'You · ' + SLOT_LABEL[state.slots[r.key]] : sent ? 'Sent out' : pp.owner ? teamName(pp.owner) : 'Free agent';
-      return Object.assign({}, r, { n: pp.n, t: pp.t, pos: pp.pos, label, _own: mine ? 'me' : (sent || !pp.owner) ? 'fa' : pp.owner });
+      const pp = ctx.pool.byKey.get(r.key) || {}, mine = r.key in state.slots, dest = !mine && to.get(r.key), sent = !mine && !dest && pp.owner === me;
+      const label = mine ? 'You · ' + SLOT_LABEL[state.slots[r.key]] : dest ? teamName(dest) : sent ? 'Sent out' : pp.owner ? teamName(pp.owner) : 'Free agent';
+      return Object.assign({}, r, { n: pp.n, t: pp.t, pos: pp.pos, label, _own: mine ? 'me' : dest ? dest : (sent || !pp.owner) ? 'fa' : pp.owner });
     });
     if (o.owner && o.owner !== 'all') list = list.filter(r => r._own === o.owner);
     if (o.query) { const hit = new Set(Team.search(list, o.query, Infinity).map(r => r.key)); list = list.filter(r => hit.has(r.key)); }

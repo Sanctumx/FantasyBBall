@@ -208,6 +208,20 @@ test('moduleView: owner filters, label, accent-blind search that keeps the Win M
   assert.ok(keys(q).every((k, i, a) => i === 0 || rows.findIndex(r => r.key === a[i - 1]) < rows.findIndex(r => r.key === k)));   // Win M order kept
 });
 
+test('moduleView: a swapped-out player belongs to the team he went to (D3), not the free agents; a pure drop is still Sent out', () => {
+  const ctx = mk(), st0 = stateOf(), out = st0.order[0], inK = ROS[other].find(x => x.slot === 'ACTIVE').fid, dropped = st0.order[1];
+  const sw = T.applySwap(st0, [out], [inK]), fa = pool.players.find(p => !p.owner && !(p.key in sw.slots)).key;
+  const rows = [out, inK, fa].map((key, i) => ({ key, dM: 3 - i, dCat: [], old: 50, new: 50 }));
+  const teamName = ((ctx.L.teams || []).find(t => t.id === other) || {}).name || String(other);
+  const v = V.moduleView(rows, ctx, sw, { owner: 'all' }), by = k => v.rows.find(x => x.key === k);
+  assert.strictEqual(by(out).label, teamName);
+  assert.ok(/^You/.test(by(inK).label));
+  assert.deepStrictEqual(V.moduleView(rows, ctx, sw, { owner: other }).rows.map(x => x.key), [out]);
+  assert.deepStrictEqual(V.moduleView(rows, ctx, sw, { owner: 'fa' }).rows.map(x => x.key), [fa]);
+  const drop = T.applySwap(st0, [dropped], []), r2 = [{ key: dropped, dM: 1, dCat: [], old: 50, new: 50 }];
+  assert.strictEqual(V.moduleView(r2, ctx, drop, { owner: 'fa' }).rows[0].label, 'Sent out');
+});
+
 test('dropSwap: the incoming player takes the outgoing one\'s slot, two of mine trade slots, dropIn adds to a slot', () => {
   const st = stateOf(), out = st.order.find(k => st.slots[k] === 'active'), inK = ROS[other][0].fid;
   const s = V.dropSwap(st, inK, out);
