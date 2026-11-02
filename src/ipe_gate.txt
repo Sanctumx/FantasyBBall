@@ -1,0 +1,48 @@
+IPE pilot gate (2026-10-29). 200 drafts (4 seasons x 50, seeds 181-190, slots as ipe_run default), arms 66-69, same rosters.
+Units: title-equivalents per 100 seasons (prize equity / 0.6), paired per draft against arm 66.
+(Written to src/ipe_gate.txt, not src/results/: a deny rule blocks writes there.)
+
+DISCLOSURE: the pooled prize-equity lines for arms 67/68/69 vs 66 were printed (prize_equity.py) BEFORE this gate was
+written, in the same command that was meant to supply the gate inputs. The gate inputs below (sd, beta, time) do not
+depend on those means, but the order rule "gate before any screen result" was not kept. The analyst should treat the
+screen numbers from this pilot as seen, and judge the full run on fresh seeds (201+), not on seeds 181-190.
+
+Pilot paired prize-equity difference per draft:
+  arm 67 placebo   mean -2.0  sd/draft 4.2   (actual-prize sd/draft 24.4)
+  arm 68 streaming mean +0.5  sd/draft 4.0   (29.8)
+  arm 69 lineup    mean -0.2  sd/draft 1.7   (14.9)
+Pooled: 68 vs 66 +0.5 +/- 0.3, 69 vs 66 -0.2 +/- 0.1, 67 vs 66 -1.9 +/- 0.3.
+beta (slope of title logit on `me`): 12.5.   Time: 3.4 s per draft for all four arms (local, 4 seasons in parallel).
+
+Placebo note: the plan expected mean about 0. It is -2.0 (about 6 s.e.), as it should be if "second-best streamer in odd
+weeks" is a real downgrade rather than a neutral swap. So it shows the pipeline can see a harm of that size; it does not
+show the null is calibrated. Analyst to judge whether a truly neutral placebo (e.g. equal-ranked tie swap) is needed.
+
+Gate: gateT(se1, n, delta) = min(0.5*se1/sqrt(n), delta). delta = 0.3 (user, 2026-10-29).
+  se1 = 4.2 (the larger of placebo/streaming sd), n = 1000 drafts (about 57 min local at 3.4 s per draft, no PC needed):
+  T = min(0.5*4.2/sqrt(1000), 0.3) = 0.066.
+  n = 2000: T = 0.047 (about 1.9 h).  n = 200 (pilot size): T = 0.149.
+Rule: run the full simulation unless the screen's upper bound is below T. Lineup arm sd is 1.7, so its T is smaller still at
+the same n (0.5*1.7/sqrt(1000) = 0.027); use arm-specific se1 if the analyst prefers.
+
+ANALYST VERDICT (A1, 2026-10-29) - supersedes the gateT rule above for arms 68/69.
+ipe_run scores whole seasons, so the screen is already the full PE run; gateT could never clear a true zero. Replaced by an
+equivalence rule at delta 0.3. Arm 67 is a positive control (a real downgrade), not a null. Pilot seeds 181-190 are
+exploratory only and are not pooled. Fresh run: seeds 201-280, 4 seasons x 5 slots = 1600 drafts (80% power for +0.3 at sd 4.2).
+  Matters:         PE - 1.96*SE > 0 and ahead in at least 3 of 4 seasons.
+  Does not matter: PE + 1.96*SE < 0.3.
+  Otherwise:       inconclusive.
+  Valid only if:   arm 67 <= -1.0 and negative in all 4 seasons, and refitting without arms 66-69 moves PE by < 0.05.
+  Report alongside: paired poAll and actual prize; side fit with poAll in the logistic, flag if it differs from PE by > 1 SE.
+  Caveat: gamesIn is hindsight (both arms see it), so benefit may be overstated vs the live app.
+
+TRADE SCREEN GATE (idea 163, analyst A2, written 2026-10-29 BEFORE the full run; pilot seeds 281-290 are exploratory, not pooled).
+Arms 66 (no trades), 70 (Win M), 71 (z-sum), 72 (random), 73 (lowest z gain). Full run: seeds 291-370, 4 seasons x slots 1,4,7,10,14 = 1600 drafts.
+  Primary 70 vs 66:  matters = PE - 1.96*SE > 0 and ahead in >= 3 of 4 seasons; no meaningful benefit = PE + 1.96*SE < 1.0 (delta 1.0, not 0.3: SE 0.34 makes 0.3 unreachable);
+                     harmful = PE + 1.96*SE < 0; else inconclusive.
+  Secondary 70 vs 71: same rule.
+  Extension: if 70 vs 66 is inconclusive with PE > 0, add seeds 371-450 once and judge the pooled set at 2.24 SE.
+  Valid only if: V1 arm 73 <= -2.0, its upper bound < -1.0, negative in all 4 seasons; V2 arm 72 not significantly positive;
+                 V3 refit without arms 66, 70-73 moves each PE by < 0.10; V4 every plan replays without throwing, and arms 72 and 73 make 3 trades in >= 95% of drafts.
+  Report: per arm PE +- SE, CI, four season values, actual prize, paired poAll; trades per draft; share of checkpoints where 70 and 71 differ;
+          slope of per-draft PE difference on summed predicted dA; wall time. Caveats: IL hindsight, offers lean against us, no counter-offers, 70 vs 71 differ only in the ranking rule.

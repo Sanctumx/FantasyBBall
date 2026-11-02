@@ -1,0 +1,36 @@
+# inseason-pe
+
+State (2026-10-29): streaming and lineup screens DONE and recorded in the ledger (rows 161 Measured, 162 Rejected, archive 161b). Trade screen (163) is BUILT and piloted (commit a0ebd2a); full run waits on three fixes below. Idea 164 (streaming vs the actual H2H opponent) is Open, to be planned.
+
+Results so far (1600 paired drafts, seeds 201-280, `src/ipe_result.txt`; rule in `src/ipe_gate.txt`): streaming +0.56 ± 0.10 PE, lineup -0.03 ± 0.05, placebo -1.68. Seeds used: 181-190, 201-280, 281-290 (trade pilot, not pooled). Full trade run uses 291-370 (extension 371-450).
+
+Decisions (user, 2026-10-29): delta 0.3 for streaming/lineup; trade screen: opponent offers weighted by perceived likelihood (no dB term), K=3 per checkpoint at weeks 3, 7, 11, at most 1 accepted per checkpoint, value band 0.5, draft's projection world, controls 72 (random) and 73 (lowest z gain). User idea for 164: pick matchups randomly as if real (seeded random round-robin per seed, same for all arms).
+
+Built: `src/ipe_trade_core.js` (simCtx, offers, choose, planTrades), `src/ipe_trade.js <season> <s0> <s1> [slots] [arms] [flips]` (honours IPE_OUT; flips mode writes `src/ipe_trade_flips.txt`), tests in `src/tests/engine/ipe_trade.test.js` (5 passing). Empty plan equals arm 66 exactly; arm 66 matches ipe_run.js. Cost: evaluateTrade ~2 ms; ~3.5 min for 50 drafts x 5 arms.
+
+Pilot (seeds 281-290, 2025-26, 50 drafts): rules 70 (Win M) and 71 (z) choose differently at 48% of checkpoints; 70 accepts 62%, 71 77%; mean dA of a 70 trade +0.82. PE vs 66: 70 -0.7±1.9, 71 +1.2±1.7, 72 -1.5±2.1, 73 -6.1±2.1; 70 vs 71 -2.3±1.7. sd per draft ~13.
+
+Analyst A2 verdict: run 1600 drafts (seeds 291-370, 4 seasons x slots 1,4,7,10,14, ~28 min with seasons in parallel) but equivalence at 0.3 is unreachable (SE 0.34; would need ~16,000 drafts). Rule to commit to `src/ipe_gate.txt` BEFORE the run:
+- Primary 70 vs 66: matters = PE-1.96SE>0 and ahead in >=3 of 4 seasons; no meaningful benefit = PE+1.96SE<1.0 (delta 1.0, say so); harmful = PE+1.96SE<0; else inconclusive. Secondary: 70 vs 71, same rule. One extension set now: if 70 vs 66 inconclusive with PE>0, add seeds 371-450 and judge pooled at 2.24 SE.
+- Valid only if: V1 arm 73 <= -2.0, upper bound < -1.0, negative in all 4 seasons; V2 arm 72 not significantly positive; V3 refit without arms 66, 70-73 moves each PE < 0.10; V4 every plan replays without throwing, 72 and 73 make 3 trades in >= 95% of drafts.
+- Report per arm PE±SE, CI, four season values, actual prize, paired poAll; trades per draft; share where 70/71 differ; slope of per-draft PE diff on summed predicted dA; wall time; caveats (IL hindsight, offers lean against us, no counter-offers).
+
+A2 fixes DONE (2026-10-29, 7 tests pass): (a) `rng` now hashes its seed (test: arm 72 picks vary across seeds); (b) `simCtx(season, w, cores, me, world)` takes the draft's projection world and reads lines from `backtest.setup(season,{proj: world, realAdp:true}).P` (planTrades and ipe_trade.js pass `world`; zGain follows because it reads the ctx pool); (c) no code change needed: `TeamWin.leagueWin` and matchup_core read only `.line` (projection); `curLine` (in-season form) is used only in `Trade.perceived`, i.e. the offer weights, so 70 vs 71 differ only in the ranking rule, state that in the write-up. Optional arm 74 (lowest dA, always accept) not added.
+
+Pilot flips rerun DONE (2026-10-29, seeds 281-290, 2025-26, 50 drafts, 125 s): rule 70 accepts 55.3% of checkpoints, rule 71 66.7%, they choose differently at 46.7%, mean dA of a 70 trade +0.88.
+
+Side work this session (not part of the IPE run; branch inseason-pe, unpushed): b5b2f67 Team-tab Plays % now fills each night best player first (`InLeague.rosterGames` takes an optional `v` per entry; `tabPlays` passes `Matchup.nightValue`, now exported), so only the worst players are cut; the pinned category golden (Team win numbers, e.g. P[0][1] 0.525 -> 0.468) was regenerated on purpose. 5d39904 Team roster selects: Zscore type (Normal/H2H-adjusted/Roto-adjusted, `ui.ztype`, feeds `R.table` type) and Win M vs average/replacement (`ui.rosterVs`, feeds `winOpts().baseline`); template is `src/team.html` (the `src/courtside-*.html` files are generated and overwritten by the build). Not checked in a browser (`src/tests/browser/team_page.mjs` needs Playwright). Open question for the user: the IL player is ranked by value like others, not forced to share the worst player's slot. The League tab does not use TeamWin; how it treats IL is unchecked. Both commits touch Team-tab Win numbers, so merge them knowingly (they change what the page shows, not the backtest engine).
+
+New request (user, 2026-10-29, not started): the League tab should be "essentially a matrix representation of the Team tab", i.e. every team scored by the same Team-tab rules (TeamWin matrix, Plays %, IL on seasonal bases) instead of its current separate model (league.html does not use TeamWin). Big feature that changes what the page shows: brainstorming with the user first (what the rows/columns are, which Win numbers, Per game vs Rest of season), then the `planner`. Ask before starting; it is separate from the IPE run below.
+
+Trade run DONE and recorded (ledger commits 2401298 + archive 163b, unlanded; row 163 Measured): vs no trades Win M +0.92±0.27, z-sum +1.18±0.28, random -1.97, lowest-z -3.57; 70 vs 71 -0.25±0.27; gate says MATTERS but with poAll in the fit Win M drops to +0.07±0.35 (z-sum +1.04). Cause likely: evaluateTrade dA counts regular-season weeks only (`TeamWin.weeksLeft`, by design). Pooled prize_equity printouts include pilot files (n 1650): use seeds 291-370 only. Playoff-weighted Win M arm is a possible new idea (not numbered).
+
+Also done this session (pushed 2026-10-29, force-with-lease after the rebase; branch not merged): Source select on the Trade Analyzer (`ui.src`, `TeamView.sourceCtx`, gen.py now loads rankings_core.js and team_view.js into inseason; candidate cache keyed by source). Build + 563 tests pass; NOT checked in a browser.
+
+Next:
+1. Land the ledger (needs the user's "push"): `node .claude/scripts/ledger.mjs land`.
+2. Browser-check the Trade tab Source select (box-score sources load files; switching resets the builder).
+3. Decide the playoff-weighted Win M idea (number via `ledger.mjs next`); planner first (hard area).
+3. Idea 164: brief the `planner` (hard area) with: random seeded round-robin schedule per seed (14 teams, weeks 1-17), playoff bracket from standings, `ctx.opp` added to the streamPick hook in `stream_sim.js`, new streamPick in `ipe_core.js` scoring `Engine.pairMatchup` vs the real opponent; decision for the planner: score the regular season on the same schedule (new rsMode) or keep all-play, and how to refit PE or report both. Facts: stream_sim has no opponent (all-play, `wins/(games*(N-1))`), title_score.js has `beats()` for playoffs and all-play playoff weeks.
+
+Hazards: `src/results/` blocks Write and `ls` (deny rule); result notes live in `src/ipe_*.txt`. Never write arm 66 twice for the same seeds. Pilot result files for seeds 281-290 and calib_* files are untracked in src/ (leave them). Ledger worktree has 2 unlanded commits plus the edit to rows 163/164 (uncommitted at the time of this note); landing needs the user's "push".
