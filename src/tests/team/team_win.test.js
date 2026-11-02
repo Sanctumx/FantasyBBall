@@ -669,7 +669,16 @@ test('leagueWin without detail has no C or swing (unchanged result shape)', () =
 
 // dropRank (IL timeline, 2026-10-29): who is dropped when the IL players return and the roster is over the player limit is chosen by Win M
 // contribution (the drop in the team's mean match chance when he is removed), not by nightValue
-const tabDrop = DAYS => Object.assign({}, mk(last.start, DAYS || games(last.start, last.end)), { teamTab: true, basis: 'total' });
+// the Team tab context (teamTab, IL kept, bench Active): a chips swap sends my player to the opponent's side, so the opponent does not just lose a player
+test('teamTab matrix: swapping my player for an opponent\'s hands him to that team', () => {
+  const ctx = mkTab('total'), st = T.tabState(ROS[me]), out = st.order.find(k => st.slots[k] === 'active'), inK = ROS[other].find(x => x.slot === 'ACTIVE').fid;
+  const sw = T.applySwap(st, [out], [inK]);
+  assert.deepStrictEqual(W.received(ctx, sw), { [other]: [{ key: out, slot: 'active' }] });
+  const m = W.matrix(ctx, sw), without = W.matrixOf(ctx, W.side(ctx, sw, W.weeksLeft(ctx)), new Set(sw.order), W.weeksLeft(ctx), {});
+  assert.notStrictEqual(m.teams.find(t => t.id === other).match, without.teams.find(t => t.id === other).match);
+});
+
+const tabDrop = DAYS =>Object.assign({}, mk(last.start, DAYS || games(last.start, last.end)), { teamTab: true, basis: 'total' });
 test('dropRank: rank(k) is minus the team\'s mean match chance when k is the one dropped at the first return, the field\'s saved rosters with nobody dropped', () => {
   const ctx = tabDrop(), st = T.tabState(ROS[me]), Wk = W.weeksLeft(ctx), rank = W.dropRank(ctx, me), e = W.engCtx(ctx, 9);
   const field = ids.filter(t => t !== me).map(t => W.teamVec(e, W.side(ctx, W.oppState(ctx, t), Wk, { noDrop: true })));
