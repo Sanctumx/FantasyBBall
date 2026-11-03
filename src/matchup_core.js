@@ -164,6 +164,40 @@
       known: [A.known, B.known], games: [A.leftG, B.leftG], share, roster: [A.players, B.players] };
   }
 
+  // The Team schedule grid: my roster by local day with who plays each night. Same rules as the projection (segGames / statusCore):
+  // on a night with more players than the limit the best per-game players start, games already boxed count only for players who played
+  // (they use up slots first), IR and out players sit out the current week only. Cells: start | bench | played | dnp (null = no game).
+  function scheduleGrid(ctx, n, files) {
+    const per = periodOf(ctx.L, n), days = InLeague.periodDays(per), G = (ctx.DAYS && ctx.DAYS.games) || ctx.DAYS || {}, cur = n === ctx.cur;
+    const bx = cur && files && files.length ? boxLines(files, per) : null, list = bx ? Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id })) : [];
+    const max = ctx.L.maxActive || Infinity, dayIx = new Map(days.map((d, i) => [d, i]));
+    const rows = ctx.roster[ctx.me].map(k => ctx.pool.byKey.get(k)).filter(Boolean).map(p => {
+      const ir = p.slot === 'IR', out = !!(cur && ctx.out && ctx.out.has(p.key)), off = cur && (ir || out), m = bx && !(cur && ir) ? InPlayers.matchTo(list, p.n, p.t) : null;
+      return { p, key: p.key, n: p.n, t: p.t, slot: p.slot, ir, out, off, b: m && bx.players.get(m.id), cut: bx ? cutoffOf(ctx, bx, p.t, per) : per.start, cells: days.map(() => null), games: 0 };
+    });
+    const pastC = days.map(() => []), futC = days.map(() => []);
+    rows.forEach(r => {
+      if (cur && r.ir) return;   // an out player keeps the games he played this week (weekStatus counts them); only his later games are dropped
+      (G[r.t] || []).map(s => s * 1000).filter(ms => ms >= per.start && ms < per.end).forEach(ms => {
+        const i = dayIx.get(InLeague.localDay(ms));
+        if (i == null) return;
+        if (ms >= r.cut) { if (!r.off) futC[i].push(r); }
+        else if (r.b && r.b.lines.some(l => l.d === InLeague.nyDay(ms))) pastC[i].push(r);
+        else r.cells[i] = { kind: 'dnp', past: true };
+      });
+    });
+    const byValue = (a, b) => nightValue(ctx, b.p) - nightValue(ctx, a.p);
+    const tot = days.map((d, i) => {
+      const past = pastC[i].slice().sort(byValue), usedPast = Math.min(max, past.length), fut = futC[i].slice().sort(byValue), cap = Math.max(0, max - usedPast);
+      const gone = d < InLeague.localDay(ctx.nowMs);   // earlier days stay dimmed even when no box score has come in yet
+      past.forEach((r, j) => { r.cells[i] = { kind: j < max ? 'played' : 'bench', past: true }; });
+      fut.forEach((r, j) => { r.cells[i] = { kind: j < cap ? 'start' : 'bench', past: gone }; });
+      return { used: usedPast + Math.min(cap, fut.length), avail: past.length + fut.length };
+    });
+    rows.forEach(r => { r.games = r.cells.filter(c => c && (c.kind === 'start' || c.kind === 'played')).length; });
+    return { days, rows, tot, max: ctx.L.maxActive };
+  }
+
   // the add tools' scorer: the current week counts the box scores so far (as the headline does), any other week is the whole-week projection
   function scoreWeek(ctx, segsA, segsB, n) {
     if (n !== ctx.cur || !ctx.box || !ctx.box.length) return scoreSegments(ctx, segsA, segsB, true);
@@ -265,6 +299,6 @@
     return plan;
   }
 
-  const api = { nightValue, GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
+  const api = { nightValue, GVAR, K_MATCH, K_CAT, KW_MATCH, KW_CAT, segGames, makeCtx, outSet, teamSegments, scoreSegments, projectWeek, weekStatus, scheduleGrid, boxLines, addFrom, lowestValue, simpleAdds, addPlan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Matchup = api;
 })(this);
