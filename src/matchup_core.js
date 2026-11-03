@@ -172,16 +172,16 @@
     const bx = cur && files && files.length ? boxLines(files, per) : null, list = bx ? Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id })) : [];
     const max = ctx.L.maxActive || Infinity, dayIx = new Map(days.map((d, i) => [d, i]));
     const rows = ctx.roster[ctx.me].map(k => ctx.pool.byKey.get(k)).filter(Boolean).map(p => {
-      const ir = p.slot === 'IR', out = !!(cur && ctx.out && ctx.out.has(p.key)), off = cur && (ir || out), m = bx && !off ? InPlayers.matchTo(list, p.n, p.t) : null;
+      const ir = p.slot === 'IR', out = !!(cur && ctx.out && ctx.out.has(p.key)), off = cur && (ir || out), m = bx && !(cur && ir) ? InPlayers.matchTo(list, p.n, p.t) : null;
       return { p, key: p.key, n: p.n, t: p.t, slot: p.slot, ir, out, off, b: m && bx.players.get(m.id), cut: bx ? cutoffOf(ctx, bx, p.t, per) : per.start, cells: days.map(() => null), games: 0 };
     });
     const pastC = days.map(() => []), futC = days.map(() => []);
     rows.forEach(r => {
-      if (r.off) return;
+      if (cur && r.ir) return;   // an out player keeps the games he played this week (weekStatus counts them); only his later games are dropped
       (G[r.t] || []).map(s => s * 1000).filter(ms => ms >= per.start && ms < per.end).forEach(ms => {
         const i = dayIx.get(InLeague.localDay(ms));
         if (i == null) return;
-        if (ms >= r.cut) futC[i].push(r);
+        if (ms >= r.cut) { if (!r.off) futC[i].push(r); }
         else if (r.b && r.b.lines.some(l => l.d === InLeague.nyDay(ms))) pastC[i].push(r);
         else r.cells[i] = { kind: 'dnp', past: true };
       });
@@ -189,8 +189,9 @@
     const byValue = (a, b) => nightValue(ctx, b.p) - nightValue(ctx, a.p);
     const tot = days.map((d, i) => {
       const past = pastC[i].slice().sort(byValue), usedPast = Math.min(max, past.length), fut = futC[i].slice().sort(byValue), cap = Math.max(0, max - usedPast);
+      const gone = d < InLeague.localDay(ctx.nowMs);   // earlier days stay dimmed even when no box score has come in yet
       past.forEach((r, j) => { r.cells[i] = { kind: j < max ? 'played' : 'bench', past: true }; });
-      fut.forEach((r, j) => { r.cells[i] = { kind: j < cap ? 'start' : 'bench', past: false }; });
+      fut.forEach((r, j) => { r.cells[i] = { kind: j < cap ? 'start' : 'bench', past: gone }; });
       return { used: usedPast + Math.min(cap, fut.length), avail: past.length + fut.length };
     });
     rows.forEach(r => { r.games = r.cells.filter(c => c && (c.kind === 'start' || c.kind === 'played')).length; });

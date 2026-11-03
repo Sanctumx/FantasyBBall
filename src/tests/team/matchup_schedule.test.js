@@ -46,6 +46,16 @@ test('a played game counts only for a player with minutes; a game he missed is d
   team[r0.t] = [[r0.key].concat(cols.map(c => c === 'min' ? 30 : 0))];
   const files = [{ season: 2027, cols, names: { [r0.key]: r0.n }, games: { g1: { d: day, teams: team } } }];
   const g = M.scheduleGrid(ctx, 1, files), r = g.rows.find(x => x.key === r0.key);
-  if (ctx.out.has(r0.key)) return;   // fixture quirk: a boxed team with 3+ games could mark him out
   assert.strictEqual(r.cells[i].kind, 'played'); assert.ok(r.cells[i].past);
+});
+
+test('an out player keeps the game he played this week and gets no later games; days before today are dimmed', () => {
+  const ctx = mk(L), g0 = M.scheduleGrid(ctx, 1, []), r0 = g0.rows.find(r => r.games >= 2), i = r0.cells.findIndex(c => c), ms = DAYS.games[r0.t].map(x => x * 1000).find(m => I.localDay(m) === g0.days[i]);
+  const cols = ['min', 'fgm', 'fga', 'ftm', 'fta', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'to'], team = { [r0.t]: [[r0.key].concat(cols.map(c => c === 'min' ? 30 : 0))] };
+  const files = [{ season: 2027, cols, names: { [r0.key]: r0.n }, games: { g1: { d: I.nyDay(ms), teams: team } } }];
+  ctx.out = new Set([r0.key]);
+  const r = M.scheduleGrid(ctx, 1, files).rows.find(x => x.key === r0.key), kinds = r.cells.filter(Boolean).map(c => c.kind);
+  assert.deepStrictEqual(kinds, ['played']); assert.strictEqual(r.games, 1); assert.ok(r.out);
+  const late = M.scheduleGrid(mk(L, Date.UTC(2026, 9, 25, 12)), 1, []);
+  assert.ok(late.rows.some(x => x.cells.some(c => c && c.past)), 'earlier days are marked past');
 });

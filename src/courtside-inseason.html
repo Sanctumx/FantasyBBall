@@ -2195,16 +2195,16 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const bx = cur && files && files.length ? boxLines(files, per) : null, list = bx ? Array.from(bx.players.values()).map(p => ({ n: p.n, t: p.t, id: p.id })) : [];
     const max = ctx.L.maxActive || Infinity, dayIx = new Map(days.map((d, i) => [d, i]));
     const rows = ctx.roster[ctx.me].map(k => ctx.pool.byKey.get(k)).filter(Boolean).map(p => {
-      const ir = p.slot === 'IR', out = !!(cur && ctx.out && ctx.out.has(p.key)), off = cur && (ir || out), m = bx && !off ? InPlayers.matchTo(list, p.n, p.t) : null;
+      const ir = p.slot === 'IR', out = !!(cur && ctx.out && ctx.out.has(p.key)), off = cur && (ir || out), m = bx && !(cur && ir) ? InPlayers.matchTo(list, p.n, p.t) : null;
       return { p, key: p.key, n: p.n, t: p.t, slot: p.slot, ir, out, off, b: m && bx.players.get(m.id), cut: bx ? cutoffOf(ctx, bx, p.t, per) : per.start, cells: days.map(() => null), games: 0 };
     });
     const pastC = days.map(() => []), futC = days.map(() => []);
     rows.forEach(r => {
-      if (r.off) return;
+      if (cur && r.ir) return;   // an out player keeps the games he played this week (weekStatus counts them); only his later games are dropped
       (G[r.t] || []).map(s => s * 1000).filter(ms => ms >= per.start && ms < per.end).forEach(ms => {
         const i = dayIx.get(InLeague.localDay(ms));
         if (i == null) return;
-        if (ms >= r.cut) futC[i].push(r);
+        if (ms >= r.cut) { if (!r.off) futC[i].push(r); }
         else if (r.b && r.b.lines.some(l => l.d === InLeague.nyDay(ms))) pastC[i].push(r);
         else r.cells[i] = { kind: 'dnp', past: true };
       });
@@ -2212,8 +2212,9 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const byValue = (a, b) => nightValue(ctx, b.p) - nightValue(ctx, a.p);
     const tot = days.map((d, i) => {
       const past = pastC[i].slice().sort(byValue), usedPast = Math.min(max, past.length), fut = futC[i].slice().sort(byValue), cap = Math.max(0, max - usedPast);
+      const gone = d < InLeague.localDay(ctx.nowMs);   // earlier days stay dimmed even when no box score has come in yet
       past.forEach((r, j) => { r.cells[i] = { kind: j < max ? 'played' : 'bench', past: true }; });
-      fut.forEach((r, j) => { r.cells[i] = { kind: j < cap ? 'start' : 'bench', past: false }; });
+      fut.forEach((r, j) => { r.cells[i] = { kind: j < cap ? 'start' : 'bench', past: gone }; });
       return { used: usedPast + Math.min(cap, fut.length), avail: past.length + fut.length };
     });
     rows.forEach(r => { r.games = r.cells.filter(c => c && (c.kind === 'start' || c.kind === 'played')).length; });
@@ -4193,7 +4194,7 @@ const SCHED_DAYS={"source":"nba-2026-UTC.csv","games":{"ATL":[1792623600,1792796
     const rows = g.rows.slice().sort((a, b) => (a.ir - b.ir) || 0);   // IR players last (stable sort keeps roster order)
     $('sched').innerHTML = '<thead><tr><th class="l">Player</th><th>Team</th>' + g.days.map(d => '<th>' + esc(d.slice(5)) + '</th>').join('') + '<th title="Games he starts or played; benched nights are not counted">Games</th></tr></thead><tbody>' +
       rows.map(r => '<tr' + (r.ir ? ' class="irrow"' : '') + '><td class="l">' + esc(r.n) + (r.ir ? ' <span class="src" title="On IR' + (n === ctx.cur ? ': no games this week' : ': counted as back next week, like the projection') + '">IR</span>' : r.out ? ' <span class="src" title="No minutes in his team\'s last 3 games: counted out for the rest of the week">out</span>' : '') + '</td><td>' + esc(r.t) + '</td>' +
-        r.cells.map(c => c ? '<td class="' + mark[c.kind][0] + '" title="' + esc(mark[c.kind][2]) + '">' + mark[c.kind][1] + '</td>' : '<td></td>').join('') + '<td><b>' + r.games + '</b></td></tr>').join('') +
+        r.cells.map(c => c ? '<td class="' + mark[c.kind][0] + (c.past && !/past/.test(mark[c.kind][0]) ? ' past' : '') + '" title="' + esc(mark[c.kind][2]) + '">' + mark[c.kind][1] + '</td>' : '<td></td>').join('') + '<td><b>' + r.games + '</b></td></tr>').join('') +
       '<tr class="tot"><td class="l">Playing' + (max ? ' <span class="src">limit ' + max + '</span>' : '') + '</td><td></td>' + g.tot.map(c => '<td class="' + (max && c.avail > max ? 'over' : '') + '" title="' + (c.avail > c.used ? c.avail + ' players have a game, ' + c.used + ' play' : '') + '">' + c.used + (c.avail > c.used ? ' (' + c.avail + ')' : '') + '</td>').join('') + '<td>' + g.tot.reduce((a, c) => a + c.used, 0) + '</td></tr></tbody>';
   }
   function renderPlan(n) {
