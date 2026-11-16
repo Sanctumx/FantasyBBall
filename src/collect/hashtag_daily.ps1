@@ -7,6 +7,7 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $log = Join-Path $repo 'src\hashtag_fetch.log'
 Set-Location $repo
 function Log($m) { $m | Add-Content $log }
+$ok = '^(src/players\.json|src/data/hashtag_[\d-]+\.xlsx|assets/.*|src/courtside-[a-z]+\.html|(index|league|inseason|settings|rankings|team|math)\.html)$'   # files this job may change
 # after a failed or aborted run on the push branch, drop the build's changes so tomorrow's run starts clean (this checkout is the automation's own)
 function Clean { if ($script:canPush -and -not $DryRun) { git reset -q --hard; git clean -fdq -- assets 'src/data/hashtag_*.xlsx' } }
 function Run($what, [scriptblock]$cmd) {
@@ -19,6 +20,13 @@ $want = if ($env:HASHTAG_PUSH_BRANCH) { $env:HASHTAG_PUSH_BRANCH } else { 'main'
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 $canPush = $branch -eq $want
 if ($canPush) {
+  # A run that died after the build (killed, machine asleep, timeout) leaves built files modified and used to block every later run (2026-10-30 to 11-16).
+  # If every dirty tracked file is one this job generates, drop them (this checkout is the automation's own); anything else is a real edit: skip as before.
+  $dirty = @(git diff --name-only HEAD)
+  if ($dirty -and -not $DryRun -and -not @($dirty | Where-Object { $_ -notmatch $ok })) {
+    Log ("Recovered: reset " + $dirty.Count + ' generated files left by an interrupted run')
+    git reset -q --hard; git clean -fdq -- assets 'src/data/hashtag_*.xlsx'
+  }
   if (git status --porcelain --untracked-files=no) { Log 'Push skipped: tracked files have uncommitted changes'; $canPush = $false }
   elseif (-not $DryRun) {
     Run 'git pull' { git pull --ff-only origin $want }
@@ -32,9 +40,8 @@ if (-not $canPush) { exit 0 }
 Run 'build' { node .claude/scripts/build.mjs }
 Run 'tests' { node --test src/tests/ }
 git add -A -- assets src/players.json 'src/data/hashtag_*.xlsx' src/courtside-inseason.html src/courtside-rankings.html src/courtside-team.html index.html league.html inseason.html settings.html rankings.html team.html math.html
-$changed = @(git diff --cached --name-only)
+$changed = @(git diff --cached --name-only)   # $ok (the allowed generated files) is defined near the top
 if (-not $changed) { Log 'No change in the projections'; exit 0 }
-$ok = '^(src/players\.json|src/data/hashtag_[\d-]+\.xlsx|assets/.*|src/courtside-[a-z]+\.html|(index|league|inseason|settings|rankings|team|math)\.html)$'
 $odd = @($changed | Where-Object { $_ -notmatch $ok })
 if ($odd) { Log ('Push aborted, unexpected files changed: ' + ($odd -join ', ')); git reset -q; Clean; exit 1 }
 if ($DryRun) { Log ("Dry run: would commit " + $changed.Count + " files"); git reset -q; exit 0 }
